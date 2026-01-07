@@ -318,12 +318,17 @@ export const sendInvitationEmail = async (invitationData) => {
     const { email, name, role, invitationLink } = invitationData;
     
     const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
+    const replyToAddress = process.env.EMAIL_REPLY_TO || process.env.EMAIL_SUPPORT || emailFrom;
+    const replyToEmail = replyToAddress.includes('<')
+        ? (replyToAddress.match(/<(.+)>/)?.[1] || replyToAddress)
+        : replyToAddress;
     // Format from field with name "Abcotronics" if it's just an email address
     const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
     
     const mailOptions = {
         from: fromAddress,
-        replyTo: process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
+        // Keep Reply-To aligned to the sending domain by default (helps deliverability)
+        replyTo: replyToAddress,
         to: email,
         subject: 'Invitation to Join Abcotronics System',
         html: `
@@ -360,7 +365,7 @@ export const sendInvitationEmail = async (invitationData) => {
                     <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
                         <p style="color: #666; margin: 0; font-size: 14px;">
                             <strong>Important:</strong> This invitation link will expire in 7 days. 
-                            If you need help, contact us at <a href="mailto:garethm@abcotronics.co.za">garethm@abcotronics.co.za</a>
+                            If you need help, contact us at <a href="mailto:${replyToEmail}">${replyToEmail}</a>
                         </p>
                     </div>
                     
@@ -390,7 +395,7 @@ export const sendInvitationEmail = async (invitationData) => {
             To accept your invitation, click this link: ${invitationLink}
             
             Important: This invitation link will expire in 7 days.
-            If you need help, contact us at garethm@abcotronics.co.za
+            If you need help, contact us at ${replyToEmail}
             
             Best regards,
             Gareth Mauck
