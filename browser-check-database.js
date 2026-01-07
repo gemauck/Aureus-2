@@ -74,3 +74,4 @@
     console.log('\n💡 Try refreshing the page and logging in again.');
   }
 })();
+

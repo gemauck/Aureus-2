@@ -157,3 +157,4 @@ After deployment, monitor:
 - Pagination limits can be adjusted via query parameters
 - Some optimizations are most effective with the database indexes applied
 - Consider implementing caching for even better performance
+

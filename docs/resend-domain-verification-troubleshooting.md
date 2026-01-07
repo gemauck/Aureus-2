@@ -182,3 +182,4 @@ If you're still stuck, provide:
 2. Screenshot of DNS records in Resend dashboard
 3. Screenshot of DNS records in your DNS provider
 4. Any error messages from Resend
+

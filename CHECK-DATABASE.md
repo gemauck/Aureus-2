@@ -125,3 +125,4 @@ After checking, tell me:
 2. ✅ **How many leads?** (number)
 3. ✅ **Is this the right database?** (Yes/No)
 4. ✅ **When was the data last updated?** (if you can see dates)
+

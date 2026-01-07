@@ -136,3 +136,4 @@ If root domain setup is complicated, use a subdomain:
 - **Domains.co.za Support:** 011 640 9700
 - **Resend Support:** support@resend.com
 - **Check DNS:** https://dns.email
+

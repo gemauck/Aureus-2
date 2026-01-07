@@ -141,3 +141,4 @@ Resend will be used automatically (higher priority than SendGrid).
 - Resend Docs: https://resend.com/docs
 - Resend Dashboard: https://resend.com
 - API Reference: https://resend.com/docs/api-reference/emails/send-email
+

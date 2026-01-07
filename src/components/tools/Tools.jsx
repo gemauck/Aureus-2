@@ -34,23 +34,22 @@ const Tools = () => {
             // Check if any component is missing
             const allLoaded = Object.values(components).every(comp => comp !== undefined && comp !== null);
             
+            // Always update toolComponents state (even if not all loaded) so UI can show available tools
+            setToolComponents(components);
+            
             if (!allLoaded && retryCount < maxRetries) {
                 // Components not loaded yet, wait a bit and check again
                 retryCount++;
                 timeoutId = setTimeout(checkComponents, 100);
-            } else {
-                // All components loaded or max retries reached
-                setToolComponents(components);
-                if (allLoaded) {
-                } else {
-                    console.warn('⚠️ Tools: Some tool components failed to load after maximum retries', {
-                        TankSizeCalculator: !!components.TankSizeCalculator,
-                        UnitConverter: !!components.UnitConverter,
-                        PDFToWordConverter: !!components.PDFToWordConverter,
-                        HandwritingToWord: !!components.HandwritingToWord,
-                        DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator
-                    });
-                }
+            } else if (!allLoaded) {
+                // Max retries reached - log which components are missing
+                console.warn('⚠️ Tools: Some tool components failed to load after maximum retries', {
+                    TankSizeCalculator: !!components.TankSizeCalculator,
+                    UnitConverter: !!components.UnitConverter,
+                    PDFToWordConverter: !!components.PDFToWordConverter,
+                    HandwritingToWord: !!components.HandwritingToWord,
+                    DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator
+                });
             }
         };
         

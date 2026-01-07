@@ -13,3 +13,4 @@ cat scripts/fix-504-timeout.sh | ssh root@${DROPLET_IP} 'bash -s'
 
 echo ""
 echo "✅ Done! Try uploading your file again."
+

@@ -1,17 +1,13 @@
-// Wait for React to be available
+// Get React hooks from window (React should be available by the time components load)
 (function() {
-    // Wait for React
-    function waitForReact(callback, maxAttempts = 50) {
-        if (window.React && window.React.useState && window.React.useRef) {
-            callback();
-        } else if (maxAttempts > 0) {
-            setTimeout(() => waitForReact(callback, maxAttempts - 1), 100);
-        } else {
-            console.error('❌ DieselRefundEvidenceEvaluator: React not available after maximum attempts');
+    // Check if React is available, if not wait briefly
+    function initComponent() {
+        if (!window.React || !window.React.useState || !window.React.useRef) {
+            // React not ready yet, wait a bit
+            setTimeout(initComponent, 50);
+            return;
         }
-    }
-    
-    waitForReact(() => {
+        
         // Get React hooks from window
         const { useState, useRef } = window.React;
 
@@ -414,11 +410,14 @@
         );
     };
     
-    // Register component on window
+        // Register component on window
         if (typeof window !== 'undefined') {
             window.DieselRefundEvidenceEvaluator = DieselRefundEvidenceEvaluator;
             console.log('✅ DieselRefundEvidenceEvaluator component registered');
         }
-    });
+    }
+    
+    // Start initialization
+    initComponent();
 })();
 

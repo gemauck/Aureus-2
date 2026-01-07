@@ -675,6 +675,50 @@ app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for helpdesk endpoints
+app.all('/api/helpdesk/:id?/:action?', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'helpdesk.js'))
+    if (!handler) {
+      console.error('❌ Helpdesk handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in helpdesk handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process helpdesk request',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for helpdesk stats endpoint
+app.all('/api/helpdesk/stats', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'helpdesk.js'))
+    if (!handler) {
+      console.error('❌ Helpdesk handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in helpdesk stats handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process helpdesk request',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for clients list and create operations (GET, POST /api/clients)
 app.all('/api/clients', async (req, res, next) => {
   try {

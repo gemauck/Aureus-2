@@ -102,3 +102,4 @@ echo "   pm2 stop abcotronics-erp-local"
 echo "   pm2 delete abcotronics-erp-local"
 echo ""
 echo "🌐 Server should be available at: http://localhost:${PORT:-3000}"
+

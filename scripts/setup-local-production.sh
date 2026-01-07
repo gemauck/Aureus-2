@@ -76,3 +76,4 @@ echo ""
 echo "Or use PM2 (like production):"
 echo "  npm run start:local-prod:pm2"
 echo ""
+

@@ -144,6 +144,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/tools/UnitConverter.jsx',
         './src/components/tools/PDFToWordConverter.jsx',
         './src/components/tools/HandwritingToWord.jsx',
+        './src/components/tools/DieselRefundEvidenceEvaluator.jsx',
         './src/components/tools/Tools.jsx',
         
         // Tasks and Notes
