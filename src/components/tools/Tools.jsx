@@ -89,48 +89,57 @@ const Tools = () => {
     }, []);
 
     // Build tools array with components - use useMemo to recalculate when toolComponents changes
-    const tools = useMemo(() => [
-        {
-            id: 'tank-calculator',
-            name: 'Tank Size Calculator',
-            description: 'Calculate tank volumes, fuel weights, and generate calibration charts',
-            icon: 'fa-gas-pump',
-            color: 'blue',
-            component: toolComponents.TankSizeCalculator
-        },
-        {
-            id: 'unit-converter',
-            name: 'Unit Converter',
-            description: 'Convert between different units of measurement',
-            icon: 'fa-exchange-alt',
-            color: 'orange',
-            component: toolComponents.UnitConverter
-        },
-        {
-            id: 'pdf-to-word',
-            name: 'PDF to RTF',
-            description: 'Extract text from PDF documents and save as RTF format',
-            icon: 'fa-file-pdf',
-            color: 'red',
-            component: toolComponents.PDFToWordConverter
-        },
-        {
-            id: 'handwriting-to-word',
-            name: 'Handwriting to Text',
-            description: 'Convert handwritten text images to editable RTF documents using OCR',
-            icon: 'fa-pen-fancy',
-            color: 'purple',
-            component: toolComponents.HandwritingToWord
-        },
-        {
-            id: 'diesel-refund-evaluator',
-            name: 'Diesel Refund Evidence Evaluator',
-            description: 'Evaluate any data to determine if it qualifies as evidence for diesel refund claims',
-            icon: 'fa-file-invoice-dollar',
-            color: 'green',
-            component: toolComponents.DieselRefundEvidenceEvaluator
-        }
-    ], [toolComponents]);
+    const tools = useMemo(() => {
+        const toolsArray = [
+            {
+                id: 'tank-calculator',
+                name: 'Tank Size Calculator',
+                description: 'Calculate tank volumes, fuel weights, and generate calibration charts',
+                icon: 'fa-gas-pump',
+                color: 'blue',
+                component: toolComponents.TankSizeCalculator
+            },
+            {
+                id: 'unit-converter',
+                name: 'Unit Converter',
+                description: 'Convert between different units of measurement',
+                icon: 'fa-exchange-alt',
+                color: 'orange',
+                component: toolComponents.UnitConverter
+            },
+            {
+                id: 'pdf-to-word',
+                name: 'PDF to RTF',
+                description: 'Extract text from PDF documents and save as RTF format',
+                icon: 'fa-file-pdf',
+                color: 'red',
+                component: toolComponents.PDFToWordConverter
+            },
+            {
+                id: 'handwriting-to-word',
+                name: 'Handwriting to Text',
+                description: 'Convert handwritten text images to editable RTF documents using OCR',
+                icon: 'fa-pen-fancy',
+                color: 'purple',
+                component: toolComponents.HandwritingToWord
+            },
+            {
+                id: 'diesel-refund-evaluator',
+                name: 'Diesel Refund Evidence Evaluator',
+                description: 'Evaluate any data to determine if it qualifies as evidence for diesel refund claims',
+                icon: 'fa-file-invoice-dollar',
+                color: 'green',
+                component: toolComponents.DieselRefundEvidenceEvaluator
+            }
+        ];
+        // Debug: Log when tools array is recalculated
+        console.log('🔧 Tools array recalculated:', {
+            totalTools: toolsArray.length,
+            dieselRefundComponent: !!toolComponents.DieselRefundEvidenceEvaluator,
+            allComponents: Object.keys(toolComponents).map(k => ({ key: k, exists: !!toolComponents[k] }))
+        });
+        return toolsArray;
+    }, [toolComponents]);
 
     const renderToolContent = () => {
         if (!currentTool) {
