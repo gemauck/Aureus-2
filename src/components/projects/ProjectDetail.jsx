@@ -1458,14 +1458,28 @@ function initializeProjectDetail() {
     const hasWeeklyFMSReviewProcessChangedRef = useRef(false);
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        if (normalizedValue !== hasWeeklyFMSReviewProcess && !hasWeeklyFMSReviewProcessChangedRef.current) {
-            setHasWeeklyFMSReviewProcess(normalizedValue);
+        // Always sync when project.id changes (navigating to different project)
+        // OR when project.hasWeeklyFMSReviewProcess changes and ref is not set
+        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
+            if (!hasWeeklyFMSReviewProcessChangedRef.current) {
+                // Safe to sync - user hasn't explicitly changed it
+                setHasWeeklyFMSReviewProcess(normalizedValue);
+            } else {
+                // User changed it, but check if project prop has a different value
+                // This handles the case where we navigate back and project prop has the saved value
+                // Reset the ref so future changes can sync
+                hasWeeklyFMSReviewProcessChangedRef.current = false;
+                setHasWeeklyFMSReviewProcess(normalizedValue);
+            }
         }
     }, [project.hasWeeklyFMSReviewProcess, project.id]);
     
+    // Always sync when project.id changes (navigating to different project)
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
         setHasWeeklyFMSReviewProcess(normalizedValue);
+        // Reset ref when project changes
+        hasWeeklyFMSReviewProcessChangedRef.current = false;
     }, [project.id]);
     
     // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)

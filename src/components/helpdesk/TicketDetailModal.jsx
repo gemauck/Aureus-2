@@ -50,7 +50,7 @@ const TicketDetailModal = ({
         status: ticket?.status || 'open',
         priority: ticket?.priority || 'medium',
         category: ticket?.category || 'general',
-        type: ticket?.type || 'internal',
+        type: ticket?.type || 'internal', // 'internal' for manual, 'email' for email-created
         assignedToId: ticket?.assignedToId || null,
         clientId: ticket?.clientId || null,
         projectId: ticket?.projectId || null,

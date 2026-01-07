@@ -246,6 +246,7 @@ async function handler(req, res) {
         // Build ticket data - ensure type is always explicitly set
         const ticketType = (body.type && body.type.trim() !== '') ? body.type.trim() : 'internal'
         
+        // Build ticket data - support both manual and email creation
         const ticketData = {
           ticketNumber,
           title: body.title.trim(),
@@ -253,7 +254,7 @@ async function handler(req, res) {
           status: body.status || 'open',
           priority: body.priority || 'medium',
           category: body.category || 'general',
-          type: ticketType, // Always explicitly set
+          type: ticketType, // Always explicitly set ('internal' for manual, 'email' for email)
           createdById: userId,
           assignedToId: body.assignedToId || null,
           clientId: body.clientId || null,
@@ -266,10 +267,16 @@ async function handler(req, res) {
             action: 'created',
             userId,
             userName: user.name || user.email,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            source: ticketType === 'email' ? 'email' : 'manual'
           }]),
           customFields: JSON.stringify(typeof body.customFields === 'object' ? body.customFields : {}),
-          dueDate: body.dueDate ? new Date(body.dueDate) : null
+          dueDate: body.dueDate ? new Date(body.dueDate) : null,
+          // Email fields - only set if provided (for email-created tickets)
+          ...(body.sourceEmail && { sourceEmail: body.sourceEmail }),
+          ...(body.emailThreadId && { emailThreadId: body.emailThreadId }),
+          ...(body.emailMessageId && { emailMessageId: body.emailMessageId }),
+          ...(body.emailSubject && { emailSubject: body.emailSubject })
         }
 
         console.log('📝 Creating ticket with data:', {

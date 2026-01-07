@@ -523,8 +523,20 @@ const Helpdesk = () => {
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex flex-col">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                                    {ticket.ticketNumber}
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                                        {ticket.ticketNumber}
+                                                    </div>
+                                                    {ticket.type === 'email' && (
+                                                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" title="Created from email">
+                                                            <i className="fas fa-envelope mr-1"></i>Email
+                                                        </span>
+                                                    )}
+                                                    {ticket.type === 'internal' && (
+                                                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" title="Created manually">
+                                                            <i className="fas fa-user mr-1"></i>Manual
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="text-sm text-gray-500 dark:text-gray-400">
                                                     {ticket.title}
@@ -577,8 +589,20 @@ const Helpdesk = () => {
                                 className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-lg transition-shadow cursor-pointer"
                             >
                                 <div className="flex items-start justify-between mb-2">
-                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                        {ticket.ticketNumber}
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                            {ticket.ticketNumber}
+                                        </div>
+                                        {ticket.type === 'email' && (
+                                            <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" title="Created from email">
+                                                <i className="fas fa-envelope"></i>
+                                            </span>
+                                        )}
+                                        {ticket.type === 'internal' && (
+                                            <span className="px-2 py-0.5 text-xs font-semibold rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" title="Created manually">
+                                                <i className="fas fa-user"></i>
+                                            </span>
+                                        )}
                                     </div>
                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColorClasses(ticket.status)}`}>
                                         {ticket.status}
