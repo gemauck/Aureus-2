@@ -288,6 +288,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
                                      src.includes('ManagementMeetingNotes') || src.includes('Teams.jsx') || src.includes('Teams.js') ||
+                                     src.includes('AuditTrail') || src.includes('Reports') ||
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
                                      scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') ||
@@ -295,6 +296,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
                                      scriptSrc.includes('/projects/Projects') || 
                                      scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
+                                     scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             
             if (needsCacheBusting) {
