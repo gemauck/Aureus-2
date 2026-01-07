@@ -177,6 +177,12 @@ async function handler(req, res) {
 
       try {
         console.log('📊 Fetching audit logs with where clause:', JSON.stringify(where, null, 2));
+        console.log('📊 User info:', { id: user.id, role: user.role, isAdmin });
+        
+        // First, let's just count ALL audit logs to see if any exist
+        const totalAllLogs = await prisma.auditLog.count();
+        console.log('📊 Total audit logs in database (no filter):', totalAllLogs);
+        
         const [auditLogs, total] = await Promise.all([
           prisma.auditLog.findMany({
             where,
@@ -200,6 +206,7 @@ async function handler(req, res) {
         ]);
 
         console.log(`✅ Found ${auditLogs.length} audit logs (total: ${total}) for user: ${user.id}, role: ${user.role}`);
+        console.log('📊 First 3 logs:', auditLogs.slice(0, 3).map(l => ({ id: l.id, action: l.action, entity: l.entity, actorId: l.actorId })));
 
         // Transform logs to match the frontend format
         const transformedLogs = auditLogs.map(log => {
