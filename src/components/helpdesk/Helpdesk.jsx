@@ -157,10 +157,16 @@ const Helpdesk = () => {
                     if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
                     response = await fetchResponse.json();
                 }
-                savedTicket = response.ticket;
+                // Handle response format: API returns { data: { ticket: ... } }
+                savedTicket = response?.ticket || response?.data?.ticket;
                 
-                // Update in local state
-                setTickets(prev => prev.map(t => t.id === savedTicket.id ? savedTicket : t));
+                if (savedTicket) {
+                    // Update in local state
+                    setTickets(prev => prev.map(t => t.id === savedTicket.id ? savedTicket : t));
+                } else {
+                    console.error('❌ No ticket in update response:', response);
+                    throw new Error('No ticket data in response');
+                }
             } else {
                 // Create new ticket
                 let response;
@@ -180,10 +186,16 @@ const Helpdesk = () => {
                     if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
                     response = await fetchResponse.json();
                 }
-                savedTicket = response.ticket;
+                // Handle response format: API returns { data: { ticket: ... } }
+                savedTicket = response?.ticket || response?.data?.ticket;
                 
-                // Add to local state
-                setTickets(prev => [savedTicket, ...prev]);
+                if (savedTicket) {
+                    // Add to local state
+                    setTickets(prev => [savedTicket, ...prev]);
+                } else {
+                    console.error('❌ No ticket in create response:', response);
+                    throw new Error('No ticket data in response');
+                }
             }
             
             setShowModal(false);
