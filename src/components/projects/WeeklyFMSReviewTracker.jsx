@@ -102,6 +102,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const lastChangeTimestampRef = useRef(0); // Track when last status change was made
     const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
     const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
+    const sectionScrollRefs = useRef({}); // Track scroll containers for each section
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -1218,10 +1219,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
+        { value: 'not-checked', label: 'Not Checked', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' },
+        { value: 'acceptable', label: 'Acceptable', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
+        { value: 'issue', label: 'Issue', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-500 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {
@@ -2070,6 +2070,45 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     // (Per-section tables now scroll independently, so we skip auto-scroll to working months)
     
+    // Scroll to current month on initial load
+    useEffect(() => {
+        if (isLoading || sections.length === 0) return;
+        
+        // Only scroll if we're viewing the current year
+        if (selectedYear !== currentYear) return;
+        
+        // Find the first week of the current month
+        const currentMonthName = months[currentMonth];
+        const firstWeekOfCurrentMonth = weeks.findIndex(w => w.month === currentMonthName && w.weekNumber === 1);
+        
+        if (firstWeekOfCurrentMonth === -1) {
+            // If exact match not found, find any week in the current month
+            const anyWeekInCurrentMonth = weeks.findIndex(w => w.month === currentMonthName);
+            if (anyWeekInCurrentMonth === -1) return;
+        }
+        
+        const targetWeekIndex = firstWeekOfCurrentMonth !== -1 ? firstWeekOfCurrentMonth : weeks.findIndex(w => w.month === currentMonthName);
+        
+        // Scroll all section scroll containers to the current month
+        const scrollToCurrentMonth = () => {
+            Object.values(sectionScrollRefs.current).forEach(scrollContainer => {
+                if (scrollContainer) {
+                    // Find the header cell for the target week
+                    const headerCells = scrollContainer.querySelectorAll('thead th');
+                    if (headerCells.length > targetWeekIndex + 1) {
+                        const targetCell = headerCells[targetWeekIndex + 1]; // +1 because first cell is "Document / Data"
+                        if (targetCell) {
+                            targetCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+                        }
+                    }
+                }
+            });
+        };
+        
+        // Wait a bit for DOM to render
+        setTimeout(scrollToCurrentMonth, 300);
+    }, [isLoading, sections.length, selectedYear, currentYear, currentMonth, weeks, months]);
+    
     // ============================================================
     // COMMENT POPUP MANAGEMENT
     // ============================================================
@@ -2243,7 +2282,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             >
                 <div className="min-w-[160px] relative">
                     <select
-                        value={status || ''}
+                        value={status || 'not-checked'}
                         onChange={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2298,7 +2337,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
-                        <option value="">Select Status</option>
                         {statusOptions.map(option => (
                             <option key={option.value} value={option.value}>
                                 {option.label}
@@ -3185,20 +3223,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-medium text-gray-600">Status:</span>
-                    {statusOptions.slice(0, 3).map((option, idx) => (
+                    {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
                             <div className="flex items-center gap-1">
                                 <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
                                 <span className="text-[10px] text-gray-600">{option.label}</span>
                             </div>
-                            {idx < 2 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
                         </React.Fragment>
                     ))}
-                    <span className="text-gray-300 mx-1">|</span>
-                    <div className="flex items-center gap-1">
-                        <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor}`}></div>
-                        <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
-                    </div>
                 </div>
             </div>
             
@@ -3261,7 +3294,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             </div>
 
                             {/* Scrollable week/document grid for this section only */}
-                            <div className="border-t border-gray-200 overflow-x-auto">
+                            <div 
+                                ref={(el) => {
+                                    if (el) {
+                                        sectionScrollRefs.current[section.id] = el;
+                                    }
+                                }}
+                                className="border-t border-gray-200 overflow-x-auto"
+                            >
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
