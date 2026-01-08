@@ -209,6 +209,19 @@ async function buildJSX() {
     const versionFilePath = path.join(__dirname, 'dist', 'build-version.json');
     fs.writeFileSync(versionFilePath, JSON.stringify(versionInfo, null, 2));
     console.log(`🧾 Build version file created at dist/build-version.json (version: ${versionInfo.version})`);
+    
+    // Update index.html with new build version for cache busting
+    const indexHtmlPath = path.join(__dirname, 'index.html');
+    if (fs.existsSync(indexHtmlPath)) {
+        let indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+        // Replace the BUILD_VERSION value
+        indexHtml = indexHtml.replace(
+            /window\.BUILD_VERSION\s*=\s*['"][^'"]*['"]/,
+            `window.BUILD_VERSION = '${versionInfo.version}'`
+        );
+        fs.writeFileSync(indexHtmlPath, indexHtml);
+        console.log(`🔄 Updated index.html with build version: ${versionInfo.version}`);
+    }
      
     if (!isWatchMode) {
       console.log('✨ Build complete!');

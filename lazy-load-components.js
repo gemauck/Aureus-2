@@ -284,6 +284,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             // Also check the original src path to catch components before path conversion
             const needsCacheBusting = src.includes('DailyNotes') || src.includes('Manufacturing') || 
                                      src.includes('ProjectProgressTracker') || 
+                                     src.includes('ProjectDetail') || 
                                      src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') || 
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
@@ -295,6 +296,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                      scriptSrc.includes('Users.jsx') || scriptSrc.includes('Users.js') || 
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
                                      scriptSrc.includes('/projects/Projects') || 
+                                     scriptSrc.includes('/projects/ProjectDetail') ||
                                      scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -319,8 +321,8 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             ensureReactForProjectDetail().then(() => {
                 // First, fetch the file to validate it's JavaScript before loading as script
                 // This prevents HTML (404 pages) from being executed as JavaScript
-                // Use no-cache for DailyNotes, Manufacturing, ProjectProgressTracker, and ManagementMeetingNotes to ensure fresh version, default for others
-                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ? 'no-cache' : 'default';
+                // Use no-cache for DailyNotes, Manufacturing, ProjectProgressTracker, ProjectDetail, and ManagementMeetingNotes to ensure fresh version, default for others
+                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('ProjectDetail') || scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ? 'no-cache' : 'default';
                 
                 // Retry logic for server errors (502, 503, 504)
                 const attemptLoad = (attempt = 1, maxAttempts = 3) => {
