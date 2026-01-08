@@ -47,12 +47,67 @@ const generateWeeksForYear = (year) => {
         const actualWeeks = Math.min(numberOfWeeks, 5); // Cap at 5 weeks
         
         for (let weekNumber = 1; weekNumber <= actualWeeks; weekNumber++) {
+            // Calculate date range for this week
+            // Week 1: days 1-7, Week 2: days 8-14, Week 3: days 15-21, Week 4: days 22-28, Week 5: remaining days
+            const startDay = (weekNumber - 1) * 7 + 1;
+            const endDay = Math.min(weekNumber * 7, daysInMonth);
+            
+            // For the first week of January, check if it should start from December
+            // This handles cases like "W1 = 29 December to 4 Jan 2026"
+            let startDate, endDate;
+            if (monthIndex === 0 && weekNumber === 1) {
+                // First week of January - check if we should start from December
+                const daysInPrevMonth = new Date(year - 1, 11, 0).getDate();
+                // If January doesn't start on the 1st of a week, start from December
+                // For simplicity, if week 1 is less than 7 days, extend backwards
+                if (endDay < 7) {
+                    const daysFromPrevMonth = 7 - endDay;
+                    startDate = new Date(year - 1, 11, daysInPrevMonth - daysFromPrevMonth + 1);
+                } else {
+                    startDate = new Date(year, monthIndex, startDay);
+                }
+                endDate = new Date(year, monthIndex, endDay);
+            } else if (monthIndex === 11 && weekNumber === actualWeeks) {
+                // Last week of December - extend into January if needed
+                startDate = new Date(year, monthIndex, startDay);
+                const daysInWeek = endDay - startDay + 1;
+                if (daysInWeek < 7) {
+                    // Extend into January
+                    const daysToExtend = 7 - daysInWeek;
+                    endDate = new Date(year + 1, 0, daysToExtend);
+                } else {
+                    endDate = new Date(year, monthIndex, endDay);
+                }
+            } else {
+                // Regular weeks
+                startDate = new Date(year, monthIndex, startDay);
+                endDate = new Date(year, monthIndex, endDay);
+            }
+            
+            // Determine end month and year
+            let endMonth = months[endDate.getMonth()];
+            let endYear = endDate.getFullYear();
+            
+            // Format dates
+            const formatDate = (date) => {
+                const day = date.getDate();
+                const monthName = months[date.getMonth()];
+                return `${day} ${monthName}`;
+            };
+            
+            const dateRange = startDate.getTime() === endDate.getTime()
+                ? formatDate(startDate)
+                : `${formatDate(startDate)} to ${endDate.getDate()} ${endMonth}${endYear !== year ? ` ${endYear}` : ''}`;
+            
             weeks.push({
                 month,
                 monthIndex,
                 weekNumber,
                 key: `${month}-Week${weekNumber}-${year}`,
-                display: `W${weekNumber}`
+                display: `W${weekNumber}`,
+                dateRange: dateRange,
+                startDate: startDate,
+                endDate: endDate
             });
         }
     });
@@ -103,6 +158,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
     const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
     const sectionScrollRefs = useRef({}); // Track scroll containers for each section
+    const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -2070,6 +2126,48 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     // (Per-section tables now scroll independently, so we skip auto-scroll to working months)
     
+    // Synchronize horizontal scrolling across all sections
+    useEffect(() => {
+        if (sections.length === 0) return;
+        
+        const scrollContainers = Object.values(sectionScrollRefs.current).filter(Boolean);
+        if (scrollContainers.length === 0) return;
+        
+        // Create a map to store event handlers for proper cleanup
+        const scrollHandlers = new Map();
+        
+        scrollContainers.forEach(sourceContainer => {
+            const handleScroll = () => {
+                if (isScrollingRef.current) return; // Prevent infinite loops
+                
+                isScrollingRef.current = true;
+                const scrollLeft = sourceContainer.scrollLeft;
+                
+                // Update all other containers to match the scroll position
+                scrollContainers.forEach(container => {
+                    if (container !== sourceContainer) {
+                        container.scrollLeft = scrollLeft;
+                    }
+                });
+                
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    isScrollingRef.current = false;
+                }, 50);
+            };
+            
+            scrollHandlers.set(sourceContainer, handleScroll);
+            sourceContainer.addEventListener('scroll', handleScroll, { passive: true });
+        });
+        
+        // Cleanup
+        return () => {
+            scrollHandlers.forEach((handler, container) => {
+                container.removeEventListener('scroll', handler);
+            });
+        };
+    }, [sections.length]);
+    
     // Scroll to current month on initial load
     useEffect(() => {
         if (isLoading || sections.length === 0) return;
@@ -2091,6 +2189,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Scroll all section scroll containers to the current month
         const scrollToCurrentMonth = () => {
+            // Temporarily disable scroll sync to prevent conflicts
+            isScrollingRef.current = true;
+            
             Object.values(sectionScrollRefs.current).forEach(scrollContainer => {
                 if (scrollContainer) {
                     // Find the header cell for the target week
@@ -2103,6 +2204,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     }
                 }
             });
+            
+            // Re-enable scroll sync after scrolling completes
+            setTimeout(() => {
+                isScrollingRef.current = false;
+            }, 500);
         };
         
         // Wait a bit for DOM to render
@@ -3324,15 +3430,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                                 ? 'bg-primary-50 text-primary-700'
                                                                 : 'text-gray-600'
                                                         }`}
-                                                        title={`${week.month} Week ${week.weekNumber}`}
+                                                        title={`${week.month} Week ${week.weekNumber}: ${week.dateRange}`}
                                                     >
                                                         {showMonthHeader && idx > 0 ? (
                                                             <div>
                                                                 <div className="text-[9px] font-bold text-gray-500">{week.month.slice(0, 3)}</div>
-                                                                <div>{week.display}</div>
+                                                                <div className="text-[9px]">{week.display}</div>
+                                                                <div className="text-[8px] font-normal text-gray-500 mt-0.5 leading-tight">{week.dateRange}</div>
                                                             </div>
                                                         ) : (
-                                                            week.display
+                                                            <div>
+                                                                <div>{week.display}</div>
+                                                                <div className="text-[8px] font-normal text-gray-500 mt-0.5 leading-tight">{week.dateRange}</div>
+                                                            </div>
                                                         )}
                                                     </th>
                                                 );
