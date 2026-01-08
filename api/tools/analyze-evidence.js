@@ -9,16 +9,27 @@ import XLSX from 'xlsx'
 
 // Initialize OpenAI client (optional - can use other LLM providers)
 let openai = null
-try {
-  // Try to load OpenAI SDK if available
-  const openaiModule = await import('openai').catch(() => null)
-  if (openaiModule) {
-    openai = new openaiModule.OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    })
+let openaiInitialized = false
+
+async function initializeOpenAI() {
+  if (openaiInitialized) return openai
+  
+  try {
+    // Try to load OpenAI SDK if available
+    const openaiModule = await import('openai').catch(() => null)
+    if (openaiModule && process.env.OPENAI_API_KEY) {
+      openai = new openaiModule.OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      })
+      openaiInitialized = true
+      return openai
+    }
+  } catch (e) {
+    console.warn('OpenAI SDK not available. LLM analysis will use fallback method.')
   }
-} catch (e) {
-  console.warn('OpenAI SDK not available. LLM analysis will use fallback method.')
+  
+  openaiInitialized = true
+  return null
 }
 
 /**
@@ -88,6 +99,11 @@ async function extractFileContent(fileBuffer, fileName, mimeType) {
  */
 async function analyzeWithLLM(content, fileName, options = {}) {
   const { useLLM = true, model = 'gpt-4o-mini' } = options
+  
+  // Initialize OpenAI if not already done
+  if (useLLM && !openaiInitialized) {
+    await initializeOpenAI()
+  }
   
   if (!useLLM || !openai || !process.env.OPENAI_API_KEY) {
     // Fallback to basic analysis
