@@ -9,60 +9,127 @@ const DieselRefundEvidenceEvaluator = () => {
     const [inputMode, setInputMode] = useState('json'); // 'json', 'text', 'file'
     const fileInputRef = useRef(null);
     const [uploadedFile, setUploadedFile] = useState(null);
+    const [useLLMAnalysis, setUseLLMAnalysis] = useState(true);
 
-    // Check if the evaluator function is available
+    // Check if the evaluator function is available (for fallback)
     const evaluatorAvailable = typeof window.evaluateDieselRefundEvidence === 'function';
 
-    const handleEvaluate = () => {
-        if (!evaluatorAvailable) {
-            setError('Evidence evaluator function is not loaded. Please refresh the page.');
-            return;
-        }
-
+    const handleEvaluate = async () => {
         setIsEvaluating(true);
         setError(null);
         setEvaluationResult(null);
 
         try {
-            let dataToEvaluate;
+            let payload = {};
+            const apiBase = window.location.origin;
 
             if (inputMode === 'file' && uploadedFile) {
-                // For file mode, create a file object structure
-                dataToEvaluate = {
-                    fileName: uploadedFile.name,
-                    fileType: uploadedFile.type,
-                    fileSize: uploadedFile.size,
-                    lastModified: uploadedFile.lastModified,
-                    // Try to read file content if it's text-based
-                    content: null
+                // Convert file to base64 data URL
+                const reader = new FileReader();
+                const fileDataUrl = await new Promise((resolve, reject) => {
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(uploadedFile);
+                });
+
+                payload = {
+                    file: {
+                        name: uploadedFile.name,
+                        dataUrl: fileDataUrl,
+                        type: uploadedFile.type
+                    },
+                    useLLM: useLLMAnalysis
                 };
             } else if (inputMode === 'json') {
                 // Try to parse as JSON
                 if (!inputData.trim()) {
                     throw new Error('Please enter some data to evaluate');
                 }
+                let parsedData;
                 try {
-                    dataToEvaluate = JSON.parse(inputData);
+                    parsedData = JSON.parse(inputData);
                 } catch (e) {
                     throw new Error('Invalid JSON. Please check your input or use Text mode.');
                 }
+                payload = {
+                    content: parsedData,
+                    fileName: 'json-input.json',
+                    useLLM: useLLMAnalysis
+                };
             } else {
                 // Text mode
                 if (!inputData.trim()) {
                     throw new Error('Please enter some text to evaluate');
                 }
-                dataToEvaluate = inputData;
+                payload = {
+                    content: inputData,
+                    fileName: 'text-input.txt',
+                    useLLM: useLLMAnalysis
+                };
             }
 
-            // Evaluate the data
-            const result = window.evaluateDieselRefundEvidence(dataToEvaluate, {
-                projectId: null // Can be enhanced to accept project ID
+            // Call LLM API endpoint
+            const response = await fetch(`${apiBase}/api/tools/analyze-evidence`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload)
             });
 
-            setEvaluationResult(result);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (data.success && data.analysis) {
+                // Use LLM analysis result
+                setEvaluationResult(data.analysis);
+            } else {
+                throw new Error('Invalid response from analysis API');
+            }
         } catch (err) {
-            setError(err.message || 'An error occurred while evaluating the data');
             console.error('Evaluation error:', err);
+            
+            // Fallback to client-side evaluator if LLM API fails
+            if (evaluatorAvailable) {
+                try {
+                    let dataToEvaluate;
+
+                    if (inputMode === 'file' && uploadedFile) {
+                        dataToEvaluate = {
+                            fileName: uploadedFile.name,
+                            fileType: uploadedFile.type,
+                            fileSize: uploadedFile.size,
+                            lastModified: uploadedFile.lastModified,
+                            content: null
+                        };
+                    } else if (inputMode === 'json') {
+                        dataToEvaluate = JSON.parse(inputData);
+                    } else {
+                        dataToEvaluate = inputData;
+                    }
+
+                    const result = window.evaluateDieselRefundEvidence(dataToEvaluate, {
+                        projectId: null
+                    });
+                    
+                    // Add warning about fallback
+                    result.warning = 'LLM analysis unavailable. Using basic evaluation.';
+                    result.issues = result.issues || [];
+                    result.issues.push('LLM analysis failed: ' + err.message);
+                    
+                    setEvaluationResult(result);
+                } catch (fallbackErr) {
+                    setError(err.message || 'An error occurred while evaluating the data');
+                }
+            } else {
+                setError(err.message || 'An error occurred while evaluating the data');
+            }
         } finally {
             setIsEvaluating(false);
         }
@@ -131,10 +198,28 @@ const DieselRefundEvidenceEvaluator = () => {
 
             {/* Input Section */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="mb-4 flex items-center justify-between">
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Input Mode
+                        </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={useLLMAnalysis}
+                                onChange={(e) => setUseLLMAnalysis(e.target.checked)}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <span className="flex items-center gap-1">
+                                <i className="fas fa-brain text-primary-600"></i>
+                                Use AI Analysis (GPT)
+                            </span>
+                        </label>
+                    </div>
+                </div>
                 <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Input Mode
-                    </label>
                     <div className="flex gap-2">
                         <button
                             onClick={() => {
@@ -265,6 +350,22 @@ const DieselRefundEvidenceEvaluator = () => {
                 <div className="space-y-4">
                     {/* Summary Card */}
                     <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        {evaluationResult.warning && (
+                            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-sm text-yellow-800">
+                                    <i className="fas fa-exclamation-triangle mr-2"></i>
+                                    {evaluationResult.warning}
+                                </p>
+                            </div>
+                        )}
+                        {evaluationResult.method === 'llm' && (
+                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p className="text-sm text-blue-800">
+                                    <i className="fas fa-brain mr-2"></i>
+                                    Analysis powered by AI (GPT Model: {evaluationResult.model || 'gpt-4o-mini'})
+                                </p>
+                            </div>
+                        )}
                         <div className="flex items-start justify-between mb-4">
                             <div>
                                 <h3 className="text-lg font-semibold text-gray-900 mb-1">Evaluation Results</h3>
