@@ -3699,6 +3699,10 @@ function initializeProjectDetail() {
     };
     
     const handleAddWeeklyFMSReviewProcess = async () => {
+        console.log('🟢 ProjectDetail: Adding Weekly FMS Review process', {
+            projectId: project.id,
+            currentHasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcess
+        });
         
         try {
             // Cancel any pending debounced saves to prevent overwriting
