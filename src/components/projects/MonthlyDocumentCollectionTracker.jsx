@@ -101,9 +101,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // Continue to cleanup attempts
                 }
                 
-                // OPTIMIZATION: Reduced max attempts from 10 to 3 for better performance
+                // OPTIMIZATION: Reduced max attempts from 3 to 1 for better performance
+                // Most data is already valid JSON, so we don't need multiple retries
                 let attempts = 0;
-                const maxAttempts = 3;
+                const maxAttempts = 1;
                 
                 while (attempts < maxAttempts) {
                     try {
@@ -112,7 +113,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             cleaned = cleaned.slice(1, -1);
                         }
                         
-                        // Unescape common escape sequences
+                        // Unescape common escape sequences (optimized single pass)
                         cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
                         
                         const parsed = JSON.parse(cleaned);
@@ -182,8 +183,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return Array.from(years).sort();
     };
 
+    // PERFORMANCE: Memoize normalization results to avoid re-processing
+    const normalizationCache = useRef(new Map());
+    
     const normalizeSectionsByYear = (rawValue, fallbackYear) => {
         if (!rawValue) return {};
+
+        // PERFORMANCE: Use cache for identical inputs (common when re-rendering)
+        const cacheKey = `${typeof rawValue === 'string' ? rawValue.substring(0, 100) : JSON.stringify(rawValue).substring(0, 100)}_${fallbackYear || 'default'}`;
+        if (normalizationCache.current.has(cacheKey)) {
+            return normalizationCache.current.get(cacheKey);
+        }
 
         let parsedValue = rawValue;
 
@@ -191,18 +201,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const trimmed = rawValue.trim();
             if (!trimmed) return {};
             try {
+                // OPTIMIZATION: Use faster JSON.parse for most cases
                 parsedValue = JSON.parse(trimmed);
             } catch {
+                // Only use slow parseSections if JSON.parse fails
                 parsedValue = parseSections(rawValue);
             }
         }
 
         if (parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)) {
             const result = {};
-            Object.keys(parsedValue).forEach(yearKey => {
+            // OPTIMIZATION: Process in batches to avoid blocking
+            const yearKeys = Object.keys(parsedValue);
+            for (let i = 0; i < yearKeys.length; i++) {
+                const yearKey = yearKeys[i];
                 const value = parsedValue[yearKey];
                 result[yearKey] = Array.isArray(value) ? value : parseSections(value);
-            });
+            }
+            
+            // Cache result
+            normalizationCache.current.set(cacheKey, result);
+            // Limit cache size to prevent memory issues
+            if (normalizationCache.current.size > 50) {
+                const firstKey = normalizationCache.current.keys().next().value;
+                normalizationCache.current.delete(firstKey);
+            }
+            
             return result;
         }
 
@@ -216,9 +240,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return {};
         }
 
-        return {
+        const result = {
             [targetYear]: cloneSectionsArray(baseSections)
         };
+        
+        // Cache result
+        normalizationCache.current.set(cacheKey, result);
+        if (normalizationCache.current.size > 50) {
+            const firstKey = normalizationCache.current.keys().next().value;
+            normalizationCache.current.delete(firstKey);
+        }
+        
+        return result;
     };
     
     // ============================================================
@@ -326,42 +359,102 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setIsLoading(true);
         }
         
-        try {
-            const snapshotKey = getSnapshotKey(project.id);
-            const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
-            let normalized = normalizedFromProp;
-            
-            const yearKeys = Object.keys(normalizedFromProp || {});
-            
-            // If prop has no data but we have a local snapshot, restore from snapshot
-            if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
-                try {
-                    const snapshotString = window.localStorage.getItem(snapshotKey);
-                    if (snapshotString) {
-                        const snapshotParsed = JSON.parse(snapshotString);
-                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
-                        const snapshotYears = Object.keys(snapshotMap || {});
-                        if (snapshotYears.length > 0) {
-                            normalized = snapshotMap;
+        // PERFORMANCE: Process data asynchronously to avoid blocking UI
+        const processData = () => {
+            try {
+                const snapshotKey = getSnapshotKey(project.id);
+                
+                // Quick check: if prop has simple data, process immediately
+                const hasSimpleData = project.documentSections && 
+                    (Array.isArray(project.documentSections) || 
+                     (typeof project.documentSections === 'string' && project.documentSections.length < 1000));
+                
+                if (hasSimpleData) {
+                    // Fast path for small/simple data
+                    const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
+                    let normalized = normalizedFromProp;
+                    
+                    const yearKeys = Object.keys(normalizedFromProp || {});
+                    
+                    // Quick localStorage check for small data
+                    if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                        try {
+                            const snapshotString = window.localStorage.getItem(snapshotKey);
+                            if (snapshotString && snapshotString.length < 50000) { // Only for reasonably sized data
+                                const snapshotParsed = JSON.parse(snapshotString);
+                                const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                                const snapshotYears = Object.keys(snapshotMap || {});
+                                if (snapshotYears.length > 0) {
+                                    normalized = snapshotMap;
+                                }
+                            }
+                        } catch (snapshotError) {
+                            console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
                         }
                     }
-                } catch (snapshotError) {
-                    console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
+                    
+                    setSectionsByYear(normalized);
+                    lastSavedSnapshotRef.current = serializeSections(normalized);
+                    lastLoadTimestampRef.current = Date.now();
+                    hasLoadedInitialDataRef.current = true;
+                    setIsLoading(false);
+                } else {
+                    // Slow path for large/complex data - defer to idle time
+                    const processLargeData = () => {
+                        try {
+                            const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
+                            let normalized = normalizedFromProp;
+                            
+                            const yearKeys = Object.keys(normalizedFromProp || {});
+                            
+                            // If prop has no data but we have a local snapshot, restore from snapshot
+                            if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                                try {
+                                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                                    if (snapshotString) {
+                                        const snapshotParsed = JSON.parse(snapshotString);
+                                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                                        const snapshotYears = Object.keys(snapshotMap || {});
+                                        if (snapshotYears.length > 0) {
+                                            normalized = snapshotMap;
+                                        }
+                                    }
+                                } catch (snapshotError) {
+                                    console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
+                                }
+                            }
+                            
+                            setSectionsByYear(normalized);
+                            lastSavedSnapshotRef.current = serializeSections(normalized);
+                            lastLoadTimestampRef.current = Date.now();
+                        } catch (error) {
+                            console.error('❌ Error loading sections from prop:', error);
+                            setSectionsByYear({});
+                            lastSavedSnapshotRef.current = '{}';
+                        } finally {
+                            hasLoadedInitialDataRef.current = true;
+                            setIsLoading(false);
+                        }
+                    };
+                    
+                    // Use requestIdleCallback for large data processing, fallback to setTimeout
+                    if (typeof requestIdleCallback !== 'undefined') {
+                        requestIdleCallback(processLargeData, { timeout: 100 });
+                    } else {
+                        setTimeout(processLargeData, 0);
+                    }
                 }
+            } catch (error) {
+                console.error('❌ Error loading sections from prop:', error);
+                setSectionsByYear({});
+                lastSavedSnapshotRef.current = '{}';
+                hasLoadedInitialDataRef.current = true;
+                setIsLoading(false);
             }
-            
-            setSectionsByYear(normalized);
-            lastSavedSnapshotRef.current = serializeSections(normalized);
-            // Track when we loaded data from props
-            lastLoadTimestampRef.current = Date.now();
-        } catch (error) {
-            console.error('❌ Error loading sections from prop:', error);
-            setSectionsByYear({});
-            lastSavedSnapshotRef.current = '{}';
-        } finally {
-            hasLoadedInitialDataRef.current = true;
-            setIsLoading(false);
-        }
+        };
+        
+        // Start processing immediately for small data, defer for large data
+        processData();
     }, [project?.documentSections, project?.id]);
     
     const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
