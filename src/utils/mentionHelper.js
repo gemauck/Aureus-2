@@ -170,8 +170,19 @@ const MentionHelper = {
             }
             
             // Generate entity URL if we have entity information
+            // IMPORTANT: If contextLink already contains document collection tracker parameters,
+            // preserve it as-is instead of generating a new URL
             let entityUrl = contextLink;
-            if (window.EntityUrl) {
+            const hasDocumentCollectionParams = contextLink && (
+                contextLink.includes('docSectionId=') || 
+                contextLink.includes('docDocumentId=') || 
+                contextLink.includes('docMonth=')
+            );
+            
+            // If contextLink has document collection tracker parameters, use it as-is
+            if (hasDocumentCollectionParams) {
+                entityUrl = contextLink;
+            } else if (window.EntityUrl) {
                 // Try to generate URL from metadata
                 if (metadata.projectId) {
                     // If we have a task, link to the task with parent project; otherwise link to project

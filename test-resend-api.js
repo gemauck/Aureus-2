@@ -66,3 +66,4 @@ fetch('https://api.resend.com/emails', {
     process.exit(1);
 });
 
+

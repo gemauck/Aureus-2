@@ -44,6 +44,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs'
+import { execSync } from 'child_process'
 
 // Load package.json (Node.js v22 compatible)
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'))
@@ -246,16 +247,28 @@ const PORT = process.env.PORT || 3000
 
 // Application version info for cache-busting and client refresh prompts
 // Use dynamic version that changes on each deployment
-// Priority: APP_VERSION env var (set by deployment script) > timestamp-based version > package version
+// Priority: APP_VERSION env var (set by deployment script) > git commit hash > timestamp-based version > package version
 const getAppVersion = () => {
   if (process.env.APP_VERSION) {
-    // Use the version set by deployment script (git commit hash or timestamp)
+    // Use the version set by deployment script (format: YYYYMMDD-gitHash)
     return process.env.APP_VERSION
   }
-  // Fallback: Use timestamp-based version (changes on each server start/restart)
-  // This ensures version changes even if APP_VERSION is not set, triggering update notifications
-  // Format: package.version-timestamp (e.g., "0.1.20-1734567890123")
-  return `${pkg.version}-${Date.now()}`
+  
+  // Try to get git commit hash as fallback (more stable than timestamp)
+  try {
+    const gitHash = execSync('git rev-parse --short HEAD', { 
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim()
+    const date = new Date().toISOString().split('T')[0].replace(/-/g, '')
+    return `${date}-${gitHash}`
+  } catch (error) {
+    // Final fallback: Use timestamp-based version (changes on each server start/restart)
+    // This ensures version changes even if git is not available, triggering update notifications
+    // Format: package.version-timestamp (e.g., "0.1.20-1734567890123")
+    return `${pkg.version}-${Date.now()}`
+  }
 }
 const APP_VERSION = getAppVersion()
 const APP_BUILD_TIME = process.env.APP_BUILD_TIME || new Date().toISOString()

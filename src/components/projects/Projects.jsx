@@ -1088,29 +1088,33 @@ const Projects = () => {
         let projectId = null;
         let taskId = null;
         
-        // Check pathname first
-        if (urlPath.includes('/projects/')) {
-            const pathParts = urlPath.split('/projects/')[1].split('/');
-            projectId = pathParts[0];
-            taskId = urlParams.get('task');
-        }
-        
-        // Also check hash (for hash-based routing like #/projects/123?task=456)
-        if (!projectId && urlHash.includes('/projects/')) {
+        // PRIORITY: Check hash first (for hash-based routing like #/projects/123?task=456 or #/projects/123?docSectionId=...)
+        // This is critical for email links which use hash-based routing
+        let hashParams = null;
+        if (urlHash.includes('/projects/')) {
             const hashParts = urlHash.split('/projects/')[1].split('/');
             projectId = hashParts[0].split('?')[0]; // Remove query params from ID
-            // Check for task in hash query params
+            // Check for query params in hash
             if (urlHash.includes('?')) {
                 const hashQuery = urlHash.split('?')[1];
-                const hashParams = new URLSearchParams(hashQuery);
+                hashParams = new URLSearchParams(hashQuery);
                 taskId = hashParams.get('task') || urlParams.get('task');
             } else {
                 taskId = urlParams.get('task');
             }
         }
         
+        // Fallback to pathname if not found in hash
+        if (!projectId && urlPath.includes('/projects/')) {
+            const pathParts = urlPath.split('/projects/')[1].split('/');
+            projectId = pathParts[0];
+            if (!taskId) {
+                taskId = urlParams.get('task');
+            }
+        }
+        
         if (projectId) {
-            console.log('✅ Projects: IMMEDIATE - Found project in URL:', { projectId, taskId });
+            console.log('✅ Projects: IMMEDIATE - Found project in URL:', { projectId, taskId, hasHashParams: !!hashParams });
             
             // Fetch and open project immediately
             const fetchAndOpen = async () => {
@@ -1138,16 +1142,40 @@ const Projects = () => {
                             setSelectedProject(fetchedProject);
                             setShowModal(false);
                             
-                            // Update URL (use RouteState directly since updateProjectUrl might not be defined yet)
-                            if (taskId && window.RouteState) {
+                            // Update URL - preserve hash if it contains document collection tracker parameters
+                            const hasDocCollectionParams = hashParams && (
+                                hashParams.has('docSectionId') || 
+                                hashParams.has('docDocumentId') || 
+                                hashParams.has('docMonth')
+                            );
+                            
+                            if (hasDocCollectionParams) {
+                                // For document collection tracker, DON'T call RouteState.navigate() 
+                                // as it converts hash URLs to pathname URLs, losing the hash
+                                // The hash is already correct (#/projects/{id}?docSectionId=...), 
+                                // we just opened the project, so leave the hash alone
+                                // ProjectDetail and MonthlyDocumentCollectionTracker will detect the hash params
+                                console.log('✅ Projects: Preserving hash with document collection parameters:', urlHash);
+                            } else if (window.RouteState) {
                                 try {
-                                    window.RouteState.navigate({
-                                        page: 'projects',
-                                        segments: [projectId],
-                                        search: `?task=${encodeURIComponent(taskId)}`,
-                                        preserveSearch: false,
-                                        preserveHash: false
-                                    });
+                                    if (taskId) {
+                                        // For tasks, use search params
+                                        window.RouteState.navigate({
+                                            page: 'projects',
+                                            segments: [projectId],
+                                            search: `?task=${encodeURIComponent(taskId)}`,
+                                            preserveSearch: false,
+                                            preserveHash: false
+                                        });
+                                    } else {
+                                        // No special params, just navigate to project
+                                        window.RouteState.navigate({
+                                            page: 'projects',
+                                            segments: [projectId],
+                                            preserveSearch: false,
+                                            preserveHash: false
+                                        });
+                                    }
                                 } catch (e) {
                                     console.warn('⚠️ Projects: Failed to update URL:', e);
                                 }

@@ -43,6 +43,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const isSavingRef = useRef(false);
     const previousProjectIdRef = useRef(project?.id);
     const hasLoadedInitialDataRef = useRef(false);
+    const lastLoadTimestampRef = useRef(0);
     const sectionsRef = useRef({});
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
@@ -79,6 +80,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
     // Parse documentSections safely (legacy flat array support)
+    // OPTIMIZED: Reduced retry attempts and improved early exit conditions
     const parseSections = (data) => {
         if (!data) return [];
         if (Array.isArray(data)) return data;
@@ -88,11 +90,36 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 let cleaned = data.trim();
                 if (!cleaned) return [];
                 
+                // OPTIMIZATION: Try direct parse first (most common case)
+                try {
+                    const directParsed = JSON.parse(cleaned);
+                    if (Array.isArray(directParsed)) return directParsed;
+                    if (typeof directParsed === 'object' && directParsed !== null) {
+                        return directParsed; // Could be year-scoped object
+                    }
+                } catch {
+                    // Continue to cleanup attempts
+                }
+                
+                // OPTIMIZATION: Reduced max attempts from 10 to 3 for better performance
                 let attempts = 0;
-                while (attempts < 10) {
+                const maxAttempts = 3;
+                
+                while (attempts < maxAttempts) {
                     try {
+                        // Remove surrounding quotes if present
+                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                            cleaned = cleaned.slice(1, -1);
+                        }
+                        
+                        // Unescape common escape sequences
+                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                        
                         const parsed = JSON.parse(cleaned);
                         if (Array.isArray(parsed)) return parsed;
+                        if (typeof parsed === 'object' && parsed !== null) {
+                            return parsed; // Could be year-scoped object
+                        }
                         if (typeof parsed === 'string') {
                             cleaned = parsed;
                             attempts++;
@@ -100,12 +127,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                         return [];
                     } catch (parseError) {
-                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                            cleaned = cleaned.slice(1, -1);
-                        }
-                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
                         attempts++;
-                        if (attempts >= 10) {
+                        if (attempts >= maxAttempts) {
                             console.warn('Failed to parse documentSections after', attempts, 'attempts');
                             return [];
                         }
@@ -296,7 +319,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const loadFromProjectProp = useCallback(() => {
         if (!project?.id) return;
         
-        setIsLoading(true);
+        // OPTIMIZATION: Only show loading if we don't have data yet
+        // Check sectionsRef instead of state to avoid dependency issues
+        const hasExistingData = Object.keys(sectionsRef.current || {}).length > 0;
+        if (!hasExistingData) {
+            setIsLoading(true);
+        }
+        
         try {
             const snapshotKey = getSnapshotKey(project.id);
             const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
@@ -323,6 +352,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             setSectionsByYear(normalized);
             lastSavedSnapshotRef.current = serializeSections(normalized);
+            // Track when we loaded data from props
+            lastLoadTimestampRef.current = Date.now();
         } catch (error) {
             console.error('❌ Error loading sections from prop:', error);
             setSectionsByYear({});
@@ -335,6 +366,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
         if (!project?.id || !apiRef.current) return;
+        
+        // OPTIMIZATION: Skip refresh if we just loaded from props and haven't made changes
+        // This prevents unnecessary full project fetch right after initial load
+        if (!forceUpdate && hasLoadedInitialDataRef.current) {
+            const timeSinceLoad = Date.now() - (lastLoadTimestampRef.current || 0);
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            
+            // If we loaded less than 2 seconds ago and have no unsaved changes, skip refresh
+            // This allows the UI to render quickly with prop data
+            if (timeSinceLoad < 2000 && !hasUnsavedChanges) {
+                return;
+            }
+        }
         
         // Don't refresh if a save is in progress to avoid race conditions
         if (isSavingRef.current && !forceUpdate) {
@@ -524,7 +568,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } else {
         }
         
-        refreshFromDatabase();
+        // OPTIMIZATION: Only refresh from database if we don't have data from props
+        // This prevents unnecessary full project fetch on initial load
+        const hasDataFromProps = project?.documentSections && 
+            (typeof project.documentSections === 'string' ? project.documentSections.trim() : project.documentSections);
+        
+        // For new projects or when we have no data, refresh immediately
+        // Otherwise, defer the refresh to avoid blocking initial render
+        if (isNewProject || !hasDataFromProps) {
+            refreshFromDatabase();
+        } else {
+            // Defer database refresh to allow UI to render first with prop data
+            // This makes the page feel much faster
+            const refreshTimeout = setTimeout(() => {
+                refreshFromDatabase();
+            }, 100);
+            return () => clearTimeout(refreshTimeout);
+        }
     }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
     
     // ============================================================
@@ -533,10 +593,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         if (!project?.id || !apiRef.current) return;
         
-        // Poll every 5 seconds to check for database updates
+        // OPTIMIZATION: Increase polling interval to 30 seconds to reduce network load
+        // Only poll if component is visible and not actively being edited
         const pollInterval = setInterval(() => {
+            // Skip polling if:
+            // 1. User is actively editing (recent changes)
+            // 2. A save is in progress
+            // 3. Component is not visible (document hidden)
+            const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+            const isDocumentVisible = document.visibilityState === 'visible';
+            
+            if (isSavingRef.current || timeSinceLastChange < 5000 || !isDocumentVisible) {
+                return; // Skip this poll
+            }
+            
             refreshFromDatabase(false);
-        }, 5000);
+        }, 30000); // Increased from 5 seconds to 30 seconds
         
         return () => {
             clearInterval(pollInterval);
@@ -1788,15 +1860,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
     // immediately see the relevant discussion.
-    useEffect(() => {
+    const checkAndOpenDeepLink = useCallback(() => {
         try {
-            const search = window.location.search || '';
-            if (!search) return;
-            const params = new URLSearchParams(search);
-            const deepSectionId = params.get('docSectionId');
-            const deepDocumentId = params.get('docDocumentId');
-            const deepMonth = params.get('docMonth');
-            const deepCommentId = params.get('commentId');
+            // Only proceed if sections are loaded
+            if (!sections || sections.length === 0) {
+                return;
+            }
+            
+            // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
+            let params = null;
+            let deepSectionId = null;
+            let deepDocumentId = null;
+            let deepMonth = null;
+            let deepCommentId = null;
+            
+            // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
+            const hash = window.location.hash || '';
+            if (hash.includes('?')) {
+                const hashParts = hash.split('?');
+                if (hashParts.length > 1) {
+                    params = new URLSearchParams(hashParts[1]);
+                    deepSectionId = params.get('docSectionId');
+                    deepDocumentId = params.get('docDocumentId');
+                    deepMonth = params.get('docMonth');
+                    deepCommentId = params.get('commentId');
+                }
+            }
+            
+            // If not found in hash, check window.location.search (for regular URLs)
+            if (!deepSectionId || !deepDocumentId || !deepMonth) {
+                const search = window.location.search || '';
+                if (search) {
+                    params = new URLSearchParams(search);
+                    if (!deepSectionId) deepSectionId = params.get('docSectionId');
+                    if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
+                    if (!deepMonth) deepMonth = params.get('docMonth');
+                    if (!deepCommentId) deepCommentId = params.get('commentId');
+                }
+            }
             
             if (deepSectionId && deepDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
@@ -1844,7 +1945,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);
         }
-    }, []);
+    }, [sections]);
+    
+    // Check for deep link on mount and when sections load
+    useEffect(() => {
+        // Wait a bit for component to fully render
+        const timer = setTimeout(() => {
+            checkAndOpenDeepLink();
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [checkAndOpenDeepLink]);
+    
+    // Also listen for hash changes in case URL is updated after component mounts
+    useEffect(() => {
+        const handleHashChange = () => {
+            setTimeout(() => {
+                checkAndOpenDeepLink();
+            }, 100);
+        };
+        
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [checkAndOpenDeepLink]);
     
     // ============================================================
     // RENDER STATUS CELL

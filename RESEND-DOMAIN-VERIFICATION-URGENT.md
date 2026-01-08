@@ -112,3 +112,4 @@ Once your domain is verified:
 - ✅ Works for: **All email addresses**
 - ✅ Emails come from your verified domain
 
+

@@ -330,8 +330,9 @@ function initializeProjectDetail() {
             }, []);
 
             const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
+            // Always read from window to get latest version (vite-projects may override dist version)
             const WeeklyFMSReviewTracker = window.WeeklyFMSReviewTracker;
-            const [trackerReady, setTrackerReady] = useStateSection(() => !!WeeklyFMSReviewTracker);
+            const [trackerReady, setTrackerReady] = useStateSection(() => !!window.WeeklyFMSReviewTracker);
             const [loadAttempts, setLoadAttempts] = useStateSection(0);
             const maxAttempts = 50; // 5 seconds (50 * 100ms)
 
@@ -379,7 +380,7 @@ function initializeProjectDetail() {
             }, [trackerReady]);
 
 
-            if (!trackerReady || !WeeklyFMSReviewTracker) {
+            if (!trackerReady || !window.WeeklyFMSReviewTracker) {
                 return (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
@@ -408,7 +409,7 @@ function initializeProjectDetail() {
                             </div>
                         )}
                         <div className="mt-4 text-xs text-gray-500">
-                            <p>Debug Info: window.WeeklyFMSReviewTracker = {String(typeof WeeklyFMSReviewTracker)}</p>
+                            <p>Debug Info: window.WeeklyFMSReviewTracker = {String(typeof window.WeeklyFMSReviewTracker)}</p>
                             <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
                         </div>
                     </div>
@@ -420,8 +421,20 @@ function initializeProjectDetail() {
                 return null;
             }
             
+            // Always get latest version from window (vite-projects may have overridden dist version)
+            const LatestTracker = window.WeeklyFMSReviewTracker;
+            if (!LatestTracker) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600">The Weekly FMS Review Tracker is loading...</p>
+                    </div>
+                );
+            }
+            
             return (
-                <WeeklyFMSReviewTracker
+                <LatestTracker
                     key={`tracker-${project?.id || 'default'}`}
                     project={project}
                     onBack={handleBackToOverview}
@@ -1140,20 +1153,60 @@ function initializeProjectDetail() {
     // is active so the MonthlyDocumentCollectionTracker can show the target comment.
     useEffect(() => {
         if (!project?.id) return;
-        try {
-            const search = window.location.search || '';
-            if (!search) return;
-            const params = new URLSearchParams(search);
-            const deepSectionId = params.get('docSectionId');
-            const deepDocumentId = params.get('docDocumentId');
-            const deepMonth = params.get('docMonth');
-            if (deepSectionId && deepDocumentId && deepMonth) {
-                switchSection('documentCollection');
+        
+        const checkAndSwitchToDocumentCollection = () => {
+            try {
+                // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
+                let params = null;
+                let deepSectionId = null;
+                let deepDocumentId = null;
+                let deepMonth = null;
+                
+                // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
+                const hash = window.location.hash || '';
+                if (hash.includes('?')) {
+                    const hashParts = hash.split('?');
+                    if (hashParts.length > 1) {
+                        params = new URLSearchParams(hashParts[1]);
+                        deepSectionId = params.get('docSectionId');
+                        deepDocumentId = params.get('docDocumentId');
+                        deepMonth = params.get('docMonth');
+                    }
+                }
+                
+                // If not found in hash, check window.location.search (for regular URLs)
+                if (!deepSectionId || !deepDocumentId || !deepMonth) {
+                    const search = window.location.search || '';
+                    if (search) {
+                        params = new URLSearchParams(search);
+                        if (!deepSectionId) deepSectionId = params.get('docSectionId');
+                        if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
+                        if (!deepMonth) deepMonth = params.get('docMonth');
+                    }
+                }
+                
+                if (deepSectionId && deepDocumentId && deepMonth) {
+                    // Only switch if not already on document collection tab
+                    if (activeSection !== 'documentCollection') {
+                        switchSection('documentCollection');
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to apply document collection deep-link:', error);
             }
-        } catch (error) {
-            console.warn('⚠️ ProjectDetail: failed to apply document collection deep-link:', error);
-        }
-    }, [project?.id]);
+        };
+        
+        // Check immediately
+        checkAndSwitchToDocumentCollection();
+        
+        // Also listen for hash changes
+        const handleHashChange = () => {
+            setTimeout(checkAndSwitchToDocumentCollection, 100);
+        };
+        
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [project?.id, switchSection, activeSection]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal

@@ -76,3 +76,4 @@ This should return an empty array `{"tickets": [], "pagination": {...}}` instead
 - All foreign key constraints and indexes will be created automatically
 - After migration, restart your application server if needed
 
+

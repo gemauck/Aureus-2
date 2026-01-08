@@ -95,6 +95,42 @@
     };
 
     const getRoute = () => {
+        // First check hash-based routing (e.g., #/projects/{id}?params)
+        const hash = window.location.hash || '';
+        if (hash.startsWith('#/')) {
+            // Parse hash-based route: #/projects/{id}?params
+            const hashPath = hash.substring(2); // Remove '#/'
+            const hashParts = hashPath.split('?');
+            const hashPathname = hashParts[0] || '';
+            const hashSegments = hashPathname.split('/').filter(Boolean);
+            
+            if (hashSegments.length > 0) {
+                let page = hashSegments[0];
+                // Map 'crm' to 'clients' for backward compatibility
+                if (page === 'crm') {
+                    page = 'clients';
+                }
+                
+                // Parse query params from hash if present
+                let search = new URLSearchParams(window.location.search || '');
+                if (hashParts.length > 1) {
+                    // Merge hash query params with regular search params
+                    const hashParams = new URLSearchParams(hashParts[1]);
+                    hashParams.forEach((value, key) => {
+                        search.set(key, value);
+                    });
+                }
+                
+                return {
+                    page,
+                    segments: hashSegments.slice(1),
+                    search: search,
+                    hash: window.location.hash || ''
+                };
+            }
+        }
+        
+        // Fallback to pathname-based routing
         const segments = getSegmentsFromPath();
         let page = segments[0] || 'dashboard';
         // Map 'crm' to 'clients' for backward compatibility

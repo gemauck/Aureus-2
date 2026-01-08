@@ -37,17 +37,25 @@ else
     echo "⚠️  Skipping deployment tests (SKIP_SAFETY_TESTS is set)"
 fi
 
-# Step 1: Build CSS
+# Step 1: Update cache-busting versions BEFORE building
+echo "🔄 Updating cache-busting versions..."
+node scripts/update-cache-versions.js
+DEPLOYMENT_VERSION=$(node -e "const {execSync}=require('child_process');try{const hash=execSync('git rev-parse --short HEAD',{encoding:'utf8'}).trim();const date=new Date().toISOString().split('T')[0].replace(/-/g,'');console.log(date+'-'+hash);}catch(e){console.log(Date.now());}")
+export APP_VERSION="${DEPLOYMENT_VERSION}"
+export APP_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+echo "✅ Cache versions updated: ${DEPLOYMENT_VERSION}"
+
+# Step 2: Build CSS
 echo "🏗️  Building CSS..."
 npm run build:css
 
-# Step 2: Build JSX
+# Step 3: Build JSX
 echo "🏗️  Building JSX..."
 set +e  # Temporarily disable exit on error for JSX build
 npm run build:jsx 2>&1 | grep -v "ERROR" || echo "⚠️  JSX build failed, continuing with deployment (temporary bypass)..."
 set -e  # Re-enable exit on error
 
-# Step 3: Check git status
+# Step 4: Check git status
 echo ""
 echo "📋 Checking git status..."
 if [ -n "$(git status --porcelain)" ]; then
@@ -82,7 +90,7 @@ else
     git push origin main || git push origin master || echo "⚠️  Git push skipped"
 fi
 
-# Step 4: Deploy to server
+# Step 5: Deploy to server
 echo ""
 echo "🚀 Deploying to server..."
 ssh $SERVER << 'DEPLOY'
@@ -98,6 +106,14 @@ git clean -fd || true
 git reset --hard HEAD || true
 git pull origin main || git pull origin master
 echo "✅ Code updated"
+
+# Update cache versions on server too
+echo "🔄 Updating cache versions on server..."
+node scripts/update-cache-versions.js || echo "⚠️  Cache version update skipped"
+DEPLOYMENT_VERSION=$(node -e "const {execSync}=require('child_process');try{const hash=execSync('git rev-parse --short HEAD',{encoding:'utf8'}).trim();const date=new Date().toISOString().split('T')[0].replace(/-/g,'');console.log(date+'-'+hash);}catch(e){console.log(Date.now());}")
+export APP_VERSION="${DEPLOYMENT_VERSION}"
+export APP_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+echo "✅ Server cache versions updated: ${DEPLOYMENT_VERSION}"
 
 # CRITICAL: Always set correct DATABASE_URL after git pull
 echo ""
@@ -238,13 +254,30 @@ rm -rf node_modules/.prisma 2>/dev/null || true
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
 echo ""
+echo "🧹 Clearing Nginx cache..."
+# Clear nginx cache if it exists
+if [ -d /var/cache/nginx ]; then
+    rm -rf /var/cache/nginx/* || echo "⚠️  Nginx cache clear skipped"
+    echo "✅ Nginx cache cleared"
+fi
+# Reload nginx to ensure fresh config
+systemctl reload nginx || echo "⚠️  Nginx reload skipped"
+
+echo ""
 echo "🔄 Restarting application..."
 # Use pm2 restart which is safer than delete/start
 set -a
 [ -f /etc/environment ] && source /etc/environment
+# Set APP_VERSION and APP_BUILD_TIME for this deployment
+export APP_VERSION="${DEPLOYMENT_VERSION:-$(date +%s)}"
+export APP_BUILD_TIME="${APP_BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
 set +a
 cd /var/www/abcotronics-erp
+# Ensure environment variables are set in PM2
 pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp --update-env
+# Update PM2 environment with version info
+pm2 set abcotronics-erp APP_VERSION "${APP_VERSION}" || true
+pm2 set abcotronics-erp APP_BUILD_TIME "${APP_BUILD_TIME}" || true
 
 echo ""
 echo "✅ Deployment complete!"

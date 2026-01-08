@@ -47,12 +47,67 @@ const generateWeeksForYear = (year) => {
         const actualWeeks = Math.min(numberOfWeeks, 5); // Cap at 5 weeks
         
         for (let weekNumber = 1; weekNumber <= actualWeeks; weekNumber++) {
+            // Calculate date range for this week
+            // Week 1: days 1-7, Week 2: days 8-14, Week 3: days 15-21, Week 4: days 22-28, Week 5: remaining days
+            const startDay = (weekNumber - 1) * 7 + 1;
+            const endDay = Math.min(weekNumber * 7, daysInMonth);
+            
+            // For the first week of January, check if it should start from December
+            // This handles cases like "W1 = 29 December to 4 Jan 2026"
+            let startDate, endDate;
+            if (monthIndex === 0 && weekNumber === 1) {
+                // First week of January - check if we should start from December
+                const daysInPrevMonth = new Date(year - 1, 11, 0).getDate();
+                // If January doesn't start on the 1st of a week, start from December
+                // For simplicity, if week 1 is less than 7 days, extend backwards
+                if (endDay < 7) {
+                    const daysFromPrevMonth = 7 - endDay;
+                    startDate = new Date(year - 1, 11, daysInPrevMonth - daysFromPrevMonth + 1);
+                } else {
+                    startDate = new Date(year, monthIndex, startDay);
+                }
+                endDate = new Date(year, monthIndex, endDay);
+            } else if (monthIndex === 11 && weekNumber === actualWeeks) {
+                // Last week of December - extend into January if needed
+                startDate = new Date(year, monthIndex, startDay);
+                const daysInWeek = endDay - startDay + 1;
+                if (daysInWeek < 7) {
+                    // Extend into January
+                    const daysToExtend = 7 - daysInWeek;
+                    endDate = new Date(year + 1, 0, daysToExtend);
+                } else {
+                    endDate = new Date(year, monthIndex, endDay);
+                }
+            } else {
+                // Regular weeks
+                startDate = new Date(year, monthIndex, startDay);
+                endDate = new Date(year, monthIndex, endDay);
+            }
+            
+            // Determine end month and year
+            let endMonth = months[endDate.getMonth()];
+            let endYear = endDate.getFullYear();
+            
+            // Format dates
+            const formatDate = (date) => {
+                const day = date.getDate();
+                const monthName = months[date.getMonth()];
+                return `${day} ${monthName}`;
+            };
+            
+            const dateRange = startDate.getTime() === endDate.getTime()
+                ? formatDate(startDate)
+                : `${formatDate(startDate)} to ${endDate.getDate()} ${endMonth}${endYear !== year ? ` ${endYear}` : ''}`;
+            
             weeks.push({
                 month,
                 monthIndex,
                 weekNumber,
                 key: `${month}-Week${weekNumber}-${year}`,
-                display: `W${weekNumber}`
+                display: `W${weekNumber}`,
+                dateRange: dateRange,
+                startDate: startDate,
+                endDate: endDate
             });
         }
     });
@@ -61,6 +116,12 @@ const generateWeeksForYear = (year) => {
 };
 
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
+    console.log('🚀 WeeklyFMSReviewTracker component mounted/rendered', {
+        projectId: project?.id,
+        hasProject: !!project,
+        hasWeeklyFMSReviewSections: !!project?.weeklyFMSReviewSections
+    });
+    
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     const currentWeek = Math.ceil(new Date().getDate() / 7); // Approximate current week
@@ -96,6 +157,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const lastChangeTimestampRef = useRef(0); // Track when last status change was made
     const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
     const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
+    const sectionScrollRefs = useRef({}); // Track scroll containers for each section
+    const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -261,16 +324,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
     // Year‑scoped setter: only updates the array for the active year
     const setSections = (updater) => {
+        // CRITICAL: Update timestamp when sections change so save logic can detect changes
+        lastChangeTimestampRef.current = Date.now();
+        
         setSectionsByYear(prev => {
             const prevForYear = prev[selectedYear] || [];
             const nextForYear = typeof updater === 'function'
                 ? updater(prevForYear)
                 : (updater || []);
             
-            return {
+            const updated = {
                 ...prev,
                 [selectedYear]: nextForYear
             };
+            
+            // CRITICAL: Keep ref in sync immediately so save functions have latest data
+            sectionsRef.current = updated;
+            
+            return updated;
         });
     };
 
@@ -342,30 +413,116 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const loadFromProjectProp = useCallback(() => {
         if (!project?.id) return;
         
+        console.log('📥 Loading weekly review sections from project prop...', {
+            projectId: project.id,
+            hasWeeklyFMSReviewSections: !!project.weeklyFMSReviewSections,
+            hasDocumentSections: !!project.documentSections,
+            weeklyFMSReviewSectionsType: typeof project.weeklyFMSReviewSections,
+            weeklyFMSReviewSectionsLength: project.weeklyFMSReviewSections?.length || 0
+        });
+        
         setIsLoading(true);
         try {
             const snapshotKey = getSnapshotKey(project.id);
             const normalizedFromProp = normalizeSectionsByYear(project.weeklyFMSReviewSections || project.documentSections);
+            const propYearKeys = Object.keys(normalizedFromProp || {});
+            const propHasData = propYearKeys.length > 0 && 
+                propYearKeys.some(year => {
+                    const yearSections = normalizedFromProp[year] || [];
+                    return Array.isArray(yearSections) && yearSections.length > 0;
+                });
+            
+            console.log('📥 Normalized from prop:', {
+                propYearKeys,
+                propHasData,
+                sectionCounts: propYearKeys.reduce((acc, year) => {
+                    acc[year] = (normalizedFromProp[year] || []).length;
+                    return acc;
+                }, {})
+            });
+            
             let normalized = normalizedFromProp;
             
-            const yearKeys = Object.keys(normalizedFromProp || {});
-            
-            // If prop has no data but we have a local snapshot, restore from snapshot
-            if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+            // CRITICAL: Always check localStorage as backup, even if prop has data
+            // This ensures we don't lose data if the prop hasn't been refreshed yet
+            // Optimized: Only check localStorage if prop has no data or use requestIdleCallback for non-blocking
+            if (snapshotKey && window.localStorage) {
                 try {
-                    const snapshotString = window.localStorage.getItem(snapshotKey);
-                    if (snapshotString) {
-                        const snapshotParsed = JSON.parse(snapshotString);
-                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
-                        const snapshotYears = Object.keys(snapshotMap || {});
-                        if (snapshotYears.length > 0) {
-                            normalized = snapshotMap;
+                    // If prop has data, defer localStorage check to avoid blocking
+                    if (propHasData) {
+                        // Use requestIdleCallback to check localStorage without blocking
+                        const checkLocalStorage = () => {
+                            try {
+                                const snapshotString = window.localStorage.getItem(snapshotKey);
+                                if (snapshotString) {
+                                    const snapshotParsed = JSON.parse(snapshotString);
+                                    const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                                    const snapshotYears = Object.keys(snapshotMap || {});
+                                    const snapshotSectionCount = snapshotYears.reduce((sum, year) => 
+                                        sum + ((snapshotMap[year] || []).length), 0
+                                    );
+                                    const propSectionCount = propYearKeys.reduce((sum, year) => 
+                                        sum + ((normalizedFromProp[year] || []).length), 0
+                                    );
+                                    
+                                    if (snapshotSectionCount > propSectionCount) {
+                                        setSectionsByYear(snapshotMap);
+                                        lastSavedSnapshotRef.current = serializeSections(snapshotMap);
+                                        console.log('💾 Using localStorage (has more sections)', {
+                                            propCount: propSectionCount,
+                                            snapshotCount: snapshotSectionCount
+                                        });
+                                    }
+                                }
+                            } catch (e) {
+                                // Silently fail - prop data is already loaded
+                            }
+                        };
+                        
+                        if (typeof requestIdleCallback !== 'undefined') {
+                            requestIdleCallback(checkLocalStorage, { timeout: 100 });
+                        } else {
+                            setTimeout(checkLocalStorage, 0);
+                        }
+                    } else {
+                        // Prop is empty, check localStorage immediately (synchronous)
+                        const snapshotString = window.localStorage.getItem(snapshotKey);
+                        if (snapshotString) {
+                            const snapshotParsed = JSON.parse(snapshotString);
+                            const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                            const snapshotYears = Object.keys(snapshotMap || {});
+                            const snapshotHasData = snapshotYears.length > 0 &&
+                                snapshotYears.some(year => {
+                                    const yearSections = snapshotMap[year] || [];
+                                    return Array.isArray(yearSections) && yearSections.length > 0;
+                                });
+                            
+                            if (snapshotHasData) {
+                                normalized = snapshotMap;
+                                console.log('💾 Restored from localStorage (prop was empty)', {
+                                    snapshotYears,
+                                    sectionsCount: snapshotYears.reduce((sum, year) => 
+                                        sum + (snapshotMap[year]?.length || 0), 0
+                                    )
+                                });
+                            }
                         }
                     }
                 } catch (snapshotError) {
                     console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
                 }
             }
+            
+            const finalYearKeys = Object.keys(normalized || {});
+            const finalSectionCount = finalYearKeys.reduce((sum, year) => 
+                sum + ((normalized[year] || []).length), 0
+            );
+            
+            console.log('📥 Final loaded data:', {
+                finalYearKeys,
+                finalSectionCount,
+                source: normalized === normalizedFromProp ? 'prop' : 'localStorage'
+            });
             
             setSectionsByYear(normalized);
             lastSavedSnapshotRef.current = serializeSections(normalized);
@@ -377,7 +534,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             hasLoadedInitialDataRef.current = true;
             setIsLoading(false);
         }
-    }, [project?.documentSections, project?.id]);
+    }, [project?.weeklyFMSReviewSections, project?.documentSections, project?.id]);
     
     const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
         if (!project?.id || !apiRef.current) return;
@@ -401,9 +558,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Also check if there are unsaved changes - don't refresh if user is still editing
         // This provides additional protection even if the timestamp check passes
+        // BUT: Allow refresh if currentSnapshot is empty (fresh load, not editing)
         const currentSnapshot = serializeSections(sectionsRef.current);
+        const isEmptySnapshot = currentSnapshot === '{}' || currentSnapshot === '';
         const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-        if (!forceUpdate && hasUnsavedChanges && timeSinceLastChange < 20000) {
+        if (!forceUpdate && hasUnsavedChanges && !isEmptySnapshot && timeSinceLastChange < 20000) {
             console.log('⏸️ Refresh skipped: unsaved changes detected (will not overwrite)', {
                 hasUnsavedChanges: true,
                 timeSinceLastChange: `${timeSinceLastChange}ms`
@@ -514,7 +673,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // CRITICAL: Never update if we have unsaved local changes, regardless of snapshot matching
                 // This prevents overwriting local changes before they're saved to the database
                 // The only exception is forceUpdate, which should only be used after a successful save
-                if (hasUnsavedChanges && !forceUpdate) {
+                // ALSO: Allow refresh if currentSnapshot is empty (fresh load, not editing)
+                const isEmptySnapshot = currentSnapshot === '{}' || currentSnapshot === '';
+                if (hasUnsavedChanges && !forceUpdate && !isEmptySnapshot) {
                     console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)', {
                         hasUnsavedChanges: true,
                         isSaving: isSavingRef.current,
@@ -590,6 +751,35 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [project?.id, refreshFromDatabase]);
     
     // ============================================================
+    // Handle navigation with save - ensures data is saved before navigating away
+    const handleBackWithSave = useCallback(async () => {
+        // Check if there are unsaved changes
+        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+        
+        if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
+            // Clear any pending debounced saves
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            
+            // Save immediately before navigating
+            console.log('💾 Saving before navigation...');
+            try {
+                await saveToDatabase({ skipParentUpdate: true });
+                console.log('✅ Save complete, navigating...');
+            } catch (error) {
+                console.error('❌ Error saving before navigation:', error);
+                // Still navigate even if save fails - unmount handler will try again
+            }
+        }
+        
+        // Call original onBack handler
+        if (typeof onBack === 'function') {
+            onBack();
+        }
+    }, [project?.id, onBack]);
+    
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
     //
@@ -762,8 +952,45 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => {
             const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
             if (hasUnsavedChanges && !isSavingRef.current) {
-                // Fire-and-forget save on unmount; parent update is optional here
-                saveToDatabase({ skipParentUpdate: true });
+                // CRITICAL: Save synchronously on unmount to prevent data loss during navigation
+                // Use both localStorage (immediate) and fetch with keepalive (continues after navigation)
+                const payload = sectionsRef.current || {};
+                const serialized = serializeSections(payload);
+                
+                // 1. Save to localStorage immediately (synchronous)
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, serialized);
+                        console.log('💾 Saved weekly review snapshot to localStorage on unmount');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save weekly review snapshot to localStorage:', storageError);
+                    }
+                }
+                
+                // 2. Send to API with keepalive (continues after page unloads)
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (token && window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        // Use fetch with keepalive to ensure request continues after navigation
+                        fetch(`/api/projects/${project.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                weeklyFMSReviewSections: serialized
+                            }),
+                            keepalive: true // Critical: allows request to continue after page unloads
+                        }).catch(error => {
+                            console.warn('⚠️ Background save on unmount failed (non-critical):', error);
+                        });
+                        console.log('💾 Initiated background save on unmount');
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Failed to initiate background save on unmount:', error);
+                }
             }
         };
     }, [project?.id]);
@@ -1033,7 +1260,30 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const getStatusForYear = (collectionStatus, month, weekNumber, year = selectedYear) => {
         if (!collectionStatus) return null;
         const weekKey = getWeekKey(month, weekNumber, year);
-        return collectionStatus[weekKey] || null;
+        const status = collectionStatus[weekKey] || null;
+        
+        // Migrate old status values to new ones
+        if (status) {
+            const statusMigration = {
+                'not-collected': 'not-checked',
+                'ongoing': 'acceptable',
+                'collected': 'acceptable',
+                'unavailable': 'not-checked'
+            };
+            
+            if (statusMigration[status]) {
+                // Auto-migrate: update the status in the data structure
+                const migratedStatus = statusMigration[status];
+                if (collectionStatus[weekKey] !== migratedStatus) {
+                    collectionStatus[weekKey] = migratedStatus;
+                    // Trigger a save to persist the migration
+                    setTimeout(() => saveToDatabase({ skipParentUpdate: true }), 100);
+                }
+                return migratedStatus;
+            }
+        }
+        
+        return status;
     };
     
     // Get comments for a specific week in the selected year only
@@ -1066,13 +1316,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
+        { value: 'not-checked', label: 'Not Checked', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' },
+        { value: 'acceptable', label: 'Acceptable', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
+        { value: 'issue', label: 'Issue', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-500 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {
+        // Migrate old status values to new ones
+        const statusMigration = {
+            'not-collected': 'not-checked',
+            'ongoing': 'acceptable',
+            'collected': 'acceptable',
+            'unavailable': 'not-checked'
+        };
+        
+        // If status is an old value, migrate it
+        if (status && statusMigration[status]) {
+            console.log(`🔄 Migrating old status "${status}" to "${statusMigration[status]}"`);
+            return statusOptions.find(opt => opt.value === statusMigration[status]) || statusOptions[0];
+        }
+        
         return statusOptions.find(opt => opt.value === status) || statusOptions[0];
     };
     
@@ -1090,22 +1353,111 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setShowSectionModal(true);
     };
     
-    const handleSaveSection = (sectionData) => {
+    const handleSaveSection = async (sectionData) => {
+        // Calculate the new state before updating
+        let updatedSectionsByYear = { ...sectionsByYear };
+        const currentYearSections = updatedSectionsByYear[selectedYear] || [];
+        
         if (editingSection) {
-            setSections(prev => prev.map(s => 
+            updatedSectionsByYear[selectedYear] = currentYearSections.map(s => 
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
-            ));
+            );
         } else {
             const newSection = {
                 id: Date.now(),
                 ...sectionData,
                 documents: []
             };
-            setSections(prev => [...prev, newSection]);
+            updatedSectionsByYear[selectedYear] = [...currentYearSections, newSection];
         }
+        
+        // Update state
+        setSectionsByYear(updatedSectionsByYear);
+        // CRITICAL: Update ref immediately so save has the latest data
+        sectionsRef.current = updatedSectionsByYear;
+        // Update timestamp
+        lastChangeTimestampRef.current = Date.now();
         
         setShowSectionModal(false);
         setEditingSection(null);
+        
+        // CRITICAL: Force immediate save when adding/editing sections to prevent data loss
+        // Clear any pending debounced save and save immediately
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        
+        // Save immediately with the calculated state - AWAIT to ensure it completes
+        if (project?.id && !isSavingRef.current) {
+            const serialized = serializeSections(updatedSectionsByYear);
+            
+            // CRITICAL: Save to localStorage immediately as backup
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    window.localStorage.setItem(snapshotKey, serialized);
+                    console.log('💾 Section change saved to localStorage immediately', {
+                        hasData: Object.keys(updatedSectionsByYear).length > 0,
+                        yearKeys: Object.keys(updatedSectionsByYear),
+                        sectionCount: updatedSectionsByYear[selectedYear]?.length || 0
+                    });
+                } catch (storageError) {
+                    console.warn('⚠️ Failed to save section to localStorage:', storageError);
+                }
+            }
+            
+            // Save to database immediately using API service - AWAIT to ensure parent update completes
+            isSavingRef.current = true;
+            try {
+                console.log('💾 Saving weekly review sections to database...', {
+                    projectId: project.id,
+                    serializedLength: serialized.length,
+                    hasData: Object.keys(updatedSectionsByYear).length > 0,
+                    yearKeys: Object.keys(updatedSectionsByYear)
+                });
+                
+                // Use API service first (like Document Collection) - this handles parent updates automatically
+                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                    const result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, updatedSectionsByYear, false);
+                    console.log('✅ Saved via API service (with parent update)', { result: !!result });
+                } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                    // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
+                    // NOTE: This will save to documentSections field, not weeklyFMSReviewSections!
+                    console.warn('⚠️ Using documentSections API fallback - data will be saved to wrong field!');
+                    await apiRef.current.saveDocumentSections(project.id, updatedSectionsByYear, false);
+                    console.log('✅ Saved via documentSections API (fallback)');
+                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                    console.log('⚠️ API service not available, using direct DatabaseAPI call');
+                    // Final fallback - direct API call with manual parent update
+                    const updatePayload = {
+                        weeklyFMSReviewSections: serialized
+                    };
+                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    
+                    // Update parent component's project prop so it has the latest data
+                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                        const updatedProject = result?.data?.project || result?.project || result?.data;
+                        if (updatedProject) {
+                            window.updateViewingProject({
+                                ...updatedProject,
+                                weeklyFMSReviewSections: serialized
+                            });
+                            console.log('✅ Project prop updated with new sections');
+                        }
+                    }
+                } else {
+                    console.error('❌ No available API for saving weekly review sections');
+                }
+                
+                // Update lastSavedSnapshot AFTER successful save
+                lastSavedSnapshotRef.current = serialized;
+            } catch (error) {
+                console.error('❌ Error saving section to database:', error);
+            } finally {
+                isSavingRef.current = false;
+            }
+        }
     };
     
     // Actual deletion logic extracted to separate function
@@ -1476,6 +1828,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, weekNumber, status, applyToSelected = false) => {
+        // Preserve scroll positions before update to prevent page shifting
+        const scrollPositions = new Map();
+        Object.entries(sectionScrollRefs.current).forEach(([sectionId, container]) => {
+            if (container) {
+                scrollPositions.set(sectionId, {
+                    scrollLeft: container.scrollLeft,
+                    scrollTop: container.scrollTop
+                });
+            }
+        });
+        const mainScrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        const mainScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
         // Track when the last change was made to prevent refresh from overwriting rapid changes
         lastChangeTimestampRef.current = Date.now();
         
@@ -1573,6 +1938,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Now update state (this will trigger auto-save, but ref already has the latest data)
         setSectionsByYear(updatedSectionsByYear);
+        
+        // Restore scroll positions after state update to prevent page shifting
+        requestAnimationFrame(() => {
+            scrollPositions.forEach((pos, sectionId) => {
+                const container = sectionScrollRefs.current[sectionId];
+                if (container) {
+                    container.scrollLeft = pos.scrollLeft;
+                    container.scrollTop = pos.scrollTop;
+                }
+            });
+            // Restore main window scroll position
+            window.scrollTo(mainScrollLeft, mainScrollTop);
+        });
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -1721,11 +2099,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const handleSectionDragStart = (e, section, index) => {
         setDraggedSection({ section, index });
         e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => e.currentTarget.style.opacity = '0.5', 0);
+        const target = e.currentTarget;
+        if (target) {
+            setTimeout(() => {
+                if (target && target.style) {
+                    target.style.opacity = '0.5';
+                }
+            }, 0);
+        }
     };
     
     const handleSectionDragEnd = (e) => {
-        e.currentTarget.style.opacity = '1';
+        if (e.currentTarget && e.currentTarget.style) {
+            e.currentTarget.style.opacity = '1';
+        }
         setDraggedSection(null);
         setDragOverIndex(null);
     };
@@ -1828,6 +2215,118 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     };
     
     // (Per-section tables now scroll independently, so we skip auto-scroll to working months)
+    
+    // Synchronize horizontal scrolling across all sections
+    useEffect(() => {
+        if (sections.length === 0) return;
+        
+        const scrollContainers = Object.values(sectionScrollRefs.current).filter(Boolean);
+        if (scrollContainers.length === 0) return;
+        
+        // Create a map to store event handlers for proper cleanup
+        const scrollHandlers = new Map();
+        
+        scrollContainers.forEach(sourceContainer => {
+            let rafId = null;
+            let lastScrollLeft = sourceContainer.scrollLeft;
+            
+            const handleScroll = () => {
+                if (isScrollingRef.current) return; // Prevent infinite loops
+                
+                const currentScrollLeft = sourceContainer.scrollLeft;
+                
+                // Cancel any pending animation frame
+                if (rafId !== null) {
+                    cancelAnimationFrame(rafId);
+                }
+                
+                // Use requestAnimationFrame for smooth updates
+                rafId = requestAnimationFrame(() => {
+                    if (isScrollingRef.current) return;
+                    
+                    isScrollingRef.current = true;
+                    const scrollLeft = sourceContainer.scrollLeft;
+                    
+                    // Only update if scroll position actually changed
+                    if (scrollLeft !== lastScrollLeft) {
+                        lastScrollLeft = scrollLeft;
+                        
+                        // Update all other containers to match the scroll position
+                        scrollContainers.forEach(container => {
+                            if (container !== sourceContainer && container) {
+                                // Use requestAnimationFrame for each container update for smoother sync
+                                requestAnimationFrame(() => {
+                                    container.scrollLeft = scrollLeft;
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Reset flag after a very short delay to allow smooth scrolling
+                    setTimeout(() => {
+                        isScrollingRef.current = false;
+                    }, 16); // ~60fps timing
+                });
+            };
+            
+            scrollHandlers.set(sourceContainer, handleScroll);
+            sourceContainer.addEventListener('scroll', handleScroll, { passive: true });
+        });
+        
+        // Cleanup
+        return () => {
+            scrollHandlers.forEach((handler, container) => {
+                container.removeEventListener('scroll', handler);
+            });
+        };
+    }, [sections.length]);
+    
+    // Scroll to current month on initial load
+    useEffect(() => {
+        if (isLoading || sections.length === 0) return;
+        
+        // Only scroll if we're viewing the current year
+        if (selectedYear !== currentYear) return;
+        
+        // Find the first week of the current month
+        const currentMonthName = months[currentMonth];
+        const firstWeekOfCurrentMonth = weeks.findIndex(w => w.month === currentMonthName && w.weekNumber === 1);
+        
+        if (firstWeekOfCurrentMonth === -1) {
+            // If exact match not found, find any week in the current month
+            const anyWeekInCurrentMonth = weeks.findIndex(w => w.month === currentMonthName);
+            if (anyWeekInCurrentMonth === -1) return;
+        }
+        
+        const targetWeekIndex = firstWeekOfCurrentMonth !== -1 ? firstWeekOfCurrentMonth : weeks.findIndex(w => w.month === currentMonthName);
+        
+        // Scroll all section scroll containers to the current month
+        const scrollToCurrentMonth = () => {
+            // Temporarily disable scroll sync to prevent conflicts
+            isScrollingRef.current = true;
+            
+            Object.values(sectionScrollRefs.current).forEach(scrollContainer => {
+                if (scrollContainer) {
+                    // Find the header cell for the target week
+                    const headerCells = scrollContainer.querySelectorAll('thead th');
+                    if (headerCells.length > targetWeekIndex + 1) {
+                        const targetCell = headerCells[targetWeekIndex + 1]; // +1 because first cell is "Document / Data"
+                        if (targetCell) {
+                            targetCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+                        }
+                    }
+                }
+            });
+            
+            // Re-enable scroll sync after scrolling completes
+            setTimeout(() => {
+                isScrollingRef.current = false;
+            }, 500);
+        };
+        
+        // Wait a bit for DOM to render
+        setTimeout(scrollToCurrentMonth, 300);
+    }, [isLoading, sections.length, selectedYear, currentYear, currentMonth, weeks, months]);
     
     // ============================================================
     // COMMENT POPUP MANAGEMENT
@@ -2002,7 +2501,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             >
                 <div className="min-w-[160px] relative">
                     <select
-                        value={status || ''}
+                        value={status || 'not-checked'}
                         onChange={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2057,7 +2556,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
-                        <option value="">Select Status</option>
                         {statusOptions.map(option => (
                             <option key={option.value} value={option.value}>
                                 {option.label}
@@ -2110,13 +2608,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             description: editingSection?.description || ''
         });
         
-        const handleSubmit = (e) => {
+        const handleSubmit = async (e) => {
             e.preventDefault();
             if (!formData.name.trim()) {
                 alert('Please enter a section name');
                 return;
             }
-            handleSaveSection(formData);
+            await handleSaveSection(formData);
         };
         
         return (
@@ -2825,7 +3323,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <button onClick={handleBackWithSave} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                         <i className="fas fa-arrow-left"></i>
                     </button>
                     <div>
@@ -2944,20 +3442,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-medium text-gray-600">Status:</span>
-                    {statusOptions.slice(0, 3).map((option, idx) => (
+                    {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
                             <div className="flex items-center gap-1">
                                 <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
                                 <span className="text-[10px] text-gray-600">{option.label}</span>
                             </div>
-                            {idx < 2 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
                         </React.Fragment>
                     ))}
-                    <span className="text-gray-300 mx-1">|</span>
-                    <div className="flex items-center gap-1">
-                        <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor}`}></div>
-                        <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
-                    </div>
                 </div>
             </div>
             
@@ -3020,7 +3513,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             </div>
 
                             {/* Scrollable week/document grid for this section only */}
-                            <div className="border-t border-gray-200 overflow-x-auto">
+                            <div 
+                                ref={(el) => {
+                                    if (el) {
+                                        sectionScrollRefs.current[section.id] = el;
+                                    }
+                                }}
+                                className="border-t border-gray-200 overflow-x-auto"
+                                style={{ scrollBehavior: 'auto' }}
+                            >
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
@@ -3043,15 +3544,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                                 ? 'bg-primary-50 text-primary-700'
                                                                 : 'text-gray-600'
                                                         }`}
-                                                        title={`${week.month} Week ${week.weekNumber}`}
+                                                        title={`${week.month} Week ${week.weekNumber}: ${week.dateRange}`}
                                                     >
                                                         {showMonthHeader && idx > 0 ? (
                                                             <div>
                                                                 <div className="text-[9px] font-bold text-gray-500">{week.month.slice(0, 3)}</div>
-                                                                <div>{week.display}</div>
+                                                                <div className="text-[9px]">{week.display}</div>
+                                                                <div className="text-[8px] font-normal text-gray-500 mt-0.5 leading-tight">{week.dateRange}</div>
                                                             </div>
                                                         ) : (
-                                                            week.display
+                                                            <div>
+                                                                <div>{week.display}</div>
+                                                                <div className="text-[8px] font-normal text-gray-500 mt-0.5 leading-tight">{week.dateRange}</div>
+                                                            </div>
                                                         )}
                                                     </th>
                                                 );
@@ -3132,6 +3637,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
 // Make available globally
 window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
-console.log('✅ WeeklyFMSReviewTracker component loaded');
 
+// Export for ES modules
 export default WeeklyFMSReviewTracker;

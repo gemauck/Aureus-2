@@ -12,3 +12,4 @@ CREATE INDEX IF NOT EXISTS "Ticket_emailThreadId_idx" ON "Ticket"("emailThreadId
 CREATE INDEX IF NOT EXISTS "Ticket_emailMessageId_idx" ON "Ticket"("emailMessageId");
 CREATE INDEX IF NOT EXISTS "Ticket_sourceEmail_idx" ON "Ticket"("sourceEmail");
 
+

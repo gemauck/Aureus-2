@@ -675,3 +675,4 @@ const canCreate = window.PermissionChecker?.check(user, 'HELPDESK_CREATE');
 **Status**: Framework Ready for Implementation  
 **Author**: Development Team
 
+

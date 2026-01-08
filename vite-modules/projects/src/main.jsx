@@ -15,13 +15,9 @@ if (typeof window !== 'undefined') {
     console.log('✅ Vite module: MonthlyDocumentCollectionTracker already available from main source, skipping');
   }
   
-  // Expose WeeklyFMSReviewTracker
-  if (!window.WeeklyFMSReviewTracker || typeof window.WeeklyFMSReviewTracker !== 'function') {
-    window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
-    console.log('✅ Vite module: WeeklyFMSReviewTracker exposed to window');
-  } else {
-    console.log('✅ Vite module: WeeklyFMSReviewTracker already available from main source, skipping');
-  }
+  // Expose WeeklyFMSReviewTracker - ALWAYS override to ensure latest version is used
+  window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
+  console.log('✅ Vite module: WeeklyFMSReviewTracker exposed to window (overriding any existing version)');
   
   // DO NOT expose old Projects components - they conflict with newer versions
   // Only expose if they don't exist (fallback for edge cases)

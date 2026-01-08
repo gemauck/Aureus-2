@@ -64,6 +64,26 @@ const MainLayout = () => {
                 return page;
             }
         }
+        
+        // Check hash-based routing if RouteState not available yet
+        const hash = window.location.hash || '';
+        if (hash.startsWith('#/')) {
+            const hashPath = hash.substring(2); // Remove '#/'
+            const hashPathname = hashPath.split('?')[0]; // Remove query params
+            const hashSegments = hashPathname.split('/').filter(Boolean);
+            if (hashSegments.length > 0) {
+                let pageFromHash = hashSegments[0];
+                // Map 'crm' to 'clients' for backward compatibility
+                if (pageFromHash === 'crm') {
+                    pageFromHash = 'clients';
+                }
+                if (VALID_PAGES.includes(pageFromHash)) {
+                    return pageFromHash;
+                }
+            }
+        }
+        
+        // Fallback to pathname-based routing
         const pathname = (window.location.pathname || '').toLowerCase();
         if (pathname && pathname !== '/' && !PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
             let pageFromPath = pathname.replace(/^\//, '').split('/')[0];
@@ -79,6 +99,29 @@ const MainLayout = () => {
     };
 
     const [currentPage, setCurrentPage] = useState(getInitialPage());
+    
+    // Re-check route on mount if hash is present (for deep links from email)
+    React.useEffect(() => {
+        const hash = window.location.hash || '';
+        if (hash.startsWith('#/')) {
+            // Wait a bit for RouteState to be ready, then re-check
+            const checkRoute = () => {
+                if (window.RouteState) {
+                    const route = window.RouteState.getRoute();
+                    if (route?.page && route.page !== currentPage) {
+                        const page = route.page === 'crm' ? 'clients' : route.page;
+                        if (VALID_PAGES.includes(page)) {
+                            setCurrentPage(page);
+                        }
+                    }
+                } else {
+                    // RouteState not ready yet, try again
+                    setTimeout(checkRoute, 100);
+                }
+            };
+            checkRoute();
+        }
+    }, []); // Run once on mount
     
     React.useEffect(() => {
         const routeState = window.RouteState;

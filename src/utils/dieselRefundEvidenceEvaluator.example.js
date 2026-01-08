@@ -172,3 +172,4 @@ console.log('File 3 Evidence:', file3Evidence);
 const sortedByRelevance = batchResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
 console.log('Sorted by Relevance:', sortedByRelevance);
 
+

@@ -80,7 +80,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1767840239319'; // Updated by build process
+        window.BUILD_VERSION = '1767881987261'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
@@ -1075,7 +1075,7 @@
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 // CACHE BUST VERSION: bump when deploying new Vite projects bundle
-                const VITE_PROJECTS_VERSION = '20260108-weekly-fms-update-v1';
+                const VITE_PROJECTS_VERSION = '20260108-weekly-fms-update-v14-scroll-preserve-' + Date.now();
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -1114,7 +1114,7 @@
                 // Cache busting with version - update this when deploying new changes
                 // IMPORTANT: This version must match the one used above
                 // NOTE: The Vite projects bundle is served from the /vite-projects static path on the server
-                script.src = '/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION + '&t=' + Date.now();
+                script.src = '/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION + '&t=' + Date.now() + '&_=' + Math.random().toString(36).substring(7);
                 console.log('📦 Loading vite projects module from /vite-projects with version:', VITE_PROJECTS_VERSION);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
@@ -1203,10 +1203,10 @@
         });
     </script>
     
-    <!-- Lazy loader - CACHE BUST 20251215-groups-fix-cache-bust -->
+    <!-- Lazy loader - CACHE BUST 20260108-deep-link-fix-v1 -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=20251215-remove-simple-v3" as="script">
-    <script defer src="/lazy-load-components.js?v=20251215-remove-simple-v3"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=20260108-deep-link-fix-v1" as="script">
+    <script defer src="/lazy-load-components.js?v=20260108-deep-link-fix-v1"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

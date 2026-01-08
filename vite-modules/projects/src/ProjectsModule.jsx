@@ -33,11 +33,9 @@ if (typeof window !== 'undefined') {
     console.log('✅ ProjectsModule: MonthlyDocumentCollectionTracker exposed to window');
   }
   
-  // Expose WeeklyFMSReviewTracker
-  if (!window.WeeklyFMSReviewTracker || typeof window.WeeklyFMSReviewTracker !== 'function') {
-    window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
-    console.log('✅ ProjectsModule: WeeklyFMSReviewTracker exposed to window');
-  }
+  // Expose WeeklyFMSReviewTracker - ALWAYS override to ensure latest version
+  window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
+  console.log('✅ ProjectsModule: WeeklyFMSReviewTracker exposed to window (overriding any existing version)');
   
   // DO NOT expose old Projects components - they will conflict with newer versions
   // These are commented out to prevent the old version from loading

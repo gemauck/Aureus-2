@@ -165,6 +165,62 @@ const TaskDetailModal = ({
         }
     }, [activeTab, comments.length, comments]); // Re-scroll when tab changes, comments count changes, or comments array updates
 
+    // Listen for scrollToComment event to scroll to a specific comment (from email links)
+    useEffect(() => {
+        const handleScrollToComment = (event) => {
+            const { commentId, taskId } = event.detail || {};
+            if (!commentId) return;
+            
+            // Verify this is for the current task
+            const currentTaskId = editedTask.id || task?.id;
+            if (taskId && String(currentTaskId) !== String(taskId)) {
+                return; // Not for this task
+            }
+            
+            // Switch to comments tab if not already there
+            if (activeTab !== 'comments') {
+                setActiveTab('comments');
+            }
+            
+            // Wait for tab switch and DOM update, then scroll to comment
+            setTimeout(() => {
+                const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`) ||
+                                     document.querySelector(`#comment-${commentId}`);
+                
+                if (commentElement && commentsContainerRef.current) {
+                    // Scroll the comment into view within the container
+                    commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Also scroll the container to ensure visibility
+                    if (commentsContainerRef.current) {
+                        const containerRect = commentsContainerRef.current.getBoundingClientRect();
+                        const commentRect = commentElement.getBoundingClientRect();
+                        const scrollTop = commentsContainerRef.current.scrollTop;
+                        const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                        commentsContainerRef.current.scrollTo({
+                            top: commentOffset - 20, // 20px padding from top
+                            behavior: 'smooth'
+                        });
+                    }
+                    
+                    // Highlight the comment briefly
+                    const originalBg = window.getComputedStyle(commentElement).backgroundColor;
+                    commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
+                    commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                    commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+                    setTimeout(() => {
+                        commentElement.style.backgroundColor = originalBg;
+                        commentElement.style.boxShadow = '';
+                        commentElement.style.transition = '';
+                    }, 2000);
+                }
+            }, activeTab === 'comments' ? 100 : 300); // Shorter delay if already on comments tab
+        };
+        
+        window.addEventListener('scrollToComment', handleScrollToComment);
+        return () => window.removeEventListener('scrollToComment', handleScrollToComment);
+    }, [activeTab, editedTask.id, task?.id, comments]);
+
     // Close mention suggestions when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -356,17 +412,23 @@ const TaskDetailModal = ({
             // Send notifications
             try {
                 const taskId = editedTask.id || task?.id;
+                const commentId = comment.id; // Get the comment ID for deep linking
                 // Use hash-based routing format for email links (frontend uses hash routing)
                 const projectLink = project ? `#/projects/${project.id}` : '#/projects';
-                // Build task-specific link with query parameter for direct navigation to task
-                const taskLink = taskId ? `${projectLink}?task=${taskId}` : projectLink;
+                // Build task-specific link with query parameters for direct navigation to task and comment
+                let taskLink = taskId ? `${projectLink}?task=${taskId}` : projectLink;
+                // Add commentId parameter for deep linking to specific comment
+                if (commentId) {
+                    const separator = taskLink.includes('?') ? '&' : '?';
+                    taskLink = `${taskLink}${separator}commentId=${encodeURIComponent(commentId)}`;
+                }
                 const taskTitle = editedTask.title || task?.title || 'Untitled Task';
                 const projectName = project?.name || 'Project';
                 
                 // Send notifications to mentioned users using MentionHelper
                 if (window.MentionHelper && mentionedUsers.length > 0) {
                     const contextTitle = `Task: ${taskTitle}`;
-                    const contextLink = taskLink; // Use task-specific link
+                    const contextLink = taskLink; // Use task-specific link with commentId
                     // Pass project information for email notifications
                     await window.MentionHelper.processMentions(
                         newComment,
@@ -378,7 +440,8 @@ const TaskDetailModal = ({
                             projectId: project?.id,
                             projectName: projectName,
                             taskId: taskId,
-                            taskTitle: taskTitle
+                            taskTitle: taskTitle,
+                            commentId: commentId // Include commentId in metadata
                         }
                     );
                 }

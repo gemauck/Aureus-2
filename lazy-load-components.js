@@ -1,6 +1,6 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 1020-projectdetail-bulletproof - Multiple loading strategies ensure ProjectDetail ALWAYS loads
-console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded');
+// VERSION: 20260108-deep-link-fix-v1 - Updated for deep linking support
+console.log('🚀 lazy-load-components.js v20260108-deep-link-fix-v1 loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
@@ -207,6 +207,21 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                     console.log('✅ MonthlyDocumentCollectionTracker component already available from Vite module - loading dist override anyway');
                 }
             }
+            if (src.includes('WeeklyFMSReviewTracker.jsx') || src.includes('WeeklyFMSReviewTracker.js')) {
+                // ALWAYS skip loading dist version - vite-projects module MUST provide the latest version
+                // Even if it doesn't exist yet, we'll wait for vite-projects to load it
+                console.log('⏭️ WeeklyFMSReviewTracker: Skipping dist load - vite-projects module will provide the latest version');
+                // Wait a bit to see if vite-projects loads it
+                setTimeout(() => {
+                    if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
+                        console.log('✅ WeeklyFMSReviewTracker available from vite-projects module');
+                    } else {
+                        console.warn('⚠️ WeeklyFMSReviewTracker not yet available from vite-projects - it should load soon');
+                    }
+                    resolve();
+                }, 100);
+                return;
+            }
             
             // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
             // They are loaded early in index.html and must NOT be overwritten
@@ -304,17 +319,23 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             if (needsCacheBusting) {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
                 // Use build version from build-version.json if available, otherwise use timestamp
+                // Optimized: Only add Date.now() in development to allow browser caching in production
+                const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                 let cacheVersion = Date.now();
                 try {
                     // Try to get build version synchronously from a global variable set in index.html
                     if (window.BUILD_VERSION) {
-                        cacheVersion = window.BUILD_VERSION + '-' + Date.now();
+                        // In production, use BUILD_VERSION only (allows browser caching)
+                        // In development, add timestamp to force fresh load
+                        cacheVersion = isDevelopment ? window.BUILD_VERSION + '-' + Date.now() : window.BUILD_VERSION;
                     }
                 } catch (e) {
                     // Fallback to timestamp if build version not available
                 }
                 scriptSrc = scriptSrc + separator + 'v=' + cacheVersion;
-                console.log(`🔄 Cache-busting applied to: ${scriptSrc}`);
+                if (isDevelopment) {
+                    console.log(`🔄 Cache-busting applied to: ${scriptSrc}`);
+                }
             }
             
             // Wait for React if needed (for ProjectDetail), then proceed with loading
@@ -341,8 +362,8 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                             }
                             
                             if (isServerError && attempt < maxAttempts) {
-                                // Retry server errors with exponential backoff
-                                const delay = Math.min(300 * Math.pow(2, attempt - 1), 2000); // 300ms, 600ms, 1200ms, max 2000ms
+                                // Retry server errors with faster exponential backoff
+                                const delay = Math.min(100 * Math.pow(2, attempt - 1), 1000); // 100ms, 200ms, 400ms, max 1000ms (was 300ms, 600ms, 1200ms, max 2000ms)
                                 console.warn(`⚠️ Server error ${response.status} loading ${scriptSrc} (attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms)...`);
                                 return new Promise((retryResolve) => {
                                     setTimeout(() => {
@@ -369,7 +390,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                     .catch(error => {
                         // Network errors - retry if we haven't exceeded max attempts
                         if (attempt < maxAttempts) {
-                            const delay = Math.min(300 * Math.pow(2, attempt - 1), 2000);
+                            const delay = Math.min(100 * Math.pow(2, attempt - 1), 1000); // Faster retries (was 300ms, 600ms, 1200ms, max 2000ms)
                             console.warn(`⚠️ Network error loading ${scriptSrc} (attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms):`, error.message);
                             return new Promise((retryResolve) => {
                                 setTimeout(() => {
@@ -605,14 +626,13 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                 const elapsed = Date.now() - startTime;
                 const criticalLoaded = window.LeadDetailModal && window.ClientDetailModal;
                 
-                // Reduced max wait time from 3000ms to 1500ms for faster startup
-                if (criticalLoaded || elapsed >= 1500) {
+                // Reduced max wait time from 1500ms to 500ms for faster startup
+                if (criticalLoaded || elapsed >= 500) {
                     clearInterval(checkInterval);
                     
                     // Now start loading lazy components
-                    // Increased batch size from 3 to 8 for better performance
-                    // Further increased to 12 for faster initial load
-                    const batchSize = 12;
+                    // Increased batch size from 12 to 25 for much faster loading
+                    const batchSize = 25;
                     let index = 0;
                     
                     function loadBatch() {
@@ -645,14 +665,14 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                                 console.log(`✅ Lazy loader: ProjectDetail loaded successfully on attempt ${attemptNumber}`);
                                             } else {
                                                 console.warn(`⚠️ Lazy loader: ProjectDetail script loaded but component not registered (attempt ${attemptNumber})`);
-                                                // Retry after a delay
-                                                setTimeout(() => attemptLoadProjectDetail(attemptNumber + 1, maxAttempts), 1000);
+                                                // Retry after a shorter delay (was 1000ms)
+                                                setTimeout(() => attemptLoadProjectDetail(attemptNumber + 1, maxAttempts), 500);
                                             }
-                                        }, 1000);
+                                        }, 200); // Reduced from 1000ms to 200ms
                                     }).catch(err => {
                                         console.warn(`⚠️ Lazy loader: Failed to load ProjectDetail (attempt ${attemptNumber}):`, err);
-                                        // Retry after a delay
-                                        setTimeout(() => attemptLoadProjectDetail(attemptNumber + 1, maxAttempts), 1000);
+                                        // Retry after a shorter delay (was 1000ms)
+                                        setTimeout(() => attemptLoadProjectDetail(attemptNumber + 1, maxAttempts), 500);
                                     });
                                 };
                                 
@@ -697,7 +717,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                         } else {
                                             console.warn('⚠️ Lazy loader: ProjectDetail script loaded but component not registered');
                                         }
-                                    }, 500);
+                                    }, 200); // Reduced from 500ms to 200ms
                                 }).catch(err => {
                                     console.warn('⚠️ Lazy loader: Failed to load ProjectDetail:', err);
                                 });
@@ -716,12 +736,13 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                             }
                             
                             index += batchSize;
-                            // Reduced delay between batches for faster loading (50ms -> 25ms)
-                            const nextBatchDelay = index < componentFiles.length ? 25 : 0;
+                            // Reduced delay between batches to 0ms for faster loading (was 25ms)
+                            const nextBatchDelay = 0;
                             
                             if (typeof requestIdleCallback !== 'undefined') {
-                                requestIdleCallback(loadBatch, { timeout: 200 });
+                                requestIdleCallback(loadBatch, { timeout: 50 });
                             } else {
+                                // Use setTimeout with 0ms for immediate next batch
                                 setTimeout(loadBatch, nextBatchDelay);
                             }
                         });
@@ -729,11 +750,11 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                     
                     loadBatch();
                 }
-            }, 50); // Check every 50ms for faster detection
+            }, 25); // Check every 25ms for faster detection (was 50ms)
         };
         
-        // Start checking after minimal initial delay for faster loading
-        setTimeout(waitForCriticalComponents, 100);
+        // Start checking immediately for faster loading (was 100ms delay)
+        setTimeout(waitForCriticalComponents, 0);
     }
     
     // BULLETPROOF: Global fallback loader for ProjectDetail
@@ -745,10 +766,10 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         }
         window._projectDetailFallbackLoaderActive = true;
         
-        console.log('🔄 Setting up ProjectDetail fallback loader (runs every 5 seconds until loaded)...');
+        console.log('🔄 Setting up ProjectDetail fallback loader (runs every 2 seconds until loaded)...');
         
         let attempts = 0;
-        const maxAttempts = 60; // Run for up to 5 minutes (60 * 5 seconds)
+        const maxAttempts = 30; // Run for up to 1 minute (30 * 2 seconds, was 60 * 5 seconds)
         
         const fallbackInterval = setInterval(() => {
             attempts++;
@@ -785,7 +806,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                         clearInterval(fallbackInterval);
                         window._projectDetailFallbackLoaderActive = false;
                     }
-                }, 1000);
+                }, 200); // Reduced from 1000ms to 200ms
             };
             
             script.onerror = () => {
@@ -799,7 +820,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             }
             
             document.body.appendChild(script);
-        }, 5000); // Check every 5 seconds
+        }, 2000); // Check every 2 seconds (was 5 seconds)
     }
     
     // BULLETPROOF: Start fallback loader immediately as a safety net
@@ -809,6 +830,6 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             console.log('🔄 Starting ProjectDetail fallback loader as safety net...');
             setupProjectDetailFallbackLoader();
         }
-    }, 10000); // Start after 10 seconds if ProjectDetail isn't loaded yet
+    }, 5000); // Start after 5 seconds if ProjectDetail isn't loaded yet (was 10 seconds)
 })();
 

@@ -167,7 +167,19 @@ async function handler(req, res) {
                     const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : (metadata || {});
                     
                     // Check for entity IDs in metadata
-                    if (metadataObj.projectId) {
+                    // Handle document collection tracker links first (they need special parameters)
+                    if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId)) {
+                        // Document collection tracker comment - build link with all parameters
+                        validLink = `#/projects/${metadataObj.projectId}`;
+                        const queryParams = [];
+                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
+                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
+                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
+                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                        if (queryParams.length > 0) {
+                            validLink += `?${queryParams.join('&')}`;
+                        }
+                    } else if (metadataObj.projectId) {
                         validLink = `/projects/${metadataObj.projectId}`;
                         if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
                     } else if (metadataObj.taskId) {
@@ -360,24 +372,45 @@ async function handler(req, res) {
                                         }
                                     }
                                     
-                                    // Build comment link - include task ID if available for direct navigation
-                                    // Check if link already has a task query parameter to avoid duplication
-                                    if (metadataObj?.taskId) {
-                                        // If link is already provided and contains task parameter, use it as-is
-                                        if (link && (link.includes('?task=') || link.includes('&task='))) {
+                                    // Build comment link - prioritize document collection tracker links with commentId
+                                    // First, check if link already contains document collection parameters - if so, use it as-is
+                                    if (link && (link.includes('docSectionId=') || link.includes('docDocumentId=') || link.includes('commentId='))) {
+                                        // Link already has document collection tracker parameters, preserve it
+                                        commentLink = link;
+                                    } else if (metadataObj?.sectionId || metadataObj?.documentId || metadataObj?.commentId) {
+                                        // Document collection tracker comment - build link with all parameters from metadata
+                                        const baseLink = link || `#/projects/${projectId}`;
+                                        
+                                        // Build document collection tracker link with all parameters
+                                        const queryParams = [];
+                                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
+                                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
+                                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
+                                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                                        
+                                        const separator = baseLink.includes('?') ? '&' : '?';
+                                        commentLink = queryParams.length > 0 
+                                            ? `${baseLink}${separator}${queryParams.join('&')}`
+                                            : baseLink;
+                                    } else if (metadataObj?.taskId) {
+                                        // Task comment - include task ID and commentId for direct navigation
+                                        // Check if link already has task/commentId parameters - if so, use it as-is
+                                        if (link && (link.includes('?task=') || link.includes('&task=') || link.includes('commentId='))) {
                                             commentLink = link;
                                         } else {
-                                            // Build task-specific link with query parameter
+                                            // Build task-specific link with query parameters
                                             // Use hash-based routing format for frontend navigation
                                             const baseLink = link || `#/projects/${projectId}`;
-                                            // Only add task parameter if not already present
-                                            if (baseLink.includes('?task=') || baseLink.includes('&task=')) {
-                                                commentLink = baseLink;
-                                            } else {
-                                                // Add task as query parameter
-                                                const separator = baseLink.includes('?') ? '&' : '?';
-                                                commentLink = `${baseLink}${separator}task=${metadataObj.taskId}`;
-                                            }
+                                            
+                                            // Build query parameters
+                                            const queryParams = [];
+                                            if (metadataObj.taskId) queryParams.push(`task=${encodeURIComponent(metadataObj.taskId)}`);
+                                            if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                                            
+                                            const separator = baseLink.includes('?') ? '&' : '?';
+                                            commentLink = queryParams.length > 0 
+                                                ? `${baseLink}${separator}${queryParams.join('&')}`
+                                                : baseLink;
                                         }
                                     } else {
                                         // For project-level notifications, use project link with hash routing
