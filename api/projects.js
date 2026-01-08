@@ -75,6 +75,7 @@ async function handler(req, res) {
             monthlyProgress: true,
             tasksList: true, // Include to count tasks stored in JSON
             hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
+            hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
             _count: {
               select: {
                 tasks: true
