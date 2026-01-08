@@ -1486,9 +1486,13 @@ function initializeProjectDetail() {
             projectId: project?.id,
             propValue: project.hasWeeklyFMSReviewProcess,
             normalizedValue,
-            currentState: hasWeeklyFMSReviewProcess
+            currentState: hasWeeklyFMSReviewProcess,
+            willSync: normalizedValue !== hasWeeklyFMSReviewProcess
         });
-        setHasWeeklyFMSReviewProcess(normalizedValue);
+        // Only set if different to avoid unnecessary updates
+        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
+            setHasWeeklyFMSReviewProcess(normalizedValue);
+        }
         // Reset the changed ref when project changes to allow sync from database
         hasWeeklyFMSReviewProcessChangedRef.current = false;
     }, [project.id]); // Re-sync whenever we switch to a different project
