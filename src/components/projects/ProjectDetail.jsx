@@ -1450,9 +1450,18 @@ function initializeProjectDetail() {
         return false;
     };
     
-    const [hasWeeklyFMSReviewProcess, setHasWeeklyFMSReviewProcess] = useState(() => 
-        normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess)
-    );
+    const [hasWeeklyFMSReviewProcess, setHasWeeklyFMSReviewProcess] = useState(() => {
+        const normalized = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        console.log('🔵 ProjectDetail: Initial hasWeeklyFMSReviewProcess state', {
+            projectId: project?.id,
+            projectName: project?.name,
+            propValue: project.hasWeeklyFMSReviewProcess,
+            propType: typeof project.hasWeeklyFMSReviewProcess,
+            normalized,
+            projectKeys: Object.keys(project || {}).filter(k => k.includes('Weekly') || k.includes('FMS'))
+        });
+        return normalized;
+    });
     
     // Sync hasWeeklyFMSReviewProcess when project prop changes (e.g., after reloading from database)
     // But only if it hasn't been explicitly changed by the user recently
