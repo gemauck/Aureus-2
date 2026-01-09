@@ -2435,6 +2435,7 @@ const ManagementMeetingNotes = () => {
     
     // Debounce timer refs for field changes
     const fieldChangeDebounceTimers = useRef({});
+    const stateUpdateDebounceTimers = useRef({}); // For debouncing React state updates to prevent cursor jumps
     const DEBOUNCE_DELAY = 300; // 300ms debounce delay
     
     // Auto-save function - saves department notes after a delay (Google Docs style)
@@ -2450,7 +2451,8 @@ const ManagementMeetingNotes = () => {
         const deptNote = week.departmentNotes?.find(dn => dn.id === departmentNotesId);
         if (!deptNote) return;
         
-        // Get current values from state
+        // Get current values - use ref (latest) with fallback to state
+        // Since we debounce state updates, ref has the most recent values
         let attachments = [];
         try {
             if (deptNote.attachments) {
@@ -2462,10 +2464,15 @@ const ManagementMeetingNotes = () => {
             console.warn('Error parsing attachments:', e);
         }
         
+        // Get latest values from ref (updated immediately on typing) with fallback to state
+        const successesKey = getFieldKey(departmentNotesId, 'successes');
+        const weekToFollowKey = getFieldKey(departmentNotesId, 'weekToFollow');
+        const frustrationsKey = getFieldKey(departmentNotesId, 'frustrations');
+        
         const fieldsToSave = {
-            successes: deptNote.successes || '',
-            weekToFollow: deptNote.weekToFollow || '',
-            frustrations: deptNote.frustrations || '',
+            successes: (currentFieldValues.current[successesKey] ?? deptNote.successes) || '',
+            weekToFollow: (currentFieldValues.current[weekToFollowKey] ?? deptNote.weekToFollow) || '',
+            frustrations: (currentFieldValues.current[frustrationsKey] ?? deptNote.frustrations) || '',
             attachments: JSON.stringify(attachments)
         };
         
@@ -2605,45 +2612,38 @@ const ManagementMeetingNotes = () => {
     
     // Track field changes - with auto-save triggered after typing stops
     const handleFieldChange = (departmentNotesId, field, value) => {
-        // Save cursor position BEFORE state update - this is critical
-        saveCursorPositionForField(departmentNotesId, field);
-        
-        // Update local state immediately for responsive UI (no debounce on UI updates)
-        const monthlyId = currentMonthlyNotes?.id || null;
-        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
-        
-        // Restore cursor position after React re-renders and DOM updates complete
-        // Use multiple animation frames and timeouts to ensure RichTextEditor's useEffect has completed
-        // and innerHTML has been updated
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                restoreCursorPositionForField(departmentNotesId, field);
-                // Try again after a short delay to catch any late updates
-                setTimeout(() => {
-                    restoreCursorPositionForField(departmentNotesId, field);
-                }, 20);
-                setTimeout(() => {
-                    restoreCursorPositionForField(departmentNotesId, field);
-                }, 50);
-            });
-        });
-        
         const fieldKey = getFieldKey(departmentNotesId, field);
         
-        // Update currentFieldValues immediately (for UI responsiveness)
-        // Use try-catch to handle cases where currentFieldValues might not be in scope (e.g., bundling issues)
+        // CRITICAL FIX: Update ref immediately (for auto-save) but debounce React state update
+        // This prevents re-renders during typing which cause cursor jumps
+        
+        // Update ref immediately so auto-save has latest value
         try {
             currentFieldValues.current[fieldKey] = value;
         } catch (error) {
-            // If currentFieldValues is not accessible (ReferenceError), log warning but don't break the UI
-            // This can happen due to bundling/minification scoping issues
             if (error instanceof ReferenceError && error.message.includes('currentFieldValues')) {
-                console.warn('currentFieldValues not accessible in handleFieldChange (likely a bundling scoping issue):', error.message);
+                console.warn('currentFieldValues not accessible in handleFieldChange:', error.message);
             } else {
-                // Re-throw if it's a different error
                 throw error;
             }
         }
+        
+        // Debounce React state update - this prevents cursor jumps during typing
+        // Clear existing timer for this field
+        if (stateUpdateDebounceTimers.current[fieldKey]) {
+            clearTimeout(stateUpdateDebounceTimers.current[fieldKey]);
+        }
+        
+        // Update React state after user stops typing (300ms delay)
+        // This prevents re-renders during active typing which reset cursor
+        stateUpdateDebounceTimers.current[fieldKey] = setTimeout(() => {
+            const monthlyId = currentMonthlyNotes?.id || null;
+            updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+            delete stateUpdateDebounceTimers.current[fieldKey];
+        }, 300);
+        
+        // Note: We don't need cursor save/restore here anymore because we're preventing
+        // the state update during typing, which prevents the re-render that causes cursor jumps
         
         // Debounce the pendingValues update to reduce excessive save checks
         // Clear existing timer for this field
