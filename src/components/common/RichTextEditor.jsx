@@ -935,7 +935,7 @@ if (typeof window !== 'undefined') {
     window.RichTextEditor = MemoizedRichTextEditor;
     // Also export unmemoized version in case needed
     window.RichTextEditorUnmemoized = RichTextEditor;
-    // Version: 20260109-cursor-fix-v6 - Memoized with complete prop disconnection
-    console.log('✅ RichTextEditor loaded - cursor fix v6 (memoized + prop disconnection)');
+    // Version: 20260109-cursor-fix-v8 - No state updates during typing
+    console.log('✅ RichTextEditor loaded - cursor fix v8 (no state updates during typing)');
 }
 
