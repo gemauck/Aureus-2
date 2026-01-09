@@ -216,9 +216,12 @@ const RichTextEditor = ({
                     !editor.contains(document.activeElement)) {
                     isFocusedRef.current = false;
                     // Update DOM value ref from actual DOM content before allowing prop updates
-                    domValueRef.current = editor.innerHTML || '';
+                    const finalHtml = editor.innerHTML || '';
+                    domValueRef.current = finalHtml;
+                    // Sync internal state with DOM content on blur (since we didn't update it during typing)
+                    setHtml(finalHtml);
                     // Update last synced value so we can detect actual changes
-                    lastSyncedValueRef.current = domValueRef.current;
+                    lastSyncedValueRef.current = finalHtml;
                     // Unfreeze value when blurring - allow prop updates again
                     frozenValueRef.current = null;
                     // Allow prop updates again
@@ -583,11 +586,10 @@ const RichTextEditor = ({
         lastSetValueFromUserRef.current = newHtml;
         frozenValueRef.current = newHtml;
         
-        // Mark this as an internal update so useEffect doesn't interfere
-        isInternalUpdateRef.current = true;
-        
-        // Update internal state (but DOM is already correct - don't touch it)
-        setHtml(newHtml);
+        // CRITICAL: DO NOT call setHtml here - this causes a re-render which can reset cursor
+        // The DOM already has the correct content, and we'll sync state on blur
+        // isInternalUpdateRef.current = true; // Not needed if we don't call setHtml
+        // setHtml(newHtml); // REMOVED - prevents re-renders during typing
         
         // Debounce onChange to prevent too many state updates in parent
         // Clear existing timeout
@@ -597,6 +599,7 @@ const RichTextEditor = ({
         }
         
         // Call onChange after a short delay (but still call it for auto-save)
+        // This updates parent state but we prevent parent from re-rendering RichTextEditor by delaying state update
         window[onChangeTimeoutKey] = setTimeout(() => {
             if (onChange) {
                 onChange(newHtml);
