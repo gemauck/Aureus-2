@@ -2435,7 +2435,6 @@ const ManagementMeetingNotes = () => {
     
     // Debounce timer refs for field changes
     const fieldChangeDebounceTimers = useRef({});
-    const stateUpdateDebounceTimers = useRef({}); // For debouncing React state updates to prevent cursor jumps
     const DEBOUNCE_DELAY = 300; // 300ms debounce delay
     
     // Auto-save function - saves department notes after a delay (Google Docs style)
@@ -2510,51 +2509,8 @@ const ManagementMeetingNotes = () => {
             // Save successful - update last saved hash
             lastSavedValues.current[lastSavedKey] = currentHash;
             
-            // Determine which field is currently active/focused so we can preserve its cursor position
-            const activeElement = document.activeElement;
-            let activeField = null;
-            
-            if (activeElement) {
-                // Check if it's a textarea
-                if (activeElement.tagName === 'TEXTAREA') {
-                    const fieldAttr = activeElement.getAttribute('data-field');
-                    const deptId = activeElement.getAttribute('data-dept-note-id');
-                    if (deptId === String(departmentNotesId) && 
-                        ['successes', 'weekToFollow', 'frustrations'].includes(fieldAttr)) {
-                        activeField = fieldAttr;
-                    }
-                }
-                // Check if it's a contentEditable (RichTextEditor)
-                else if (activeElement.contentEditable === 'true') {
-                    // Try to identify which field this contentEditable belongs to
-                    const parentSection = activeElement.closest('[class*="space-y"], [class*="rounded"], div');
-                    if (parentSection) {
-                        // Look for nearby labels to identify the field
-                        const labels = parentSection.querySelectorAll('label');
-                        for (const label of labels) {
-                            const labelText = label.textContent.trim().toLowerCase();
-                            const fieldGroup = label.closest('div')?.parentElement;
-                            if (fieldGroup && fieldGroup.contains(activeElement)) {
-                                if (labelText.includes("last week's successes")) {
-                                    activeField = 'successes';
-                                } else if (labelText.includes('weekly plan')) {
-                                    activeField = 'weekToFollow';
-                                } else if (labelText.includes('frustrations') || labelText.includes('challenges')) {
-                                    activeField = 'frustrations';
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Save cursor position only for the active field
-            if (activeField) {
-                saveCursorPositionForField(departmentNotesId, activeField);
-            }
-            
             // Update local state with saved values
+            // RichTextEditor will ignore prop updates when focused, so this won't cause cursor jumps
             const monthlyId = currentMonthlyNotes?.id || null;
             updateDepartmentNotesLocalBatched(
                 departmentNotesId,
@@ -2566,13 +2522,6 @@ const ManagementMeetingNotes = () => {
                 },
                 monthlyId
             );
-            
-            // Restore cursor position only for the active field after state update
-            if (activeField) {
-                requestAnimationFrame(() => {
-                    restoreCursorPositionForField(departmentNotesId, activeField);
-                });
-            }
             
             // Set saved status
             setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'saved' }));
@@ -2614,9 +2563,6 @@ const ManagementMeetingNotes = () => {
     const handleFieldChange = (departmentNotesId, field, value) => {
         const fieldKey = getFieldKey(departmentNotesId, field);
         
-        // CRITICAL FIX: Update ref immediately (for auto-save) but debounce React state update
-        // This prevents re-renders during typing which cause cursor jumps
-        
         // Update ref immediately so auto-save has latest value
         try {
             currentFieldValues.current[fieldKey] = value;
@@ -2628,22 +2574,10 @@ const ManagementMeetingNotes = () => {
             }
         }
         
-        // Debounce React state update - this prevents cursor jumps during typing
-        // Clear existing timer for this field
-        if (stateUpdateDebounceTimers.current[fieldKey]) {
-            clearTimeout(stateUpdateDebounceTimers.current[fieldKey]);
-        }
-        
-        // Update React state after user stops typing (300ms delay)
-        // This prevents re-renders during active typing which reset cursor
-        stateUpdateDebounceTimers.current[fieldKey] = setTimeout(() => {
-            const monthlyId = currentMonthlyNotes?.id || null;
-            updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
-            delete stateUpdateDebounceTimers.current[fieldKey];
-        }, 300);
-        
-        // Note: We don't need cursor save/restore here anymore because we're preventing
-        // the state update during typing, which prevents the re-render that causes cursor jumps
+        // Update React state immediately - RichTextEditor will ignore prop updates when focused
+        // so this won't cause cursor jumps. The RichTextEditor is "uncontrolled" when focused.
+        const monthlyId = currentMonthlyNotes?.id || null;
+        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
         // Debounce the pendingValues update to reduce excessive save checks
         // Clear existing timer for this field

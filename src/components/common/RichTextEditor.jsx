@@ -452,84 +452,23 @@ const RichTextEditor = ({
         const currentHtml = editorRef.current.innerHTML || '';
         const isFocused = document.activeElement === editorRef.current;
         
-        // CRITICAL FIX: If editor is focused, be very aggressive about preventing updates
-        // Only update if the content is significantly different (not just from user typing)
+        // CRITICAL: If editor is focused, NEVER update innerHTML from props
+        // This is the key to preventing cursor jumps. When focused, the editor
+        // is "uncontrolled" and manages its own state. Only update when blurred.
         if (isFocused) {
-            const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
-            
-            // If user typed recently (within last 500ms), completely ignore prop updates
-            // This gives enough time for React state updates to settle without resetting cursor
-            if (isUserTypingRef.current && timeSinceLastInput < 500) {
-                // User is actively typing or just finished - don't update innerHTML
-                // Just sync internal state
-                if (value !== html) {
-                    setHtml(value || '');
-                }
-                return;
+            // Editor is focused - completely ignore prop updates
+            // Just sync internal state without touching DOM
+            if (value !== html) {
+                setHtml(value || '');
             }
-            
-            // Normalize HTML for comparison (ignore whitespace and entity differences)
-            const normalizeHtml = (html) => {
-                if (!html) return '';
-                const temp = document.createElement('div');
-                temp.innerHTML = html;
-                return (temp.textContent || temp.innerText || '').trim();
-            };
-            
-            const normalizedCurrent = normalizeHtml(currentHtml);
-            const normalizedValue = normalizeHtml(value || '');
-            
-            // If focused and normalized content is the same, don't touch innerHTML
-            // This prevents cursor resets during auto-save when content hasn't changed
-            if (normalizedCurrent === normalizedValue) {
-                // Content is essentially the same, just update internal state
-                if (value !== html) {
-                    setHtml(value || '');
-                }
-                return;
-            }
-            
-            // Content is different - check if it's a significant difference
-            // (more than just whitespace/formatting differences)
-            const currentLength = normalizedCurrent.length;
-            const valueLength = normalizedValue.length;
-            const lengthDiff = Math.abs(currentLength - valueLength);
-            
-            // If the difference is small and user typed recently, it's likely from their typing
-            // Don't update innerHTML to preserve cursor
-            if (lengthDiff < 50 && timeSinceLastInput < 1000) {
-                // Small difference, user just typed - skip update
-                if (value !== html) {
-                    setHtml(value || '');
-                }
-                return;
-            }
+            return;
         }
         
-        // Only update innerHTML if:
-        // 1. Editor is not focused, OR
-        // 2. Content is significantly different
+        // Editor is not focused - safe to update from props
+        // Only update if the value has actually changed
         if (value !== currentHtml && value !== html) {
-            // Save cursor position before updating (if focused)
-            if (isFocused) {
-                saveCursorPosition();
-            }
-            
             setHtml(value || '');
             editorRef.current.innerHTML = value || '';
-            
-            // Restore cursor position after updating (if we saved it)
-            if (isFocused && savedCursorPositionRef.current) {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        restoreCursorPosition();
-                        // Additional attempts with delays
-                        setTimeout(() => restoreCursorPosition(), 10);
-                        setTimeout(() => restoreCursorPosition(), 30);
-                        setTimeout(() => restoreCursorPosition(), 60);
-                    });
-                });
-            }
         }
         
         // Re-apply scroll protection in case React recreated the element
@@ -537,38 +476,34 @@ const RichTextEditor = ({
         if (editorRef.current && !isScrollProtectionSetupRef.current) {
             setupScrollProtection(editorRef.current);
         }
-    }, [value, setupScrollProtection, saveCursorPosition, restoreCursorPosition, html]);
+    }, [value, setupScrollProtection, html]);
 
     const handleInput = () => {
         if (!editorRef.current) return;
         
-        // Mark that user is typing - extend the timeout to prevent prop updates during typing
+        // Mark that user is typing
         isUserTypingRef.current = true;
         lastUserInputTimeRef.current = Date.now();
         
-        // Don't save/restore cursor here - let the browser handle it naturally during typing
-        // The key is preventing prop updates from resetting it
-        
+        // Get the current HTML from the editor
         const newHtml = editorRef.current.innerHTML;
         lastSetValueFromUserRef.current = newHtml;
         
+        // Mark this as an internal update so useEffect doesn't interfere
         isInternalUpdateRef.current = true;
+        
+        // Update internal state
         setHtml(newHtml);
         
+        // Notify parent component of the change
         if (onChange) {
             onChange(newHtml);
         }
         
-        // Keep typing flag active longer to prevent prop updates from interfering
-        // Clear existing timeout if any
-        if (window.richTextEditorTypingTimeout) {
-            clearTimeout(window.richTextEditorTypingTimeout);
-        }
-        // Set new timeout - keep flag active for 800ms after last input
-        window.richTextEditorTypingTimeout = setTimeout(() => {
+        // Clear typing flag after a delay (not critical since we check focus, but good to have)
+        setTimeout(() => {
             isUserTypingRef.current = false;
-            window.richTextEditorTypingTimeout = null;
-        }, 800);
+        }, 1000);
     };
 
     const handleCommand = (command, value = null) => {
