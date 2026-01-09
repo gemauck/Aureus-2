@@ -1827,6 +1827,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
                         style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                     >
+                        {/* Show section and document context */}
+                        {section && document && (
+                            <div className="mb-2 pb-2 border-b border-gray-200">
+                                <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
+                                    {section.name || 'Section'}
+                                </div>
+                                <div className="text-[9px] text-gray-500">
+                                    {document.name || 'Document'} • {month}
+                                </div>
+                            </div>
+                        )}
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
