@@ -2574,10 +2574,33 @@ const ManagementMeetingNotes = () => {
             }
         }
         
-        // Update React state immediately - RichTextEditor will ignore prop updates when focused
-        // so this won't cause cursor jumps. The RichTextEditor is "uncontrolled" when focused.
-        const monthlyId = currentMonthlyNotes?.id || null;
-        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+        // CRITICAL: Check if the editor is currently focused before updating React state
+        // If focused, delay the state update to prevent cursor jumps
+        const activeEl = document.activeElement;
+        const isEditorFocused = activeEl && (
+            activeEl.contentEditable === 'true' || 
+            (activeEl.tagName === 'TEXTAREA' && activeEl.getAttribute('data-dept-note-id') === String(departmentNotesId))
+        );
+        
+        if (isEditorFocused) {
+            // Editor is focused - delay state update to prevent cursor jumps
+            // Clear any existing timer for this field
+            const stateUpdateKey = `stateUpdate_${fieldKey}`;
+            if (window[stateUpdateKey]) {
+                clearTimeout(window[stateUpdateKey]);
+            }
+            
+            // Update state after user stops typing (500ms delay)
+            window[stateUpdateKey] = setTimeout(() => {
+                const monthlyId = currentMonthlyNotes?.id || null;
+                updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+                window[stateUpdateKey] = null;
+            }, 500);
+        } else {
+            // Editor is not focused - update state immediately
+            const monthlyId = currentMonthlyNotes?.id || null;
+            updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+        }
         
         // Debounce the pendingValues update to reduce excessive save checks
         // Clear existing timer for this field

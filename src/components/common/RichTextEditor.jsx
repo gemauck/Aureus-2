@@ -914,8 +914,18 @@ const RichTextEditor = ({
 
 // Make available globally
 if (typeof window !== 'undefined') {
-    window.RichTextEditor = RichTextEditor;
-    // Version: 20260109-cursor-fix-v5 - Complete prop disconnection when focused
-    console.log('✅ RichTextEditor loaded - cursor fix v5 (complete prop disconnection)');
+    // Memoize the component to prevent unnecessary re-renders
+    // Custom comparison: if editor is focused in any instance, don't re-render based on value prop
+    const MemoizedRichTextEditor = React.memo(RichTextEditor, (prevProps, nextProps) => {
+        // Always allow re-render if value actually changed significantly (for initial load)
+        // But during typing, React won't call this if we prevent parent re-renders
+        return prevProps.value === nextProps.value;
+    });
+    
+    window.RichTextEditor = MemoizedRichTextEditor;
+    // Also export unmemoized version in case needed
+    window.RichTextEditorUnmemoized = RichTextEditor;
+    // Version: 20260109-cursor-fix-v6 - Memoized with complete prop disconnection
+    console.log('✅ RichTextEditor loaded - cursor fix v6 (memoized + prop disconnection)');
 }
 
