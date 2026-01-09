@@ -3505,7 +3505,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         </div>
                         
                         {/* File upload input - Render as direct child of popup to ensure it always shows */}
-                        <div className="mt-2">
+                        <div className="mt-2" data-file-upload-section="true">
                             <label htmlFor="comment-file-upload" className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 bg-gray-50 border border-gray-300 rounded cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors">
                                 <input
                                     id="comment-file-upload"
