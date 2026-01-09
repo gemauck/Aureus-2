@@ -40,7 +40,14 @@ const TaskDetailModal = ({
         subscribers: [] // Track users subscribed to task conversation
     });
     const [newComment, setNewComment] = useState('');
-    const [comments, setComments] = useState(task?.comments || []);
+    // CRITICAL: Initialize comments from task, ensuring it's always an array
+    const [comments, setComments] = useState(() => {
+        const initialComments = Array.isArray(task?.comments) ? task.comments : [];
+        if (initialComments.length > 0) {
+            console.log('📝 TaskDetailModal: Initialized with', initialComments.length, 'comments');
+        }
+        return initialComments;
+    });
     const [attachments, setAttachments] = useState(task?.attachments || []);
     const [checklist, setChecklist] = useState(task?.checklist || []);
     
@@ -57,6 +64,7 @@ const TaskDetailModal = ({
     const [newTag, setNewTag] = useState('');
     const [tags, setTags] = useState(task?.tags || []);
     const [users, setUsers] = useState(usersProp || []);
+    const previousTaskIdRef = useRef(task?.id);
     const [mentionQuery, setMentionQuery] = useState('');
     const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
     const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
@@ -206,13 +214,88 @@ const TaskDetailModal = ({
     // Sync all task data when task prop changes - CRITICAL for persistence
     useEffect(() => {
         if (task) {
+            const isNewTask = previousTaskIdRef.current !== task.id;
+            previousTaskIdRef.current = task.id;
             
-            // Sync comments
-            if (Array.isArray(task.comments)) {
-                setComments(task.comments);
-            } else if (task.comments === undefined || task.comments === null) {
-                setComments([]);
-            }
+            // Sync comments - ALWAYS MERGE by ID to prevent losing comments
+            // CRITICAL: Never overwrite existing comments with incomplete data
+            setComments(prevComments => {
+                // Ensure prevComments is always an array
+                const safePrevComments = Array.isArray(prevComments) ? prevComments : [];
+                
+                // If it's a new task, use the new task's comments (but still validate)
+                if (isNewTask) {
+                    if (Array.isArray(task.comments) && task.comments.length > 0) {
+                        return task.comments;
+                    }
+                    // If new task has no comments, return empty array
+                    return [];
+                }
+                
+                // Same task - ALWAYS merge to preserve all comments
+                // Never overwrite existing comments, always merge by ID
+                if (safePrevComments.length > 0) {
+                    // We have existing comments - ALWAYS merge, never replace
+                    const commentsMap = new Map();
+                    
+                    // Start with all existing comments
+                    safePrevComments.forEach(comment => {
+                        if (comment.id) {
+                            commentsMap.set(comment.id, comment);
+                        } else {
+                            // Comments without IDs - keep them by adding a temporary key
+                            commentsMap.set(`temp-${Date.now()}-${Math.random()}`, comment);
+                        }
+                    });
+                    
+                    const existingCount = safePrevComments.length;
+                    const incomingCount = Array.isArray(task.comments) ? task.comments.length : 0;
+                    
+                    // Merge in incoming comments (update existing or add new)
+                    if (Array.isArray(task.comments) && task.comments.length > 0) {
+                        task.comments.forEach(incomingComment => {
+                            if (incomingComment.id) {
+                                // Update existing or add new comment
+                                commentsMap.set(incomingComment.id, incomingComment);
+                            }
+                        });
+                    }
+                    
+                    const mergedCount = commentsMap.size;
+                    
+                    // Defensive logging to detect if comments are lost
+                    if (mergedCount < existingCount) {
+                        console.warn('⚠️ TaskDetailModal: Potential comment loss detected!', {
+                            taskId: task.id,
+                            existingCount,
+                            incomingCount,
+                            mergedCount,
+                            existingIds: safePrevComments.map(c => c.id).filter(Boolean),
+                            incomingIds: Array.isArray(task.comments) ? task.comments.map(c => c.id).filter(Boolean) : []
+                        });
+                    }
+                    
+                    // Return merged comments (preserving all existing + any new/updated from server)
+                    const mergedComments = Array.from(commentsMap.values());
+                    if (mergedComments.length !== existingCount || incomingCount > 0) {
+                        console.log('🔄 TaskDetailModal: Merged comments', {
+                            taskId: task.id,
+                            before: existingCount,
+                            incoming: incomingCount,
+                            after: mergedComments.length
+                        });
+                    }
+                    return mergedComments;
+                }
+                
+                // No existing comments - use incoming if available
+                if (Array.isArray(task.comments)) {
+                    return task.comments;
+                }
+                
+                // Fallback: return empty array
+                return [];
+            });
             
             // Sync attachments
             if (Array.isArray(task.attachments)) {
@@ -383,10 +466,27 @@ const TaskDetailModal = ({
 
         // CRITICAL: Explicitly include comments, checklist, attachments, and tags from current state
         // These are managed separately and must be included in the save
+        // ALWAYS use current state, never task.comments prop (which might be stale)
+        let commentsToSave = Array.isArray(comments) ? comments : [];
+        
+        // Defensive check: if we have comments in state but task.comments has more, merge them
+        // This is a safety net in case state got out of sync
+        if (commentsToSave.length > 0 && Array.isArray(task?.comments) && task.comments.length > commentsToSave.length) {
+            console.warn('⚠️ TaskDetailModal: State comments count is less than task prop, merging before save', {
+                stateCount: commentsToSave.length,
+                taskPropCount: task.comments.length
+            });
+            const commentsMap = new Map(commentsToSave.map(c => [c.id, c]));
+            task.comments.forEach(c => {
+                if (c.id) commentsMap.set(c.id, c);
+            });
+            commentsToSave = Array.from(commentsMap.values());
+        }
+        
         const taskToSave = {
             ...editedTask,
             // Explicitly include arrays from current state to ensure persistence
-            comments: Array.isArray(comments) ? comments : [],
+            comments: commentsToSave,
             checklist: Array.isArray(checklist) ? checklist : [],
             attachments: Array.isArray(attachments) ? attachments : [],
             tags: Array.isArray(tags) ? tags : [],
@@ -401,7 +501,8 @@ const TaskDetailModal = ({
             commentsCount: taskToSave.comments?.length || 0,
             checklistCount: taskToSave.checklist?.length || 0,
             attachmentsCount: taskToSave.attachments?.length || 0,
-            tagsCount: taskToSave.tags?.length || 0
+            tagsCount: taskToSave.tags?.length || 0,
+            commentIds: taskToSave.comments?.map(c => c.id).filter(Boolean) || []
         });
 
         // Save and close modal (explicit close for Save Changes button)
@@ -907,10 +1008,10 @@ const TaskDetailModal = ({
     }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] flex flex-col my-4 sm:my-0">
                 {/* Header */}
-                <div className="border-b border-gray-200 px-4 py-3">
+                <div className="border-b border-gray-200 px-3 sm:px-4 py-3 flex-shrink-0 bg-white">
                     <div className="flex items-start justify-between">
                         <div className="flex-1">
                             {parentTask && (
@@ -956,10 +1057,10 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-hidden bg-gray-50">
-                    <div className="h-full overflow-y-auto">
-                        <div className="max-w-6xl mx-auto px-4 py-6 lg:px-6">
-                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-6">
+                <div className="flex-1 overflow-hidden bg-gray-50 min-h-0">
+                    <div className="h-full overflow-y-auto overscroll-contain">
+                        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 lg:px-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4 sm:gap-6">
                                 {/* Left Side - Main Content */}
                                 <div ref={leftContentRef} className="space-y-4">
                                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
@@ -1836,7 +1937,7 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-4 py-2.5 flex justify-between items-center">
+                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-between items-center flex-shrink-0 bg-white">
                     <div>
                         {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button
