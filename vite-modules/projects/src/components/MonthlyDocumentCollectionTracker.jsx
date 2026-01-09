@@ -940,11 +940,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleSectionDragStart = (e, section, index) => {
         setDraggedSection({ section, index });
         e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => e.currentTarget.style.opacity = '0.5', 0);
+        setTimeout(() => {
+            if (e.currentTarget) {
+                e.currentTarget.style.opacity = '0.5';
+            }
+        }, 0);
     };
     
     const handleSectionDragEnd = (e) => {
-        e.currentTarget.style.opacity = '1';
+        if (e.currentTarget) {
+            e.currentTarget.style.opacity = '1';
+        }
         setDraggedSection(null);
         setDragOverIndex(null);
     };

@@ -556,6 +556,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Update from database if data has changed
             // Check if we have unsaved local changes
+            // CRITICAL: Use the snapshot we just computed above, not a new one
             const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
             
             // Double-check deletion flag before updating (defensive programming)
@@ -590,14 +591,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             // If database has more sections than current state, don't update (deletion likely in progress)
+            // CRITICAL: Also check if our snapshot matches current state (indicates deletion was saved)
+            // Note: currentSnapshot is already declared above, so we reuse it here
+            const snapshotMatchesCurrent = currentSnapshot === lastSavedSnapshotRef.current;
+            
             if (freshYearSections.length > currentYearSections.length && currentYearSections.length > 0) {
                 const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : Infinity;
-                // Only block if deletion happened recently (within last 10 seconds)
-                if (timeSinceDeletion < 10000) {
-                    console.log('⏸️ Refresh skipped: database has more sections than current state (deletion likely in progress)', {
+                // Block if deletion happened recently (within last 15 seconds) OR if snapshot matches current (deletion was saved)
+                // This prevents restoring sections that were just deleted and saved
+                if (timeSinceDeletion < 15000 || snapshotMatchesCurrent) {
+                    console.log('⏸️ Refresh skipped: database has more sections than current state (deletion likely in progress or recently completed)', {
                         current: currentYearSections.length,
                         database: freshYearSections.length,
-                        timeSinceDeletion: `${timeSinceDeletion}ms`
+                        timeSinceDeletion: `${timeSinceDeletion}ms`,
+                        snapshotMatchesCurrent: snapshotMatchesCurrent
                     });
                     return;
                 }
@@ -626,11 +633,31 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 if (shouldUpdate) {
                     // Final check before updating state
+                    // CRITICAL: Filter out any sections that are in the deletion tracking set
+                    // This prevents restoring sections that were just deleted
+                    if (deletionSectionIdsRef.current.size > 0) {
+                        const filteredNormalized = { ...normalized };
+                        Object.keys(filteredNormalized).forEach(year => {
+                            filteredNormalized[year] = (filteredNormalized[year] || []).filter(section => 
+                                !deletionSectionIdsRef.current.has(String(section.id))
+                            );
+                        });
+                        normalized = filteredNormalized;
+                        // Recalculate snapshot after filtering
+                        const filteredSnapshot = serializeSections(normalized);
+                        console.log('🔍 Filtered out sections being deleted from refresh update', {
+                            deletedIds: Array.from(deletionSectionIdsRef.current),
+                            originalSnapshot: freshSnapshot.substring(0, 100),
+                            filteredSnapshot: filteredSnapshot.substring(0, 100)
+                        });
+                    }
+                    
                     if (!isDeletingRef.current || forceUpdate) {
                         setSectionsByYear(normalized);
-                        // Update snapshot reference to match database state
-                        if (freshSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
-                            lastSavedSnapshotRef.current = freshSnapshot;
+                        // Update snapshot reference to match database state (use filtered snapshot if filtering occurred)
+                        const finalSnapshot = deletionSectionIdsRef.current.size > 0 ? serializeSections(normalized) : freshSnapshot;
+                        if (finalSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
+                            lastSavedSnapshotRef.current = finalSnapshot;
                         }
                     } else {
                         console.log('⏸️ State update skipped: deletion in progress');
@@ -1333,8 +1360,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Remove from deletion tracking
                 deletionSectionIdsRef.current.delete(normalizedSectionId);
                 
+                // CRITICAL: Update lastSavedSnapshot to match the deleted state
+                // This ensures refreshFromDatabase won't restore the deleted section
+                const currentStateSnapshot = serializeSections(sectionsRef.current);
+                lastSavedSnapshotRef.current = currentStateSnapshot;
+                
+                // Update localStorage snapshot to match deleted state
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, currentStateSnapshot);
+                        console.log('💾 Deletion snapshot updated in localStorage after successful save');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to update document collection snapshot in localStorage:', storageError);
+                    }
+                }
+                
                 // Clear the deleting flag after successful save - wait longer to ensure DB save completes
-                // Increased from 500ms to 3000ms to give database more time to persist
+                // Increased from 3000ms to 5000ms to give database more time to persist
                 // Only clear flag if no other deletions are in progress
                 setTimeout(() => {
                     if (deletionSectionIdsRef.current.size === 0) {
@@ -1344,11 +1387,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     } else {
                         console.log(`⏸️ Deletion flag kept active: ${deletionSectionIdsRef.current.size} deletion(s) still in progress`);
                     }
-                    // Trigger a single refresh after flag is cleared to sync state
-                    refreshFromDatabase(false);
+                    // DON'T call refreshFromDatabase immediately after deletion
+                    // The state is already correct, and refresh might restore deleted sections
+                    // if database hasn't fully updated yet. Let the normal polling handle sync.
                     // Process next deletion in queue if any
                     processDeletionQueue();
-                }, 3000);
+                }, 5000);
                 
             } catch (saveError) {
                 console.error('❌ Error saving section deletion:', saveError);
@@ -1814,11 +1858,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleSectionDragStart = (e, section, index) => {
         setDraggedSection({ section, index });
         e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => e.currentTarget.style.opacity = '0.5', 0);
+        setTimeout(() => {
+            if (e.currentTarget) {
+                e.currentTarget.style.opacity = '0.5';
+            }
+        }, 0);
     };
     
     const handleSectionDragEnd = (e) => {
-        e.currentTarget.style.opacity = '1';
+        if (e.currentTarget) {
+            e.currentTarget.style.opacity = '1';
+        }
         setDraggedSection(null);
         setDragOverIndex(null);
     };
@@ -2983,6 +3033,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
+                        {/* Show section and document context */}
+                        {section && document && (
+                            <div className="mb-2 pb-2 border-b border-gray-200">
+                                <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
+                                    {section.name || 'Section'}
+                                </div>
+                                <div className="text-[9px] text-gray-500">
+                                    {document.name || 'Document'} • {month}
+                                </div>
+                            </div>
+                        )}
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
