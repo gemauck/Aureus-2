@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
@@ -116,12 +116,6 @@ const generateWeeksForYear = (year) => {
 };
 
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
-    console.log('🚀 WeeklyFMSReviewTracker component mounted/rendered', {
-        projectId: project?.id,
-        hasProject: !!project,
-        hasWeeklyFMSReviewSections: !!project?.weeklyFMSReviewSections
-    });
-    
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     const currentWeek = Math.ceil(new Date().getDate() / 7); // Approximate current week
@@ -146,6 +140,23 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const isSavingRef = useRef(false);
     const previousProjectIdRef = useRef(project?.id);
     const hasLoadedInitialDataRef = useRef(false);
+    const renderCountRef = useRef(0);
+    const lastLoggedProjectIdRef = useRef(null);
+    
+    // Only log on mount or when project.id changes (not on every render)
+    useEffect(() => {
+        const currentProjectId = project?.id;
+        if (currentProjectId !== lastLoggedProjectIdRef.current) {
+            lastLoggedProjectIdRef.current = currentProjectId;
+            console.log('🚀 WeeklyFMSReviewTracker component mounted/rendered', {
+                projectId: currentProjectId,
+                hasProject: !!project,
+                hasWeeklyFMSReviewSections: !!project?.weeklyFMSReviewSections,
+                renderCount: renderCountRef.current
+            });
+        }
+        renderCountRef.current += 1;
+    }, [project?.id]);
     const sectionsRef = useRef({});
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
@@ -360,6 +371,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             apiRef.current = window.DocumentCollectionAPI;
         }
     }, []);
+    
+    // Store callbacks in refs to prevent unnecessary re-renders
+    const loadFromProjectPropRef = useRef(null);
+    const refreshFromDatabaseRef = useRef(null);
+    
+    useEffect(() => {
+        loadFromProjectPropRef.current = loadFromProjectProp;
+        refreshFromDatabaseRef.current = refreshFromDatabase;
+    }, [loadFromProjectProp, refreshFromDatabase]);
     
     // Templates state
     const [templates, setTemplates] = useState([]);
@@ -724,6 +744,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.id]);
     
+    // Track previous project data to detect actual changes
+    const previousProjectDataRef = useRef(null);
+    
     useEffect(() => {
         if (!project?.id) return;
         
@@ -731,16 +754,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         if (isNewProject) {
             previousProjectIdRef.current = project.id;
             hasLoadedInitialDataRef.current = false;
+            previousProjectDataRef.current = null; // Reset on new project
+        }
+        
+        // Only trigger if project data actually changed (not just object reference)
+        const currentProjectData = JSON.stringify({
+            weeklyFMSReviewSections: project?.weeklyFMSReviewSections,
+            documentSections: project?.documentSections
+        });
+        const projectDataChanged = previousProjectDataRef.current !== currentProjectData;
+        
+        if (projectDataChanged) {
+            previousProjectDataRef.current = currentProjectData;
         }
         
         const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
-        if (isNewProject || !hasUnsavedChanges) {
-            loadFromProjectProp();
-        } else {
+        if (isNewProject || (projectDataChanged && !hasUnsavedChanges)) {
+            if (loadFromProjectPropRef.current) {
+                loadFromProjectPropRef.current();
+            }
         }
         
-        refreshFromDatabase();
-    }, [project?.id, project?.weeklyFMSReviewSections, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
+        // Only refresh on new project or when data actually changed
+        if (isNewProject || projectDataChanged) {
+            if (refreshFromDatabaseRef.current) {
+                refreshFromDatabaseRef.current();
+            }
+        }
+    }, [project?.id, project?.weeklyFMSReviewSections, project?.documentSections]);
     
     // ============================================================
     // POLLING - Regularly refresh from database to get updates
@@ -750,13 +791,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Poll every 5 seconds to check for database updates
         const pollInterval = setInterval(() => {
-            refreshFromDatabase(false);
+            if (refreshFromDatabaseRef.current) {
+                refreshFromDatabaseRef.current(false);
+            }
         }, 5000);
         
         return () => {
             clearInterval(pollInterval);
         };
-    }, [project?.id, refreshFromDatabase]);
+    }, [project?.id]);
     
     // ============================================================
     // Handle navigation with save - ensures data is saved before navigating away
@@ -801,8 +844,28 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     //
     // Using a function declaration avoids that temporal‑dead‑zone issue while
     // remaining safe because mutable state lives in refs and React state.
+    
+    // Track serialized sections to detect actual changes (not just object reference changes)
+    const sectionsSnapshotRef = useRef('{}');
+    const previousSectionsSnapshotRef = useRef('{}');
+    
+    // Serialize sections for comparison
+    const sectionsSnapshot = React.useMemo(() => {
+        return serializeSections(sectionsByYear);
+    }, [sectionsByYear]);
+    
+    useEffect(() => {
+        sectionsSnapshotRef.current = sectionsSnapshot;
+    }, [sectionsSnapshot]);
+    
     useEffect(() => {
         if (isLoading || !project?.id) return;
+        
+        // Only trigger save if sections actually changed (not just object reference)
+        const hasChanged = sectionsSnapshotRef.current !== previousSectionsSnapshotRef.current;
+        if (!hasChanged) return;
+        
+        previousSectionsSnapshotRef.current = sectionsSnapshotRef.current;
         
         // Clear any pending save
         if (saveTimeoutRef.current) {
@@ -822,7 +885,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 clearTimeout(forceSaveTimeoutRef.current);
             }
         };
-    }, [sectionsByYear, isLoading, project?.id]);
+    }, [sectionsSnapshot, isLoading, project?.id]);
     
     async function saveToDatabase(options = {}) {
         if (isSavingRef.current) {
@@ -1019,7 +1082,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const response = await fetch('/api/document-collection-templates', {
+            const response = await fetch('/api/weekly-fms-review-templates', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -1083,7 +1146,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             if (isEditingExisting) {
                 // Update existing template in database
-                const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
+                const response = await fetch(`/api/weekly-fms-review-templates/${editingTemplate.id}`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -1101,7 +1164,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
             } else {
                 // Create new template in database
-                const response = await fetch('/api/document-collection-templates', {
+                const response = await fetch('/api/weekly-fms-review-templates', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -1150,7 +1213,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
             
             // Delete from database
-            const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+            const response = await fetch(`/api/weekly-fms-review-templates/${encodeURIComponent(templateId)}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -2308,13 +2371,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const scrollContainers = Object.values(sectionScrollRefs.current).filter(Boolean);
         if (scrollContainers.length === 0) return;
         
+        // Track which container is currently being programmatically scrolled (by us)
+        const syncingContainer = { current: null };
+        
         // Create a map to store event handlers for proper cleanup
         const scrollHandlers = new Map();
         
         scrollContainers.forEach(sourceContainer => {
             const handleScroll = () => {
-                // Skip if this scroll was triggered by our sync (prevents infinite loop)
-                if (isScrollingRef.current) return;
+                // Skip if this container is the one we're currently syncing (prevents infinite loop)
+                if (syncingContainer.current === sourceContainer) return;
                 
                 const scrollLeft = sourceContainer.scrollLeft;
                 
@@ -2326,8 +2392,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     savedScrollPositionsRef.current[sectionId] = scrollLeft;
                 }
                 
-                // Set flag to prevent this sync from triggering other scroll events
-                isScrollingRef.current = true;
+                // Mark that we're syncing from this container
+                syncingContainer.current = sourceContainer;
                 
                 // Sync all other containers immediately for fluid scrolling
                 scrollContainers.forEach(container => {
@@ -2343,10 +2409,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     }
                 });
                 
-                // Clear flag immediately on next tick to allow subsequent scrolls
-                // Using requestAnimationFrame ensures DOM has updated
-                requestAnimationFrame(() => {
-                    isScrollingRef.current = false;
+                // Clear the syncing flag immediately after all containers are updated
+                // Use a microtask to ensure it clears after current execution but before next scroll event
+                Promise.resolve().then(() => {
+                    syncingContainer.current = null;
                 });
             };
             
@@ -3182,7 +3248,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div className="flex-1 overflow-y-auto p-4">
                             <div className="flex justify-between items-center mb-4">
-                                <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                <p className="text-xs text-gray-600">Manage your weekly FMS review templates</p>
                                 <button
                                     onClick={() => {
                                         setEditingTemplate(null);
