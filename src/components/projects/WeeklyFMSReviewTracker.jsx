@@ -2397,14 +2397,41 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // immediately see the relevant discussion.
     useEffect(() => {
         try {
-            const search = window.location.search || '';
-            if (!search) return;
-            const params = new URLSearchParams(search);
-            const deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
-            const deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
-            const deepMonth = params.get('weeklyMonth') || params.get('docMonth');
-            const deepWeek = params.get('weeklyWeek') || '1';
-            const deepCommentId = params.get('commentId');
+            let params = null;
+            let deepSectionId = null;
+            let deepDocumentId = null;
+            let deepMonth = null;
+            let deepWeek = '1';
+            let deepCommentId = null;
+            
+            // First check hash query params (for hash-based routing like #/projects/123?weeklySectionId=...)
+            const hash = window.location.hash || '';
+            if (hash.includes('?')) {
+                const hashParts = hash.split('?');
+                if (hashParts.length > 1) {
+                    params = new URLSearchParams(hashParts[1]);
+                    deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
+                    deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
+                    deepMonth = params.get('weeklyMonth') || params.get('docMonth');
+                    deepWeek = params.get('weeklyWeek') || '1';
+                    deepCommentId = params.get('commentId');
+                }
+            }
+            
+            // If not found in hash, check window.location.search (for regular URLs)
+            if (!deepSectionId || !deepDocumentId) {
+                const search = window.location.search || '';
+                if (search) {
+                    params = new URLSearchParams(search);
+                    if (!deepSectionId) deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
+                    if (!deepDocumentId) deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
+                    if (!deepMonth) deepMonth = params.get('weeklyMonth') || params.get('docMonth');
+                    if (!deepWeek || deepWeek === '1') deepWeek = params.get('weeklyWeek') || '1';
+                    if (!deepCommentId) deepCommentId = params.get('commentId');
+                }
+            }
+            
+            if (!deepSectionId || !deepDocumentId || !deepMonth) return;
             
             if (deepSectionId && deepDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}-Week${deepWeek}`;
@@ -2450,9 +2477,97 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             }
         } catch (error) {
-            console.warn('⚠️ Failed to apply document collection deep-link:', error);
+            console.warn('⚠️ Failed to apply weekly FMS review deep-link:', error);
         }
-    }, []);
+    }, [project?.id, sections]);
+    
+    // Also listen for hash changes to handle navigation from email links
+    useEffect(() => {
+        const handleHashChange = () => {
+            // Re-run the deep-link logic when hash changes
+            setTimeout(() => {
+                try {
+                    let params = null;
+                    let deepSectionId = null;
+                    let deepDocumentId = null;
+                    let deepMonth = null;
+                    let deepWeek = '1';
+                    let deepCommentId = null;
+                    
+                    // First check hash query params (for hash-based routing like #/projects/123?weeklySectionId=...)
+                    const hash = window.location.hash || '';
+                    if (hash.includes('?')) {
+                        const hashParts = hash.split('?');
+                        if (hashParts.length > 1) {
+                            params = new URLSearchParams(hashParts[1]);
+                            deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
+                            deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
+                            deepMonth = params.get('weeklyMonth') || params.get('docMonth');
+                            deepWeek = params.get('weeklyWeek') || '1';
+                            deepCommentId = params.get('commentId');
+                        }
+                    }
+                    
+                    // If not found in hash, check window.location.search (for regular URLs)
+                    if (!deepSectionId || !deepDocumentId) {
+                        const search = window.location.search || '';
+                        if (search) {
+                            params = new URLSearchParams(search);
+                            if (!deepSectionId) deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
+                            if (!deepDocumentId) deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
+                            if (!deepMonth) deepMonth = params.get('weeklyMonth') || params.get('docMonth');
+                            if (!deepWeek || deepWeek === '1') deepWeek = params.get('weeklyWeek') || '1';
+                            if (!deepCommentId) deepCommentId = params.get('commentId');
+                        }
+                    }
+                    
+                    if (deepSectionId && deepDocumentId && deepMonth) {
+                        const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}-Week${deepWeek}`;
+                        setCommentPopupPosition({
+                            top: Math.max(window.innerHeight / 2 - 160, 60),
+                            left: Math.max(window.innerWidth / 2 - 180, 20)
+                        });
+                        setHoverCommentCell(cellKey);
+                        
+                        // If a specific comment ID is provided, scroll to it after the popup opens
+                        if (deepCommentId) {
+                            setTimeout(() => {
+                                const commentElement = document.querySelector(`[data-comment-id="${deepCommentId}"]`) ||
+                                                     document.querySelector(`#comment-${deepCommentId}`);
+                                if (commentElement && commentPopupContainerRef.current) {
+                                    commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    if (commentPopupContainerRef.current) {
+                                        const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
+                                        const commentRect = commentElement.getBoundingClientRect();
+                                        const scrollTop = commentPopupContainerRef.current.scrollTop;
+                                        const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                        commentPopupContainerRef.current.scrollTo({
+                                            top: commentOffset - 20,
+                                            behavior: 'smooth'
+                                        });
+                                    }
+                                    const originalBg = window.getComputedStyle(commentElement).backgroundColor;
+                                    commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
+                                    commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                                    commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+                                    setTimeout(() => {
+                                        commentElement.style.backgroundColor = originalBg;
+                                        commentElement.style.boxShadow = '';
+                                        commentElement.style.transition = '';
+                                    }, 2000);
+                                }
+                            }, 500);
+                        }
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Failed to apply weekly FMS review deep-link on hash change:', error);
+                }
+            }, 100);
+        };
+        
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [project?.id, sections]);
     
     // ============================================================
     // RENDER STATUS CELL
