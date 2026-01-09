@@ -3463,7 +3463,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             
                             <div>
                                 {commentInputAvailable && section && document ? (
-                                    <>
+                                    <div>
                                         <window.CommentInputWithMentions
                                             onSubmit={(commentText) => {
                                                 if (commentText && commentText.trim() || commentAttachments.length > 0) {
@@ -3490,9 +3490,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 <span className="font-medium">{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
                                             </label>
                                         </div>
-                                    </>
+                                    </div>
                                 ) : (
-                                    <>
+                                    <div>
                                         <textarea
                                             value={quickComment}
                                             onChange={(e) => setQuickComment(e.target.value)}
@@ -3531,7 +3531,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 <span className="font-medium">{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
                                             </label>
                                         </div>
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         </div>
