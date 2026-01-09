@@ -190,10 +190,108 @@ const RichTextEditor = ({
         };
     }, []);
     
-    // Track focus state with event listeners for reliable detection
+    // Save and restore cursor position functions - CRITICAL for preventing cursor jumps
+    const saveCursorPosition = useCallback(() => {
+        if (!editorRef.current || !isFocusedRef.current) return null;
+        
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return null;
+        
+        const range = selection.getRangeAt(0);
+        
+        // Save both text position and node references
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(editorRef.current);
+        preCaretRange.setEnd(range.startContainer, range.startOffset);
+        
+        const position = {
+            start: preCaretRange.toString().length,
+            end: preCaretRange.toString().length + range.toString().length,
+            startContainer: range.startContainer,
+            startOffset: range.startOffset,
+            endContainer: range.endContainer,
+            endOffset: range.endOffset
+        };
+        
+        return position;
+    }, []);
+    
+    const restoreCursorPosition = useCallback((position) => {
+        if (!editorRef.current || !position || !isFocusedRef.current) return;
+        
+        try {
+            const selection = window.getSelection();
+            if (!selection) return;
+            
+            // Try to restore using saved container/offset first (most accurate)
+            if (position.startContainer && document.body.contains(position.startContainer)) {
+                try {
+                    const range = document.createRange();
+                    range.setStart(position.startContainer, position.startOffset);
+                    range.setEnd(position.endContainer || position.startContainer, position.endOffset || position.startOffset);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    return;
+                } catch (e) {
+                    // Fall through to text-based restoration
+                }
+            }
+            
+            // Fallback: restore using text position
+            const walker = document.createTreeWalker(
+                editorRef.current,
+                NodeFilter.SHOW_TEXT,
+                null
+            );
+            
+            let charCount = 0;
+            let startNode = null;
+            let endNode = null;
+            let startOffset = 0;
+            let endOffset = 0;
+            
+            while (walker.nextNode()) {
+                const node = walker.currentNode;
+                const nodeLength = node.textContent.length;
+                
+                if (!startNode && charCount + nodeLength >= position.start) {
+                    startNode = node;
+                    startOffset = position.start - charCount;
+                }
+                
+                if (charCount + nodeLength >= position.end) {
+                    endNode = node;
+                    endOffset = position.end - charCount;
+                    break;
+                }
+                
+                charCount += nodeLength;
+            }
+            
+            if (startNode) {
+                const range = document.createRange();
+                range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+                if (endNode) {
+                    range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+                } else {
+                    range.setEnd(startNode, Math.min(startOffset, startNode.textContent.length));
+                }
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        } catch (e) {
+            console.warn('Failed to restore cursor position:', e);
+        }
+    }, []);
+    
+    // Track focus state with event listeners and MutationObserver for cursor protection
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor) return;
+        
+        let savedPosition = null;
+        let mutationObserver = null;
+        let isRestoring = false; // Flag to prevent recursive restoration
         
         const handleFocus = (e) => {
             // Only set focus if the event target is the editor or a child
@@ -205,6 +303,44 @@ const RichTextEditor = ({
                 frozenValueRef.current = domValueRef.current;
                 // Completely ignore prop updates while focused
                 ignorePropUpdatesRef.current = true;
+                
+                // Save current cursor position
+                savedPosition = saveCursorPosition();
+                
+                // Set up MutationObserver to detect DOM changes and restore cursor
+                if (!mutationObserver) {
+                    mutationObserver = new MutationObserver((mutations) => {
+                        if (!isFocusedRef.current || isRestoring) return;
+                        
+                        // Check if innerHTML actually changed (not just user typing)
+                        let externalChange = false;
+                        const currentHtml = editor.innerHTML || '';
+                        
+                        // Only restore if HTML changed externally (not from user input)
+                        // User input changes are handled by handleInput, which doesn't trigger mutations we care about
+                        if (currentHtml !== domValueRef.current && savedPosition) {
+                            externalChange = true;
+                        }
+                        
+                        // If external change detected, restore cursor position
+                        if (externalChange) {
+                            isRestoring = true;
+                            requestAnimationFrame(() => {
+                                restoreCursorPosition(savedPosition);
+                                // Update saved position after restoration
+                                savedPosition = saveCursorPosition();
+                                isRestoring = false;
+                            });
+                        }
+                    });
+                    
+                    mutationObserver.observe(editor, {
+                        childList: true,
+                        subtree: true,
+                        characterData: true,
+                        attributes: false
+                    });
+                }
             }
         };
         
@@ -215,6 +351,14 @@ const RichTextEditor = ({
                 if (document.activeElement !== editor && 
                     !editor.contains(document.activeElement)) {
                     isFocusedRef.current = false;
+                    savedPosition = null; // Clear saved position on blur
+                    
+                    // Disconnect MutationObserver
+                    if (mutationObserver) {
+                        mutationObserver.disconnect();
+                        mutationObserver = null;
+                    }
+                    
                     // Update DOM value ref from actual DOM content before allowing prop updates
                     const finalHtml = editor.innerHTML || '';
                     domValueRef.current = finalHtml;
@@ -230,15 +374,33 @@ const RichTextEditor = ({
             }, 150); // Small delay to ensure blur event completes and cursor position is stable
         };
         
+        // Save cursor position before any potential DOM changes
+        const handleBeforeInput = () => {
+            if (isFocusedRef.current) {
+                savedPosition = saveCursorPosition();
+            }
+        };
+        
+        // Save cursor position on selection change (user moving cursor)
+        const handleSelectionChange = () => {
+            if (isFocusedRef.current && editor.contains(document.activeElement)) {
+                savedPosition = saveCursorPosition();
+            }
+        };
+        
         // Use capture phase to catch all focus events
         editor.addEventListener('focusin', handleFocus, true);
         editor.addEventListener('focusout', handleBlur, true);
         editor.addEventListener('focus', handleFocus, true);
         editor.addEventListener('blur', handleBlur, true);
+        editor.addEventListener('beforeinput', handleBeforeInput, true);
+        document.addEventListener('selectionchange', handleSelectionChange);
         
         // Also check current focus state
         if (document.activeElement === editor || editor.contains(document.activeElement)) {
             isFocusedRef.current = true;
+            ignorePropUpdatesRef.current = true;
+            savedPosition = saveCursorPosition();
         }
         
         return () => {
@@ -246,8 +408,13 @@ const RichTextEditor = ({
             editor.removeEventListener('focusout', handleBlur, true);
             editor.removeEventListener('focus', handleFocus, true);
             editor.removeEventListener('blur', handleBlur, true);
+            editor.removeEventListener('beforeinput', handleBeforeInput, true);
+            document.removeEventListener('selectionchange', handleSelectionChange);
+            if (mutationObserver) {
+                mutationObserver.disconnect();
+            }
         };
-    }, []); // Run once on mount
+    }, [saveCursorPosition, restoreCursorPosition]); // Include dependencies
     
     // Initialize editor content on mount and set up scroll protection
     useEffect(() => {
@@ -935,7 +1102,7 @@ if (typeof window !== 'undefined') {
     window.RichTextEditor = MemoizedRichTextEditor;
     // Also export unmemoized version in case needed
     window.RichTextEditorUnmemoized = RichTextEditor;
-    // Version: 20260109-cursor-fix-v8 - No state updates during typing
-    console.log('✅ RichTextEditor loaded - cursor fix v8 (no state updates during typing)');
+    // Version: 20260109-cursor-fix-v9 - MutationObserver cursor restoration
+    console.log('✅ RichTextEditor loaded - cursor fix v9 (MutationObserver cursor restoration)');
 }
 
