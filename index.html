@@ -1217,21 +1217,37 @@
                     console.error('❌ Please check that the file exists at: dist/vite-projects/projects-module.js');
                     console.error('❌ This may be a server configuration issue (502 Bad Gateway suggests nginx/backend misconfiguration)');
                     
-                    // Check if MonthlyDocumentCollectionTracker might be available from another source
-                    // (it might have been loaded from the main app build instead)
+                    // Check if components might be available from another source
+                    // (they might have been loaded from the main app build instead)
                     setTimeout(() => {
-                        if (window.MonthlyDocumentCollectionTracker) {
-                            console.log('✅ MonthlyDocumentCollectionTracker found from alternative source - continuing');
+                        const hasMonthly = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
+                        const hasWeekly = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
+                        
+                        if (hasMonthly || hasWeekly) {
+                            const detail = {};
+                            if (hasMonthly) {
+                                detail.MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+                                console.log('✅ MonthlyDocumentCollectionTracker found from alternative source');
+                            }
+                            if (hasWeekly) {
+                                detail.WeeklyFMSReviewTracker = window.WeeklyFMSReviewTracker;
+                                console.log('✅ WeeklyFMSReviewTracker found from alternative source');
+                            }
+                            
                             // Dispatch event anyway so dependent components can proceed
-                            if (typeof window.dispatchEvent === 'function') {
-                                window.dispatchEvent(new CustomEvent('viteProjectsReady', {
-                                    detail: { 
-                                        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
-                                    }
-                                }));
+                            if (typeof window.dispatchEvent === 'function' && Object.keys(detail).length > 0) {
+                                window.dispatchEvent(new CustomEvent('viteProjectsReady', { detail }));
+                                console.log('📢 Dispatched viteProjectsReady event with available components');
+                            }
+                            
+                            if (!hasMonthly) {
+                                console.warn('⚠️ MonthlyDocumentCollectionTracker not available - monthly document collection features may be limited');
+                            }
+                            if (!hasWeekly) {
+                                console.warn('⚠️ WeeklyFMSReviewTracker not available - weekly FMS checklist features may be limited');
                             }
                         } else {
-                            console.warn('⚠️ MonthlyDocumentCollectionTracker not available - some features may be limited');
+                            console.warn('⚠️ Neither MonthlyDocumentCollectionTracker nor WeeklyFMSReviewTracker available - some features may be limited');
                             console.warn('⚠️ To fix: Ensure vite-projects files are built and deployed to the server');
                             console.warn('⚠️ Run: npm run build:vite-projects && deploy dist/vite-projects/ to server');
                         }
@@ -1264,8 +1280,10 @@
         
         // Also listen for React ready event as fallback
         window.addEventListener('babelready', () => {
-            if (!window.MonthlyDocumentCollectionTracker) {
-                console.log('🔄 babelready event received, checking Vite module...');
+            const hasMonthly = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
+            const hasWeekly = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
+            if (!hasMonthly || !hasWeekly) {
+                console.log('🔄 babelready event received, checking Vite module... (missing:', !hasMonthly ? 'MonthlyDocumentCollectionTracker' : '', !hasWeekly ? 'WeeklyFMSReviewTracker' : '', ')');
                 loadViteProjectsModule();
             }
         });

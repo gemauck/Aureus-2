@@ -56,6 +56,7 @@ console.log('🚀 lazy-load-components.js v20260108-deep-link-fix-v1 loaded');
         './src/components/projects/ProjectModal.jsx',
         './src/components/projects/ProjectProgressTracker.jsx',
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
+        './src/components/projects/WeeklyFMSReviewTracker.jsx', // Added as fallback if vite-projects fails
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
         // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler
@@ -208,19 +209,39 @@ console.log('🚀 lazy-load-components.js v20260108-deep-link-fix-v1 loaded');
                 }
             }
             if (src.includes('WeeklyFMSReviewTracker.jsx') || src.includes('WeeklyFMSReviewTracker.js')) {
-                // ALWAYS skip loading dist version - vite-projects module MUST provide the latest version
-                // Even if it doesn't exist yet, we'll wait for vite-projects to load it
-                console.log('⏭️ WeeklyFMSReviewTracker: Skipping dist load - vite-projects module will provide the latest version');
-                // Wait a bit to see if vite-projects loads it
-                setTimeout(() => {
-                    if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
-                        console.log('✅ WeeklyFMSReviewTracker available from vite-projects module');
-                    } else {
-                        console.warn('⚠️ WeeklyFMSReviewTracker not yet available from vite-projects - it should load soon');
-                    }
+                // Check if vite-projects module already loaded it
+                if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
+                    console.log('✅ WeeklyFMSReviewTracker already available from vite-projects module - skipping dist load');
                     resolve();
+                    return;
+                }
+                
+                // Wait for vite-projects module to load it (up to 2 seconds)
+                // If it's not available after that, load from dist as fallback
+                let attempts = 0;
+                const maxAttempts = 20; // 2 seconds (20 * 100ms)
+                let resolvedFromVite = false;
+                
+                const checkViteModule = setInterval(() => {
+                    attempts++;
+                    if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
+                        console.log('✅ WeeklyFMSReviewTracker available from vite-projects module (after ' + (attempts * 100) + 'ms)');
+                        clearInterval(checkViteModule);
+                        resolvedFromVite = true;
+                        resolve();
+                        return;
+                    } else if (attempts >= maxAttempts) {
+                        console.warn('⚠️ WeeklyFMSReviewTracker not available from vite-projects after ' + maxAttempts + ' attempts');
+                        console.warn('⚠️ Loading from dist as fallback...');
+                        clearInterval(checkViteModule);
+                        // Continue with dist loading - don't resolve here, let it load from dist
+                        // The promise will resolve in script.onload below when dist loads successfully
+                    }
                 }, 100);
-                return;
+                
+                // Give vite-projects a quick chance, then continue with dist loading if needed
+                // Don't return early - let the function continue to load from dist as fallback
+                // If vite-projects loads it, we already resolved above
             }
             
             // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader

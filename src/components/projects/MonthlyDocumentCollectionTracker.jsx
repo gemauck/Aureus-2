@@ -482,9 +482,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Don't refresh if user made changes recently (within last 15 seconds)
         // This prevents overwriting rapid consecutive changes
-        // Increased from 5 seconds to 15 seconds to better handle rapid consecutive changes
+        // BUT: Allow refresh on initial load (forceUpdate) even with recent changes
         const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-        if (!forceUpdate && timeSinceLastChange < 15000) {
+        if (!forceUpdate && timeSinceLastChange < 15000 && hasLoadedInitialDataRef.current) {
             console.log('⏸️ Refresh skipped: recent changes detected (will not overwrite)', {
                 timeSinceLastChange: `${timeSinceLastChange}ms`
             });
@@ -644,6 +644,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         } catch (error) {
             console.error('❌ Error fetching fresh project data:', error);
+            // Retry once after a short delay if initial load failed
+            if (forceUpdate && !hasLoadedInitialDataRef.current) {
+                console.log('🔄 Retrying initial data fetch after error...');
+                setTimeout(() => {
+                    refreshFromDatabase(true).catch(retryError => {
+                        console.error('❌ Retry failed:', retryError);
+                        // Show user-friendly error message
+                        if (window.alert) {
+                            alert('Failed to load document collection data. Please refresh the page or try again later.');
+                        }
+                    });
+                }, 1000);
+            }
         }
     }, [project?.id]);
     
@@ -667,16 +680,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const hasDataFromProps = project?.documentSections && 
             (typeof project.documentSections === 'string' ? project.documentSections.trim() : project.documentSections);
         
-        // For new projects or when we have no data, refresh immediately
-        // Otherwise, defer the refresh to avoid blocking initial render
+        // For new projects or when we have no data, refresh immediately with forceUpdate
+        // This ensures we get data even if guards would normally block
         if (isNewProject || !hasDataFromProps) {
-            refreshFromDatabase();
+            refreshFromDatabase(true); // Force update on initial load
         } else {
             // Defer database refresh to allow UI to render first with prop data
-            // This makes the page feel much faster
+            // But use shorter timeout for faster data sync
             const refreshTimeout = setTimeout(() => {
-                refreshFromDatabase();
-            }, 100);
+                refreshFromDatabase(false); // Allow guards on subsequent refreshes
+            }, 50); // Reduced from 100ms to 50ms for faster sync
             return () => clearTimeout(refreshTimeout);
         }
     }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
