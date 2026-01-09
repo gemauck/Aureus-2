@@ -1515,7 +1515,7 @@ const TaskDetailModal = ({
                                                     </button>
                                                 </div>
                                                 <p className="text-gray-700 text-xs whitespace-pre-wrap">
-                                                    {comment.text.split(/(@[\w]+(?:\s+[\w]+)*)/g).map((part, idx) => {
+                                                    {comment.text.split(/(@[A-Za-z0-9._-]+(?:\s+[A-Za-z0-9._-]+)*)(?=\s|$|[^\w\s])/g).map((part, idx) => {
                                                         if (part.startsWith('@')) {
                                                             const mentionText = part.substring(1).trim();
                                                             const mentionedUser = comment.mentions?.find(m => {
