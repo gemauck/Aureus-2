@@ -3462,17 +3462,35 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             )}
                             
                             {commentInputAvailable && section && document ? (
-                                <window.CommentInputWithMentions
-                                    onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim() || commentAttachments.length > 0) {
-                                            handleAddComment(section.id, document.id, month, weekNumber, commentText);
-                                        }
-                                    }}
-                                    placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
-                                    rows={2}
-                                    showButton={true}
-                                    autoFocus={true}
-                                />
+                                <>
+                                    <window.CommentInputWithMentions
+                                        onSubmit={(commentText) => {
+                                            if (commentText && commentText.trim() || commentAttachments.length > 0) {
+                                                handleAddComment(section.id, document.id, month, weekNumber, commentText);
+                                            }
+                                        }}
+                                        placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                                        rows={2}
+                                        showButton={true}
+                                        autoFocus={true}
+                                    />
+                                    {/* File upload input - Always visible after comment input */}
+                                    <div className="mt-1.5">
+                                        <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                            <input
+                                                id="comment-file-upload"
+                                                type="file"
+                                                multiple
+                                                onChange={handleFileUpload}
+                                                disabled={isUploadingAttachment}
+                                                className="hidden"
+                                                accept="*/*"
+                                            />
+                                            <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
+                                            <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                        </label>
+                                    </div>
+                                </>
                             ) : (
                                 <>
                                     <textarea
@@ -3498,25 +3516,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     >
                                         Add Comment
                                     </button>
+                                    {/* File upload input - Always visible after comment input */}
+                                    <div className="mt-1.5">
+                                        <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                            <input
+                                                id="comment-file-upload"
+                                                type="file"
+                                                multiple
+                                                onChange={handleFileUpload}
+                                                disabled={isUploadingAttachment}
+                                                className="hidden"
+                                                accept="*/*"
+                                            />
+                                            <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
+                                            <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                        </label>
+                                    </div>
                                 </>
                             )}
-                            
-                            {/* File upload input - Always visible after comment input */}
-                            <div className="mt-1.5">
-                                <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
-                                    <input
-                                        id="comment-file-upload"
-                                        type="file"
-                                        multiple
-                                        onChange={handleFileUpload}
-                                        disabled={isUploadingAttachment}
-                                        className="hidden"
-                                        accept="*/*"
-                                    />
-                                    <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
-                                    <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
-                                </label>
-                            </div>
                         </div>
                     </div>
                 );
