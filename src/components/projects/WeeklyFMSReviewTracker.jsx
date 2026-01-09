@@ -460,12 +460,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 return Array.isArray(yearSections) && yearSections.length > 0;
                             });
                         
-                        // Use localStorage if:
-                        // 1. Prop has no data, OR
-                        // 2. localStorage has more sections (more recent save)
+                        // CRITICAL: Always prefer prop (database) over localStorage when prop has data
+                        // This prevents deleted sections from being restored from localStorage
+                        // localStorage should only be used as a fallback when prop is empty
                         if (snapshotHasData) {
                             if (!propHasData) {
-                                // Prop is empty, use localStorage
+                                // Prop is empty, use localStorage as fallback
                                 normalized = snapshotMap;
                                 console.log('💾 Restored from localStorage (prop was empty)', {
                                     snapshotYears,
@@ -474,21 +474,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     )
                                 });
                             } else {
-                                // Both have data - compare and use the one with more sections
-                                const propSectionCount = propYearKeys.reduce((sum, year) => 
-                                    sum + ((normalizedFromProp[year] || []).length), 0
-                                );
-                                const snapshotSectionCount = snapshotYears.reduce((sum, year) => 
-                                    sum + ((snapshotMap[year] || []).length), 0
-                                );
-                                
-                                if (snapshotSectionCount > propSectionCount) {
-                                    normalized = snapshotMap;
-                                    console.log('💾 Using localStorage (has more sections)', {
-                                        propCount: propSectionCount,
-                                        snapshotCount: snapshotSectionCount
-                                    });
-                                }
+                                // Prop has data - ALWAYS use prop (database is source of truth)
+                                // Don't compare section counts - database state takes precedence
+                                // This ensures deletions persist and aren't restored from localStorage
+                                console.log('✅ Using prop data (database is source of truth)', {
+                                    propCount: propYearKeys.reduce((sum, year) => 
+                                        sum + ((normalizedFromProp[year] || []).length), 0
+                                    ),
+                                    snapshotCount: snapshotYears.reduce((sum, year) => 
+                                        sum + ((snapshotMap[year] || []).length), 0
+                                    )
+                                });
+                                // normalized already equals normalizedFromProp, so no change needed
                             }
                         }
                     }
