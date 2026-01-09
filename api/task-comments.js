@@ -2,7 +2,7 @@
 // This uses a separate table instead of storing comments in JSON
 
 import { prisma } from './_lib/prisma.js';
-import { ok, serverError, badRequest, notFound } from './_lib/responses.js';
+import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 
 export default async function handler(req, res) {
   const { method } = req;
