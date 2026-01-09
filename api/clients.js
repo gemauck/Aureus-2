@@ -5,48 +5,10 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
+import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
 
-// Helper function to parse JSON fields from database responses
-// PERFORMANCE: Optimized JSON parsing - only parse what's needed
-const DEFAULT_BILLING_TERMS = {
-  paymentTerms: 'Net 30',
-  billingFrequency: 'Monthly',
-  currency: 'ZAR',
-  retainerAmount: 0,
-  taxExempt: false,
-  notes: ''
-}
-
-function parseClientJsonFields(client) {
-  try {
-    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-    const parsed = { ...client }
-    
-    // Optimized: Parse JSON fields with minimal error handling overhead
-    for (const field of jsonFields) {
-      const value = parsed[field]
-      
-      if (typeof value === 'string' && value) {
-        try {
-          parsed[field] = JSON.parse(value)
-        } catch (e) {
-          // Set safe defaults on parse error
-          parsed[field] = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : []
-        }
-      } else if (!value) {
-        // Set defaults for missing/null fields
-        parsed[field] = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : []
-      }
-      // If already an object/array, keep as-is (already parsed)
-    }
-    
-    return parsed
-  } catch (error) {
-    console.error(`❌ Error parsing client ${client.id}:`, error.message)
-    // Return client as-is if parsing fails completely
-    return client
-  }
-}
+// Phase 2: JSON field parsing and dual-write utilities moved to shared module
+// See: api/_lib/clientJsonFields.js
 
 async function handler(req, res) {
   try {
@@ -137,7 +99,47 @@ async function handler(req, res) {
                       }
                     }
                   }
-                } : {})
+                } : {}),
+                // Phase 3: Include normalized tables
+                clientContacts: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    phone: true,
+                    mobile: true,
+                    role: true,
+                    title: true,
+                    isPrimary: true,
+                    notes: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    isPrimary: 'desc',
+                    createdAt: 'asc'
+                  }
+                },
+                clientComments: {
+                  select: {
+                    id: true,
+                    text: true,
+                    author: true,
+                    authorId: true,
+                    userName: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    createdAt: 'desc'
+                  }
+                },
+                // Phase 4: Include projects relation to derive projectIds
+                projects: {
+                  select: {
+                    id: true,
+                    name: true,
+                    status: true
+                  }
+                }
               },
               orderBy: {
                 createdAt: 'desc'
@@ -182,7 +184,46 @@ async function handler(req, res) {
                         }
                       }
                     }
-                  } : {})
+                  } : {}),
+                  // Phase 3: Include normalized tables
+                  clientContacts: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                      phone: true,
+                      mobile: true,
+                      role: true,
+                      title: true,
+                      isPrimary: true,
+                      notes: true
+                    },
+                    orderBy: {
+                      isPrimary: 'desc',
+                      createdAt: 'asc'
+                    }
+                  },
+                  clientComments: {
+                    select: {
+                      id: true,
+                      text: true,
+                      author: true,
+                      authorId: true,
+                      userName: true,
+                      createdAt: true
+                    },
+                    orderBy: {
+                      createdAt: 'desc'
+                    }
+                  },
+                  // Phase 4: Include projects relation to derive projectIds
+                  projects: {
+                    select: {
+                      id: true,
+                      name: true,
+                      status: true
+                    }
+                  }
                 },
                 orderBy: {
                   createdAt: 'desc'
@@ -526,6 +567,9 @@ async function handler(req, res) {
       }
 
       // CRITICAL: Always set type to 'client' for client creation (ignore body.type if present for leads)
+      // Phase 2: Prepare JSON fields for dual-write (both String and JSONB)
+      const jsonFields = prepareJsonFieldsForDualWrite(body)
+      
       const clientData = {
         name: body.name,
         type: 'client', // Always 'client' for client creation - never allow override
@@ -538,22 +582,8 @@ async function handler(req, res) {
         address: body.address || '',
         website: body.website || '',
         notes: body.notes || '',
-        contacts: JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
-        followUps: JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
-        projectIds: JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
-        comments: JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
-        sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
-        contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
-        activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
-        services: JSON.stringify(Array.isArray(body.services) ? body.services : []),
-            billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {
-          paymentTerms: 'Net 30',
-          billingFrequency: 'Monthly',
-          currency: 'ZAR',
-          retainerAmount: 0,
-          taxExempt: false,
-          notes: ''
-        }),
+        // Phase 2: Dual-write - both String (backward compatibility) and JSONB (new)
+        ...jsonFields,
         ...(ownerId ? { ownerId } : {})
       }
 
@@ -596,6 +626,7 @@ async function handler(req, res) {
       }
       
       try {
+        // Phase 2: Dual-write - Create with both String and JSONB fields
         const client = await prisma.client.create({
           data: {
             name: clientData.name,
@@ -609,15 +640,28 @@ async function handler(req, res) {
             address: clientData.address,
             website: clientData.website,
             notes: clientData.notes,
-            contacts: Array.isArray(clientData.contacts) ? JSON.stringify(clientData.contacts) : (typeof clientData.contacts === 'string' ? clientData.contacts : '[]'),
-            followUps: Array.isArray(clientData.followUps) ? JSON.stringify(clientData.followUps) : (typeof clientData.followUps === 'string' ? clientData.followUps : '[]'),
-            projectIds: Array.isArray(clientData.projectIds) ? JSON.stringify(clientData.projectIds) : (typeof clientData.projectIds === 'string' ? clientData.projectIds : '[]'),
-            comments: Array.isArray(clientData.comments) ? JSON.stringify(clientData.comments) : (typeof clientData.comments === 'string' ? clientData.comments : '[]'),
-            sites: Array.isArray(clientData.sites) ? JSON.stringify(clientData.sites) : (typeof clientData.sites === 'string' ? clientData.sites : '[]'),
-            contracts: Array.isArray(clientData.contracts) ? JSON.stringify(clientData.contracts) : (typeof clientData.contracts === 'string' ? clientData.contracts : '[]'),
-            activityLog: Array.isArray(clientData.activityLog) ? JSON.stringify(clientData.activityLog) : (typeof clientData.activityLog === 'string' ? clientData.activityLog : '[]'),
-            services: Array.isArray(clientData.services) ? JSON.stringify(clientData.services) : (typeof clientData.services === 'string' ? clientData.services : '[]'),
-            billingTerms: typeof clientData.billingTerms === 'object' ? JSON.stringify(clientData.billingTerms) : (typeof clientData.billingTerms === 'string' ? clientData.billingTerms : '{}'),
+            // Phase 2: Dual-write - both String and JSONB fields are already prepared
+            contacts: clientData.contacts || '[]',
+            contactsJsonb: clientData.contactsJsonb || [],
+            followUps: clientData.followUps || '[]',
+            followUpsJsonb: clientData.followUpsJsonb || [],
+            // Phase 4: projectIds deprecated - projects managed via Project.clientId relation
+            // Still include for backward compatibility if provided, but prefer Project.clientId
+            projectIds: clientData.projectIds || '[]',
+            comments: clientData.comments || '[]',
+            commentsJsonb: clientData.commentsJsonb || [],
+            sites: clientData.sites || '[]',
+            sitesJsonb: clientData.sitesJsonb || [],
+            contracts: clientData.contracts || '[]',
+            contractsJsonb: clientData.contractsJsonb || [],
+            activityLog: clientData.activityLog || '[]',
+            activityLogJsonb: clientData.activityLogJsonb || [],
+            proposals: clientData.proposals || '[]',
+            proposalsJsonb: clientData.proposalsJsonb || [],
+            services: clientData.services || '[]',
+            servicesJsonb: clientData.servicesJsonb || [],
+            billingTerms: clientData.billingTerms || JSON.stringify(DEFAULT_BILLING_TERMS),
+            billingTermsJsonb: clientData.billingTermsJsonb || DEFAULT_BILLING_TERMS,
             ...(ownerId ? { ownerId } : {})
           }
         })
@@ -731,34 +775,84 @@ async function handler(req, res) {
           // Don't block update if duplicate check fails
         }
         
-        // Ensure services is always included, even if not provided in body
-        const servicesValue = body.services !== undefined 
-          ? (typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : []))
-          : JSON.stringify([])
-        
-        
+        // Phase 2: Prepare update data with dual-write support
+        // Only include fields that are provided in the body
         const updateData = {
-          name: body.name,
-          type: body.type || 'client', // Default to 'client' to prevent null types
-          industry: body.industry,
-          status: body.status,
-          revenue: body.revenue,
-          value: body.value, // Add value field
-          probability: body.probability, // Add probability field
-          lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
-          address: body.address,
-          website: body.website,
-          notes: body.notes,
-          contacts: typeof body.contacts === 'string' ? body.contacts : JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
-          followUps: typeof body.followUps === 'string' ? body.followUps : JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
-          projectIds: typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
-          comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
-          sites: typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
-          contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
-          activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
-          services: servicesValue, // Always include services
-          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
+          ...(body.name !== undefined && { name: body.name }),
+          ...(body.type !== undefined && { type: body.type || 'client' }), // Default to 'client' to prevent null types
+          ...(body.industry !== undefined && { industry: body.industry }),
+          ...(body.status !== undefined && { status: body.status }),
+          ...(body.revenue !== undefined && { revenue: body.revenue }),
+          ...(body.value !== undefined && { value: body.value }),
+          ...(body.probability !== undefined && { probability: body.probability }),
+          ...(body.lastContact !== undefined && { lastContact: body.lastContact ? new Date(body.lastContact) : undefined }),
+          ...(body.address !== undefined && { address: body.address }),
+          ...(body.website !== undefined && { website: body.website }),
+          ...(body.notes !== undefined && { notes: body.notes })
         }
+        
+        // Phase 2: Add JSON fields with dual-write (both String and JSONB)
+        // Phase 4: projectIds removed from jsonFields - use Project.clientId relation instead
+        // Only include JSON fields if they're provided in the body
+        const jsonFieldsToUpdate = {}
+        const jsonFields = ['contacts', 'followUps', 'comments', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
+        
+        for (const field of jsonFields) {
+          if (body[field] !== undefined) {
+            let arrayValue = []
+            if (Array.isArray(body[field])) {
+              arrayValue = body[field]
+            } else if (typeof body[field] === 'string' && body[field].trim()) {
+              try {
+                arrayValue = JSON.parse(body[field])
+              } catch (e) {
+                arrayValue = []
+              }
+            }
+            
+            jsonFieldsToUpdate[field] = JSON.stringify(arrayValue)
+            jsonFieldsToUpdate[`${field}Jsonb`] = arrayValue
+          }
+        }
+        
+        // Phase 4: Handle projectIds as deprecated field (backward compatibility only)
+        // Projects should be managed via Project.clientId relation, not JSON array
+        if (body.projectIds !== undefined) {
+          let projectIdsArray = []
+          if (Array.isArray(body.projectIds)) {
+            projectIdsArray = body.projectIds
+          } else if (typeof body.projectIds === 'string' && body.projectIds.trim()) {
+            try {
+              projectIdsArray = JSON.parse(body.projectIds)
+            } catch (e) {
+              projectIdsArray = []
+            }
+          }
+          // Only write to String field (deprecated, no JSONB)
+          jsonFieldsToUpdate.projectIds = JSON.stringify(projectIdsArray)
+          console.warn(`⚠️ projectIds field is deprecated. Use Project.clientId relation instead.`)
+        }
+        
+        // Handle billingTerms separately (object, not array)
+        if (body.billingTerms !== undefined) {
+          let billingTermsObj = DEFAULT_BILLING_TERMS
+          if (typeof body.billingTerms === 'object' && body.billingTerms !== null) {
+            billingTermsObj = { ...DEFAULT_BILLING_TERMS, ...body.billingTerms }
+          } else if (typeof body.billingTerms === 'string' && body.billingTerms.trim()) {
+            try {
+              billingTermsObj = { ...DEFAULT_BILLING_TERMS, ...JSON.parse(body.billingTerms) }
+            } catch (e) {
+              billingTermsObj = DEFAULT_BILLING_TERMS
+            }
+          }
+          jsonFieldsToUpdate.billingTerms = JSON.stringify(billingTermsObj)
+          jsonFieldsToUpdate.billingTermsJsonb = billingTermsObj
+        }
+        
+        // Merge all update data
+        Object.assign(updateData, jsonFieldsToUpdate)
+        
+        // Remove undefined values
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
             delete updateData[key]
@@ -766,8 +860,9 @@ async function handler(req, res) {
         })
         
         try {
+          // Phase 2: Dual-write update - writes to both String and JSONB
           const client = await prisma.client.update({ where: { id }, data: updateData })
-          // Parse JSON fields before returning
+          // Parse JSON fields before returning (will read from JSONB first)
           const parsedClient = parseClientJsonFields(client)
           return ok(res, { client: parsedClient })
         } catch (dbError) {

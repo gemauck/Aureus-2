@@ -6,6 +6,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
+import { parseClientJsonFields } from '../_lib/clientJsonFields.js'
 
 async function handler(req, res) {
   try {
@@ -88,6 +89,70 @@ async function handler(req, res) {
           return notFound(res)
         }
 
+        // Phase 3: Get normalized contacts and comments using raw SQL
+        let normalizedContacts = []
+        let normalizedComments = []
+        let clientProjects = []
+        try {
+          // Fetch contacts from normalized table
+          const contactsResult = await prisma.$queryRaw`
+            SELECT id, "clientId", name, email, phone, mobile, role, title, "isPrimary", notes, "createdAt"
+            FROM "ClientContact"
+            WHERE "clientId" = ${id}
+            ORDER BY "isPrimary" DESC, "createdAt" ASC
+          `
+          normalizedContacts = contactsResult || []
+          
+          // Fetch comments from normalized table
+          const commentsResult = await prisma.$queryRaw`
+            SELECT id, "clientId", text, "authorId", author, "userName", "createdAt"
+            FROM "ClientComment"
+            WHERE "clientId" = ${id}
+            ORDER BY "createdAt" DESC
+          `
+          normalizedComments = commentsResult || []
+          
+          // Phase 4: Get projects via relation (instead of projectIds JSON)
+          const projectsResult = await prisma.$queryRaw`
+            SELECT id, name, status
+            FROM "Project"
+            WHERE "clientId" = ${id}
+            ORDER BY "createdAt" DESC
+          `
+          clientProjects = projectsResult || []
+        } catch (normError) {
+          // If normalized tables don't exist yet, that's okay - will fallback to JSON
+          console.warn(`⚠️ Could not fetch normalized data (may not exist yet):`, normError.message)
+        }
+        
+        // Add normalized data to client object for parsing
+        clientBasic.clientContacts = normalizedContacts.map(c => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          mobile: c.mobile,
+          role: c.role,
+          title: c.title,
+          isPrimary: c.isPrimary,
+          notes: c.notes,
+          createdAt: c.createdAt
+        }))
+        clientBasic.clientComments = normalizedComments.map(c => ({
+          id: c.id,
+          text: c.text,
+          author: c.author,
+          authorId: c.authorId,
+          userName: c.userName,
+          createdAt: c.createdAt
+        }))
+        // Phase 4: Add projects relation data
+        clientBasic.projects = clientProjects.map(p => ({
+          id: p.id,
+          name: p.name,
+          status: p.status
+        }))
+        
         // Get group memberships separately using raw SQL to avoid Prisma relation issues
         let groupMemberships = []
         try {
@@ -149,21 +214,23 @@ async function handler(req, res) {
           groupMemberships = []
         }
 
-        // Combine client data with group memberships
+        // Combine client data with group memberships and normalized data
         const client = {
           ...clientBasic,
-          groupMemberships
+          groupMemberships,
+          clientContacts: clientBasic.clientContacts || [],
+          clientComments: clientBasic.clientComments || []
         }
         
-        // Parse JSON fields (proposals, contacts, etc.)
-        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-        const parsedClient = { ...client }
+        // Phase 3: Use shared parseClientJsonFields which handles normalized tables, JSONB, and String fallback
+        const parsedClient = parseClientJsonFields(client)
         
-        // Parse JSON fields with error handling
+        // Legacy parsing for other fields (if parseClientJsonFields didn't handle them)
+        const jsonFields = ['followUps', 'projectIds', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
         for (const field of jsonFields) {
           try {
             const value = parsedClient[field]
-            if (typeof value === 'string' && value) {
+            if (typeof value === 'string' && value && parsedClient[field] === value) {
               try {
                 parsedClient[field] = JSON.parse(value)
               } catch (parseError) {

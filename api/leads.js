@@ -7,62 +7,10 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { logDatabaseError } from './_lib/dbErrorHandler.js'
 import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
+import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
 
-// Helper function to parse JSON fields from database responses
-function parseClientJsonFields(client) {
-  try {
-    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-    const parsed = { ...client }
-    
-    // Parse JSON fields
-    for (const field of jsonFields) {
-      const value = parsed[field]
-      
-      if (typeof value === 'string' && value) {
-        try {
-          parsed[field] = JSON.parse(value)
-        } catch (e) {
-          // Set safe defaults on parse error
-          if (field === 'services') {
-            parsed[field] = []
-          } else if (field === 'billingTerms') {
-            parsed[field] = {
-              paymentTerms: 'Net 30',
-              billingFrequency: 'Monthly',
-              currency: 'ZAR',
-              retainerAmount: 0,
-              taxExempt: false,
-              notes: ''
-            }
-          } else {
-            parsed[field] = []
-          }
-        }
-      } else if (value === null || value === undefined) {
-        // Set safe defaults for null/undefined
-        if (field === 'services') {
-          parsed[field] = []
-        } else if (field === 'billingTerms') {
-          parsed[field] = {
-            paymentTerms: 'Net 30',
-            billingFrequency: 'Monthly',
-            currency: 'ZAR',
-            retainerAmount: 0,
-            taxExempt: false,
-            notes: ''
-          }
-        } else {
-          parsed[field] = []
-        }
-      }
-    }
-    
-    return parsed
-  } catch (error) {
-    console.error('Error parsing client JSON fields:', error)
-    return client // Return original on error
-  }
-}
+// Phase 2: JSON field parsing and dual-write utilities moved to shared module
+// See: api/_lib/clientJsonFields.js
 
 async function handler(req, res) {
   try {
@@ -200,7 +148,38 @@ async function handler(req, res) {
                     }
                   }
                 }
-              } : {})
+              } : {}),
+              // Phase 3: Include normalized tables
+              clientContacts: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                  mobile: true,
+                  role: true,
+                  title: true,
+                  isPrimary: true,
+                  notes: true
+                },
+                orderBy: {
+                  isPrimary: 'desc',
+                  createdAt: 'asc'
+                }
+              },
+              clientComments: {
+                select: {
+                  id: true,
+                  text: true,
+                  author: true,
+                  authorId: true,
+                  userName: true,
+                  createdAt: true
+                },
+                orderBy: {
+                  createdAt: 'desc'
+                }
+              }
             }
             
             // If table doesn't exist, we'll set empty groupMemberships after query
@@ -261,7 +240,46 @@ async function handler(req, res) {
                           }
                         }
                       }
-                    } : {})
+                    } : {}),
+                    // Phase 3: Include normalized tables
+                    clientContacts: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phone: true,
+                        mobile: true,
+                        role: true,
+                        title: true,
+                        isPrimary: true,
+                        notes: true
+                      },
+                      orderBy: {
+                        isPrimary: 'desc',
+                        createdAt: 'asc'
+                      }
+                    },
+                    clientComments: {
+                      select: {
+                        id: true,
+                        text: true,
+                        author: true,
+                        authorId: true,
+                        userName: true,
+                        createdAt: true
+                      },
+                      orderBy: {
+                        createdAt: 'desc'
+                      }
+                    },
+                    // Phase 4: Include projects relation to derive projectIds
+                    projects: {
+                      select: {
+                        id: true,
+                        name: true,
+                        status: true
+                      }
+                    }
                   },
                   orderBy: { createdAt: 'desc' } 
                 })
@@ -660,24 +678,12 @@ async function handler(req, res) {
         address: String(body.address || '').trim(),
         website: String(body.website || '').trim(),
         notes: String(notes).trim(),
-        contacts: JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
-        followUps: JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
-        projectIds: JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
-        comments: JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
-        sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
-        contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
-        activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
-        billingTerms: JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {
-          paymentTerms: 'Net 30',
-          billingFrequency: 'Monthly',
-          currency: 'ZAR',
-          retainerAmount: 0,
-          taxExempt: false,
-          notes: ''
-        }),
-        proposals: JSON.stringify(Array.isArray(body.proposals) ? body.proposals : []),
         externalAgentId: body.externalAgentId || null
       }
+      
+      // Phase 2: Add JSON fields with dual-write (both String and JSONB)
+      const jsonFields = prepareJsonFieldsForDualWrite(body)
+      Object.assign(leadData, jsonFields)
 
 
       // Filter out any undefined or null values that might cause issues
@@ -749,11 +755,55 @@ async function handler(req, res) {
     if (pathSegments.length === 2 && pathSegments[0] === 'leads' && id) {
       if (req.method === 'GET') {
         try {
+          // Phase 3: Include normalized tables for lead detail
+          // Phase 4: Include projects relation to derive projectIds
           const lead = await prisma.client.findFirst({ 
-            where: { id, type: 'lead' } 
+            where: { id, type: 'lead' },
+            include: {
+              clientContacts: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                  mobile: true,
+                  role: true,
+                  title: true,
+                  isPrimary: true,
+                  notes: true
+                },
+                orderBy: {
+                  isPrimary: 'desc',
+                  createdAt: 'asc'
+                }
+              },
+              clientComments: {
+                select: {
+                  id: true,
+                  text: true,
+                  author: true,
+                  authorId: true,
+                  userName: true,
+                  createdAt: true
+                },
+                orderBy: {
+                  createdAt: 'desc'
+                }
+              },
+              projects: {
+                select: {
+                  id: true,
+                  name: true,
+                  status: true
+                }
+              }
+            }
           })
           if (!lead) return notFound(res)
-          return ok(res, { lead })
+          
+          // Phase 3: Parse using shared function which handles normalized tables
+          const parsedLead = parseClientJsonFields(lead)
+          return ok(res, { lead: parsedLead })
         } catch (dbError) {
           console.error('❌ Database error getting lead:', dbError)
           return serverError(res, 'Failed to get lead', dbError.message)
@@ -791,29 +841,86 @@ async function handler(req, res) {
           lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
           address: body.address,
           website: body.website,
-          notes: notes || undefined,
-          contacts: body.contacts !== undefined ? (typeof body.contacts === 'string' ? body.contacts : JSON.stringify(body.contacts)) : undefined,
-          followUps: body.followUps !== undefined ? (typeof body.followUps === 'string' ? body.followUps : JSON.stringify(body.followUps)) : undefined,
-          projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(body.projectIds)) : undefined,
-          comments: body.comments !== undefined ? (typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments)) : undefined,
-          sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(body.sites)) : undefined,
-          contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(body.contracts)) : undefined,
-          activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog)) : undefined,
-          billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
-          proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(body.proposals)) : undefined,
-          externalAgentId: body.externalAgentId !== undefined ? (body.externalAgentId || null) : undefined
-        }
-        
-        // Debug logging for externalAgentId
-        if (body.externalAgentId !== undefined) {
-          console.log('📥 Received externalAgentId in update request:', body.externalAgentId, '→', updateData.externalAgentId);
-        }
-        
-        Object.keys(updateData).forEach(key => {
-          if (updateData[key] === undefined) {
-            delete updateData[key]
+          notes: notes || undefined
+      }
+      
+      // Phase 2: Add JSON fields with dual-write (both String and JSONB)
+      // Phase 4: projectIds removed from jsonFields - use Project.clientId relation instead
+      // Only include JSON fields if they're provided in the body
+      const jsonFieldsToUpdate = {}
+      const jsonFields = ['contacts', 'followUps', 'comments', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
+      
+      for (const field of jsonFields) {
+        if (body[field] !== undefined) {
+          let arrayValue = []
+          if (Array.isArray(body[field])) {
+            arrayValue = body[field]
+          } else if (typeof body[field] === 'string' && body[field].trim()) {
+            try {
+              arrayValue = JSON.parse(body[field])
+            } catch (e) {
+              arrayValue = []
+            }
           }
-        })
+          
+          jsonFieldsToUpdate[field] = JSON.stringify(arrayValue)
+          jsonFieldsToUpdate[`${field}Jsonb`] = arrayValue
+        }
+      }
+      
+      // Phase 4: Handle projectIds as deprecated field (backward compatibility only)
+      // Projects should be managed via Project.clientId relation, not JSON array
+      if (body.projectIds !== undefined) {
+        let projectIdsArray = []
+        if (Array.isArray(body.projectIds)) {
+          projectIdsArray = body.projectIds
+        } else if (typeof body.projectIds === 'string' && body.projectIds.trim()) {
+          try {
+            projectIdsArray = JSON.parse(body.projectIds)
+          } catch (e) {
+            projectIdsArray = []
+          }
+        }
+        // Only write to String field (deprecated, no JSONB)
+        jsonFieldsToUpdate.projectIds = JSON.stringify(projectIdsArray)
+        console.warn(`⚠️ projectIds field is deprecated. Use Project.clientId relation instead.`)
+      }
+      
+      // Handle billingTerms separately (object, not array)
+      if (body.billingTerms !== undefined) {
+        let billingTermsObj = DEFAULT_BILLING_TERMS
+        if (typeof body.billingTerms === 'object' && body.billingTerms !== null) {
+          billingTermsObj = { ...DEFAULT_BILLING_TERMS, ...body.billingTerms }
+        } else if (typeof body.billingTerms === 'string' && body.billingTerms.trim()) {
+          try {
+            billingTermsObj = { ...DEFAULT_BILLING_TERMS, ...JSON.parse(body.billingTerms) }
+          } catch (e) {
+            billingTermsObj = DEFAULT_BILLING_TERMS
+          }
+        }
+        jsonFieldsToUpdate.billingTerms = JSON.stringify(billingTermsObj)
+        jsonFieldsToUpdate.billingTermsJsonb = billingTermsObj
+      }
+      
+      // Merge JSON fields into updateData
+      Object.assign(updateData, jsonFieldsToUpdate)
+      
+      // Handle externalAgentId separately
+      if (body.externalAgentId !== undefined) {
+        updateData.externalAgentId = body.externalAgentId || null
+      }
+      
+      // Debug logging for externalAgentId
+      if (body.externalAgentId !== undefined) {
+        console.log('📥 Received externalAgentId in update request:', body.externalAgentId, '→', updateData.externalAgentId);
+      }
+      
+      // Remove undefined values
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          delete updateData[key]
+        }
+      })
         
         // Ensure externalAgentId is included even if null (to allow clearing it)
         if (body.externalAgentId !== undefined && !('externalAgentId' in updateData)) {

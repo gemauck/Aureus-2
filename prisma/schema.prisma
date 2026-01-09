@@ -79,6 +79,7 @@ model User {
   taskComments              TaskComment[]                @relation("TaskCommentAuthor")
   documentComments          DocumentItemComment[]        @relation("DocumentCommentAuthor")
   weeklyFMSComments         WeeklyFMSReviewItemComment[] @relation("WeeklyFMSCommentAuthor")
+  clientComments            ClientComment[]              @relation("ClientCommentAuthor")
 
   @@index([createdAt])
   @@index([role])
@@ -161,6 +162,10 @@ model Client {
   groupMemberships ClientCompanyGroup[] @relation("ClientGroups")
   groupChildren    ClientCompanyGroup[] @relation("GroupMembers")
 
+  // Phase 3: Normalized tables
+  clientContacts ClientContact[]
+  clientComments ClientComment[]
+
   @@index([createdAt])
   @@index([type])
   @@index([status])
@@ -182,6 +187,49 @@ model ClientCompanyGroup {
   @@unique([clientId, groupId])
   @@index([clientId])
   @@index([groupId])
+}
+
+// Phase 3: Normalized Contact table
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  email     String?
+  phone     String?
+  mobile    String?
+  role      String?
+  title     String?
+  isPrimary Boolean  @default(false)
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([email])
+  @@index([phone])
+  @@index([mobile])
+  @@index([isPrimary])
+}
+
+// Phase 3: Normalized Comment table
+model ClientComment {
+  id        String   @id @default(cuid())
+  clientId  String
+  text      String
+  authorId  String?
+  author    String   @default("") // Denormalized author name for quick display
+  userName  String? // Username/email (denormalized)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorUser User?  @relation("ClientCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([createdAt])
+  @@index([authorId])
 }
 
 model Industry {
