@@ -170,20 +170,28 @@ const MentionHelper = {
             }
             
             // Generate entity URL if we have entity information
-            // IMPORTANT: If contextLink already contains document collection tracker parameters,
+            // IMPORTANT: If contextLink already contains weekly FMS review or document collection tracker parameters,
             // preserve it as-is instead of generating a new URL
             let entityUrl = contextLink;
+            const hasWeeklyFMSReviewParams = contextLink && (
+                contextLink.includes('weeklySectionId=') || 
+                contextLink.includes('weeklyDocumentId=') || 
+                contextLink.includes('weeklyWeek=') || 
+                contextLink.includes('weeklyMonth=')
+            );
             const hasDocumentCollectionParams = contextLink && (
                 contextLink.includes('docSectionId=') || 
                 contextLink.includes('docDocumentId=') || 
                 contextLink.includes('docMonth=')
             );
             
-            // If contextLink has document collection tracker parameters, use it as-is
-            if (hasDocumentCollectionParams) {
+            // If contextLink has weekly FMS review or document collection tracker parameters, use it as-is
+            // Don't generate a new URL that would lose these important parameters
+            if (hasWeeklyFMSReviewParams || hasDocumentCollectionParams) {
                 entityUrl = contextLink;
+                console.log('📧 MentionHelper: Preserving contextLink with tracker params:', entityUrl);
             } else if (window.EntityUrl) {
-                // Try to generate URL from metadata
+                // Try to generate URL from metadata (only if contextLink doesn't have tracker params)
                 if (metadata.projectId) {
                     // If we have a task, link to the task with parent project; otherwise link to project
                     if (metadata.taskId) {
