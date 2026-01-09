@@ -3503,8 +3503,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 )}
                                 
                                 {/* File upload input - Always visible after comment input */}
-                                <div className="mt-1.5">
-                                    <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                <div className="mt-2">
+                                    <label htmlFor="comment-file-upload" className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 bg-gray-50 border border-gray-300 rounded cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors">
                                         <input
                                             id="comment-file-upload"
                                             type="file"
@@ -3514,8 +3514,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             className="hidden"
                                             accept="*/*"
                                         />
-                                        <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
-                                        <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                        <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-xs`}></i>
+                                        <span className="font-medium">{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
                                     </label>
                                 </div>
                             </>
