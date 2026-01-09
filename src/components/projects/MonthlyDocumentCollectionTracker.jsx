@@ -47,6 +47,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const sectionsRef = useRef({});
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
+    
+    // Window-level cache to persist loaded state across remounts
+    // This helps avoid unnecessary reloads when navigating back to the section
+    if (!window._documentCollectionLoadCache) {
+        window._documentCollectionLoadCache = new Map();
+    }
+    const loadCache = window._documentCollectionLoadCache;
     const isDeletingRef = useRef(false);
     const deletionTimestampRef = useRef(null); // Track when deletion started
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
@@ -353,9 +360,71 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const loadFromProjectProp = useCallback(() => {
         if (!project?.id) return;
         
+        // OPTIMIZATION: Check if we already have data loaded for this project
+        // This prevents unnecessary reloading on remount (e.g., second navigation)
+        const existingData = sectionsRef.current || {};
+        const hasExistingData = Object.keys(existingData).length > 0;
+        
+        // Check if we recently loaded data for this project (within last 10 seconds)
+        // This helps avoid reloading on remount when navigating back to the section
+        // Use window-level cache to persist across remounts
+        const cacheKey = `load_${project.id}`;
+        const cachedLoadInfo = loadCache.get(cacheKey);
+        const timeSinceLastLoad = cachedLoadInfo 
+            ? Date.now() - (cachedLoadInfo.timestamp || 0)
+            : Date.now() - (lastLoadTimestampRef.current || 0);
+        const recentlyLoaded = (cachedLoadInfo?.loaded || hasLoadedInitialDataRef.current) && timeSinceLastLoad < 10000;
+        
+        // If we have existing data and it matches the project prop, skip reloading
+        if (hasExistingData && recentlyLoaded) {
+            const existingSnapshot = serializeSections(existingData);
+            const propSnapshot = project.documentSections 
+                ? (typeof project.documentSections === 'string' 
+                    ? project.documentSections.trim() 
+                    : JSON.stringify(project.documentSections))
+                : '';
+            
+            // Quick check: if snapshots are similar, skip reload
+            // This avoids expensive re-processing on remount
+            if (propSnapshot && existingSnapshot && 
+                (propSnapshot === existingSnapshot || 
+                 existingSnapshot.length > 0 && propSnapshot.length > 0)) {
+                // Data already loaded and matches, just ensure loading state is false
+                setIsLoading(false);
+                return;
+            }
+        }
+        
+        // Also check localStorage snapshot for quick restore on remount
+        // This provides a fast path when component remounts but data was recently loaded
+        if (!hasExistingData && recentlyLoaded) {
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                    if (snapshotString && snapshotString.length > 0) {
+                        const snapshotParsed = JSON.parse(snapshotString);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                        const snapshotYears = Object.keys(snapshotMap || {});
+                        if (snapshotYears.length > 0) {
+                            // Restore from snapshot quickly without processing prop again
+                            setSectionsByYear(snapshotMap);
+                            lastSavedSnapshotRef.current = serializeSections(snapshotMap);
+                            lastLoadTimestampRef.current = Date.now();
+                            hasLoadedInitialDataRef.current = true;
+                            // Update window-level cache to persist across remounts
+                            loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
+                            setIsLoading(false);
+                            return;
+                        }
+                    }
+                } catch (snapshotError) {
+                    // Fall through to normal processing
+                }
+            }
+        }
+        
         // OPTIMIZATION: Only show loading if we don't have data yet
-        // Check sectionsRef instead of state to avoid dependency issues
-        const hasExistingData = Object.keys(sectionsRef.current || {}).length > 0;
         if (!hasExistingData) {
             setIsLoading(true);
         }
@@ -398,6 +467,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     lastSavedSnapshotRef.current = serializeSections(normalized);
                     lastLoadTimestampRef.current = Date.now();
                     hasLoadedInitialDataRef.current = true;
+                    // Update window-level cache to persist across remounts
+                    loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
                     setIsLoading(false);
                 } else {
                     // Slow path for large/complex data - defer to idle time
@@ -428,12 +499,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             setSectionsByYear(normalized);
                             lastSavedSnapshotRef.current = serializeSections(normalized);
                             lastLoadTimestampRef.current = Date.now();
+                            // Update window-level cache to persist across remounts
+                            loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
                         } catch (error) {
                             console.error('❌ Error loading sections from prop:', error);
                             setSectionsByYear({});
                             lastSavedSnapshotRef.current = '{}';
                         } finally {
                             hasLoadedInitialDataRef.current = true;
+                            // Update window-level cache to persist across remounts
+                            loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
                             setIsLoading(false);
                         }
                     };
@@ -450,6 +525,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 setSectionsByYear({});
                 lastSavedSnapshotRef.current = '{}';
                 hasLoadedInitialDataRef.current = true;
+                // Update window-level cache to persist across remounts
+                loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
                 setIsLoading(false);
             }
         };
@@ -707,11 +784,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const hasDataFromProps = project?.documentSections && 
             (typeof project.documentSections === 'string' ? project.documentSections.trim() : project.documentSections);
         
+        // OPTIMIZATION: Skip database refresh if we already have data loaded and it's the same project
+        // This prevents unnecessary database fetches on remount (e.g., second navigation)
+        const hasExistingData = Object.keys(sectionsRef.current || {}).length > 0;
+        const timeSinceLastLoad = Date.now() - (lastLoadTimestampRef.current || 0);
+        const shouldSkipRefresh = hasExistingData && 
+                                 hasLoadedInitialDataRef.current && 
+                                 !isNewProject && 
+                                 timeSinceLastLoad < 5000; // Skip if loaded within last 5 seconds
+        
         // For new projects or when we have no data, refresh immediately with forceUpdate
         // This ensures we get data even if guards would normally block
-        if (isNewProject || !hasDataFromProps) {
+        if (isNewProject || (!hasDataFromProps && !shouldSkipRefresh)) {
             refreshFromDatabase(true); // Force update on initial load
-        } else {
+        } else if (!shouldSkipRefresh) {
             // Defer database refresh to allow UI to render first with prop data
             // But use shorter timeout for faster data sync
             const refreshTimeout = setTimeout(() => {
@@ -719,6 +805,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }, 50); // Reduced from 100ms to 50ms for faster sync
             return () => clearTimeout(refreshTimeout);
         }
+        // If shouldSkipRefresh is true, we skip the database refresh entirely
+        // This allows the UI to render immediately with existing data
     }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
     
     // ============================================================
