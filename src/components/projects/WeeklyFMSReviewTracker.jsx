@@ -399,6 +399,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [commentPopupPointer, setCommentPopupPointer] = useState({ side: 'bottom', offset: 0 });
     const commentPopupContainerRef = useRef(null);
     const commentCellRef = useRef(null);
+    const [commentAttachments, setCommentAttachments] = useState([]);
+    const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month-WeekN)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1940,7 +1942,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [selectedYear, saveScrollPositions, restoreScrollPositions]);
     
     const handleAddComment = async (sectionId, documentId, month, weekNumber, commentText) => {
-        if (!commentText.trim()) return;
+        if (!commentText.trim() && commentAttachments.length === 0) return;
         
         // Save scroll positions before update
         saveScrollPositions();
@@ -1949,11 +1951,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const newCommentId = Date.now();
         const newComment = {
             id: newCommentId,
-            text: commentText,
+            text: commentText || '',
             date: new Date().toISOString(),
             author: currentUser.name,
             authorEmail: currentUser.email,
-            authorId: currentUser.id
+            authorId: currentUser.id,
+            attachments: commentAttachments.length > 0 ? [...commentAttachments] : []
         };
         
         setSections(prev => prev.map(section => {
@@ -1976,6 +1979,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }));
         
         setQuickComment('');
+        setCommentAttachments([]); // Clear attachments after adding comment
         
         // Restore scroll positions after state update
         setTimeout(() => {
@@ -2034,6 +2038,92 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             console.error('❌ Unexpected error in handleAddComment @mentions processing:', error);
             // Swallow errors so commenting UI never breaks due to notifications
         }
+    };
+    
+    const handleFileUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        setIsUploadingAttachment(true);
+        
+        try {
+            const uploadPromises = files.map(async (file) => {
+                // Check file size (8MB max)
+                const MAX_SIZE = 8 * 1024 * 1024;
+                if (file.size > MAX_SIZE) {
+                    alert(`File "${file.name}" is too large. Maximum size is 8MB.`);
+                    return null;
+                }
+                
+                // Convert file to base64 data URL
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        try {
+                            const dataUrl = event.target.result;
+                            
+                            // Upload to server
+                            const token = window.storage?.getToken?.();
+                            if (!token) {
+                                reject(new Error('Not authenticated'));
+                                return;
+                            }
+                            
+                            const response = await fetch('/api/files', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({
+                                    name: file.name,
+                                    dataUrl: dataUrl,
+                                    folder: 'weekly-fms-comments'
+                                })
+                            });
+                            
+                            if (!response.ok) {
+                                const error = await response.json();
+                                reject(new Error(error.message || 'Upload failed'));
+                                return;
+                            }
+                            
+                            const result = await response.json();
+                            resolve({
+                                id: Date.now() + Math.random(),
+                                name: result.name || file.name,
+                                url: result.url,
+                                size: result.size || file.size,
+                                type: result.mimeType || file.type,
+                                uploadDate: new Date().toISOString()
+                            });
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+                    reader.onerror = () => reject(new Error('Failed to read file'));
+                    reader.readAsDataURL(file);
+                });
+            });
+            
+            const uploadedFiles = await Promise.all(uploadPromises);
+            const validFiles = uploadedFiles.filter(f => f !== null);
+            
+            if (validFiles.length > 0) {
+                setCommentAttachments(prev => [...prev, ...validFiles]);
+            }
+        } catch (error) {
+            console.error('❌ Error uploading file:', error);
+            alert(`Failed to upload file: ${error.message}`);
+        } finally {
+            setIsUploadingAttachment(false);
+            // Reset file input
+            e.target.value = '';
+        }
+    };
+    
+    const handleRemoveAttachment = (attachmentId) => {
+        setCommentAttachments(prev => prev.filter(a => a.id !== attachmentId));
     };
     
     const handleDeleteComment = (sectionId, documentId, month, weekNumber, commentId) => {
@@ -2379,6 +2469,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
                 setHoverCommentCell(null);
                 setQuickComment('');
+                setCommentAttachments([]); // Clear attachments when closing popup
             }
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
@@ -2803,6 +2894,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 if (isPopupOpen) {
                                     setHoverCommentCell(null);
                                     commentCellRef.current = null;
+                                    setCommentAttachments([]); // Clear attachments when closing popup
                                 } else {
                                     // Get the cell (td) element that contains this button
                                     const cellElement = e.currentTarget.closest('td');
@@ -3559,6 +3651,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             : (comment.text || '')
                                                 }}
                                             />
+                                            {comment.attachments && comment.attachments.length > 0 && (
+                                                <div className="mt-1.5 space-y-1">
+                                                    {comment.attachments.map((attachment) => (
+                                                        <div key={attachment.id || attachment.url} className="flex items-center gap-1.5 text-[10px]">
+                                                            <i className="fas fa-paperclip text-gray-400"></i>
+                                                            <a
+                                                                href={attachment.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-primary-600 hover:text-primary-700 hover:underline truncate flex-1"
+                                                                title={attachment.name}
+                                                            >
+                                                                {attachment.name}
+                                                            </a>
+                                                            {attachment.size && (
+                                                                <span className="text-gray-400">
+                                                                    ({(attachment.size / 1024).toFixed(1)} KB)
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
                                                 <span>{new Date(comment.date).toLocaleString('en-ZA', { 
@@ -3583,10 +3698,54 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
+                            
+                            {/* File attachments preview */}
+                            {commentAttachments.length > 0 && (
+                                <div className="mb-2 space-y-1">
+                                    {commentAttachments.map((attachment) => (
+                                        <div key={attachment.id} className="flex items-center gap-1.5 text-[10px] bg-gray-50 rounded px-2 py-1">
+                                            <i className="fas fa-paperclip text-gray-400"></i>
+                                            <span className="flex-1 truncate text-gray-700" title={attachment.name}>
+                                                {attachment.name}
+                                            </span>
+                                            {attachment.size && (
+                                                <span className="text-gray-400">
+                                                    ({(attachment.size / 1024).toFixed(1)} KB)
+                                                </span>
+                                            )}
+                                            <button
+                                                onClick={() => handleRemoveAttachment(attachment.id)}
+                                                className="text-red-500 hover:text-red-700"
+                                                type="button"
+                                                title="Remove attachment"
+                                            >
+                                                <i className="fas fa-times text-[10px]"></i>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {/* File upload input */}
+                            <div className="mb-1.5">
+                                <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        onChange={handleFileUpload}
+                                        disabled={isUploadingAttachment}
+                                        className="hidden"
+                                        accept="*/*"
+                                    />
+                                    <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
+                                    <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                </label>
+                            </div>
+                            
                             {commentInputAvailable && section && document ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim()) {
+                                        if (commentText && commentText.trim() || commentAttachments.length > 0) {
                                             handleAddComment(section.id, document.id, month, weekNumber, commentText);
                                         }
                                     }}
@@ -3615,7 +3774,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             if (!section || !document) return;
                                             handleAddComment(section.id, document.id, month, weekNumber, quickComment);
                                         }}
-                                        disabled={!quickComment.trim()}
+                                        disabled={!quickComment.trim() && commentAttachments.length === 0}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
                                     >
                                         Add Comment
