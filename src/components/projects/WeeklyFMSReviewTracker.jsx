@@ -396,7 +396,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
+    const [commentPopupPointer, setCommentPopupPointer] = useState({ side: 'bottom', offset: 0 });
     const commentPopupContainerRef = useRef(null);
+    const commentCellRef = useRef(null);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month-WeekN)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -2440,12 +2442,55 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             if (deepSectionId && deepDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}-Week${deepWeek}`;
-                // Center the popup on screen; the underlying grid provides context.
-                setCommentPopupPosition({
-                    top: Math.max(window.innerHeight / 2 - 160, 60),
-                    left: Math.max(window.innerWidth / 2 - 180, 20)
-                });
                 setHoverCommentCell(cellKey);
+                
+                // Find the cell element and position popup relative to it
+                setTimeout(() => {
+                    const cellElement = document.querySelector(`td[data-cell-key="${cellKey}"]`) ||
+                                      document.querySelector(`[data-comment-cell="${cellKey}"]`)?.closest('td');
+                    if (cellElement) {
+                        commentCellRef.current = cellElement;
+                        const cellRect = cellElement.getBoundingClientRect();
+                        const buttonElement = cellElement.querySelector(`[data-comment-cell="${cellKey}"]`);
+                        const buttonRect = buttonElement?.getBoundingClientRect() || cellRect;
+                        
+                        const popupWidth = 288;
+                        const popupHeight = 200;
+                        const spacing = 8;
+                        
+                        let top = cellRect.bottom + spacing;
+                        let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
+                        let pointerSide = 'top';
+                        let pointerOffset = buttonRect.left + (buttonRect.width / 2) - cellRect.left;
+                        
+                        if (top + popupHeight > window.innerHeight - 20) {
+                            top = cellRect.top - popupHeight - spacing;
+                            pointerSide = 'bottom';
+                            if (top < 20) top = 20;
+                        }
+                        
+                        if (left < 20) {
+                            left = 20;
+                            pointerOffset = buttonRect.left + (buttonRect.width / 2) - 20;
+                        } else if (left + popupWidth > window.innerWidth - 20) {
+                            left = window.innerWidth - popupWidth - 20;
+                            pointerOffset = buttonRect.left + (buttonRect.width / 2) - left;
+                        }
+                        
+                        setCommentPopupPosition({ top, left });
+                        setCommentPopupPointer({ 
+                            side: pointerSide, 
+                            offset: Math.max(20, Math.min(pointerOffset, popupWidth - 20))
+                        });
+                    } else {
+                        // Fallback to center if cell not found
+                        setCommentPopupPosition({
+                            top: Math.max(window.innerHeight / 2 - 160, 60),
+                            left: Math.max(window.innerWidth / 2 - 180, 20)
+                        });
+                        setCommentPopupPointer({ side: 'top', offset: 144 });
+                    }
+                }, 100);
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
@@ -2528,11 +2573,55 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     if (deepSectionId && deepDocumentId && deepMonth) {
                         const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}-Week${deepWeek}`;
-                        setCommentPopupPosition({
-                            top: Math.max(window.innerHeight / 2 - 160, 60),
-                            left: Math.max(window.innerWidth / 2 - 180, 20)
-                        });
                         setHoverCommentCell(cellKey);
+                        
+                        // Find the cell element and position popup relative to it
+                        setTimeout(() => {
+                            const cellElement = document.querySelector(`td[data-cell-key="${cellKey}"]`) ||
+                                              document.querySelector(`[data-comment-cell="${cellKey}"]`)?.closest('td');
+                            if (cellElement) {
+                                commentCellRef.current = cellElement;
+                                const cellRect = cellElement.getBoundingClientRect();
+                                const buttonElement = cellElement.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                const buttonRect = buttonElement?.getBoundingClientRect() || cellRect;
+                                
+                                const popupWidth = 288;
+                                const popupHeight = 200;
+                                const spacing = 8;
+                                
+                                let top = cellRect.bottom + spacing;
+                                let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
+                                let pointerSide = 'top';
+                                let pointerOffset = buttonRect.left + (buttonRect.width / 2) - cellRect.left;
+                                
+                                if (top + popupHeight > window.innerHeight - 20) {
+                                    top = cellRect.top - popupHeight - spacing;
+                                    pointerSide = 'bottom';
+                                    if (top < 20) top = 20;
+                                }
+                                
+                                if (left < 20) {
+                                    left = 20;
+                                    pointerOffset = buttonRect.left + (buttonRect.width / 2) - 20;
+                                } else if (left + popupWidth > window.innerWidth - 20) {
+                                    left = window.innerWidth - popupWidth - 20;
+                                    pointerOffset = buttonRect.left + (buttonRect.width / 2) - left;
+                                }
+                                
+                                setCommentPopupPosition({ top, left });
+                                setCommentPopupPointer({ 
+                                    side: pointerSide, 
+                                    offset: Math.max(20, Math.min(pointerOffset, popupWidth - 20))
+                                });
+                            } else {
+                                // Fallback to center if cell not found
+                                setCommentPopupPosition({
+                                    top: Math.max(window.innerHeight / 2 - 160, 60),
+                                    left: Math.max(window.innerWidth / 2 - 180, 20)
+                                });
+                                setCommentPopupPointer({ side: 'top', offset: 144 });
+                            }
+                        }, 100);
                         
                         // If a specific comment ID is provided, scroll to it after the popup opens
                         if (deepCommentId) {
@@ -2635,6 +2724,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         return (
             <td 
+                data-cell-key={cellKey}
                 className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
@@ -2712,11 +2802,50 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 
                                 if (isPopupOpen) {
                                     setHoverCommentCell(null);
+                                    commentCellRef.current = null;
                                 } else {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setCommentPopupPosition({
-                                        top: rect.bottom + 5,
-                                        left: rect.right - 288
+                                    // Get the cell (td) element that contains this button
+                                    const cellElement = e.currentTarget.closest('td');
+                                    commentCellRef.current = cellElement;
+                                    
+                                    // Get cell position
+                                    const cellRect = cellElement.getBoundingClientRect();
+                                    const buttonRect = e.currentTarget.getBoundingClientRect();
+                                    
+                                    // Calculate popup position - position it above or below the cell
+                                    const popupWidth = 288; // w-72 = 288px
+                                    const popupHeight = 200; // approximate height
+                                    const spacing = 8; // space between cell and popup
+                                    
+                                    // Try to position below the cell first
+                                    let top = cellRect.bottom + spacing;
+                                    let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
+                                    let pointerSide = 'top';
+                                    let pointerOffset = buttonRect.left + (buttonRect.width / 2) - cellRect.left;
+                                    
+                                    // If popup would go off bottom of screen, position above
+                                    if (top + popupHeight > window.innerHeight - 20) {
+                                        top = cellRect.top - popupHeight - spacing;
+                                        pointerSide = 'bottom';
+                                        // Adjust if would go off top
+                                        if (top < 20) {
+                                            top = 20;
+                                        }
+                                    }
+                                    
+                                    // Adjust horizontal position if would go off screen
+                                    if (left < 20) {
+                                        left = 20;
+                                        pointerOffset = buttonRect.left + (buttonRect.width / 2) - 20;
+                                    } else if (left + popupWidth > window.innerWidth - 20) {
+                                        left = window.innerWidth - popupWidth - 20;
+                                        pointerOffset = buttonRect.left + (buttonRect.width / 2) - left;
+                                    }
+                                    
+                                    setCommentPopupPosition({ top, left });
+                                    setCommentPopupPointer({ 
+                                        side: pointerSide, 
+                                        offset: Math.max(20, Math.min(pointerOffset, popupWidth - 20))
                                     });
                                     setHoverCommentCell(cellKey);
                                 }
@@ -3369,9 +3498,44 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 return (
                     <div 
-                        className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
+                        className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999] relative"
                         style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                     >
+                        {/* Speech bubble pointer - points to the comment button */}
+                        {commentPopupPointer.offset > 0 && (
+                            <>
+                                {/* Pointer border (outer) */}
+                                <div 
+                                    className={`absolute ${commentPopupPointer.side === 'top' ? '-top-2.5' : '-bottom-2.5'} w-0 h-0 pointer-events-none`}
+                                    style={{ 
+                                        left: `${commentPopupPointer.offset}px`,
+                                        transform: 'translateX(-50%)',
+                                        borderLeft: '9px solid transparent',
+                                        borderRight: '9px solid transparent',
+                                        ...(commentPopupPointer.side === 'top' 
+                                            ? { borderBottom: '9px solid #d1d5db' }
+                                            : { borderTop: '9px solid #d1d5db' }
+                                        ),
+                                        zIndex: 998
+                                    }}
+                                />
+                                {/* Pointer fill (inner) */}
+                                <div 
+                                    className={`absolute ${commentPopupPointer.side === 'top' ? '-top-2' : '-bottom-2'} w-0 h-0 pointer-events-none`}
+                                    style={{ 
+                                        left: `${commentPopupPointer.offset}px`,
+                                        transform: 'translateX(-50%)',
+                                        borderLeft: '8px solid transparent',
+                                        borderRight: '8px solid transparent',
+                                        ...(commentPopupPointer.side === 'top' 
+                                            ? { borderBottom: '8px solid white' }
+                                            : { borderTop: '8px solid white' }
+                                        ),
+                                        zIndex: 999
+                                    }}
+                                />
+                            </>
+                        )}
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
