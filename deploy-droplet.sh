@@ -110,6 +110,11 @@ echo ""
 echo "🏗️  Building JSX files..."
 npm run build:jsx || echo "⚠️ JSX build had warnings but continuing..."
 
+# CRITICAL: Build RichTextEditor separately to ensure cursor fix v9 is deployed
+echo ""
+echo "🔧 Building RichTextEditor separately (cursor fix v9)..."
+node -e "const esbuild = require('esbuild'); esbuild.build({entryPoints: ['src/components/common/RichTextEditor.jsx'], bundle: false, format: 'iife', jsx: 'transform', jsxFactory: 'React.createElement', outdir: 'dist/src', write: true, minify: false}).then(() => console.log('✅ RichTextEditor v9 built successfully')).catch(e => console.error('❌ RichTextEditor build error:', e.message))" || echo "⚠️ RichTextEditor build had issues but continuing..."
+
 echo ""
 echo "🎨 Building CSS..."
 npm run build:css || echo "⚠️ CSS build had warnings but continuing..."
