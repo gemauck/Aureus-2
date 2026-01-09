@@ -340,7 +340,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
-    const [tailPosition, setTailPosition] = useState({ top: 0, left: 0, rotation: 0 });
     const commentPopupContainerRef = useRef(null);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -2073,16 +2072,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }, 100);
         }
         
-        // Smart positioning and tail alignment for comment popup
-        const updatePopupPositionAndTail = () => {
+        // Smart positioning for comment popup
+        const updatePopupPosition = () => {
             if (!hoverCommentCell) {
-                setTailPosition({ top: 0, left: 0, rotation: 0 });
                 return;
             }
             
             const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
-                setTailPosition({ top: 0, left: 0, rotation: 0 });
                 return;
             }
             
@@ -2092,7 +2089,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const popupWidth = 288; // w-72 = 288px
             const popupHeight = 300; // approximate max height
             const spacing = 8; // Space between button and popup
-            const tailSize = 12; // Size of the pointer triangle
             
             // Determine if popup should be above or below
             const spaceBelow = viewportHeight - buttonRect.bottom;
@@ -2104,10 +2100,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             if (positionAbove) {
                 // Position above the button
-                popupTop = buttonRect.top - popupHeight - spacing - tailSize;
+                popupTop = buttonRect.top - popupHeight - spacing;
             } else {
                 // Position below the button (default)
-                popupTop = buttonRect.bottom + spacing + tailSize;
+                popupTop = buttonRect.bottom + spacing;
             }
             
             // Align horizontally - prefer aligning with button center, but adjust to stay in viewport
@@ -2123,50 +2119,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             popupLeft = preferredLeft;
             
-            // Calculate tail position - align with button center
-            const buttonCenterY = buttonRect.top + buttonRect.height / 2;
-            let tailTop, tailLeft;
-            
-            if (positionAbove) {
-                // Tail at bottom of popup, pointing down to button
-                tailTop = popupTop + popupHeight;
-            } else {
-                // Tail at top of popup, pointing up to button
-                tailTop = popupTop - tailSize;
-            }
-            
-            // Align tail horizontally with button center (clamped to popup bounds)
-            const tailLeftOnPopup = buttonCenterX - popupLeft;
-            const tailLeftClamped = Math.max(20, Math.min(popupWidth - 20, tailLeftOnPopup));
-            tailLeft = popupLeft + tailLeftClamped - tailSize / 2;
-            
-            // Calculate rotation angle to point at button center
-            const tailCenterX = tailLeft + tailSize / 2;
-            const tailCenterY = positionAbove ? tailTop + tailSize / 2 : tailTop + tailSize / 2;
-            const deltaX = buttonCenterX - tailCenterX;
-            const deltaY = buttonCenterY - tailCenterY;
-            const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI) + 90; // +90 because triangle points up by default
-            
             // Update popup position
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
-            
-            // Update tail position
-            setTailPosition({ 
-                top: tailTop, 
-                left: tailLeft, 
-                rotation: angle 
-            });
         };
         
         // Update immediately and on resize/scroll
         if (hoverCommentCell) {
-            setTimeout(updatePopupPositionAndTail, 50); // Wait for DOM to update
-            window.addEventListener('resize', updatePopupPositionAndTail);
-            window.addEventListener('scroll', updatePopupPositionAndTail);
+            setTimeout(updatePopupPosition, 50); // Wait for DOM to update
+            window.addEventListener('resize', updatePopupPosition);
+            window.addEventListener('scroll', updatePopupPosition);
             
             return () => {
-                window.removeEventListener('resize', updatePopupPositionAndTail);
-                window.removeEventListener('scroll', updatePopupPositionAndTail);
+                window.removeEventListener('resize', updatePopupPosition);
+                window.removeEventListener('scroll', updatePopupPosition);
             };
         }
     }, [hoverCommentCell, sections, commentPopupPosition]);
@@ -3237,33 +3202,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 return (
                     <>
-                        {/* Speech bubble tail connector - points to comment button */}
-                        {tailPosition.top > 0 && tailPosition.left > 0 && hoverCommentCell && (() => {
-                            const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
-                            if (!commentButton) return null;
-                            
-                            return (
-                                <div
-                                    className="fixed z-[998] pointer-events-none"
-                                    style={{
-                                        top: `${tailPosition.top}px`,
-                                        left: `${tailPosition.left}px`,
-                                        transform: `rotate(${tailPosition.rotation}deg)`,
-                                        transformOrigin: 'center center'
-                                    }}
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 12 12" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))' }}>
-                                        <path
-                                            d="M 6 0 L 12 12 L 0 12 Z"
-                                            fill="white"
-                                            stroke="#d1d5db"
-                                            strokeWidth="0.5"
-                                        />
-                                    </svg>
-                                </div>
-                            );
-                        })()}
-                        
                         {/* Comment Popup */}
                         <div 
                             className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
