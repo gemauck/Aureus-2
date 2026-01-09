@@ -2509,19 +2509,54 @@ const ManagementMeetingNotes = () => {
             // Save successful - update last saved hash
             lastSavedValues.current[lastSavedKey] = currentHash;
             
-            // Update local state with saved values
-            // RichTextEditor will ignore prop updates when focused, so this won't cause cursor jumps
-            const monthlyId = currentMonthlyNotes?.id || null;
-            updateDepartmentNotesLocalBatched(
-                departmentNotesId,
-                {
-                    successes: fieldsToSave.successes,
-                    weekToFollow: fieldsToSave.weekToFollow,
-                    frustrations: fieldsToSave.frustrations,
-                    attachments: fieldsToSave.attachments
-                },
-                monthlyId
+            // CRITICAL: Check if any editor is focused before updating state
+            // If focused, delay state update to prevent cursor jumps
+            const activeEl = document.activeElement;
+            const isAnyEditorFocused = activeEl && (
+                activeEl.contentEditable === 'true' || 
+                (activeEl.tagName === 'TEXTAREA' && activeEl.getAttribute('data-dept-note-id'))
             );
+            
+            const monthlyId = currentMonthlyNotes?.id || null;
+            
+            if (isAnyEditorFocused) {
+                // Editor is focused - delay state update to prevent cursor jumps
+                // The DOM already has the correct content, we just saved it to DB
+                // State update can happen after editor loses focus
+                setTimeout(() => {
+                    // Check again if still focused before updating
+                    const stillFocused = document.activeElement && (
+                        document.activeElement.contentEditable === 'true' || 
+                        (document.activeElement.tagName === 'TEXTAREA' && 
+                         document.activeElement.getAttribute('data-dept-note-id') === String(departmentNotesId))
+                    );
+                    
+                    if (!stillFocused) {
+                        updateDepartmentNotesLocalBatched(
+                            departmentNotesId,
+                            {
+                                successes: fieldsToSave.successes,
+                                weekToFollow: fieldsToSave.weekToFollow,
+                                frustrations: fieldsToSave.frustrations,
+                                attachments: fieldsToSave.attachments
+                            },
+                            monthlyId
+                        );
+                    }
+                }, 1000); // Wait 1 second - user likely moved on
+            } else {
+                // No editor focused - safe to update state immediately
+                updateDepartmentNotesLocalBatched(
+                    departmentNotesId,
+                    {
+                        successes: fieldsToSave.successes,
+                        weekToFollow: fieldsToSave.weekToFollow,
+                        frustrations: fieldsToSave.frustrations,
+                        attachments: fieldsToSave.attachments
+                    },
+                    monthlyId
+                );
+            }
             
             // Set saved status
             setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'saved' }));
