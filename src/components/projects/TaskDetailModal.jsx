@@ -74,6 +74,7 @@ const TaskDetailModal = ({
     const commentsContainerRef = useRef(null);
     const leftContentRef = useRef(null);
     const refreshIntervalRef = useRef(null);
+    const lastCommentAddTimeRef = useRef(null); // Track when comment was added to prevent refresh race condition
 
     // Refresh task data from database when modal opens and periodically while open
     // This ensures comments and checklists added by other users are visible
@@ -82,6 +83,13 @@ const TaskDetailModal = ({
 
         const refreshTaskData = async () => {
             try {
+                // Skip refresh if a comment was just added (within last 3 seconds)
+                // This prevents race condition where refresh overwrites newly added comments
+                if (lastCommentAddTimeRef.current && (Date.now() - lastCommentAddTimeRef.current) < 3000) {
+                    console.log('⏸️ TaskDetailModal: Skipping refresh - comment recently added');
+                    return;
+                }
+                
                 // Get the latest project data from database
                 if (window.DatabaseAPI?.getProject) {
                     const response = await window.DatabaseAPI.getProject(project.id);
@@ -106,7 +114,9 @@ const TaskDetailModal = ({
                         
                         // If we found an updated task, check if comments or checklist have changed
                         if (updatedTask) {
-                            const currentComments = Array.isArray(task.comments) ? task.comments : [];
+                            // CRITICAL: Compare against local comments state, not just task prop
+                            // This ensures we don't lose comments that are in local state but not yet in prop
+                            const currentComments = Array.isArray(comments) ? comments : [];
                             const updatedComments = Array.isArray(updatedTask.comments) ? updatedTask.comments : [];
                             const currentChecklist = Array.isArray(task.checklist) ? task.checklist : [];
                             const updatedChecklist = Array.isArray(updatedTask.checklist) ? updatedTask.checklist : [];
@@ -115,9 +125,25 @@ const TaskDetailModal = ({
                             const currentCommentIds = new Set(currentComments.map(c => c.id).filter(Boolean));
                             const updatedCommentIds = new Set(updatedComments.map(c => c.id).filter(Boolean));
                             
-                            // Check if there are new comments (by ID comparison)
+                            // CRITICAL: Check if we have local comments that aren't in the database yet
+                            // This can happen if refresh runs before database save completes
+                            const hasLocalCommentsNotInDB = currentComments.length > updatedComments.length ||
+                                Array.from(currentCommentIds).some(id => !updatedCommentIds.has(id));
+                            
+                            // Check if there are new comments from database (by ID comparison)
                             const hasNewComments = updatedComments.length > currentComments.length ||
                                 Array.from(updatedCommentIds).some(id => !currentCommentIds.has(id));
+                            
+                            // If we have local comments not in DB, don't refresh yet (wait for save to complete)
+                            if (hasLocalCommentsNotInDB && !hasNewComments) {
+                                console.log('⏸️ TaskDetailModal: Skipping refresh - local comments not yet saved to DB', {
+                                    localCount: currentComments.length,
+                                    dbCount: updatedComments.length,
+                                    localIds: Array.from(currentCommentIds),
+                                    dbIds: Array.from(updatedCommentIds)
+                                });
+                                return;
+                            }
                             
                             // Check if any existing comments have changed
                             const commentsChanged = updatedComments.some(updatedComment => {
@@ -238,7 +264,7 @@ const TaskDetailModal = ({
                     // We have existing comments - ALWAYS merge, never replace
                     const commentsMap = new Map();
                     
-                    // Start with all existing comments
+                    // Start with all existing comments (CRITICAL: preserve local state)
                     safePrevComments.forEach(comment => {
                         if (comment.id) {
                             commentsMap.set(comment.id, comment);
@@ -252,12 +278,64 @@ const TaskDetailModal = ({
                     const incomingCount = Array.isArray(task.comments) ? task.comments.length : 0;
                     
                     // Merge in incoming comments (update existing or add new)
+                    // CRITICAL: Only update if incoming comment exists, never remove local comments
+                    // CRITICAL: Handle comments without IDs (old tasks) by matching on content + timestamp
                     if (Array.isArray(task.comments) && task.comments.length > 0) {
                         task.comments.forEach(incomingComment => {
                             if (incomingComment.id) {
                                 // Update existing or add new comment
-                                commentsMap.set(incomingComment.id, incomingComment);
+                                // If local comment exists, prefer local version if it's newer (by timestamp)
+                                const existingComment = commentsMap.get(incomingComment.id);
+                                if (existingComment && existingComment.timestamp && incomingComment.timestamp) {
+                                    const existingTime = new Date(existingComment.timestamp).getTime();
+                                    const incomingTime = new Date(incomingComment.timestamp).getTime();
+                                    // Only update if incoming is newer (more than 1 second difference)
+                                    if (incomingTime > existingTime + 1000) {
+                                        commentsMap.set(incomingComment.id, incomingComment);
+                                    }
+                                    // Otherwise keep existing (local) comment
+                                } else {
+                                    // No existing comment with this ID, add it
+                                    commentsMap.set(incomingComment.id, incomingComment);
+                                }
+                            } else {
+                                // CRITICAL: Handle comments without IDs (old tasks)
+                                // Match by text + timestamp to avoid duplicates
+                                const incomingText = incomingComment.text || incomingComment.message || '';
+                                const incomingTimestamp = incomingComment.timestamp || incomingComment.date || '';
+                                
+                                // Check if we already have this comment (by content + timestamp)
+                                let foundMatch = false;
+                                for (const [key, existingComment] of commentsMap.entries()) {
+                                    const existingText = existingComment.text || existingComment.message || '';
+                                    const existingTimestamp = existingComment.timestamp || existingComment.date || '';
+                                    
+                                    // Match if text and timestamp are the same
+                                    if (incomingText === existingText && incomingTimestamp === existingTimestamp) {
+                                        foundMatch = true;
+                                        break;
+                                    }
+                                }
+                                
+                                // Only add if we don't already have it
+                                if (!foundMatch) {
+                                    // Generate a stable ID for comments without IDs to prevent duplicates
+                                    const stableId = `legacy-${incomingText.substring(0, 20)}-${incomingTimestamp}`.replace(/[^a-zA-Z0-9-]/g, '');
+                                    commentsMap.set(stableId, incomingComment);
+                                }
                             }
+                        });
+                    }
+                    
+                    // CRITICAL: If incoming has fewer comments than local state, keep all local comments
+                    // This prevents losing comments that were just added but not yet in database
+                    if (incomingCount < existingCount) {
+                        console.warn('⚠️ TaskDetailModal: Incoming comments count is less than local state, preserving all local comments', {
+                            taskId: task.id,
+                            localCount: existingCount,
+                            incomingCount: incomingCount,
+                            localIds: safePrevComments.map(c => c.id).filter(Boolean),
+                            incomingIds: Array.isArray(task.comments) ? task.comments.map(c => c.id).filter(Boolean) : []
                         });
                     }
                     
@@ -471,15 +549,53 @@ const TaskDetailModal = ({
         
         // Defensive check: if we have comments in state but task.comments has more, merge them
         // This is a safety net in case state got out of sync
+        // CRITICAL: Handle comments without IDs (old tasks) by matching on content + timestamp
         if (commentsToSave.length > 0 && Array.isArray(task?.comments) && task.comments.length > commentsToSave.length) {
             console.warn('⚠️ TaskDetailModal: State comments count is less than task prop, merging before save', {
                 stateCount: commentsToSave.length,
                 taskPropCount: task.comments.length
             });
-            const commentsMap = new Map(commentsToSave.map(c => [c.id, c]));
-            task.comments.forEach(c => {
-                if (c.id) commentsMap.set(c.id, c);
+            const commentsMap = new Map();
+            
+            // Add all comments from state first
+            commentsToSave.forEach(c => {
+                if (c.id) {
+                    commentsMap.set(c.id, c);
+                } else {
+                    // Comments without IDs - create stable key
+                    const text = c.text || c.message || '';
+                    const timestamp = c.timestamp || c.date || '';
+                    const stableId = `legacy-${text.substring(0, 20)}-${timestamp}`.replace(/[^a-zA-Z0-9-]/g, '');
+                    commentsMap.set(stableId, c);
+                }
             });
+            
+            // Merge in comments from task prop
+            task.comments.forEach(c => {
+                if (c.id) {
+                    commentsMap.set(c.id, c);
+                } else {
+                    // Match by content + timestamp for comments without IDs
+                    const text = c.text || c.message || '';
+                    const timestamp = c.timestamp || c.date || '';
+                    let foundMatch = false;
+                    
+                    for (const [key, existing] of commentsMap.entries()) {
+                        const existingText = existing.text || existing.message || '';
+                        const existingTimestamp = existing.timestamp || existing.date || '';
+                        if (text === existingText && timestamp === existingTimestamp) {
+                            foundMatch = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!foundMatch) {
+                        const stableId = `legacy-${text.substring(0, 20)}-${timestamp}`.replace(/[^a-zA-Z0-9-]/g, '');
+                        commentsMap.set(stableId, c);
+                    }
+                }
+            });
+            
             commentsToSave = Array.from(commentsMap.values());
         }
         
@@ -639,8 +755,12 @@ const TaskDetailModal = ({
                 }
             });
             
+            // CRITICAL: Ensure comment always has an ID (even for old tasks)
+            // Use a more robust ID generation that won't collide
+            const commentId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            
             const comment = {
-                id: Date.now(),
+                id: commentId,
                 text: newComment,
                 author: currentUser.name,
                 authorEmail: currentUser.email,
@@ -665,6 +785,9 @@ const TaskDetailModal = ({
             const updatedComments = [...comments, comment];
             setComments(updatedComments);
             setNewComment('');
+            
+            // CRITICAL: Mark that we just added a comment to prevent refresh race condition
+            lastCommentAddTimeRef.current = Date.now();
             
             // CRITICAL: Auto-save the comment immediately to ensure persistence
             // Don't wait for user to click "Save Changes" - comments should persist immediately

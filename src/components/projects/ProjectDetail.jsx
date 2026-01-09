@@ -1239,11 +1239,45 @@ function initializeProjectDetail() {
             // Update the viewingTask with the latest data - ensure all fields are preserved
             setViewingTask(prev => {
                 // Merge to preserve any local edits while updating with fresh data
+                // CRITICAL: For comments, merge by ID to prevent losing comments that are being saved
+                const prevComments = Array.isArray(prev?.comments) ? prev.comments : [];
+                const updatedComments = Array.isArray(updatedTask.comments) ? updatedTask.comments : [];
+                
+                // If updated comments has fewer items than previous, it might be stale data
+                // Merge by ID to preserve all comments
+                let mergedComments = updatedComments;
+                if (prevComments.length > 0) {
+                    const commentsMap = new Map();
+                    // Start with previous comments (preserve local state)
+                    prevComments.forEach(comment => {
+                        if (comment.id) {
+                            commentsMap.set(comment.id, comment);
+                        }
+                    });
+                    // Merge in updated comments (update existing or add new)
+                    updatedComments.forEach(comment => {
+                        if (comment.id) {
+                            commentsMap.set(comment.id, comment);
+                        }
+                    });
+                    mergedComments = Array.from(commentsMap.values());
+                    
+                    // If we're losing comments, log a warning
+                    if (mergedComments.length < prevComments.length && updatedComments.length < prevComments.length) {
+                        console.warn('⚠️ ProjectDetail: Potential comment loss during refresh, preserving all comments', {
+                            taskId,
+                            prevCount: prevComments.length,
+                            updatedCount: updatedComments.length,
+                            mergedCount: mergedComments.length
+                        });
+                    }
+                }
+                
                 const merged = {
                     ...prev,
                     ...updatedTask,
-                    // Explicitly ensure comments and checklist are from updated task
-                    comments: Array.isArray(updatedTask.comments) ? updatedTask.comments : (prev?.comments || []),
+                    // Use merged comments to preserve all comments
+                    comments: mergedComments,
                     checklist: Array.isArray(updatedTask.checklist) ? updatedTask.checklist : (prev?.checklist || []),
                     attachments: Array.isArray(updatedTask.attachments) ? updatedTask.attachments : (prev?.attachments || []),
                     tags: Array.isArray(updatedTask.tags) ? updatedTask.tags : (prev?.tags || [])
