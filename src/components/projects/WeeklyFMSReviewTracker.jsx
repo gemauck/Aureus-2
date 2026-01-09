@@ -2821,7 +2821,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     let top = cellRect.bottom + spacing;
                                     let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
                                     let pointerSide = 'top';
-                                    let pointerOffset = buttonRect.left + (buttonRect.width / 2) - cellRect.left;
+                                    
+                                    // Calculate button center position relative to viewport
+                                    const buttonCenterX = buttonRect.left + (buttonRect.width / 2);
                                     
                                     // If popup would go off bottom of screen, position above
                                     if (top + popupHeight > window.innerHeight - 20) {
@@ -2836,11 +2838,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     // Adjust horizontal position if would go off screen
                                     if (left < 20) {
                                         left = 20;
-                                        pointerOffset = buttonRect.left + (buttonRect.width / 2) - 20;
                                     } else if (left + popupWidth > window.innerWidth - 20) {
                                         left = window.innerWidth - popupWidth - 20;
-                                        pointerOffset = buttonRect.left + (buttonRect.width / 2) - left;
                                     }
+                                    
+                                    // Calculate pointer offset relative to popup's left position
+                                    const pointerOffset = buttonCenterX - left;
                                     
                                     setCommentPopupPosition({ top, left });
                                     setCommentPopupPointer({ 
