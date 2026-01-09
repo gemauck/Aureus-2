@@ -2212,49 +2212,42 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const scrollHandlers = new Map();
         
         scrollContainers.forEach(sourceContainer => {
-            let scrollTimeout = null;
             const handleScroll = () => {
-                if (isScrollingRef.current) return; // Prevent infinite loops
+                // Skip if this scroll was triggered by our sync (prevents infinite loop)
+                if (isScrollingRef.current) return;
+                
+                const scrollLeft = sourceContainer.scrollLeft;
                 
                 // Save scroll position for this container
                 const sectionId = Object.keys(sectionScrollRefs.current).find(
                     id => sectionScrollRefs.current[id] === sourceContainer
                 );
                 if (sectionId) {
-                    savedScrollPositionsRef.current[sectionId] = sourceContainer.scrollLeft;
+                    savedScrollPositionsRef.current[sectionId] = scrollLeft;
                 }
                 
-                // Clear existing timeout to debounce sync operations
-                if (scrollTimeout) {
-                    clearTimeout(scrollTimeout);
-                }
+                // Set flag to prevent this sync from triggering other scroll events
+                isScrollingRef.current = true;
                 
-                // Debounce the sync operation to reduce jitter
-                scrollTimeout = setTimeout(() => {
-                    if (isScrollingRef.current) return;
-                    
-                    const scrollLeft = sourceContainer.scrollLeft;
-                    isScrollingRef.current = true;
-                    
-                    // Update all other containers to match the scroll position
-                    scrollContainers.forEach(container => {
-                        if (container !== sourceContainer) {
-                            container.scrollLeft = scrollLeft;
-                            // Save position for synced containers too
-                            const syncSectionId = Object.keys(sectionScrollRefs.current).find(
-                                id => sectionScrollRefs.current[id] === container
-                            );
-                            if (syncSectionId) {
-                                savedScrollPositionsRef.current[syncSectionId] = scrollLeft;
-                            }
+                // Sync all other containers immediately for fluid scrolling
+                scrollContainers.forEach(container => {
+                    if (container !== sourceContainer) {
+                        container.scrollLeft = scrollLeft;
+                        // Save position for synced containers
+                        const syncSectionId = Object.keys(sectionScrollRefs.current).find(
+                            id => sectionScrollRefs.current[id] === container
+                        );
+                        if (syncSectionId) {
+                            savedScrollPositionsRef.current[syncSectionId] = scrollLeft;
                         }
-                    });
-                    
-                    // Reset flag after a short delay
-                    setTimeout(() => {
-                        isScrollingRef.current = false;
-                    }, 100);
-                }, 10); // Small debounce to reduce jitter
+                    }
+                });
+                
+                // Clear flag immediately on next tick to allow subsequent scrolls
+                // Using requestAnimationFrame ensures DOM has updated
+                requestAnimationFrame(() => {
+                    isScrollingRef.current = false;
+                });
             };
             
             scrollHandlers.set(sourceContainer, handleScroll);
