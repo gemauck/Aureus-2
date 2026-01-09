@@ -1,6 +1,6 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 20260108-deep-link-fix-v1 - Updated for deep linking support
-console.log('🚀 lazy-load-components.js v20260108-deep-link-fix-v1 loaded');
+// VERSION: 20260109-speech-bubble-fix - Updated for speech bubble tail feature
+console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
