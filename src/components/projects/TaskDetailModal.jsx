@@ -65,6 +65,114 @@ const TaskDetailModal = ({
     const mentionSuggestionsRef = useRef(null);
     const commentsContainerRef = useRef(null);
     const leftContentRef = useRef(null);
+    const refreshIntervalRef = useRef(null);
+
+    // Refresh task data from database when modal opens and periodically while open
+    // This ensures comments and checklists added by other users are visible
+    useEffect(() => {
+        if (!task?.id || !project?.id) return;
+
+        const refreshTaskData = async () => {
+            try {
+                // Get the latest project data from database
+                if (window.DatabaseAPI?.getProject) {
+                    const response = await window.DatabaseAPI.getProject(project.id);
+                    const updatedProject = response?.data?.project || response?.project || response?.data;
+                    
+                    if (updatedProject?.tasks && Array.isArray(updatedProject.tasks)) {
+                        // Find the updated task in the project
+                        let updatedTask = updatedProject.tasks.find(t => t.id === task.id);
+                        
+                        // Also check subtasks
+                        if (!updatedTask) {
+                            for (const parentTask of updatedProject.tasks) {
+                                if (parentTask.subtasks && Array.isArray(parentTask.subtasks)) {
+                                    const foundSubtask = parentTask.subtasks.find(st => st.id === task.id);
+                                    if (foundSubtask) {
+                                        updatedTask = foundSubtask;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If we found an updated task, check if comments or checklist have changed
+                        if (updatedTask) {
+                            const currentComments = Array.isArray(task.comments) ? task.comments : [];
+                            const updatedComments = Array.isArray(updatedTask.comments) ? updatedTask.comments : [];
+                            const currentChecklist = Array.isArray(task.checklist) ? task.checklist : [];
+                            const updatedChecklist = Array.isArray(updatedTask.checklist) ? updatedTask.checklist : [];
+                            
+                            // Check if comments have changed (by comparing IDs or count)
+                            const commentsChanged = updatedComments.length !== currentComments.length ||
+                                updatedComments.some((comment, idx) => {
+                                    const currentComment = currentComments[idx];
+                                    return !currentComment || comment.id !== currentComment.id || 
+                                           comment.text !== currentComment.text || 
+                                           comment.timestamp !== currentComment.timestamp;
+                                });
+                            
+                            // Check if checklist has changed
+                            const checklistChanged = updatedChecklist.length !== currentChecklist.length ||
+                                updatedChecklist.some((item, idx) => {
+                                    const currentItem = currentChecklist[idx];
+                                    return !currentItem || item.id !== currentItem.id || 
+                                           item.completed !== currentItem.completed ||
+                                           item.text !== currentItem.text;
+                                });
+                            
+                            // Update if anything changed
+                            if (commentsChanged || checklistChanged) {
+                                console.log('🔄 TaskDetailModal: Found updated task data, refreshing...', {
+                                    taskId: task.id,
+                                    currentComments: currentComments.length,
+                                    updatedComments: updatedComments.length,
+                                    commentsChanged,
+                                    checklistChanged
+                                });
+                                
+                                // Dispatch event to parent to update the task
+                                window.dispatchEvent(new CustomEvent('refreshTaskInModal', {
+                                    detail: { taskId: task.id, updatedTask }
+                                }));
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ TaskDetailModal: Failed to refresh task data:', error);
+            }
+        };
+
+        // Refresh immediately when modal opens
+        refreshTaskData();
+
+        // Set up periodic refresh every 5 seconds while modal is open
+        refreshIntervalRef.current = setInterval(refreshTaskData, 5000);
+
+        return () => {
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+                refreshIntervalRef.current = null;
+            }
+        };
+    }, [task?.id, project?.id]);
+
+    // Listen for refresh events from parent
+    useEffect(() => {
+        const handleRefreshTask = (event) => {
+            const { taskId, updatedTask } = event.detail || {};
+            if (taskId && updatedTask && taskId === task?.id) {
+                console.log('🔄 TaskDetailModal: Received refresh event, updating task data');
+                // The task prop will be updated by the parent, which will trigger the sync useEffect
+            }
+        };
+
+        window.addEventListener('refreshTaskInModal', handleRefreshTask);
+        return () => {
+            window.removeEventListener('refreshTaskInModal', handleRefreshTask);
+        };
+    }, [task?.id]);
 
     // Sync all task data when task prop changes - CRITICAL for persistence
     useEffect(() => {
@@ -99,9 +207,12 @@ const TaskDetailModal = ({
             }
             
             // Sync editedTask with all task properties
+            // CRITICAL: Exclude comments, checklist, attachments, and tags from editedTask
+            // These are managed separately in their own state variables
+            const { comments: taskComments, checklist: taskChecklist, attachments: taskAttachments, tags: taskTags, ...taskWithoutArrays } = task;
             setEditedTask(prev => ({
                 ...prev,
-                ...task,
+                ...taskWithoutArrays,
                 // Preserve local edits for fields that might be in progress
                 title: task.title !== undefined ? task.title : prev.title,
                 description: task.description !== undefined ? task.description : prev.description,
@@ -241,16 +352,30 @@ const TaskDetailModal = ({
             return;
         }
 
-        onUpdate({
+        // CRITICAL: Explicitly include comments, checklist, attachments, and tags from current state
+        // These are managed separately and must be included in the save
+        const taskToSave = {
             ...editedTask,
-            comments,
-            attachments,
-            subtasks: editedTask.subtasks || [],
-            checklist,
-            tags,
-            subscribers: editedTask.subscribers || [],
+            // Explicitly include arrays from current state to ensure persistence
+            comments: Array.isArray(comments) ? comments : [],
+            checklist: Array.isArray(checklist) ? checklist : [],
+            attachments: Array.isArray(attachments) ? attachments : [],
+            tags: Array.isArray(tags) ? tags : [],
+            subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+            subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
             id: editedTask.id || Date.now()
+        };
+
+        console.log('💾 TaskDetailModal: Saving task with:', {
+            id: taskToSave.id,
+            title: taskToSave.title,
+            commentsCount: taskToSave.comments?.length || 0,
+            checklistCount: taskToSave.checklist?.length || 0,
+            attachmentsCount: taskToSave.attachments?.length || 0,
+            tagsCount: taskToSave.tags?.length || 0
         });
+
+        onUpdate(taskToSave);
         onClose();
     };
 

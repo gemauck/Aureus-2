@@ -842,10 +842,28 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const hasAnySections = Object.values(payload || {}).some(
             (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
         );
+        
+        // CRITICAL: Prevent saving empty state if we never had data (would overwrite existing data)
+        // Only allow empty save if lastSavedSnapshot was also empty (user explicitly deleted everything)
+        const lastSnapshotWasEmpty = !lastSavedSnapshotRef.current || 
+                                     lastSavedSnapshotRef.current === '{}' || 
+                                     lastSavedSnapshotRef.current === '[]';
+        
         if (!hasAnySections && serialized === lastSavedSnapshotRef.current) {
+            // No changes, skip save
             return;
         }
-        if (!hasAnySections && serialized !== lastSavedSnapshotRef.current) {
+        
+        if (!hasAnySections && !lastSnapshotWasEmpty) {
+            // Trying to save empty state when we previously had data - this would wipe existing data!
+            // Only allow if user explicitly deleted sections (indicated by sectionsRef being explicitly set to empty)
+            // For safety, check if we're in a state where data might have been lost
+            console.warn('⚠️ Prevented saving empty state that would overwrite existing data', {
+                projectId: project.id,
+                lastSnapshot: lastSavedSnapshotRef.current?.substring(0, 100),
+                currentSerialized: serialized?.substring(0, 100)
+            });
+            return;
         }
 
         isSavingRef.current = true;

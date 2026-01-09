@@ -2,10 +2,110 @@
 const { useState, useEffect, useRef } = React;
 
 // Inline Comments Popup Component
-const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, position }) => {
+const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, position, triggerPosition }) => {
     const comments = task.comments || [];
     const recentComments = comments.slice(-3).reverse(); // Show last 3 comments
     const commentsContainerRef = useRef(null);
+    const popupRef = useRef(null);
+    
+    // Calculate speech bubble tail position
+    const [tailStyle, setTailStyle] = useState({});
+    
+    useEffect(() => {
+        if (popupRef.current && triggerPosition) {
+            // Small delay to ensure popup is fully rendered
+            const timeoutId = setTimeout(() => {
+                if (!popupRef.current) return;
+                
+                const popupRect = popupRef.current.getBoundingClientRect();
+                const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
+                const scrollY = window.scrollY ?? window.pageYOffset ?? 0;
+                
+                // Calculate relative position of trigger to popup
+                const triggerX = triggerPosition.left - (popupRect.left - scrollX);
+                const triggerY = triggerPosition.top - (popupRect.top - scrollY);
+                
+                // Determine which side the tail should be on
+                // If trigger is above the popup, tail goes on top
+                // If trigger is below, tail goes on bottom
+                // If trigger is to the left, tail goes on left
+                // If trigger is to the right, tail goes on right
+                
+                const isAbove = triggerY < 0;
+                const isBelow = triggerY > popupRect.height;
+                const isLeft = triggerX < 0;
+                const isRight = triggerX > popupRect.width;
+                
+                let tailStyle = {};
+                
+                if (isAbove) {
+                    // Tail on top, pointing up
+                    tailStyle = {
+                        top: '-8px',
+                        left: `${Math.max(12, Math.min(popupRect.width - 12, triggerX))}px`,
+                        transform: 'translateX(-50%)',
+                        borderBottom: '8px solid white',
+                        borderLeft: '8px solid transparent',
+                        borderRight: '8px solid transparent',
+                        borderTop: 'none',
+                        filter: 'drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.1))'
+                    };
+                } else if (isBelow) {
+                    // Tail on bottom, pointing down
+                    tailStyle = {
+                        bottom: '-8px',
+                        left: `${Math.max(12, Math.min(popupRect.width - 12, triggerX))}px`,
+                        transform: 'translateX(-50%)',
+                        borderTop: '8px solid white',
+                        borderLeft: '8px solid transparent',
+                        borderRight: '8px solid transparent',
+                        borderBottom: 'none',
+                        filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1))'
+                    };
+                } else if (isLeft) {
+                    // Tail on left, pointing left
+                    tailStyle = {
+                        left: '-8px',
+                        top: `${Math.max(12, Math.min(popupRect.height - 12, triggerY))}px`,
+                        transform: 'translateY(-50%)',
+                        borderRight: '8px solid white',
+                        borderTop: '8px solid transparent',
+                        borderBottom: '8px solid transparent',
+                        borderLeft: 'none',
+                        filter: 'drop-shadow(-1px 0 1px rgba(0, 0, 0, 0.1))'
+                    };
+                } else if (isRight) {
+                    // Tail on right, pointing right
+                    tailStyle = {
+                        right: '-8px',
+                        top: `${Math.max(12, Math.min(popupRect.height - 12, triggerY))}px`,
+                        transform: 'translateY(-50%)',
+                        borderLeft: '8px solid white',
+                        borderTop: '8px solid transparent',
+                        borderBottom: '8px solid transparent',
+                        borderRight: 'none',
+                        filter: 'drop-shadow(1px 0 1px rgba(0, 0, 0, 0.1))'
+                    };
+                } else {
+                    // Default: tail on top if trigger is roughly above center
+                    tailStyle = {
+                        top: '-8px',
+                        left: `${Math.max(12, Math.min(popupRect.width - 12, triggerX))}px`,
+                        transform: 'translateX(-50%)',
+                        borderBottom: '8px solid white',
+                        borderLeft: '8px solid transparent',
+                        borderRight: '8px solid transparent',
+                        borderTop: 'none',
+                        filter: 'drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.1))'
+                    };
+                }
+                
+                setTailStyle(tailStyle);
+            }, 10); // Small delay to ensure DOM is ready
+            
+            return () => clearTimeout(timeoutId);
+        }
+    }, [position, triggerPosition]);
 
     // Auto-scroll to last comment when popup opens
     useEffect(() => {
@@ -35,6 +135,7 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
             
             {/* Popup */}
             <div 
+                ref={popupRef}
                 className="absolute z-50 bg-white rounded-lg shadow-lg border border-gray-200 w-80"
                 style={{ 
                     top: position.top,
@@ -43,6 +144,13 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
+                {/* Speech bubble tail */}
+                {triggerPosition && Object.keys(tailStyle).length > 0 && (
+                    <div
+                        className="absolute w-0 h-0"
+                        style={tailStyle}
+                    />
+                )}
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
                     <div className="flex items-center gap-2">

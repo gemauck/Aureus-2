@@ -1077,6 +1077,51 @@ function initializeProjectDetail() {
         return () => window.removeEventListener('openTask', handleOpenTask);
     }, [project?.id, tasks]); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
     
+    // Listen for task refresh events from TaskDetailModal
+    // This allows the modal to request updated task data when comments/checklists are added by other users
+    useEffect(() => {
+        const handleRefreshTaskInModal = (event) => {
+            const { taskId, updatedTask } = event.detail || {};
+            if (!taskId || !updatedTask || !viewingTask || viewingTask.id !== taskId) {
+                return;
+            }
+
+            console.log('🔄 ProjectDetail: Refreshing task in modal', {
+                taskId,
+                currentCommentsCount: Array.isArray(viewingTask.comments) ? viewingTask.comments.length : 0,
+                updatedCommentsCount: Array.isArray(updatedTask.comments) ? updatedTask.comments.length : 0
+            });
+
+            // Update the viewingTask with the latest data
+            setViewingTask(updatedTask);
+
+            // Also update the task in the tasks array to keep everything in sync
+            setTasks(prevTasks => {
+                return prevTasks.map(t => {
+                    if (t.id === taskId) {
+                        return updatedTask;
+                    }
+                    // Check subtasks
+                    if (t.subtasks && Array.isArray(t.subtasks)) {
+                        const hasUpdatedSubtask = t.subtasks.some(st => st.id === taskId);
+                        if (hasUpdatedSubtask) {
+                            return {
+                                ...t,
+                                subtasks: t.subtasks.map(st => st.id === taskId ? updatedTask : st)
+                            };
+                        }
+                    }
+                    return t;
+                });
+            });
+        };
+
+        window.addEventListener('refreshTaskInModal', handleRefreshTaskInModal);
+        return () => {
+            window.removeEventListener('refreshTaskInModal', handleRefreshTaskInModal);
+        };
+    }, [viewingTask?.id]);
+
     // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
     const handleBackToOverview = useCallback(() => {
         switchSection('overview');
@@ -2888,6 +2933,12 @@ function initializeProjectDetail() {
             left: Math.max(16, left)
         };
 
+        // Calculate trigger position for speech bubble tail
+        const triggerPosition = {
+            top: rect.top + scrollY + (rect.height / 2), // Center of the button vertically
+            left: rect.left + scrollX + (rect.width / 2)  // Center of the button horizontally
+        };
+
         const ready = await ensureCommentsPopupLoaded();
         if (!ready) {
             console.warn('⚠️ CommentsPopup component is not available yet.');
@@ -2901,7 +2952,8 @@ function initializeProjectDetail() {
             task,
             isSubtask,
             parentId: parentTask ? parentTask.id : null,
-            position
+            position,
+            triggerPosition
         });
         
         // Update URL to include task and comment parameters
@@ -4774,6 +4826,7 @@ function initializeProjectDetail() {
                         updateUrl({ clearComment: true });
                     }}
                     position={commentsPopup.position}
+                    triggerPosition={commentsPopup.triggerPosition}
                 />
             )}
 
