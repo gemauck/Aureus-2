@@ -333,6 +333,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
+    const [tailPosition, setTailPosition] = useState({ top: 0, left: 0, rotation: 0 });
     const commentPopupContainerRef = useRef(null);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -990,6 +991,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             // Reload templates from database to get fresh data
+            // Add a small delay to ensure database transaction is committed
+            await new Promise(resolve => setTimeout(resolve, 100));
             await loadTemplates();
             
             setEditingTemplate(null);
@@ -1918,7 +1921,49 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }, 100);
         }
-    }, [hoverCommentCell, sections]);
+        
+        // Update tail position when popup position or hover cell changes
+        const updateTailPosition = () => {
+            if (hoverCommentCell && commentPopupPosition.top > 0) {
+                const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+                if (commentButton) {
+                    const buttonRect = commentButton.getBoundingClientRect();
+                    const popupHeight = 200; // approximate popup height
+                    const tailTop = commentPopupPosition.top + popupHeight - 8;
+                    const tailLeft = commentPopupPosition.left + 288 - 24;
+                    
+                    // Calculate angle to point at button center
+                    const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+                    const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+                    const tailCenterX = tailLeft + 8;
+                    const tailCenterY = tailTop + 8;
+                    
+                    const deltaX = buttonCenterX - tailCenterX;
+                    const deltaY = buttonCenterY - tailCenterY;
+                    const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI) + 90;
+                    
+                    setTailPosition({ top: tailTop, left: tailLeft, rotation: angle });
+                } else {
+                    // Hide tail if button not found
+                    setTailPosition({ top: 0, left: 0, rotation: 0 });
+                }
+            } else {
+                setTailPosition({ top: 0, left: 0, rotation: 0 });
+            }
+        };
+        
+        // Update immediately and on resize/scroll
+        if (hoverCommentCell) {
+            setTimeout(updateTailPosition, 100); // Wait for DOM to update
+            window.addEventListener('resize', updateTailPosition);
+            window.addEventListener('scroll', updateTailPosition);
+            
+            return () => {
+                window.removeEventListener('resize', updateTailPosition);
+                window.removeEventListener('scroll', updateTailPosition);
+            };
+        }
+    }, [hoverCommentCell, sections, commentPopupPosition]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -1994,19 +2039,68 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             if (deepSectionId && deepDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
-                // Center the popup on screen; the underlying grid provides context.
+                
+                // Set initial position (will be updated once cell is found)
                 setCommentPopupPosition({
                     top: Math.max(window.innerHeight / 2 - 160, 60),
                     left: Math.max(window.innerWidth / 2 - 180, 20)
                 });
+                
+                // Open the popup immediately
                 setHoverCommentCell(cellKey);
+                
+                // Find the comment button for this cell and reposition popup near it
+                const positionPopup = () => {
+                    const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    if (commentButton) {
+                        const rect = commentButton.getBoundingClientRect();
+                        setCommentPopupPosition({
+                            top: rect.bottom + 5,
+                            left: rect.right - 288
+                        });
+                    } else {
+                        // Fallback: try to find the cell and position relative to it
+                        const cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        if (cell) {
+                            const rect = cell.getBoundingClientRect();
+                            setCommentPopupPosition({
+                                top: rect.bottom + 5,
+                                left: rect.right - 288
+                            });
+                        }
+                    }
+                };
+                
+                // Try to position immediately, then retry a few times if not found
+                positionPopup();
+                let attempts = 0;
+                const maxAttempts = 5;
+                const retryPosition = setInterval(() => {
+                    attempts++;
+                    positionPopup();
+                    if (attempts >= maxAttempts) {
+                        clearInterval(retryPosition);
+                    }
+                }, 200);
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
-                    // Wait for the popup to render and comments to load
-                    setTimeout(() => {
-                        const commentElement = document.querySelector(`[data-comment-id="${deepCommentId}"]`) ||
-                                             document.querySelector(`#comment-${deepCommentId}`);
+                    // Convert commentId to string for comparison (URL params are always strings)
+                    const targetCommentId = String(deepCommentId);
+                    
+                    // Wait for the popup to render and comments to load - use multiple attempts
+                    let attempts = 0;
+                    const maxAttempts = 10; // Try for up to 2 seconds
+                    const findAndScrollToComment = () => {
+                        attempts++;
+                        
+                        // Try multiple selectors to find the comment (handle both string and number IDs)
+                        const commentElement = 
+                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            document.querySelector(`#comment-${targetCommentId}`) ||
+                            document.querySelector(`#comment-${Number(targetCommentId)}`);
+                        
                         if (commentElement && commentPopupContainerRef.current) {
                             // Scroll the comment into view within the popup
                             commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2031,8 +2125,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 commentElement.style.boxShadow = '';
                                 commentElement.style.transition = '';
                             }, 2000);
+                            console.log('✅ Deep link: Scrolled to comment', targetCommentId);
+                        } else if (attempts < maxAttempts) {
+                            // Comment not found yet, try again
+                            setTimeout(findAndScrollToComment, 200);
+                        } else {
+                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
                         }
-                    }, 500); // Wait 500ms for popup to render
+                    };
+                    
+                    // Start looking for the comment after a short delay
+                    setTimeout(findAndScrollToComment, 300);
                 }
             }
         } catch (error) {
@@ -2839,10 +2942,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const comments = document ? getDocumentComments(document, month) : [];
                 
                 return (
-                    <div 
-                        className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
-                        style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
-                    >
+                    <>
+                        {/* Speech bubble tail connector - points to comment button */}
+                        {tailPosition.top > 0 && tailPosition.left > 0 && (
+                            <div
+                                className="fixed z-[998] pointer-events-none"
+                                style={{
+                                    top: `${tailPosition.top}px`,
+                                    left: `${tailPosition.left}px`,
+                                    transform: `rotate(${tailPosition.rotation}deg)`,
+                                    transformOrigin: 'center center'
+                                }}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}>
+                                    <path
+                                        d="M 8 0 L 16 16 L 0 16 Z"
+                                        fill="white"
+                                        stroke="#d1d5db"
+                                        strokeWidth="1"
+                                    />
+                                </svg>
+                            </div>
+                        )}
+                        
+                        {/* Comment Popup */}
+                        <div 
+                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
+                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
+                        >
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
@@ -2928,6 +3055,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             )}
                         </div>
                     </div>
+                    </>
                 );
             })()}
             

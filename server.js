@@ -1234,6 +1234,55 @@ app.all('/api/projects/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for document-collection-templates list and create operations (GET, POST /api/document-collection-templates)
+app.all('/api/document-collection-templates', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'document-collection-templates.js'))
+    if (!handler) {
+      console.error('❌ Document collection templates handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in document-collection-templates handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for document-collection-templates operations with ID (GET, PUT, DELETE /api/document-collection-templates/:id)
+app.all('/api/document-collection-templates/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'document-collection-templates', '[id].js'))
+    if (!handler) {
+      console.error('❌ Document collection templates [id] handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    // Ensure req.params.id is set for the handler
+    req.params = req.params || {}
+    req.params.id = req.params.id || req.url.split('/').pop()
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in document-collection-templates [id] handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for user tasks list and create operations (GET, POST /api/user-tasks)
 app.all('/api/user-tasks', async (req, res, next) => {
   try {

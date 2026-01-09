@@ -9,11 +9,19 @@ async function handler(req, res) {
   try {
     await authRequired(req, res)
     
-    
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
-    const id = req.params?.id || pathSegments[pathSegments.length - 1]
-    
+    // Extract ID from route params (set by Express) or from URL path
+    let id = req.params?.id
+    if (!id) {
+      const url = new URL(req.url, `http://${req.headers.host}`)
+      const pathSegments = url.pathname.split('/').filter(Boolean)
+      // For /api/document-collection-templates/:id, the ID should be the last segment
+      const templateIndex = pathSegments.indexOf('document-collection-templates')
+      if (templateIndex >= 0 && pathSegments[templateIndex + 1]) {
+        id = pathSegments[templateIndex + 1]
+      } else {
+        id = pathSegments[pathSegments.length - 1]
+      }
+    }
     
     if (!id) {
       return badRequest(res, 'Template ID required')

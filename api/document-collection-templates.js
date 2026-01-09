@@ -22,7 +22,7 @@ async function handler(req, res) {
         })
         
         if (templates.length > 0) {
-          // Log all template names for debugging
+          console.log(`✅ Found ${templates.length} template(s) in database:`, templates.map(t => t.name))
         } else {
           console.warn('⚠️ WARNING: No templates found in database!')
           console.warn('   This could mean:')
