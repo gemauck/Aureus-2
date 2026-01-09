@@ -193,24 +193,33 @@ function initializeProjectDetail() {
             }, []);
 
             const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
-            const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+            // Always check window directly, not from closure (component persists in window even after unmount)
             const { useCallback: useCallbackSection } = window.React;
-            const [trackerReady, setTrackerReady] = useStateSection(() => !!MonthlyDocumentCollectionTracker);
+            // CRITICAL: Check window directly in initial state to avoid reset on remount
+            const [trackerReady, setTrackerReady] = useStateSection(() => {
+                return !!(window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function');
+            });
             const [isLoading, setIsLoading] = useStateSection(false);
 
             // Continuous check for component availability (updates state when component becomes available)
+            // This runs on every mount/remount to immediately recognize if component is already loaded
             useEffectSection(() => {
-                // If already ready, no need to check
-                if (trackerReady) return;
-
-                // Check immediately
+                // Check immediately on mount - component might already be in window from previous visit
                 if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                    setTrackerReady(true);
-                    setIsLoading(false);
-                    return;
+                    if (!trackerReady) {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                    }
+                    return; // Component already available, no need to poll
                 }
 
-                // Set up continuous check with early exit
+                // If already marked as ready but component not found, reset state
+                if (trackerReady) {
+                    setTrackerReady(false);
+                }
+
+                // Component not available yet, set up polling
+                setIsLoading(true);
                 let checkAttempts = 0;
                 const maxCheckAttempts = 50; // 5 seconds max (50 * 100ms)
                 const checkInterval = setInterval(() => {
@@ -240,7 +249,7 @@ function initializeProjectDetail() {
                     clearInterval(checkInterval);
                     window.removeEventListener('viteProjectsReady', handleViteReady);
                 };
-            }, [trackerReady]);
+            }, []); // Empty deps - run once on mount, check window directly
 
             // Eagerly load MonthlyDocumentCollectionTracker component
             const loadTrackerComponent = useCallbackSection(() => {
@@ -339,6 +348,18 @@ function initializeProjectDetail() {
                 return loadPromise;
             }, []);
 
+            // Sync state with window object on every render (handles remount case where component is already loaded)
+            // This ensures that if the component is already in window (from previous visit), we recognize it immediately
+            useEffectSection(() => {
+                // If component is available in window but state isn't updated, update it immediately
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    if (!trackerReady) {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                    }
+                }
+            });
+
             // Preload component when document collection section is active or about to be active
             useEffectSection(() => {
                 // If already ready, no need to load
@@ -352,8 +373,12 @@ function initializeProjectDetail() {
 
 
             // Check component availability directly from window (not from closure)
+            // This ensures we always get the current state, even after remount
             const currentTracker = window.MonthlyDocumentCollectionTracker;
-            const isComponentReady = trackerReady && currentTracker && typeof currentTracker === 'function';
+            const isComponentAvailable = currentTracker && typeof currentTracker === 'function';
+            // Component is ready if either state says so OR component is actually available in window
+            // This ensures immediate rendering on remount if component is already loaded
+            const isComponentReady = trackerReady || isComponentAvailable;
 
             if (!isComponentReady) {
                 return (
@@ -368,6 +393,7 @@ function initializeProjectDetail() {
                         <div className="mt-4 text-xs text-gray-500">
                             <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof currentTracker)}</p>
                             <p>Tracker Ready State: {String(trackerReady)}</p>
+                            <p>Component Available: {String(isComponentAvailable)}</p>
                             <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
                         </div>
                     </div>
@@ -382,7 +408,8 @@ function initializeProjectDetail() {
             }
             
             // Use React.createElement to render the component dynamically
-            const TrackerComponent = currentTracker;
+            // Always use window object directly to ensure we get the latest version
+            const TrackerComponent = window.MonthlyDocumentCollectionTracker;
             return (
                 <TrackerComponent
                     key={`tracker-${project?.id || 'default'}`}
