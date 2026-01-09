@@ -198,6 +198,50 @@ function initializeProjectDetail() {
             const [trackerReady, setTrackerReady] = useStateSection(() => !!MonthlyDocumentCollectionTracker);
             const [isLoading, setIsLoading] = useStateSection(false);
 
+            // Continuous check for component availability (updates state when component becomes available)
+            useEffectSection(() => {
+                // If already ready, no need to check
+                if (trackerReady) return;
+
+                // Check immediately
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    setTrackerReady(true);
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Set up continuous check with early exit
+                let checkAttempts = 0;
+                const maxCheckAttempts = 50; // 5 seconds max (50 * 100ms)
+                const checkInterval = setInterval(() => {
+                    checkAttempts++;
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        clearInterval(checkInterval);
+                    } else if (checkAttempts >= maxCheckAttempts) {
+                        clearInterval(checkInterval);
+                        setIsLoading(false);
+                    }
+                }, 100);
+
+                // Listen for viteProjectsReady event
+                const handleViteReady = () => {
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        clearInterval(checkInterval);
+                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                    }
+                };
+                window.addEventListener('viteProjectsReady', handleViteReady);
+
+                return () => {
+                    clearInterval(checkInterval);
+                    window.removeEventListener('viteProjectsReady', handleViteReady);
+                };
+            }, [trackerReady]);
+
             // Eagerly load MonthlyDocumentCollectionTracker component
             const loadTrackerComponent = useCallbackSection(() => {
                 // If already available, mark as ready immediately
@@ -307,7 +351,11 @@ function initializeProjectDetail() {
             }, [activeSection, hasDocumentCollectionProcess, trackerReady, loadTrackerComponent]);
 
 
-            if (!trackerReady || !MonthlyDocumentCollectionTracker) {
+            // Check component availability directly from window (not from closure)
+            const currentTracker = window.MonthlyDocumentCollectionTracker;
+            const isComponentReady = trackerReady && currentTracker && typeof currentTracker === 'function';
+
+            if (!isComponentReady) {
                 return (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
@@ -318,7 +366,8 @@ function initializeProjectDetail() {
                                 : 'The component is being prepared...'}
                         </p>
                         <div className="mt-4 text-xs text-gray-500">
-                            <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof MonthlyDocumentCollectionTracker)}</p>
+                            <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof currentTracker)}</p>
+                            <p>Tracker Ready State: {String(trackerReady)}</p>
                             <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
                         </div>
                     </div>
@@ -332,8 +381,10 @@ function initializeProjectDetail() {
                 return null;
             }
             
+            // Use React.createElement to render the component dynamically
+            const TrackerComponent = currentTracker;
             return (
-                <MonthlyDocumentCollectionTracker
+                <TrackerComponent
                     key={`tracker-${project?.id || 'default'}`}
                     project={project}
                     onBack={handleBackToOverview}
