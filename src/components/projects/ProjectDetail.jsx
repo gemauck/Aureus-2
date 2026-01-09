@@ -914,6 +914,8 @@ function initializeProjectDetail() {
 
     // Initialize tasks with project-specific data
     const [tasks, setTasks] = useState(project.tasks || []);
+    const [viewingTask, setViewingTask] = useState(null);
+    const [viewingTaskParent, setViewingTaskParent] = useState(null);
     // Use a ref to store current tasks value to avoid TDZ issues in closures
     const tasksRef = useRef(project.tasks || []);
     // Keep ref in sync with state
@@ -1697,8 +1699,6 @@ function initializeProjectDetail() {
     const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [editingList, setEditingList] = useState(null);
-    const [viewingTask, setViewingTask] = useState(null);
-    const [viewingTaskParent, setViewingTaskParent] = useState(null);
     const [creatingTaskForList, setCreatingTaskForList] = useState(null);
     const [creatingTaskWithStatus, setCreatingTaskWithStatus] = useState(null);
     const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
