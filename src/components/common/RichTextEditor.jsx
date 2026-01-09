@@ -30,6 +30,7 @@ const RichTextEditor = ({
     const isFocusedRef = useRef(false); // Track focus state reliably with events
     const frozenValueRef = useRef(null); // Freeze value prop when editor is focused to prevent prop changes
     const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
+    const lastSyncedValueRef = useRef(value || ''); // Track last value we synced from props
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -216,12 +217,14 @@ const RichTextEditor = ({
                     isFocusedRef.current = false;
                     // Update DOM value ref from actual DOM content before allowing prop updates
                     domValueRef.current = editor.innerHTML || '';
+                    // Update last synced value so we can detect actual changes
+                    lastSyncedValueRef.current = domValueRef.current;
                     // Unfreeze value when blurring - allow prop updates again
                     frozenValueRef.current = null;
                     // Allow prop updates again
                     ignorePropUpdatesRef.current = false;
                 }
-            }, 100); // Small delay to ensure blur event completes
+            }, 150); // Small delay to ensure blur event completes and cursor position is stable
         };
         
         // Use capture phase to catch all focus events
@@ -248,16 +251,19 @@ const RichTextEditor = ({
         const editor = editorRef.current;
         if (!editor) return;
         
-        // Initialize DOM value ref
+        // Initialize DOM value ref and last synced value
         if (!domValueRef.current && value) {
             domValueRef.current = value;
+            lastSyncedValueRef.current = value;
         }
         
         // Only initialize if editor is empty and not focused
-        if (!editor.innerHTML && value && !isFocusedRef.current) {
+        // CRITICAL: Don't update if editor already has content (user might be typing)
+        if (!editor.innerHTML && value && !isFocusedRef.current && !editor.textContent) {
             editor.innerHTML = value;
             setHtml(value);
             domValueRef.current = value;
+            lastSyncedValueRef.current = value;
         }
         
         // Skip if already initialized (prevent redundant setup on re-renders)
@@ -544,12 +550,13 @@ const RichTextEditor = ({
         }
         
         // Editor is not focused - safe to update from props
+        // Only update if value actually changed AND we haven't already synced this value
         const currentHtml = editorRef.current.innerHTML || '';
-        // Only update if the value has actually changed
-        if (value !== currentHtml && value !== html) {
+        if (value !== lastSyncedValueRef.current && value !== currentHtml && value !== html) {
             setHtml(value || '');
             editorRef.current.innerHTML = value || '';
             domValueRef.current = value || '';
+            lastSyncedValueRef.current = value || '';
         }
         
         // Re-apply scroll protection in case React recreated the element
