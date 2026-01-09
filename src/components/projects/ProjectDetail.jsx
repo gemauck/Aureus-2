@@ -2245,9 +2245,48 @@ function initializeProjectDetail() {
             // CRITICAL: Use validated tasks instead of original tasksToSave
             updatePayload.tasksList = JSON.stringify(validatedTasks);
             
+            // DEBUG: Log the actual payload being sent
+            const tasksListPreview = JSON.parse(updatePayload.tasksList);
+            const taskWithCommentsPreview = tasksListPreview.find(t => Array.isArray(t.comments) && t.comments.length > 0);
+            console.log('🔍 DEBUG: Payload being sent to API:', {
+                projectId: project.id,
+                tasksListLength: tasksListPreview.length,
+                tasksListStringLength: updatePayload.tasksList.length,
+                sampleTaskWithComments: taskWithCommentsPreview ? {
+                    id: taskWithCommentsPreview.id,
+                    title: taskWithCommentsPreview.title,
+                    commentsCount: taskWithCommentsPreview.comments.length,
+                    firstComment: taskWithCommentsPreview.comments[0]?.text?.substring(0, 50)
+                } : null
+            });
+            
             try {
                 const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 console.log('✅ Project save response:', apiResponse);
+                
+                // DEBUG: Verify what was actually saved
+                if (apiResponse?.project || apiResponse?.data?.project) {
+                    const savedProject = apiResponse.project || apiResponse.data.project;
+                    if (savedProject.tasksList) {
+                        try {
+                            const savedTasks = typeof savedProject.tasksList === 'string' 
+                                ? JSON.parse(savedProject.tasksList) 
+                                : savedProject.tasksList;
+                            const savedTaskWithComments = savedTasks.find(t => Array.isArray(t.comments) && t.comments.length > 0);
+                            console.log('🔍 DEBUG: What was actually saved to DB:', {
+                                savedTasksCount: savedTasks.length,
+                                savedTaskWithComments: savedTaskWithComments ? {
+                                    id: savedTaskWithComments.id,
+                                    title: savedTaskWithComments.title,
+                                    commentsCount: savedTaskWithComments.comments.length,
+                                    firstComment: savedTaskWithComments.comments[0]?.text?.substring(0, 50)
+                                } : null
+                            });
+                        } catch (parseError) {
+                            console.error('❌ DEBUG: Failed to parse saved tasksList:', parseError);
+                        }
+                    }
+                }
                 
                 // Check if save was successful - API returns { data: { project: ... } }
                 const savedProject = apiResponse?.project || apiResponse?.data?.project;

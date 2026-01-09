@@ -363,6 +363,27 @@ async function handler(req, res) {
         const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
         const normalizedDueDate = typeof body.dueDate === 'string' ? body.dueDate.trim() : ''
 
+        // DEBUG: Log what we're receiving
+        let tasksListForDebug = null;
+        if (body.tasksList !== undefined && body.tasksList !== null) {
+          try {
+            const parsed = typeof body.tasksList === 'string' ? JSON.parse(body.tasksList) : body.tasksList;
+            const taskWithComments = Array.isArray(parsed) ? parsed.find(t => Array.isArray(t.comments) && t.comments.length > 0) : null;
+            tasksListForDebug = {
+              tasksCount: Array.isArray(parsed) ? parsed.length : 0,
+              taskWithComments: taskWithComments ? {
+                id: taskWithComments.id,
+                title: taskWithComments.title,
+                commentsCount: taskWithComments.comments.length,
+                firstComment: taskWithComments.comments[0]?.text?.substring(0, 50)
+              } : null
+            };
+            console.log('🔍 DEBUG API: Received tasksList:', tasksListForDebug);
+          } catch (e) {
+            console.error('❌ DEBUG API: Failed to parse tasksList for debug:', e);
+          }
+        }
+
         const updateData = {
           name: body.name,
           description: body.description,
@@ -390,6 +411,26 @@ async function handler(req, res) {
           hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined 
             ? Boolean(body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true' || body.hasDocumentCollectionProcess === 1) 
             : undefined
+        }
+        
+        // DEBUG: Log what we're about to save
+        if (updateData.tasksList) {
+          try {
+            const parsed = typeof updateData.tasksList === 'string' ? JSON.parse(updateData.tasksList) : updateData.tasksList;
+            const taskWithComments = Array.isArray(parsed) ? parsed.find(t => Array.isArray(t.comments) && t.comments.length > 0) : null;
+            console.log('🔍 DEBUG API: About to save tasksList:', {
+              tasksCount: Array.isArray(parsed) ? parsed.length : 0,
+              tasksListStringLength: typeof updateData.tasksList === 'string' ? updateData.tasksList.length : 0,
+              taskWithComments: taskWithComments ? {
+                id: taskWithComments.id,
+                title: taskWithComments.title,
+                commentsCount: taskWithComments.comments.length,
+                firstComment: taskWithComments.comments[0]?.text?.substring(0, 50)
+              } : null
+            });
+          } catch (e) {
+            console.error('❌ DEBUG API: Failed to parse tasksList before save:', e);
+          }
         }
         
         // Handle documentSections separately if provided - ensure it's properly saved
@@ -548,6 +589,27 @@ async function handler(req, res) {
           
           // Verify the update actually worked
           const verifyProject = await prisma.project.findUnique({ where: { id } });
+          
+          // DEBUG: Verify what was actually saved
+          if (verifyProject && verifyProject.tasksList) {
+            try {
+              const savedTasks = typeof verifyProject.tasksList === 'string' 
+                ? JSON.parse(verifyProject.tasksList) 
+                : verifyProject.tasksList;
+              const savedTaskWithComments = Array.isArray(savedTasks) ? savedTasks.find(t => Array.isArray(t.comments) && t.comments.length > 0) : null;
+              console.log('🔍 DEBUG API: Verified saved tasksList:', {
+                tasksCount: Array.isArray(savedTasks) ? savedTasks.length : 0,
+                taskWithComments: savedTaskWithComments ? {
+                  id: savedTaskWithComments.id,
+                  title: savedTaskWithComments.title,
+                  commentsCount: savedTaskWithComments.comments.length,
+                  firstComment: savedTaskWithComments.comments[0]?.text?.substring(0, 50)
+                } : null
+              });
+            } catch (e) {
+              console.error('❌ DEBUG API: Failed to parse saved tasksList:', e);
+            }
+          }
           
           return ok(res, { project })
         } catch (dbError) {
