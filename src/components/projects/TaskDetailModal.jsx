@@ -404,7 +404,8 @@ const TaskDetailModal = ({
             tagsCount: taskToSave.tags?.length || 0
         });
 
-        onUpdate(taskToSave);
+        // Save and close modal (explicit close for Save Changes button)
+        onUpdate(taskToSave, { closeModal: true });
         onClose();
     };
 
@@ -585,7 +586,8 @@ const TaskDetailModal = ({
             });
 
             // Save immediately without closing the modal
-            onUpdate(taskToAutoSave);
+            // Pass closeModal: false to prevent modal from closing
+            onUpdate(taskToAutoSave, { closeModal: false });
             
             // Send notifications
             try {
@@ -734,7 +736,8 @@ const TaskDetailModal = ({
                 commentsCount: taskToAutoSave.comments.length
             });
 
-            onUpdate(taskToAutoSave);
+            // Save without closing modal
+            onUpdate(taskToAutoSave, { closeModal: false });
         }
     };
 
@@ -785,7 +788,8 @@ const TaskDetailModal = ({
                 checklistCount: taskToAutoSave.checklist.length
             });
 
-            onUpdate(taskToAutoSave);
+            // Save without closing modal
+            onUpdate(taskToAutoSave, { closeModal: false });
         }
     };
 
@@ -812,7 +816,14 @@ const TaskDetailModal = ({
             itemId
         });
 
-        onUpdate(taskToAutoSave);
+        // Save without closing modal
+        if (typeof onUpdate === 'function') {
+            if (onUpdate.length > 1) {
+                onUpdate(taskToAutoSave, { closeModal: false });
+            } else {
+                onUpdate(taskToAutoSave);
+            }
+        }
     };
 
     const handleDeleteChecklistItem = (itemId) => {
@@ -836,7 +847,14 @@ const TaskDetailModal = ({
             checklistCount: taskToAutoSave.checklist.length
         });
 
-        onUpdate(taskToAutoSave);
+        // Save without closing modal
+        if (typeof onUpdate === 'function') {
+            if (onUpdate.length > 1) {
+                onUpdate(taskToAutoSave, { closeModal: false });
+            } else {
+                onUpdate(taskToAutoSave);
+            }
+        }
     };
 
     const handleAddTag = () => {

@@ -194,52 +194,117 @@ function initializeProjectDetail() {
 
             const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
             const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+            const { useCallback: useCallbackSection } = window.React;
             const [trackerReady, setTrackerReady] = useStateSection(() => !!MonthlyDocumentCollectionTracker);
-            const [loadAttempts, setLoadAttempts] = useStateSection(0);
-            const maxAttempts = 50; // 5 seconds (50 * 100ms)
+            const [isLoading, setIsLoading] = useStateSection(false);
 
-            useEffectSection(() => {
-                if (trackerReady) return;
+            // Eagerly load MonthlyDocumentCollectionTracker component
+            const loadTrackerComponent = useCallbackSection(() => {
+                // If already available, mark as ready immediately
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    setTrackerReady(true);
+                    return Promise.resolve(true);
+                }
 
-                const checkComponent = () => {
+                // If already loading, return existing promise
+                if (window._monthlyTrackerLoadPromise) {
+                    return window._monthlyTrackerLoadPromise;
+                }
+
+                setIsLoading(true);
+
+                // Create load promise
+                const loadPromise = new Promise((resolve) => {
+                    // Check immediately first
                     if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
                         setTrackerReady(true);
-                        return true;
+                        setIsLoading(false);
+                        window._monthlyTrackerLoadPromise = null;
+                        resolve(true);
+                        return;
                     }
-                    return false;
-                };
 
-                if (checkComponent()) return;
+                    // Listen for viteProjectsReady event (fastest path)
+                    const handleViteReady = () => {
+                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                            setTrackerReady(true);
+                            setIsLoading(false);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                            window._monthlyTrackerLoadPromise = null;
+                            resolve(true);
+                        }
+                    };
+                    window.addEventListener('viteProjectsReady', handleViteReady);
 
-                const handleViteReady = () => {
-                    if (checkComponent()) {
-                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                    // Try to load from lazy-loader if available
+                    if (window.loadComponent && typeof window.loadComponent === 'function') {
+                        window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
+                            .then(() => {
+                                // Check again after load attempt
+                                let checkAttempts = 0;
+                                const maxCheckAttempts = 10; // 1 second max (10 * 100ms)
+                                const checkInterval = setInterval(() => {
+                                    checkAttempts++;
+                                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                        setTrackerReady(true);
+                                        setIsLoading(false);
+                                        clearInterval(checkInterval);
+                                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                                        window._monthlyTrackerLoadPromise = null;
+                                        resolve(true);
+                                    } else if (checkAttempts >= maxCheckAttempts) {
+                                        clearInterval(checkInterval);
+                                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                                        setIsLoading(false);
+                                        window._monthlyTrackerLoadPromise = null;
+                                        resolve(false);
+                                    }
+                                }, 100);
+                            })
+                            .catch(() => {
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                setIsLoading(false);
+                                window._monthlyTrackerLoadPromise = null;
+                                resolve(false);
+                            });
+                    } else {
+                        // Fallback: quick polling with early exit
+                        let checkAttempts = 0;
+                        const maxCheckAttempts = 20; // 2 seconds max (20 * 100ms)
+                        const checkInterval = setInterval(() => {
+                            checkAttempts++;
+                            if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                setTrackerReady(true);
+                                setIsLoading(false);
+                                clearInterval(checkInterval);
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                window._monthlyTrackerLoadPromise = null;
+                                resolve(true);
+                            } else if (checkAttempts >= maxCheckAttempts) {
+                                clearInterval(checkInterval);
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                setIsLoading(false);
+                                window._monthlyTrackerLoadPromise = null;
+                                resolve(false);
+                            }
+                        }, 100);
                     }
-                };
-                window.addEventListener('viteProjectsReady', handleViteReady);
+                });
 
-                const interval = setInterval(() => {
-                    setLoadAttempts(prev => {
-                        const newAttempts = prev + 1;
-                        if (newAttempts >= maxAttempts) {
-                            clearInterval(interval);
-                            window.removeEventListener('viteProjectsReady', handleViteReady);
-                            console.warn('⚠️ MonthlyDocumentCollectionTracker failed to load after', maxAttempts, 'attempts');
-                            return newAttempts;
-                        }
-                        if (checkComponent()) {
-                            clearInterval(interval);
-                            window.removeEventListener('viteProjectsReady', handleViteReady);
-                        }
-                        return newAttempts;
-                    });
-                }, 100);
+                window._monthlyTrackerLoadPromise = loadPromise;
+                return loadPromise;
+            }, []);
 
-                return () => {
-                    clearInterval(interval);
-                    window.removeEventListener('viteProjectsReady', handleViteReady);
-                };
-            }, [trackerReady]);
+            // Preload component when document collection section is active or about to be active
+            useEffectSection(() => {
+                // If already ready, no need to load
+                if (trackerReady) return;
+
+                // If section is documentCollection or project has document collection process, load immediately
+                if (activeSection === 'documentCollection' || hasDocumentCollectionProcess) {
+                    loadTrackerComponent();
+                }
+            }, [activeSection, hasDocumentCollectionProcess, trackerReady, loadTrackerComponent]);
 
 
             if (!trackerReady || !MonthlyDocumentCollectionTracker) {
@@ -248,28 +313,10 @@ function initializeProjectDetail() {
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                            {loadAttempts < maxAttempts 
-                                ? `The Monthly Document Collection Tracker is loading... (${loadAttempts * 100}ms)`
-                                : 'The component failed to load. Please try reloading the page.'}
+                            {isLoading 
+                                ? 'The Monthly Document Collection Tracker is loading...'
+                                : 'The component is being prepared...'}
                         </p>
-                        {loadAttempts >= maxAttempts && (
-                            <div className="flex gap-2 justify-center">
-                                <button
-                                    onClick={() => window.location.reload()}
-                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-                                >
-                                    <i className="fas fa-sync-alt mr-2"></i>
-                                    Reload Page
-                                </button>
-                                <button
-                                    onClick={handleBackToOverview}
-                                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-                                >
-                                    <i className="fas fa-arrow-left mr-2"></i>
-                                    Back to Overview
-                                </button>
-                            </div>
-                        )}
                         <div className="mt-4 text-xs text-gray-500">
                             <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof MonthlyDocumentCollectionTracker)}</p>
                             <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
@@ -1736,6 +1783,24 @@ function initializeProjectDetail() {
         const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
         setHasDocumentCollectionProcess(normalizedValue);
     }, [project.id]); // Re-sync whenever we switch to a different project
+
+    // Preload MonthlyDocumentCollectionTracker when project has document collection process enabled
+    useEffect(() => {
+        if (!hasDocumentCollectionProcess) return;
+        
+        // If component is already available, no need to preload
+        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+            return;
+        }
+
+        // Preload the component immediately
+        if (window.loadComponent && typeof window.loadComponent === 'function') {
+            window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
+                .catch(() => {
+                    // Silently fail - component will load when needed
+                });
+        }
+    }, [hasDocumentCollectionProcess, project.id]);
     
     // Ref to prevent duplicate saves when manually adding document collection process
     const skipNextSaveRef = useRef(false);
@@ -3453,7 +3518,8 @@ function initializeProjectDetail() {
         clearFlagAfterDelay(10000);
     }, [updateUrl, project?.id]);
 
-    const handleUpdateTaskFromDetail = async (updatedTaskData) => {
+    const handleUpdateTaskFromDetail = async (updatedTaskData, options = {}) => {
+        const { closeModal = true } = options; // Default to closing modal unless explicitly set to false
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
                                                     !tasks.some(t => (t.subtasks || []).find(st => st.id === updatedTaskData.id)));
         
@@ -3710,8 +3776,13 @@ function initializeProjectDetail() {
             // Don't block UI - the debounced save will retry
         }
         
-        console.log('🔒 Closing task modal...');
-        handleCloseTaskModal();
+        // Only close modal if closeModal option is true (default behavior for Save Changes button)
+        if (closeModal) {
+            console.log('🔒 Closing task modal...');
+            handleCloseTaskModal();
+        } else {
+            console.log('💾 Task updated (auto-save), keeping modal open');
+        }
     };
 
     const handleDeleteTask = async (taskId) => {
