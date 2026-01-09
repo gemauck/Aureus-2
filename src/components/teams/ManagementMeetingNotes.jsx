@@ -2605,7 +2605,7 @@ const ManagementMeetingNotes = () => {
     
     // Track field changes - with auto-save triggered after typing stops
     const handleFieldChange = (departmentNotesId, field, value) => {
-        // Save cursor position BEFORE state update
+        // Save cursor position BEFORE state update - this is critical
         saveCursorPositionForField(departmentNotesId, field);
         
         // Update local state immediately for responsive UI (no debounce on UI updates)
@@ -2613,10 +2613,18 @@ const ManagementMeetingNotes = () => {
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
         // Restore cursor position after React re-renders and DOM updates complete
-        // Use multiple animation frames to ensure RichTextEditor's useEffect has completed
+        // Use multiple animation frames and timeouts to ensure RichTextEditor's useEffect has completed
+        // and innerHTML has been updated
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 restoreCursorPositionForField(departmentNotesId, field);
+                // Try again after a short delay to catch any late updates
+                setTimeout(() => {
+                    restoreCursorPositionForField(departmentNotesId, field);
+                }, 20);
+                setTimeout(() => {
+                    restoreCursorPositionForField(departmentNotesId, field);
+                }, 50);
             });
         });
         

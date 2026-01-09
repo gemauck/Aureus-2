@@ -21,6 +21,10 @@ const RichTextEditor = ({
     const isScrollProtectionSetupRef = useRef(false);
     const protectionMonitorRef = useRef(null);
     const hasInitializedRef = useRef(false);
+    const savedCursorPositionRef = useRef(null); // { start: number, end: number }
+    const isUserTypingRef = useRef(false); // Track if user is actively typing
+    const lastUserInputTimeRef = useRef(0); // Track last user input time
+    const lastSetValueFromUserRef = useRef(null); // Track last value set from user input
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -352,18 +356,176 @@ const RichTextEditor = ({
         };
     }, [setupScrollProtection]);
 
+        // Helper function to save cursor position
+    const saveCursorPosition = useCallback(() => {
+        if (!editorRef.current) return;
+        try {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                if (editorRef.current.contains(range.commonAncestorContainer)) {
+                    // Calculate character offset from start of editor
+                    const preCaretRange = range.cloneRange();
+                    preCaretRange.selectNodeContents(editorRef.current);
+                    preCaretRange.setEnd(range.startContainer, range.startOffset);
+                    const start = preCaretRange.toString().length;
+                    
+                    preCaretRange.setEnd(range.endContainer, range.endOffset);
+                    const end = preCaretRange.toString().length;
+                    
+                    savedCursorPositionRef.current = { start, end };
+                }
+            }
+        } catch (e) {
+            // Silently fail
+        }
+    }, []);
+    
+    // Helper function to restore cursor position
+    const restoreCursorPosition = useCallback(() => {
+        if (!editorRef.current || !savedCursorPositionRef.current) return;
+        
+        try {
+            const { start, end } = savedCursorPositionRef.current;
+            const range = document.createRange();
+            const selection = window.getSelection();
+            
+            let charCount = 0;
+            const walker = document.createTreeWalker(
+                editorRef.current,
+                NodeFilter.SHOW_TEXT,
+                null
+            );
+            
+            let startNode = null, startOffset = 0;
+            let endNode = null, endOffset = 0;
+            let foundStart = false, foundEnd = false;
+            
+            let node;
+            while (node = walker.nextNode()) {
+                const nodeLength = node.textContent.length;
+                
+                if (!foundStart && charCount + nodeLength >= start) {
+                    startNode = node;
+                    startOffset = start - charCount;
+                    foundStart = true;
+                }
+                
+                if (!foundEnd && charCount + nodeLength >= end) {
+                    endNode = node;
+                    endOffset = end - charCount;
+                    foundEnd = true;
+                    break;
+                }
+                
+                charCount += nodeLength;
+            }
+            
+            if (foundStart && startNode) {
+                if (!foundEnd) {
+                    endNode = startNode;
+                    endOffset = startOffset;
+                }
+                
+                range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+                range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+                selection.removeAllRanges();
+                selection.addRange(range);
+                editorRef.current.focus();
+            }
+        } catch (e) {
+            // Silently fail
+        } finally {
+            savedCursorPositionRef.current = null;
+        }
+    }, []);
+
         // Update editor when value prop changes (external updates)
     useEffect(() => {
         if (isInternalUpdateRef.current) {
             isInternalUpdateRef.current = false;
             return;
         }
-        if (value !== html && editorRef.current) {
-            const currentHtml = editorRef.current.innerHTML || '';
-            // Only update if the value has actually changed (not from user input)
-            if (value !== currentHtml) {
+        
+        if (!editorRef.current) return;
+        
+        const currentHtml = editorRef.current.innerHTML || '';
+        const isFocused = document.activeElement === editorRef.current;
+        
+        // CRITICAL: If user is actively typing (within last 200ms) and value matches last user input, skip update
+        // This prevents cursor resets when state updates after user input
+        const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
+        if (isFocused && isUserTypingRef.current && timeSinceLastInput < 200) {
+            // User just typed, skip prop update to preserve cursor
+            if (value !== html) {
                 setHtml(value || '');
-                editorRef.current.innerHTML = value || '';
+            }
+            return;
+        }
+        
+        // Also check if this value was just set from user input
+        if (isFocused && lastSetValueFromUserRef.current && value === lastSetValueFromUserRef.current) {
+            // This is the same value the user just typed, skip innerHTML update
+            if (value !== html) {
+                setHtml(value || '');
+                lastSetValueFromUserRef.current = null; // Clear after using
+            }
+            return;
+        }
+        
+        // Normalize HTML for comparison (ignore whitespace and entity differences)
+        const normalizeHtml = (html) => {
+            if (!html) return '';
+            // Create a temporary element to normalize HTML
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            return temp.textContent || temp.innerText || '';
+        };
+        
+        const normalizedCurrent = normalizeHtml(currentHtml);
+        const normalizedValue = normalizeHtml(value || '');
+        
+        // If the editor is focused and the normalized text content is the same, don't update innerHTML
+        // This prevents cursor resets during auto-save when content hasn't actually changed
+        if (isFocused && normalizedCurrent === normalizedValue && normalizedCurrent !== '') {
+            // Content is the same, just update internal state without touching DOM
+            if (value !== html) {
+                setHtml(value || '');
+            }
+            return;
+        }
+        
+        // Only update if the value has actually changed
+        if (value !== currentHtml && value !== html) {
+            // Always save cursor position before updating innerHTML if editor is focused
+            if (isFocused) {
+                saveCursorPosition();
+            }
+            
+            setHtml(value || '');
+            editorRef.current.innerHTML = value || '';
+            
+            // Always restore cursor position after updating if editor was focused
+            if (isFocused && savedCursorPositionRef.current) {
+                // Use multiple requestAnimationFrame to ensure DOM is fully updated
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        restoreCursorPosition();
+                        // Try multiple times to ensure it sticks
+                        setTimeout(() => {
+                            restoreCursorPosition();
+                        }, 5);
+                        setTimeout(() => {
+                            restoreCursorPosition();
+                        }, 15);
+                        setTimeout(() => {
+                            restoreCursorPosition();
+                        }, 30);
+                        setTimeout(() => {
+                            restoreCursorPosition();
+                        }, 50);
+                    });
+                });
             }
         }
         
@@ -372,16 +534,40 @@ const RichTextEditor = ({
         if (editorRef.current && !isScrollProtectionSetupRef.current) {
             setupScrollProtection(editorRef.current);
         }
-    }, [value, setupScrollProtection]);
+    }, [value, setupScrollProtection, saveCursorPosition, restoreCursorPosition, html]);
 
     const handleInput = () => {
         if (!editorRef.current) return;
+        
+        // Mark that user is typing
+        isUserTypingRef.current = true;
+        lastUserInputTimeRef.current = Date.now();
+        
+        // Save cursor position before reading innerHTML (which might trigger updates)
+        saveCursorPosition();
+        
         const newHtml = editorRef.current.innerHTML;
+        lastSetValueFromUserRef.current = newHtml; // Track this as user input
+        
         isInternalUpdateRef.current = true;
         setHtml(newHtml);
+        
         if (onChange) {
             onChange(newHtml);
         }
+        
+        // Clear typing flag after a delay to allow for state updates
+        setTimeout(() => {
+            isUserTypingRef.current = false;
+        }, 100);
+        
+        // Restore cursor position after state update
+        // The cursor should already be in the right place after typing, but this ensures it stays
+        requestAnimationFrame(() => {
+            if (savedCursorPositionRef.current) {
+                restoreCursorPosition();
+            }
+        });
     };
 
     const handleCommand = (command, value = null) => {
