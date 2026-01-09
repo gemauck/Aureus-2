@@ -67,6 +67,7 @@ const TaskDetailModal = ({
     const previousTaskIdRef = useRef(task?.id);
     const [mentionQuery, setMentionQuery] = useState('');
     const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+    
     const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const commentTextareaRef = useRef(null);
@@ -1739,29 +1740,7 @@ const TaskDetailModal = ({
                                                     </button>
                                                 </div>
                                                 <p className="text-gray-700 text-xs whitespace-pre-wrap">
-                                                    {comment.text.split(/(@[A-Za-z0-9._-]+(?:\s+[A-Za-z0-9._-]+)*)(?=\s|$|[^\w\s])/g).map((part, idx) => {
-                                                        if (part.startsWith('@')) {
-                                                            const mentionText = part.substring(1).trim();
-                                                            const mentionedUser = comment.mentions?.find(m => {
-                                                                const mName = (m.name || '').toLowerCase();
-                                                                const mEmail = (m.email || '').toLowerCase();
-                                                                return mName === mentionText.toLowerCase() || 
-                                                                       mEmail === mentionText.toLowerCase() ||
-                                                                       mName.includes(mentionText.toLowerCase()) ||
-                                                                       mEmail.includes(mentionText.toLowerCase());
-                                                            });
-                                                            return (
-                                                                <span
-                                                                    key={idx}
-                                                                    className="inline-flex items-center px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded font-medium"
-                                                                    title={mentionedUser ? `@${mentionedUser.name || mentionedUser.email}` : `@${mentionText}`}
-                                                                >
-                                                                    @{mentionText}
-                                                                </span>
-                                                            );
-                                                        }
-                                                        return <span key={idx}>{part}</span>;
-                                                    })}
+                                                    {comment.text}
                                                 </p>
                                             </div>
                                         ))

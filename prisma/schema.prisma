@@ -1346,6 +1346,7 @@ model DocumentCollectionTemplate {
   description String   @default("")
   sections    String   @default("[]")
   isDefault   Boolean  @default(false)
+  type        String   @default("document-collection") // "document-collection" or "weekly-fms-review"
   ownerId     String?
   createdBy   String   @default("")
   updatedBy   String   @default("")
@@ -1355,6 +1356,7 @@ model DocumentCollectionTemplate {
   @@index([isDefault])
   @@index([ownerId])
   @@index([createdAt])
+  @@index([type])
 }
 
 model UserNote {

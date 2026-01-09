@@ -167,10 +167,14 @@ class DocumentCollectionAPI {
 
     /**
      * Get all document collection templates
+     * @param {string} type - Template type: 'document-collection' (default) or 'weekly-fms-review'
      */
-    async getTemplates() {
+    async getTemplates(type = 'document-collection') {
         try {
-            const response = await this.request('/api/document-collection-templates', {
+            const endpoint = type === 'weekly-fms-review' 
+                ? '/api/weekly-fms-review-templates'
+                : '/api/document-collection-templates';
+            const response = await this.request(endpoint, {
                 method: 'GET',
             });
 
@@ -183,14 +187,19 @@ class DocumentCollectionAPI {
 
     /**
      * Get single template by ID
+     * @param {string} templateId - Template ID
+     * @param {string} type - Template type: 'document-collection' (default) or 'weekly-fms-review'
      */
-    async getTemplate(templateId) {
+    async getTemplate(templateId, type = 'document-collection') {
         if (!templateId) {
             throw new Error('Template ID is required');
         }
 
         try {
-            const response = await this.request(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+            const endpoint = type === 'weekly-fms-review'
+                ? `/api/weekly-fms-review-templates/${encodeURIComponent(templateId)}`
+                : `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
+            const response = await this.request(endpoint, {
                 method: 'GET',
             });
 
@@ -203,14 +212,19 @@ class DocumentCollectionAPI {
 
     /**
      * Create new template
+     * @param {Object} templateData - Template data
+     * @param {string} type - Template type: 'document-collection' (default) or 'weekly-fms-review'
      */
-    async createTemplate(templateData) {
+    async createTemplate(templateData, type = 'document-collection') {
         if (!templateData || !templateData.name) {
             throw new Error('Template name is required');
         }
 
         try {
-            const response = await this.request('/api/document-collection-templates', {
+            const endpoint = type === 'weekly-fms-review'
+                ? '/api/weekly-fms-review-templates'
+                : '/api/document-collection-templates';
+            const response = await this.request(endpoint, {
                 method: 'POST',
                 body: JSON.stringify({
                     name: templateData.name.trim(),
@@ -229,14 +243,20 @@ class DocumentCollectionAPI {
 
     /**
      * Update existing template
+     * @param {string} templateId - Template ID
+     * @param {Object} templateData - Template data
+     * @param {string} type - Template type: 'document-collection' (default) or 'weekly-fms-review'
      */
-    async updateTemplate(templateId, templateData) {
+    async updateTemplate(templateId, templateData, type = 'document-collection') {
         if (!templateId) {
             throw new Error('Template ID is required');
         }
 
         try {
-            const response = await this.request(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+            const endpoint = type === 'weekly-fms-review'
+                ? `/api/weekly-fms-review-templates/${encodeURIComponent(templateId)}`
+                : `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
+            const response = await this.request(endpoint, {
                 method: 'PUT',
                 body: JSON.stringify({
                     name: templateData.name?.trim(),
@@ -255,14 +275,19 @@ class DocumentCollectionAPI {
 
     /**
      * Delete template
+     * @param {string} templateId - Template ID
+     * @param {string} type - Template type: 'document-collection' (default) or 'weekly-fms-review'
      */
-    async deleteTemplate(templateId) {
+    async deleteTemplate(templateId, type = 'document-collection') {
         if (!templateId) {
             throw new Error('Template ID is required');
         }
 
         try {
-            await this.request(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+            const endpoint = type === 'weekly-fms-review'
+                ? `/api/weekly-fms-review-templates/${encodeURIComponent(templateId)}`
+                : `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
+            await this.request(endpoint, {
                 method: 'DELETE',
             });
 

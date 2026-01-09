@@ -14,10 +14,10 @@ async function handler(req, res) {
       try {
         // IMPORTANT: Templates are shared across all users, so we return ALL templates
         // regardless of ownerId. The ownerId field is only for tracking who created the template.
-        // Filter by type to only return document-collection templates
+        // Filter by type to only return weekly-fms-review templates
         const templates = await prisma.documentCollectionTemplate.findMany({
           where: {
-            type: 'document-collection'
+            type: 'weekly-fms-review'
           },
           orderBy: [
             { isDefault: 'desc' }, // Default templates first
@@ -26,9 +26,9 @@ async function handler(req, res) {
         })
         
         if (templates.length > 0) {
-          console.log(`✅ Found ${templates.length} template(s) in database:`, templates.map(t => t.name))
+          console.log(`✅ Found ${templates.length} weekly FMS review template(s) in database:`, templates.map(t => t.name))
         } else {
-          console.warn('⚠️ WARNING: No templates found in database!')
+          console.warn('⚠️ WARNING: No weekly FMS review templates found in database!')
           console.warn('   This could mean:')
           console.warn('   1. No templates have been created yet')
           console.warn('   2. Database query is failing')
@@ -59,7 +59,7 @@ async function handler(req, res) {
         
         return ok(res, { templates: parsedTemplates })
       } catch (dbError) {
-        console.error('❌ Database error getting templates:', dbError)
+        console.error('❌ Database error getting weekly FMS review templates:', dbError)
         return serverError(res, 'Failed to get templates', dbError.message)
       }
     }
@@ -95,7 +95,7 @@ async function handler(req, res) {
             ? body.sections 
             : JSON.stringify(body.sections || []),
           isDefault: body.isDefault === true,
-          type: 'document-collection', // Always set type for document collection templates
+          type: 'weekly-fms-review', // Always set type for weekly FMS review templates
           ownerId: req.user?.sub || null, // For tracking only - templates are shared across all users
           createdBy: req.user?.name || req.user?.email || '',
           updatedBy: req.user?.name || req.user?.email || ''
@@ -140,14 +140,14 @@ async function handler(req, res) {
         
         return ok(res, { template: parsedTemplate })
       } catch (dbError) {
-        console.error('❌ Database error creating template:', dbError)
+        console.error('❌ Database error creating weekly FMS review template:', dbError)
         return serverError(res, 'Failed to create template', dbError.message)
       }
     }
     
     return badRequest(res, 'Method not allowed')
   } catch (error) {
-    console.error('❌ Error in document-collection-templates handler:', error)
+    console.error('❌ Error in weekly-fms-review-templates handler:', error)
     return serverError(res, 'Internal server error', error.message)
   }
 }

@@ -14,8 +14,8 @@ async function handler(req, res) {
     if (!id) {
       const url = new URL(req.url, `http://${req.headers.host}`)
       const pathSegments = url.pathname.split('/').filter(Boolean)
-      // For /api/document-collection-templates/:id, the ID should be the last segment
-      const templateIndex = pathSegments.indexOf('document-collection-templates')
+      // For /api/weekly-fms-review-templates/:id, the ID should be the last segment
+      const templateIndex = pathSegments.indexOf('weekly-fms-review-templates')
       if (templateIndex >= 0 && pathSegments[templateIndex + 1]) {
         id = pathSegments[templateIndex + 1]
       } else {
@@ -33,7 +33,7 @@ async function handler(req, res) {
         const template = await prisma.documentCollectionTemplate.findFirst({
           where: { 
             id,
-            type: 'document-collection'
+            type: 'weekly-fms-review'
           }
         })
         
@@ -59,7 +59,7 @@ async function handler(req, res) {
         
         return ok(res, { template: parsedTemplate })
       } catch (dbError) {
-        console.error('❌ Database error getting template:', dbError)
+        console.error('❌ Database error getting weekly FMS review template:', dbError)
         return serverError(res, 'Failed to get template', dbError.message)
       }
     }
@@ -84,11 +84,11 @@ async function handler(req, res) {
       body = body || {}
       
       try {
-        // Check if template exists and is a document-collection template
+        // Check if template exists and is a weekly-fms-review template
         const existing = await prisma.documentCollectionTemplate.findFirst({
           where: { 
             id,
-            type: 'document-collection'
+            type: 'weekly-fms-review'
           }
         })
         
@@ -141,7 +141,7 @@ async function handler(req, res) {
         
         return ok(res, { template: parsedTemplate })
       } catch (dbError) {
-        console.error('❌ Database error updating template:', dbError)
+        console.error('❌ Database error updating weekly FMS review template:', dbError)
         return serverError(res, 'Failed to update template', dbError.message)
       }
     }
@@ -153,7 +153,7 @@ async function handler(req, res) {
         const template = await prisma.documentCollectionTemplate.findFirst({
           where: { 
             id,
-            type: 'document-collection'
+            type: 'weekly-fms-review'
           }
         })
         
@@ -173,14 +173,14 @@ async function handler(req, res) {
         
         return ok(res, { message: 'Template deleted successfully' })
       } catch (dbError) {
-        console.error('❌ Database error deleting template:', dbError)
+        console.error('❌ Database error deleting weekly FMS review template:', dbError)
         return serverError(res, 'Failed to delete template', dbError.message)
       }
     }
     
     return badRequest(res, 'Method not allowed')
   } catch (error) {
-    console.error('❌ Error in document-collection-templates/[id] handler:', error)
+    console.error('❌ Error in weekly-fms-review-templates/[id] handler:', error)
     return serverError(res, 'Internal server error', error.message)
   }
 }

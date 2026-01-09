@@ -1398,12 +1398,24 @@ function initializeProjectDetail() {
     }, [activeSection, project?.id, updateUrl]);
     
     // Ensure we are on the overview tab when switching to a different project.
+    // Use a ref to track the previous project ID to only reset when actually switching projects
+    const previousProjectIdForSectionRef = useRef(project?.id);
     useEffect(() => {
         if (!project?.id) return;
-        if (activeSection !== 'overview') {
-            switchSection('overview');
+        
+        // Only reset to overview if we're actually switching to a different project
+        const projectIdChanged = previousProjectIdForSectionRef.current !== project?.id;
+        if (projectIdChanged && previousProjectIdForSectionRef.current !== null && previousProjectIdForSectionRef.current !== undefined) {
+            // We're switching to a different project, reset to overview
+            if (activeSection !== 'overview') {
+                switchSection('overview');
+            }
+            previousProjectIdForSectionRef.current = project?.id;
+        } else if (previousProjectIdForSectionRef.current === null || previousProjectIdForSectionRef.current === undefined) {
+            // First time setting project ID, just track it
+            previousProjectIdForSectionRef.current = project?.id;
         }
-    }, [project?.id, switchSection]);
+    }, [project?.id, activeSection, switchSection]);
 
     // Track if weekly FMS review process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
