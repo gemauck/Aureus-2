@@ -3503,8 +3503,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             
                             {/* File upload input - Always visible after comment input */}
                             <div className="mt-1.5">
-                                <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
                                     <input
+                                        id="comment-file-upload"
                                         type="file"
                                         multiple
                                         onChange={handleFileUpload}
