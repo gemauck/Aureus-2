@@ -13,6 +13,8 @@ const RichTextEditor = ({
     name = null
 }) => {
     const editorRef = useRef(null);
+    // Use a ref to store the actual DOM value - this is the source of truth when focused
+    const domValueRef = useRef(value || '');
     const [html, setHtml] = useState(value || '');
     const isInternalUpdateRef = useRef(false);
     const scrollLockRef = useRef(false);
@@ -27,6 +29,7 @@ const RichTextEditor = ({
     const lastSetValueFromUserRef = useRef(null); // Track last value set from user input
     const isFocusedRef = useRef(false); // Track focus state reliably with events
     const frozenValueRef = useRef(null); // Freeze value prop when editor is focused to prevent prop changes
+    const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -196,8 +199,11 @@ const RichTextEditor = ({
             if (e.target === editor || editor.contains(e.target)) {
                 isFocusedRef.current = true;
                 isUserTypingRef.current = false; // Reset typing flag on focus
-                // Freeze the current value prop to prevent React from updating it
-                frozenValueRef.current = editor.innerHTML || '';
+                // Freeze the current DOM value - this becomes the source of truth
+                domValueRef.current = editor.innerHTML || '';
+                frozenValueRef.current = domValueRef.current;
+                // Completely ignore prop updates while focused
+                ignorePropUpdatesRef.current = true;
             }
         };
         
@@ -208,10 +214,14 @@ const RichTextEditor = ({
                 if (document.activeElement !== editor && 
                     !editor.contains(document.activeElement)) {
                     isFocusedRef.current = false;
+                    // Update DOM value ref from actual DOM content before allowing prop updates
+                    domValueRef.current = editor.innerHTML || '';
                     // Unfreeze value when blurring - allow prop updates again
                     frozenValueRef.current = null;
+                    // Allow prop updates again
+                    ignorePropUpdatesRef.current = false;
                 }
-            }, 0);
+            }, 100); // Small delay to ensure blur event completes
         };
         
         // Use capture phase to catch all focus events
@@ -235,14 +245,20 @@ const RichTextEditor = ({
     
     // Initialize editor content on mount and set up scroll protection
     useEffect(() => {
-        // Only initialize if editor is empty and not focused
-        if (editorRef.current && !editorRef.current.innerHTML && value && !isFocusedRef.current) {
-            editorRef.current.innerHTML = value;
-            setHtml(value);
-        }
-        
         const editor = editorRef.current;
         if (!editor) return;
+        
+        // Initialize DOM value ref
+        if (!domValueRef.current && value) {
+            domValueRef.current = value;
+        }
+        
+        // Only initialize if editor is empty and not focused
+        if (!editor.innerHTML && value && !isFocusedRef.current) {
+            editor.innerHTML = value;
+            setHtml(value);
+            domValueRef.current = value;
+        }
         
         // Skip if already initialized (prevent redundant setup on re-renders)
         if (hasInitializedRef.current && isScrollProtectionSetupRef.current) {
@@ -501,6 +517,13 @@ const RichTextEditor = ({
         
         if (!editorRef.current) return;
         
+        // ABSOLUTE BLOCK: If we're ignoring prop updates, do NOTHING
+        // This is the final line of defense - completely disconnect from React updates
+        if (ignorePropUpdatesRef.current) {
+            // Completely ignore this prop update - DOM content is the source of truth
+            return;
+        }
+        
         // CRITICAL FIX: Multiple checks for focus state - be EXTREMELY defensive
         // Check if editor or any child element is focused
         const activeEl = document.activeElement;
@@ -511,26 +534,22 @@ const RichTextEditor = ({
         const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
         const recentlyTyped = isUserTypingRef.current && timeSinceLastInput < 3000;
         
-        // CRITICAL: If value is frozen (editor was focused), use frozen value instead
-        // This prevents React from forcing updates when editor is focused
-        const effectiveValue = frozenValueRef.current !== null ? frozenValueRef.current : value;
-        
         // If editor is focused OR user is actively typing, NEVER update innerHTML from props
         // This is the ABSOLUTE KEY to preventing cursor jumps. When focused, the editor
         // is "uncontrolled" and the DOM content is the source of truth.
         if (isCurrentlyFocused || recentlyTyped || frozenValueRef.current !== null) {
             // Editor is focused or user just typed - COMPLETELY IGNORE prop updates
             // Don't touch innerHTML, don't sync state, don't do anything
-            // The editor's DOM content is the ONLY source of truth when focused/typing
             return;
         }
         
         // Editor is not focused - safe to update from props
         const currentHtml = editorRef.current.innerHTML || '';
         // Only update if the value has actually changed
-        if (effectiveValue !== currentHtml && effectiveValue !== html) {
-            setHtml(effectiveValue || '');
-            editorRef.current.innerHTML = effectiveValue || '';
+        if (value !== currentHtml && value !== html) {
+            setHtml(value || '');
+            editorRef.current.innerHTML = value || '';
+            domValueRef.current = value || '';
         }
         
         // Re-apply scroll protection in case React recreated the element
@@ -547,22 +566,23 @@ const RichTextEditor = ({
         isFocusedRef.current = true;
         isUserTypingRef.current = true;
         lastUserInputTimeRef.current = Date.now();
+        ignorePropUpdatesRef.current = true; // Block ALL prop updates during typing
         
-        // Get the current HTML from the editor (this is the source of truth when user is typing)
+        // Get the current HTML from the editor (this is the ONLY source of truth when user is typing)
         const newHtml = editorRef.current.innerHTML;
-        lastSetValueFromUserRef.current = newHtml;
         
-        // Update frozen value to match current content - this prevents prop updates
+        // Update all our tracking refs
+        domValueRef.current = newHtml;
+        lastSetValueFromUserRef.current = newHtml;
         frozenValueRef.current = newHtml;
         
         // Mark this as an internal update so useEffect doesn't interfere
-        // This prevents the useEffect from running and updating innerHTML
         isInternalUpdateRef.current = true;
         
-        // Update internal state (but don't update DOM - DOM already has the user's input)
+        // Update internal state (but DOM is already correct - don't touch it)
         setHtml(newHtml);
         
-        // Debounce onChange to prevent too many state updates
+        // Debounce onChange to prevent too many state updates in parent
         // Clear existing timeout
         const onChangeTimeoutKey = `richTextEditorOnChange_${editorRef.current.id || 'default'}`;
         if (window[onChangeTimeoutKey]) {
@@ -575,16 +595,20 @@ const RichTextEditor = ({
                 onChange(newHtml);
             }
             window[onChangeTimeoutKey] = null;
-        }, 100); // Small delay to batch rapid typing
+        }, 150); // Small delay to batch rapid typing and reduce parent re-renders
         
-        // Keep typing flag active for longer to prevent any prop updates
+        // Keep typing flag and ignore flag active for longer
         const timeoutKey = `richTextEditorTypingTimeout_${editorRef.current.id || 'default'}`;
         if (window[timeoutKey]) {
             clearTimeout(window[timeoutKey]);
         }
-        // Set new timeout - keep flag active for 3 seconds after last input
+        // Set new timeout - keep flags active for 3 seconds after last input
         window[timeoutKey] = setTimeout(() => {
             isUserTypingRef.current = false;
+            // Only clear ignore flag if editor is not focused
+            if (!isFocusedRef.current) {
+                ignorePropUpdatesRef.current = false;
+            }
             window[timeoutKey] = null;
         }, 3000);
     };
@@ -891,7 +915,7 @@ const RichTextEditor = ({
 // Make available globally
 if (typeof window !== 'undefined') {
     window.RichTextEditor = RichTextEditor;
-    // Version: 20260109-cursor-fix-v3 - Focus-based innerHTML protection
-    console.log('✅ RichTextEditor loaded - cursor fix v3 (focus-based protection)');
+    // Version: 20260109-cursor-fix-v5 - Complete prop disconnection when focused
+    console.log('✅ RichTextEditor loaded - cursor fix v5 (complete prop disconnection)');
 }
 
