@@ -18,6 +18,7 @@ const Users = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
     const [forceUpdate, setForceUpdate] = useState(0);
+    const [loading, setLoading] = useState(true);
     
     // Sort state - default alphabetical by name
     const [sortColumn, setSortColumn] = useState('name'); // Default sort by name (alphabetical)
@@ -64,8 +65,7 @@ const Users = () => {
     ];
 
     useEffect(() => {
-        loadUsers();
-        loadInvitations();
+        loadUsersAndInvitations();
     }, []);
     
     // Listen for route changes to handle user navigation and URL-based user opening
@@ -160,9 +160,10 @@ const Users = () => {
         }
     }, [users, viewMode]);
 
-    const loadUsers = async () => {
+    // Combined function to load both users and invitations in a single API call
+    const loadUsersAndInvitations = async () => {
         try {
-            // Try to load from API first
+            setLoading(true);
             const token = window.storage?.getToken?.();
             if (token) {
                 const response = await fetch('/api/users', {
@@ -175,64 +176,52 @@ const Users = () => {
                     const data = await response.json();
                     const responseData = data.data || data;
                     const apiUsers = responseData.users || [];
+                    const apiInvitations = responseData.invitations || [];
+                    
                     // Always use API data when available, even if empty array
                     setUsers(apiUsers);
+                    setInvitations(apiInvitations);
+                    
                     // Update local storage to match API data
                     storage.setUsers(apiUsers);
+                    storage.setInvitations(apiInvitations);
+                    setLoading(false);
                     return;
                 }
             }
             
             // Fallback to local storage only if API call fails
             let savedUsers = storage.getUsers() || [];
+            let savedInvitations = storage.getInvitations() || [];
             if (savedUsers.length === 0) {
                 savedUsers = [];
                 storage.setUsers(savedUsers);
             }
             setUsers(savedUsers);
+            setInvitations(savedInvitations);
+            setLoading(false);
         } catch (error) {
-            console.error('Error loading users:', error);
+            console.error('Error loading users and invitations:', error);
             // Fallback to local storage on error
             let savedUsers = storage.getUsers() || [];
+            let savedInvitations = storage.getInvitations() || [];
             if (savedUsers.length === 0) {
                 savedUsers = [];
                 storage.setUsers(savedUsers);
             }
             setUsers(savedUsers);
+            setInvitations(savedInvitations);
+            setLoading(false);
         }
     };
 
+    // Keep separate functions for backward compatibility when reloading after mutations
+    const loadUsers = async () => {
+        await loadUsersAndInvitations();
+    };
+
     const loadInvitations = async () => {
-        try {
-            // Try to load from API first
-            const token = window.storage?.getToken?.();
-            if (token) {
-                const response = await fetch('/api/users', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    const responseData = data.data || data;
-                    const apiInvitations = responseData.invitations || [];
-                    if (apiInvitations.length > 0) {
-                        setInvitations(apiInvitations);
-                        return;
-                    }
-                }
-            }
-            
-            // Fallback to local storage
-            const savedInvitations = storage.getInvitations() || [];
-            setInvitations(savedInvitations);
-        } catch (error) {
-            console.error('Error loading invitations:', error);
-            // Fallback to local storage on error
-            const savedInvitations = storage.getInvitations() || [];
-            setInvitations(savedInvitations);
-        }
+        await loadUsersAndInvitations();
     };
 
     const handleAddUser = () => {
@@ -738,7 +727,18 @@ const Users = () => {
                 </div>
             </div>
 
+            {/* Loading State */}
+            {loading && (
+                <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-3"></div>
+                        <p className="text-sm text-gray-600">Loading users...</p>
+                    </div>
+                </div>
+            )}
+
             {/* Stats Cards */}
+            {!loading && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="bg-white rounded-lg border border-gray-200 p-3">
                     <div className="flex items-center justify-between">
@@ -789,8 +789,10 @@ const Users = () => {
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Filters and Search */}
+            {!loading && (
             <div className="bg-white rounded-lg border border-gray-200 p-3">
                 <div className="flex items-center justify-between gap-3">
                     {/* Search */}
@@ -1232,6 +1234,7 @@ const Users = () => {
                         ))}
                     </div>
                 </div>
+            )}
             )}
 
             {/* User Modal */}

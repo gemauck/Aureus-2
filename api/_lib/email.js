@@ -577,8 +577,146 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         commentText, 
         commentLink, 
         taskTitle,
-        isProjectRelated 
+        isProjectRelated,
+        // Notification creation parameters (if userId provided, create in-app notification)
+        userId,
+        notificationType,
+        notificationLink,
+        notificationMetadata,
+        skipNotificationCreation = false // Set to true if notification is already created elsewhere
     } = options;
+    
+    // If userId is provided and we're not skipping, create in-app notification
+    if (userId && !skipNotificationCreation) {
+        try {
+            // Dynamically import prisma to avoid circular dependencies
+            const { prisma } = await import('./prisma.js');
+            
+            // Find user by email if userId looks like an email (contains @), otherwise treat as ID
+            let targetUserId = userId;
+            if (userId.includes('@')) {
+                // Looks like an email, try to find user by email
+                try {
+                    const user = await prisma.user.findUnique({
+                        where: { email: userId }
+                    });
+                    if (user) {
+                        targetUserId = user.id;
+                    } else {
+                        console.warn(`⚠️ Could not find user with email ${userId}, skipping notification creation`);
+                        targetUserId = null;
+                    }
+                } catch (lookupError) {
+                    console.error(`❌ Error looking up user by email ${userId}:`, lookupError);
+                    targetUserId = null;
+                }
+            }
+            // If userId doesn't contain @, assume it's already a user ID
+            
+            if (targetUserId) {
+                // Get or create notification settings
+                let settings = await prisma.notificationSetting.findUnique({
+                    where: { userId: targetUserId }
+                });
+                
+                if (!settings) {
+                    settings = await prisma.notificationSetting.create({
+                        data: { 
+                            userId: targetUserId,
+                            emailTasks: true,
+                            emailMentions: true,
+                            emailComments: true,
+                            emailInvoices: true,
+                            emailSystem: true,
+                            inAppTasks: true,
+                            inAppMentions: true,
+                            inAppComments: true,
+                            inAppInvoices: true,
+                            inAppSystem: true
+                        }
+                    });
+                }
+                
+                // Determine notification type (default to 'system' if not specified)
+                const type = notificationType || 'system';
+                
+                // Check if user wants in-app notifications for this type
+                let shouldCreateInAppNotification = false;
+                if (type === 'mention' && settings.inAppMentions) {
+                    shouldCreateInAppNotification = true;
+                } else if (type === 'comment' && settings.inAppComments) {
+                    shouldCreateInAppNotification = true;
+                } else if (type === 'task' && settings.inAppTasks) {
+                    shouldCreateInAppNotification = true;
+                } else if (type === 'invoice' && settings.inAppInvoices) {
+                    shouldCreateInAppNotification = true;
+                } else if (type === 'system' && settings.inAppSystem) {
+                    shouldCreateInAppNotification = true;
+                }
+                
+                // Create in-app notification if enabled
+                if (shouldCreateInAppNotification) {
+                    // Strip HTML tags from message for notification text
+                    const plainMessage = message.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+                    const notificationMessage = plainMessage.length > 200 
+                        ? plainMessage.substring(0, 200) + '...' 
+                        : plainMessage;
+                    
+                    // Determine link - use notificationLink if provided, otherwise try to construct from metadata
+                    let validLink = notificationLink || '/dashboard';
+                    if (!validLink || validLink.trim() === '') {
+                        try {
+                            const metadataObj = notificationMetadata 
+                                ? (typeof notificationMetadata === 'string' ? JSON.parse(notificationMetadata) : notificationMetadata)
+                                : {};
+                            
+                            if (metadataObj.projectId) {
+                                validLink = `/projects/${metadataObj.projectId}`;
+                            } else if (metadataObj.clientId) {
+                                validLink = `/clients/${metadataObj.clientId}`;
+                            } else if (metadataObj.taskId) {
+                                validLink = `/tasks/${metadataObj.taskId}`;
+                            } else {
+                                validLink = '/dashboard';
+                            }
+                        } catch (parseError) {
+                            validLink = '/dashboard';
+                        }
+                    }
+                    
+                    // Ensure link starts with /
+                    if (validLink && !validLink.startsWith('/') && !validLink.startsWith('#')) {
+                        validLink = '/' + validLink;
+                    }
+                    
+                    await prisma.notification.create({
+                        data: {
+                            userId: targetUserId,
+                            type: type,
+                            title: subject,
+                            message: notificationMessage,
+                            link: validLink || '/dashboard',
+                            metadata: notificationMetadata ? JSON.stringify(notificationMetadata) : '{}',
+                            read: false
+                        }
+                    });
+                    
+                    console.log(`✅ Created in-app notification for user ${targetUserId} (type: ${type})`);
+                } else {
+                    console.log(`⏭️ In-app notification skipped for user ${targetUserId} (type: ${type}) - preference disabled`);
+                }
+            }
+        } catch (notificationError) {
+            // Don't fail email sending if notification creation fails
+            console.error('❌ Failed to create in-app notification:', notificationError);
+            console.error('❌ Notification error details:', {
+                message: notificationError.message,
+                stack: notificationError.stack,
+                userId,
+                type: notificationType
+            });
+        }
+    }
     
     // Helper function to escape HTML for security
     const escapeHtml = (text) => {
@@ -599,6 +737,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     if (commentLink) {
         if (commentLink.startsWith('#')) {
             // Hash-based routing - append directly to base URL
+            // Format: https://abcoafrica.co.za#/projects/123?params
             fullCommentLink = `${baseUrl}${commentLink}`;
         } else if (commentLink.startsWith('/')) {
             // Regular path - append with slash

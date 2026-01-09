@@ -167,8 +167,28 @@ async function handler(req, res) {
                     const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : (metadata || {});
                     
                     // Check for entity IDs in metadata
-                    // Handle document collection tracker links first (they need special parameters)
-                    if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId)) {
+                    // Handle weekly FMS review tracker links first (check for weekNumber to distinguish from document collection)
+                    if (metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek || metadataObj.weeklyMonth || (metadataObj.sectionId && metadataObj.weekNumber))) {
+                        // Weekly FMS review tracker comment - build link with weekly parameters
+                        validLink = `#/projects/${metadataObj.projectId}`;
+                        const queryParams = [];
+                        if (metadataObj.weeklySectionId || metadataObj.sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(metadataObj.weeklySectionId || metadataObj.sectionId)}`);
+                        if (metadataObj.weeklyDocumentId || metadataObj.documentId) queryParams.push(`weeklyDocumentId=${encodeURIComponent(metadataObj.weeklyDocumentId || metadataObj.documentId)}`);
+                        if (metadataObj.weeklyMonth !== undefined && metadataObj.weeklyMonth !== null) {
+                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.weeklyMonth)}`);
+                        } else if (metadataObj.month !== undefined && metadataObj.month !== null) {
+                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.month)}`);
+                        }
+                        if (metadataObj.weeklyWeek !== undefined && metadataObj.weeklyWeek !== null) {
+                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weeklyWeek)}`);
+                        } else if (metadataObj.weekNumber !== undefined && metadataObj.weekNumber !== null) {
+                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weekNumber)}`);
+                        }
+                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                        if (queryParams.length > 0) {
+                            validLink += `?${queryParams.join('&')}`;
+                        }
+                    } else if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId)) {
                         // Document collection tracker comment - build link with all parameters
                         validLink = `#/projects/${metadataObj.projectId}`;
                         const queryParams = [];
@@ -372,11 +392,41 @@ async function handler(req, res) {
                                         }
                                     }
                                     
-                                    // Build comment link - prioritize document collection tracker links with commentId
-                                    // First, check if link already contains document collection parameters - if so, use it as-is
-                                    if (link && (link.includes('docSectionId=') || link.includes('docDocumentId=') || link.includes('commentId='))) {
+                                    // Build comment link - prioritize weekly FMS review tracker links, then document collection tracker links
+                                    // First, check if link already contains weekly FMS review parameters - if so, use it as-is
+                                    if (link && (link.includes('weeklySectionId=') || link.includes('weeklyDocumentId=') || link.includes('weeklyWeek=') || link.includes('weeklyMonth='))) {
+                                        // Link already has weekly FMS review parameters, preserve it
+                                        commentLink = link;
+                                        console.log('📧 Email link: Using existing link with weekly FMS review params:', commentLink);
+                                    } else if (link && (link.includes('docSectionId=') || link.includes('docDocumentId=') || link.includes('commentId='))) {
                                         // Link already has document collection tracker parameters, preserve it
                                         commentLink = link;
+                                        console.log('📧 Email link: Using existing link with doc collection params:', commentLink);
+                                    } else if (metadataObj?.weeklySectionId || metadataObj?.weeklyDocumentId || metadataObj?.weeklyWeek || metadataObj?.weeklyMonth || (metadataObj?.sectionId && metadataObj?.weekNumber)) {
+                                        // Weekly FMS review tracker comment - build link with weekly parameters from metadata
+                                        const baseLink = link || `#/projects/${projectId}`;
+                                        
+                                        // Build weekly FMS review tracker link with all parameters
+                                        const queryParams = [];
+                                        if (metadataObj.weeklySectionId || metadataObj.sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(metadataObj.weeklySectionId || metadataObj.sectionId)}`);
+                                        if (metadataObj.weeklyDocumentId || metadataObj.documentId) queryParams.push(`weeklyDocumentId=${encodeURIComponent(metadataObj.weeklyDocumentId || metadataObj.documentId)}`);
+                                        if (metadataObj.weeklyMonth !== undefined && metadataObj.weeklyMonth !== null) {
+                                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.weeklyMonth)}`);
+                                        } else if (metadataObj.month !== undefined && metadataObj.month !== null) {
+                                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.month)}`);
+                                        }
+                                        if (metadataObj.weeklyWeek !== undefined && metadataObj.weeklyWeek !== null) {
+                                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weeklyWeek)}`);
+                                        } else if (metadataObj.weekNumber !== undefined && metadataObj.weekNumber !== null) {
+                                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weekNumber)}`);
+                                        }
+                                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                                        
+                                        const separator = baseLink.includes('?') ? '&' : '?';
+                                        commentLink = queryParams.length > 0 
+                                            ? `${baseLink}${separator}${queryParams.join('&')}`
+                                            : baseLink;
+                                        console.log('📧 Email link: Built weekly FMS review link from metadata:', commentLink, 'Metadata:', { weeklySectionId: metadataObj.weeklySectionId || metadataObj.sectionId, weeklyDocumentId: metadataObj.weeklyDocumentId || metadataObj.documentId, weeklyMonth: metadataObj.weeklyMonth || metadataObj.month, weeklyWeek: metadataObj.weeklyWeek || metadataObj.weekNumber, commentId: metadataObj.commentId });
                                     } else if (metadataObj?.sectionId || metadataObj?.documentId || metadataObj?.commentId) {
                                         // Document collection tracker comment - build link with all parameters from metadata
                                         const baseLink = link || `#/projects/${projectId}`;
@@ -392,6 +442,7 @@ async function handler(req, res) {
                                         commentLink = queryParams.length > 0 
                                             ? `${baseLink}${separator}${queryParams.join('&')}`
                                             : baseLink;
+                                        console.log('📧 Email link: Built document collection link from metadata:', commentLink, 'Metadata:', { sectionId: metadataObj.sectionId, documentId: metadataObj.documentId, month: metadataObj.month, commentId: metadataObj.commentId });
                                     } else if (metadataObj?.taskId) {
                                         // Task comment - include task ID and commentId for direct navigation
                                         // Check if link already has task/commentId parameters - if so, use it as-is
@@ -481,7 +532,8 @@ async function handler(req, res) {
                             commentText,
                             commentLink,
                             taskTitle,
-                            isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
+                            isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task')),
+                            skipNotificationCreation: true // Skip because notification is already created above
                         }
                     );
                 } catch (emailError) {

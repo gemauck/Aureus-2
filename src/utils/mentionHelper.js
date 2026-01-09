@@ -211,12 +211,49 @@ const MentionHelper = {
             }
             
             // Ensure URL is valid using NotificationUrlHelper if available
-            if (window.NotificationUrlHelper && typeof window.NotificationUrlHelper.ensureUrl === 'function') {
+            // IMPORTANT: If entityUrl already has document collection params, preserve it
+            // Don't let NotificationUrlHelper reconstruct and lose the params
+            const entityUrlHasDocParams = entityUrl && (
+                entityUrl.includes('docSectionId=') || 
+                entityUrl.includes('docDocumentId=') || 
+                entityUrl.includes('docMonth=')
+            );
+            
+            if (entityUrlHasDocParams) {
+                // Entity URL already has document collection params, use it as-is
+                // Don't call ensureUrl as it might reconstruct and lose params
+                console.log('📧 MentionHelper: Preserving entityUrl with doc collection params:', entityUrl);
+            } else if (window.NotificationUrlHelper && typeof window.NotificationUrlHelper.ensureUrl === 'function') {
                 entityUrl = window.NotificationUrlHelper.ensureUrl(entityUrl || contextLink, metadata);
+                console.log('📧 MentionHelper: Using NotificationUrlHelper.ensureUrl result:', entityUrl);
             } else if (!entityUrl || entityUrl.trim() === '') {
                 // Fallback: use contextLink or default to dashboard
                 entityUrl = contextLink || '/dashboard';
+                console.log('📧 MentionHelper: Using fallback entityUrl:', entityUrl);
             }
+            
+            // Final validation - if entityUrl is just '#' or empty, try to rebuild from metadata or contextLink
+            if (!entityUrl || entityUrl.trim() === '' || entityUrl === '#') {
+                console.warn('⚠️ MentionHelper: entityUrl is empty or just "#", rebuilding from contextLink or metadata');
+                if (contextLink && contextLink.trim() !== '' && contextLink !== '#') {
+                    entityUrl = contextLink;
+                    console.log('📧 MentionHelper: Using contextLink as fallback:', entityUrl);
+                } else if (metadata.sectionId || metadata.documentId) {
+                    // Build hash-based URL from metadata
+                    const projectId = metadata.projectId;
+                    if (projectId) {
+                        const queryParams = [];
+                        if (metadata.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadata.sectionId)}`);
+                        if (metadata.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadata.documentId)}`);
+                        if (metadata.month !== undefined && metadata.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadata.month)}`);
+                        if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
+                        entityUrl = `#/projects/${projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
+                        console.log('📧 MentionHelper: Rebuilt entityUrl from metadata:', entityUrl);
+                    }
+                }
+            }
+            
+            console.log('📧 MentionHelper: Final notification payload link:', entityUrl, 'Metadata:', metadata);
             
             const notificationPayload = {
                 userId: mentionedUserId,

@@ -69,14 +69,44 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     // Import sendNotificationEmail dynamically to avoid circular deps
     const { sendNotificationEmail } = await import('./_lib/email.js')
     
+    // Find admin user by email to get userId for notification
+    let adminUserId = null;
+    try {
+      const adminUser = await prisma.user.findUnique({
+        where: { email: recipientEmail }
+      });
+      if (adminUser) {
+        adminUserId = adminUser.id;
+      }
+    } catch (userError) {
+      console.warn(`⚠️ Could not find admin user with email ${recipientEmail} for notification:`, userError.message);
+    }
+    
     // Send email to garethm@abcotronics.co.za
+    // Also create in-app notification if admin user found
     try {
       const result = await sendNotificationEmail(
         recipientEmail,
         subject,
-        htmlContent
+        htmlContent,
+        {
+          userId: adminUserId || recipientEmail, // Pass userId or email (will look up if email)
+          notificationType: 'system',
+          notificationLink: feedback.pageUrl || '/feedback',
+          notificationMetadata: {
+            feedbackId: feedback.id,
+            feedbackType: feedback.type,
+            feedbackSection: feedback.section,
+            pageUrl: feedback.pageUrl,
+            submittingUserId: submittingUser?.id || submittingUser?.sub || null,
+            submittingUserName: submittingUser?.name || submittingUser?.email || 'A user'
+          }
+        }
       )
       console.log(`✅ Feedback email sent successfully to ${recipientEmail}`)
+      if (adminUserId) {
+        console.log(`✅ In-app notification created for admin user ${adminUserId}`)
+      }
     } catch (emailError) {
       console.error(`❌ Failed to send feedback email to ${recipientEmail}:`, emailError.message)
       console.error('❌ Feedback email error details:', {

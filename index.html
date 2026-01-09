@@ -24,8 +24,8 @@
     
     <!-- Tailwind CSS - Production Build (Critical - load immediately) -->
     <!-- CACHE BUST: 20251215-remove-simple-v2 -->
-    <link rel="preload" href="/dist/styles.css?v=20260108-466a843" as="style">
-    <link rel="stylesheet" href="/dist/styles.css?v=20260108-466a843">
+    <link rel="preload" href="/dist/styles.css?v=20260108-bd5e00a" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20260108-bd5e00a">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -80,14 +80,14 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1767882120915'; // Updated by build process
+        window.BUILD_VERSION = '1767932813277'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
     <!-- VERSION: 20251215-remove-simple-v2 - Update this when deploying new changes -->
     <script>
         (function() {
-            var APP_VERSION = '20260108-466a843';
+            var APP_VERSION = '20260108-bd5e00a';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -210,19 +210,19 @@
     </script>
     
     <!-- Mobile Responsive CSS - Defer non-critical CSS -->
-    <link rel="preload" href="/mobile-responsive.css?v=20260108-466a843" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260108-466a843"></noscript>
+    <link rel="preload" href="/mobile-responsive.css?v=20260108-bd5e00a" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260108-bd5e00a"></noscript>
     
     <!-- Mobile Helper JavaScript - Dynamic mobile enhancements -->
-    <script defer src="/mobile-helper.js?v=20260108-466a843"></script>
+    <script defer src="/mobile-helper.js?v=20260108-bd5e00a"></script>
     
     <!-- Dark Mode Fixes CSS - Defer -->
-    <link rel="preload" href="/dark-mode-fixes.css?v=20260108-466a843" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260108-466a843"></noscript>
+    <link rel="preload" href="/dark-mode-fixes.css?v=20260108-bd5e00a" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260108-bd5e00a"></noscript>
     
     <!-- Public Job Card Mobile Overrides - Defer -->
-    <link rel="preload" href="/job-card-public-mobile.css?v=20260108-466a843" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260108-466a843"></noscript>
+    <link rel="preload" href="/job-card-public-mobile.css?v=20260108-bd5e00a" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260108-bd5e00a"></noscript>
     
     <!-- Font Awesome - Defer non-critical CSS -->
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -951,8 +951,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20251215-groups-fix-cache-bust -->
-    <link rel="preload" href="/dist/core-bundle.js?v=20260108-466a843" as="script">
-    <script defer src="/dist/core-bundle.js?v=20260108-466a843"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=20260108-bd5e00a" as="script">
+    <script defer src="/dist/core-bundle.js?v=20260108-bd5e00a"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1058,24 +1058,35 @@
                 typeof window.React.useRef === 'function') {
                 
                 // Check if already loaded from main source (lazy-load-components.js)
-                // The Vite module should only be a fallback if MonthlyDocumentCollectionTracker isn't available
-                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                    console.log('✅ MonthlyDocumentCollectionTracker already available from main source, skipping Vite module load');
+                // The Vite module should only be a fallback if MonthlyDocumentCollectionTracker or WeeklyFMSReviewTracker aren't available
+                const hasMonthlyTracker = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
+                const hasWeeklyTracker = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
+                
+                if (hasMonthlyTracker && hasWeeklyTracker) {
+                    console.log('✅ MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker already available from main source, skipping Vite module load');
                     // Dispatch event even if already loaded (for components that missed it)
                     if (typeof window.dispatchEvent === 'function') {
                         window.dispatchEvent(new CustomEvent('viteProjectsReady', {
                             detail: { 
-                                MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
+                                MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
+                                WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
                             }
                         }));
                     }
                     return;
                 }
                 
+                // If only one is missing, still load vite-projects module
+                if (hasMonthlyTracker && !hasWeeklyTracker) {
+                    console.log('⚠️ MonthlyDocumentCollectionTracker available but WeeklyFMSReviewTracker missing, loading Vite module...');
+                } else if (!hasMonthlyTracker && hasWeeklyTracker) {
+                    console.log('⚠️ WeeklyFMSReviewTracker available but MonthlyDocumentCollectionTracker missing, loading Vite module...');
+                }
+                
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 // CACHE BUST VERSION: bump when deploying new Vite projects bundle
-                const VITE_PROJECTS_VERSION = '20260108-466a843' + Date.now();
+                const VITE_PROJECTS_VERSION = '20260108-scroll-stay-final-v25-' + Date.now();
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -1094,14 +1105,40 @@
                     // Only use existing script if it has the correct version
                     if (src.includes(VITE_PROJECTS_VERSION)) {
                         console.log('✅ Vite Projects module script already added with correct version, waiting for load...');
-                        // Listen for the component to become available
+                        // Listen for both components to become available
                         const checkExisting = setInterval(() => {
-                            if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                                console.log('✅ MonthlyDocumentCollectionTracker became available from existing script');
+                            const hasMonthly = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
+                            const hasWeekly = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
+                            if (hasMonthly && hasWeekly) {
+                                console.log('✅ MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker became available from existing script');
                                 clearInterval(checkExisting);
+                                // Dispatch event
+                                if (typeof window.dispatchEvent === 'function') {
+                                    window.dispatchEvent(new CustomEvent('viteProjectsReady', {
+                                        detail: { 
+                                            MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
+                                            WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
+                                        }
+                                    }));
+                                }
+                            } else if (hasMonthly) {
+                                console.log('⏳ MonthlyDocumentCollectionTracker available, waiting for WeeklyFMSReviewTracker...');
+                            } else if (hasWeekly) {
+                                console.log('⏳ WeeklyFMSReviewTracker available, waiting for MonthlyDocumentCollectionTracker...');
                             }
                         }, 100);
-                        setTimeout(() => clearInterval(checkExisting), 5000);
+                        setTimeout(() => {
+                            clearInterval(checkExisting);
+                            // Dispatch event even if not fully loaded
+                            if (typeof window.dispatchEvent === 'function') {
+                                const detail = {};
+                                if (window.MonthlyDocumentCollectionTracker) detail.MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+                                if (window.WeeklyFMSReviewTracker) detail.WeeklyFMSReviewTracker = window.WeeklyFMSReviewTracker;
+                                if (Object.keys(detail).length > 0) {
+                                    window.dispatchEvent(new CustomEvent('viteProjectsReady', { detail }));
+                                }
+                            }
+                        }, 10000); // Increased timeout to 10 seconds
                         return;
                     } else {
                         console.log('🗑️ Removing existing script with wrong version:', src);
@@ -1118,26 +1155,57 @@
                 console.log('📦 Loading vite projects module from /vite-projects with version:', VITE_PROJECTS_VERSION);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
-                    // Poll for components to become available (more robust than fixed timeout)
+                    // Poll for both components to become available (more robust than fixed timeout)
                     let attempts = 0;
-                    const maxAttempts = 30; // 3 seconds (30 * 100ms)
+                    const maxAttempts = 50; // 5 seconds (50 * 100ms) - increased for slower connections
                     const checkComponents = setInterval(() => {
                         attempts++;
-                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                            console.log('✅ MonthlyDocumentCollectionTracker available after script load (attempt ' + attempts + ')');
+                        const hasMonthly = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
+                        const hasWeekly = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
+                        
+                        if (hasMonthly && hasWeekly) {
+                            console.log('✅ Both MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker available after script load (attempt ' + attempts + ')');
                             clearInterval(checkComponents);
-                            // Ensure event is dispatched
+                            // Ensure event is dispatched with both components
                             if (typeof window.dispatchEvent === 'function') {
                                 window.dispatchEvent(new CustomEvent('viteProjectsReady', {
                                     detail: { 
-                                        // Only include MonthlyDocumentCollectionTracker - old Projects components cause conflicts
-                                        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
+                                        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
+                                        WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
                                     }
                                 }));
-                                console.log('📢 Dispatched viteProjectsReady event after component load (MonthlyDocumentCollectionTracker only)');
+                                console.log('📢 Dispatched viteProjectsReady event after component load (both components)');
+                            }
+                        } else if (hasMonthly && !hasWeekly) {
+                            console.log('⏳ MonthlyDocumentCollectionTracker available, waiting for WeeklyFMSReviewTracker... (attempt ' + attempts + ')');
+                            if (attempts >= maxAttempts) {
+                                console.warn('⚠️ Script loaded but WeeklyFMSReviewTracker not available after ' + maxAttempts + ' attempts');
+                                clearInterval(checkComponents);
+                                // Dispatch event with what we have
+                                if (typeof window.dispatchEvent === 'function') {
+                                    window.dispatchEvent(new CustomEvent('viteProjectsReady', {
+                                        detail: { 
+                                            MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker
+                                        }
+                                    }));
+                                }
+                            }
+                        } else if (!hasMonthly && hasWeekly) {
+                            console.log('⏳ WeeklyFMSReviewTracker available, waiting for MonthlyDocumentCollectionTracker... (attempt ' + attempts + ')');
+                            if (attempts >= maxAttempts) {
+                                console.warn('⚠️ Script loaded but MonthlyDocumentCollectionTracker not available after ' + maxAttempts + ' attempts');
+                                clearInterval(checkComponents);
+                                // Dispatch event with what we have
+                                if (typeof window.dispatchEvent === 'function') {
+                                    window.dispatchEvent(new CustomEvent('viteProjectsReady', {
+                                        detail: { 
+                                            WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
+                                        }
+                                    }));
+                                }
                             }
                         } else if (attempts >= maxAttempts) {
-                            console.warn('⚠️ Script loaded but MonthlyDocumentCollectionTracker not available after ' + maxAttempts + ' attempts');
+                            console.warn('⚠️ Script loaded but neither component available after ' + maxAttempts + ' attempts');
                             console.warn('⚠️ Available window components:', Object.keys(window).filter(k => k.includes('Project') || k.includes('Tracker') || k.includes('Modal')));
                             clearInterval(checkComponents);
                         }
@@ -1205,8 +1273,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260108-deep-link-fix-v1 -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=20260108-466a843" as="script">
-    <script defer src="/lazy-load-components.js?v=20260108-466a843"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=20260108-bd5e00a" as="script">
+    <script defer src="/lazy-load-components.js?v=20260108-bd5e00a"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

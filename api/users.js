@@ -43,7 +43,9 @@ async function handler(req, res) {
                     })
                     users = usersQuery
                 } else {
-                    // Admins get full data
+                    // Admins get optimized data for list view
+                    // Only fetch fields needed for the user list display
+                    // Full user data can be fetched on-demand when viewing/editing
                     const usersQuery = await prisma.user.findMany({
                         select: {
                             id: true,
@@ -53,25 +55,16 @@ async function handler(req, res) {
                             permissions: true,
                             status: true,
                             department: true,
-                            jobTitle: true,
                             phone: true,
-                            // Employee profile fields
-                            employeeNumber: true,
-                            position: true,
-                            employmentDate: true,
-                            idNumber: true,
-                            taxNumber: true,
-                            bankName: true,
-                            accountNumber: true,
-                            branchCode: true,
-                            salary: true,
-                            employmentStatus: true,
-                            address: true,
-                            emergencyContact: true,
                             createdAt: true,
                             lastLoginAt: true,
-                            lastSeenAt: true,
-                            invitedBy: true
+                            lastSeenAt: true
+                            // Excluded fields not needed for list view:
+                            // jobTitle, employeeNumber, position, employmentDate, 
+                            // idNumber, taxNumber, bankName, accountNumber, 
+                            // branchCode, salary, employmentStatus, address, 
+                            // emergencyContact, invitedBy
+                            // These can be fetched on-demand when viewing user details
                         },
                         orderBy: { createdAt: 'desc' }
                     })
@@ -207,7 +200,16 @@ async function handler(req, res) {
                     email,
                     subject,
                     message,
-                    { isProjectRelated: false }
+                    { 
+                        isProjectRelated: false,
+                        userId: user.id,
+                        notificationType: 'system',
+                        notificationLink: '/dashboard',
+                        notificationMetadata: {
+                            userId: user.id,
+                            welcomeEmail: true
+                        }
+                    }
                 )
                 emailSent = true
             } catch (err) {

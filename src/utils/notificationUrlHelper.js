@@ -199,12 +199,25 @@
      * @returns {string} Valid URL for the notification
      */
     const ensureUrl = (link, metadata = null) => {
-        // If link is already valid, return it
+        // If link is already valid and contains document collection params, preserve it as-is
+        const hasDocumentCollectionParams = link && (
+            link.includes('docSectionId=') || 
+            link.includes('docDocumentId=') || 
+            link.includes('docMonth=')
+        );
+        
+        // If link is already valid, return it (preserve hash-based URLs and document collection params)
         if (link && typeof link === 'string' && link.trim() && link !== '') {
             // Ensure it starts with / or #
             const normalizedLink = link.startsWith('/') || link.startsWith('#') 
                 ? link 
                 : `/${link}`;
+            
+            // If it has document collection params or is hash-based, return as-is
+            if (hasDocumentCollectionParams || normalizedLink.startsWith('#')) {
+                return normalizedLink;
+            }
+            
             return normalizedLink;
         }
 
@@ -218,6 +231,22 @@
                 if (!metadataObj || typeof metadataObj !== 'object') {
                     return '/dashboard';
                 }
+                
+                // PRIORITY 1: Check if metadata contains document collection tracker parameters
+                // Build hash-based URL with all params to preserve deep linking
+                if (metadataObj.sectionId || metadataObj.documentId || metadataObj.month !== undefined) {
+                    if (metadataObj.projectId) {
+                        const queryParams = [];
+                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
+                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
+                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
+                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                        
+                        const hashUrl = `#/projects/${metadataObj.projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
+                        console.log('📧 NotificationUrlHelper: Built hash-based URL for doc collection from metadata:', hashUrl);
+                        return hashUrl;
+                    }
+                }
 
                 // Try to find entity information in metadata
                 const entityTypes = [
@@ -227,6 +256,23 @@
                     'leaveapplicationId', 'timeentryId'
                 ];
 
+                // Check if metadata contains document collection tracker parameters
+                // If so, build hash-based URL with all params instead of using getUrlForEntity
+                if (metadataObj.sectionId || metadataObj.documentId || metadataObj.month !== undefined) {
+                    // Document collection tracker - build hash-based URL with all params
+                    if (metadataObj.projectId) {
+                        const queryParams = [];
+                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
+                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
+                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
+                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                        
+                        const hashUrl = `#/projects/${metadataObj.projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
+                        console.log('📧 NotificationUrlHelper: Building hash-based URL for doc collection:', hashUrl);
+                        return hashUrl;
+                    }
+                }
+                
                 for (const entityTypeKey of entityTypes) {
                     if (metadataObj[entityTypeKey]) {
                         const entityId = metadataObj[entityTypeKey];
@@ -244,7 +290,10 @@
                             options.parentType = 'project';
                         }
                         
-                        return getUrlForEntity(entityType, entityId, options);
+                        const url = getUrlForEntity(entityType, entityId, options);
+                        // If EntityUrl returns a path-based URL, convert to hash-based for notifications
+                        const hashUrl = url.startsWith('/') && !url.startsWith('#') ? `#${url}` : url;
+                        return hashUrl;
                     }
                 }
 

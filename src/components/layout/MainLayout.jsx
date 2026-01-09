@@ -104,8 +104,29 @@ const MainLayout = () => {
     React.useEffect(() => {
         const hash = window.location.hash || '';
         if (hash.startsWith('#/')) {
-            // Wait a bit for RouteState to be ready, then re-check
+            // Parse hash directly if RouteState not available
+            const hashPath = hash.substring(2); // Remove '#/'
+            const hashPathname = hashPath.split('?')[0]; // Remove query params
+            const hashSegments = hashPathname.split('/').filter(Boolean);
+            
+            if (hashSegments.length > 0) {
+                let pageFromHash = hashSegments[0];
+                // Map 'crm' to 'clients' for backward compatibility
+                if (pageFromHash === 'crm') {
+                    pageFromHash = 'clients';
+                }
+                
+                // If it's a valid page and not already set, update it
+                if (VALID_PAGES.includes(pageFromHash) && currentPage !== pageFromHash) {
+                    setCurrentPage(pageFromHash);
+                }
+            }
+            
+            // Also wait for RouteState to be ready and re-check
+            let attempts = 0;
+            const maxAttempts = 50; // 5 seconds
             const checkRoute = () => {
+                attempts++;
                 if (window.RouteState) {
                     const route = window.RouteState.getRoute();
                     if (route?.page && route.page !== currentPage) {
@@ -114,7 +135,7 @@ const MainLayout = () => {
                             setCurrentPage(page);
                         }
                     }
-                } else {
+                } else if (attempts < maxAttempts) {
                     // RouteState not ready yet, try again
                     setTimeout(checkRoute, 100);
                 }

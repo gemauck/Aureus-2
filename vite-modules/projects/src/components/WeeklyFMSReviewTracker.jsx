@@ -159,6 +159,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
     const sectionScrollRefs = useRef({}); // Track scroll containers for each section
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
+    const hasScrolledToCurrentMonthRef = useRef(false); // Flag to prevent auto-scroll on every change
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -1940,16 +1941,46 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setSectionsByYear(updatedSectionsByYear);
         
         // Restore scroll positions after state update to prevent page shifting
+        // Use multiple requestAnimationFrame calls to ensure DOM has fully updated
         requestAnimationFrame(() => {
-            scrollPositions.forEach((pos, sectionId) => {
-                const container = sectionScrollRefs.current[sectionId];
-                if (container) {
-                    container.scrollLeft = pos.scrollLeft;
-                    container.scrollTop = pos.scrollTop;
+            requestAnimationFrame(() => {
+                // Temporarily disable scroll sync during restoration
+                isScrollingRef.current = true;
+                
+                scrollPositions.forEach((pos, sectionId) => {
+                    const container = sectionScrollRefs.current[sectionId];
+                    if (container) {
+                        container.scrollLeft = pos.scrollLeft;
+                        container.scrollTop = pos.scrollTop;
+                    }
+                });
+                
+                // Restore main window scroll position - use multiple methods for reliability
+                try {
+                    window.scrollTo({
+                        left: mainScrollLeft,
+                        top: mainScrollTop,
+                        behavior: 'auto' // Use 'auto' for better compatibility
+                    });
+                } catch (e) {
+                    window.scrollTo(mainScrollLeft, mainScrollTop);
                 }
+                
+                // Also set directly as fallback to ensure it works
+                if (document.documentElement) {
+                    document.documentElement.scrollLeft = mainScrollLeft;
+                    document.documentElement.scrollTop = mainScrollTop;
+                }
+                if (document.body) {
+                    document.body.scrollLeft = mainScrollLeft;
+                    document.body.scrollTop = mainScrollTop;
+                }
+                
+                // Re-enable scroll sync after restoration
+                setTimeout(() => {
+                    isScrollingRef.current = false;
+                }, 100);
             });
-            // Restore main window scroll position
-            window.scrollTo(mainScrollLeft, mainScrollTop);
         });
         
         // Clear selection after applying status to multiple cells
@@ -2216,77 +2247,63 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     // (Per-section tables now scroll independently, so we skip auto-scroll to working months)
     
-    // Synchronize horizontal scrolling across all sections
+    // Synchronize horizontal scrolling across all sections - SIMPLE AND RELIABLE
     useEffect(() => {
         if (sections.length === 0) return;
         
-        const scrollContainers = Object.values(sectionScrollRefs.current).filter(Boolean);
-        if (scrollContainers.length === 0) return;
-        
-        // Create a map to store event handlers for proper cleanup
-        const scrollHandlers = new Map();
-        
-        scrollContainers.forEach(sourceContainer => {
-            let rafId = null;
-            let lastScrollLeft = sourceContainer.scrollLeft;
+        // Wait a bit for refs to be populated
+        let scrollHandlers = new Map();
+        let timeoutId = setTimeout(() => {
+            const scrollContainers = Object.values(sectionScrollRefs.current).filter(Boolean);
+            if (scrollContainers.length === 0) return;
             
-            const handleScroll = () => {
-                if (isScrollingRef.current) return; // Prevent infinite loops
-                
-                const currentScrollLeft = sourceContainer.scrollLeft;
-                
-                // Cancel any pending animation frame
-                if (rafId !== null) {
-                    cancelAnimationFrame(rafId);
-                }
-                
-                // Use requestAnimationFrame for smooth updates
-                rafId = requestAnimationFrame(() => {
+            scrollContainers.forEach(sourceContainer => {
+                const handleScroll = () => {
+                    // Skip if we're already syncing (prevents infinite loops)
                     if (isScrollingRef.current) return;
                     
                     isScrollingRef.current = true;
                     const scrollLeft = sourceContainer.scrollLeft;
                     
-                    // Only update if scroll position actually changed
-                    if (scrollLeft !== lastScrollLeft) {
-                        lastScrollLeft = scrollLeft;
-                        
-                        // Update all other containers to match the scroll position
-                        scrollContainers.forEach(container => {
-                            if (container !== sourceContainer && container) {
-                                // Use requestAnimationFrame for each container update for smoother sync
-                                requestAnimationFrame(() => {
-                                    container.scrollLeft = scrollLeft;
-                                });
-                            }
-                        });
-                    }
+                    // Update all other containers synchronously for immediate sync
+                    scrollContainers.forEach(container => {
+                        if (container !== sourceContainer && container) {
+                            container.scrollLeft = scrollLeft;
+                        }
+                    });
                     
-                    // Reset flag after a very short delay to allow smooth scrolling
+                    // Reset flag after a short delay
                     setTimeout(() => {
                         isScrollingRef.current = false;
-                    }, 16); // ~60fps timing
-                });
-            };
-            
-            scrollHandlers.set(sourceContainer, handleScroll);
-            sourceContainer.addEventListener('scroll', handleScroll, { passive: true });
-        });
+                    }, 10);
+                };
+                
+                scrollHandlers.set(sourceContainer, handleScroll);
+                sourceContainer.addEventListener('scroll', handleScroll, { passive: true });
+            });
+        }, 100);
         
-        // Cleanup
+        // Cleanup function
         return () => {
+            clearTimeout(timeoutId);
             scrollHandlers.forEach((handler, container) => {
                 container.removeEventListener('scroll', handler);
             });
         };
     }, [sections.length]);
     
-    // Scroll to current month on initial load
+    // Scroll to current month on initial load ONLY - not on every change
     useEffect(() => {
         if (isLoading || sections.length === 0) return;
         
+        // Only scroll once on initial load, not on every change
+        if (hasScrolledToCurrentMonthRef.current) return;
+        
         // Only scroll if we're viewing the current year
         if (selectedYear !== currentYear) return;
+        
+        // Mark that we've scrolled to prevent future auto-scrolling
+        hasScrolledToCurrentMonthRef.current = true;
         
         // Find the first week of the current month
         const currentMonthName = months[currentMonth];
@@ -2302,26 +2319,33 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Scroll all section scroll containers to the current month
         const scrollToCurrentMonth = () => {
-            // Temporarily disable scroll sync to prevent conflicts
-            isScrollingRef.current = true;
+            // Only auto-scroll if user hasn't manually scrolled yet
+            const hasUserScrolled = Array.from(sectionScrollRefs.current.values()).some(
+                container => container && container.scrollLeft > 50
+            );
             
-            Object.values(sectionScrollRefs.current).forEach(scrollContainer => {
-                if (scrollContainer) {
-                    // Find the header cell for the target week
-                    const headerCells = scrollContainer.querySelectorAll('thead th');
-                    if (headerCells.length > targetWeekIndex + 1) {
-                        const targetCell = headerCells[targetWeekIndex + 1]; // +1 because first cell is "Document / Data"
-                        if (targetCell) {
-                            targetCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+            if (!hasUserScrolled) {
+                // Temporarily disable scroll sync to prevent conflicts
+                isScrollingRef.current = true;
+                
+                Object.values(sectionScrollRefs.current).forEach(scrollContainer => {
+                    if (scrollContainer) {
+                        // Find the header cell for the target week
+                        const headerCells = scrollContainer.querySelectorAll('thead th');
+                        if (headerCells.length > targetWeekIndex + 1) {
+                            const targetCell = headerCells[targetWeekIndex + 1]; // +1 because first cell is "Document / Data"
+                            if (targetCell) {
+                                targetCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+                            }
                         }
                     }
-                }
-            });
-            
-            // Re-enable scroll sync after scrolling completes
-            setTimeout(() => {
-                isScrollingRef.current = false;
-            }, 500);
+                });
+                
+                // Re-enable scroll sync after scrolling completes
+                setTimeout(() => {
+                    isScrollingRef.current = false;
+                }, 500);
+            }
         };
         
         // Wait a bit for DOM to render

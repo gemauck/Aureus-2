@@ -1196,17 +1196,71 @@ function initializeProjectDetail() {
             }
         };
         
+        // Check for weekly FMS review deep-link parameters
+        const checkAndSwitchToWeeklyFMSReview = () => {
+            if (!project?.id || !hasWeeklyFMSReviewProcess) return;
+            
+            try {
+                let params = null;
+                let weeklySectionId = null;
+                let weeklyDocumentId = null;
+                let weeklyMonth = null;
+                let weeklyWeek = null;
+                let commentId = null;
+                
+                // First check hash query params (for hash-based routing like #/projects/123?weeklySectionId=...)
+                const hash = window.location.hash || '';
+                if (hash.includes('?')) {
+                    const hashParts = hash.split('?');
+                    if (hashParts.length > 1) {
+                        params = new URLSearchParams(hashParts[1]);
+                        weeklySectionId = params.get('weeklySectionId');
+                        weeklyDocumentId = params.get('weeklyDocumentId');
+                        weeklyMonth = params.get('weeklyMonth');
+                        weeklyWeek = params.get('weeklyWeek');
+                        commentId = params.get('commentId');
+                    }
+                }
+                
+                // If not found in hash, check window.location.search (for regular URLs)
+                if (!weeklySectionId || !weeklyDocumentId) {
+                    const search = window.location.search || '';
+                    if (search) {
+                        params = new URLSearchParams(search);
+                        if (!weeklySectionId) weeklySectionId = params.get('weeklySectionId');
+                        if (!weeklyDocumentId) weeklyDocumentId = params.get('weeklyDocumentId');
+                        if (!weeklyMonth) weeklyMonth = params.get('weeklyMonth');
+                        if (!weeklyWeek) weeklyWeek = params.get('weeklyWeek');
+                        if (!commentId) commentId = params.get('commentId');
+                    }
+                }
+                
+                if (weeklySectionId && weeklyDocumentId) {
+                    // Only switch if not already on weekly FMS review tab
+                    if (activeSection !== 'weeklyFMSReview') {
+                        switchSection('weeklyFMSReview');
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to apply weekly FMS review deep-link:', error);
+            }
+        };
+        
         // Check immediately
         checkAndSwitchToDocumentCollection();
+        checkAndSwitchToWeeklyFMSReview();
         
         // Also listen for hash changes
         const handleHashChange = () => {
-            setTimeout(checkAndSwitchToDocumentCollection, 100);
+            setTimeout(() => {
+                checkAndSwitchToDocumentCollection();
+                checkAndSwitchToWeeklyFMSReview();
+            }, 100);
         };
         
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [project?.id, switchSection, activeSection]);
+    }, [project?.id, switchSection, activeSection, hasWeeklyFMSReviewProcess]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal
