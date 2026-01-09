@@ -1032,7 +1032,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const response = await fetch('/api/document-collection-templates', {
+            const response = await fetch('/api/weekly-fms-review-templates', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -1096,7 +1096,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             if (isEditingExisting) {
                 // Update existing template in database
-                const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
+                const response = await fetch(`/api/weekly-fms-review-templates/${editingTemplate.id}`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -1114,7 +1114,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
             } else {
                 // Create new template in database
-                const response = await fetch('/api/document-collection-templates', {
+                const response = await fetch('/api/weekly-fms-review-templates', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -1163,7 +1163,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
             
             // Delete from database
-            const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+            const response = await fetch(`/api/weekly-fms-review-templates/${encodeURIComponent(templateId)}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -2952,7 +2952,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div className="flex-1 overflow-y-auto p-4">
                             <div className="flex justify-between items-center mb-4">
-                                <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                <p className="text-xs text-gray-600">Manage your weekly FMS review templates</p>
                                 <button
                                     onClick={() => {
                                         setEditingTemplate(null);
