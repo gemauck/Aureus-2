@@ -1148,6 +1148,70 @@ function initializeProjectDetail() {
         }
     }, [project?.id, switchSection]);
 
+    // Track if weekly FMS review process exists
+    // Normalize the value from project prop (handle boolean, string, number, undefined)
+    const normalizeHasWeeklyFMSReviewProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    
+    const [hasWeeklyFMSReviewProcess, setHasWeeklyFMSReviewProcess] = useState(() => {
+        const normalized = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        console.log('🔵 ProjectDetail: Initial hasWeeklyFMSReviewProcess state', {
+            projectId: project?.id,
+            projectName: project?.name,
+            propValue: project.hasWeeklyFMSReviewProcess,
+            propType: typeof project.hasWeeklyFMSReviewProcess,
+            normalized,
+            projectKeys: Object.keys(project || {}).filter(k => k.includes('Weekly') || k.includes('FMS'))
+        });
+        return normalized;
+    });
+    
+    // Sync hasWeeklyFMSReviewProcess when project prop changes (e.g., after reloading from database)
+    // But only if it hasn't been explicitly changed by the user recently
+    const hasWeeklyFMSReviewProcessChangedRef = useRef(false);
+    
+    useEffect(() => {
+        const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        
+        // Sync when value changes from prop (e.g., after database refresh)
+        // Only skip sync if ref is set AND we're not switching projects
+        // This ensures that when navigating back, we always sync from the database
+        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
+            console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess from prop', {
+                projectId: project?.id,
+                propValue: project.hasWeeklyFMSReviewProcess,
+                normalizedValue,
+                currentState: hasWeeklyFMSReviewProcess,
+                refValue: hasWeeklyFMSReviewProcessChangedRef.current
+            });
+            // Always sync - the ref is reset when project.id changes anyway
+            setHasWeeklyFMSReviewProcess(normalizedValue);
+            // Reset the ref after syncing from prop to allow future syncs
+            hasWeeklyFMSReviewProcessChangedRef.current = false;
+        }
+    }, [project.hasWeeklyFMSReviewProcess, project.id, hasWeeklyFMSReviewProcess]);
+    
+    // Also sync on mount to ensure we have the latest value
+    useEffect(() => {
+        const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess on project.id change', {
+            projectId: project?.id,
+            propValue: project.hasWeeklyFMSReviewProcess,
+            normalizedValue,
+            currentState: hasWeeklyFMSReviewProcess,
+            willSync: normalizedValue !== hasWeeklyFMSReviewProcess
+        });
+        // Only set if different to avoid unnecessary updates
+        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
+            setHasWeeklyFMSReviewProcess(normalizedValue);
+        }
+        // Reset the changed ref when project changes to allow sync from database
+        hasWeeklyFMSReviewProcessChangedRef.current = false;
+    }, [project.id]); // Re-sync whenever we switch to a different project
+
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
     // is active so the MonthlyDocumentCollectionTracker can show the target comment.
@@ -1198,7 +1262,12 @@ function initializeProjectDetail() {
         
         // Check for weekly FMS review deep-link parameters
         const checkAndSwitchToWeeklyFMSReview = () => {
-            if (!project?.id || !hasWeeklyFMSReviewProcess) return;
+            // Check the prop directly to avoid TDZ issues (state may not be initialized yet)
+            const projectHasWeeklyFMS = project?.hasWeeklyFMSReviewProcess === true || 
+                                      project?.hasWeeklyFMSReviewProcess === 'true' ||
+                                      project?.hasWeeklyFMSReviewProcess === 1 ||
+                                      (typeof project?.hasWeeklyFMSReviewProcess === 'string' && project?.hasWeeklyFMSReviewProcess?.toLowerCase() === 'true');
+            if (!project?.id || !projectHasWeeklyFMS) return;
             
             try {
                 let params = null;
@@ -1260,7 +1329,7 @@ function initializeProjectDetail() {
         
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [project?.id, switchSection, activeSection, hasWeeklyFMSReviewProcess]);
+    }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal
@@ -1549,69 +1618,6 @@ function initializeProjectDetail() {
     const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(() => 
         normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
     );
-    
-    // Track if weekly FMS review process exists
-    const normalizeHasWeeklyFMSReviewProcess = (value) => {
-        if (value === true || value === 'true' || value === 1) return true;
-        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-        return false;
-    };
-    
-    const [hasWeeklyFMSReviewProcess, setHasWeeklyFMSReviewProcess] = useState(() => {
-        const normalized = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        console.log('🔵 ProjectDetail: Initial hasWeeklyFMSReviewProcess state', {
-            projectId: project?.id,
-            projectName: project?.name,
-            propValue: project.hasWeeklyFMSReviewProcess,
-            propType: typeof project.hasWeeklyFMSReviewProcess,
-            normalized,
-            projectKeys: Object.keys(project || {}).filter(k => k.includes('Weekly') || k.includes('FMS'))
-        });
-        return normalized;
-    });
-    
-    // Sync hasWeeklyFMSReviewProcess when project prop changes (e.g., after reloading from database)
-    // But only if it hasn't been explicitly changed by the user recently
-    const hasWeeklyFMSReviewProcessChangedRef = useRef(false);
-    
-    useEffect(() => {
-        const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        
-        // Sync when value changes from prop (e.g., after database refresh)
-        // Only skip sync if ref is set AND we're not switching projects
-        // This ensures that when navigating back, we always sync from the database
-        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
-            console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess from prop', {
-                projectId: project?.id,
-                propValue: project.hasWeeklyFMSReviewProcess,
-                normalizedValue,
-                currentState: hasWeeklyFMSReviewProcess,
-                refValue: hasWeeklyFMSReviewProcessChangedRef.current
-            });
-            // Always sync - the ref is reset when project.id changes anyway
-            setHasWeeklyFMSReviewProcess(normalizedValue);
-            // Reset the ref after syncing from prop to allow future syncs
-            hasWeeklyFMSReviewProcessChangedRef.current = false;
-        }
-    }, [project.hasWeeklyFMSReviewProcess, project.id, hasWeeklyFMSReviewProcess]);
-    
-    // Also sync on mount to ensure we have the latest value
-    useEffect(() => {
-        const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess on project.id change', {
-            projectId: project?.id,
-            propValue: project.hasWeeklyFMSReviewProcess,
-            normalizedValue,
-            currentState: hasWeeklyFMSReviewProcess,
-            willSync: normalizedValue !== hasWeeklyFMSReviewProcess
-        });
-        // Only set if different to avoid unnecessary updates
-        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
-            setHasWeeklyFMSReviewProcess(normalizedValue);
-        }
-        // Reset the changed ref when project changes to allow sync from database
-        hasWeeklyFMSReviewProcessChangedRef.current = false;
-    }, [project.id]); // Re-sync whenever we switch to a different project
     
     // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
     // But only if it hasn't been explicitly changed by the user recently

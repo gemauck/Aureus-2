@@ -76,6 +76,12 @@ model User {
   sharedNotes               UserNoteShare[]         @relation("UserNoteSharedWith")
   createdTickets            Ticket[]                @relation("TicketCreator")
   assignedTickets           Ticket[]                @relation("TicketAssignee")
+
+  @@index([createdAt])
+  @@index([role])
+  @@index([status])
+  @@index([department])
+  @@index([lastSeenAt])
 }
 
 model Team {
@@ -365,6 +371,9 @@ model Invitation {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   accessibleProjectIds String    @default("[]")
+
+  @@index([createdAt])
+  @@index([status])
 }
 
 model Feedback {

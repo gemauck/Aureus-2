@@ -46,6 +46,7 @@ async function handler(req, res) {
                     // Admins get optimized data for list view
                     // Only fetch fields needed for the user list display
                     // Full user data can be fetched on-demand when viewing/editing
+                    // Using indexes on createdAt, role, status, department for fast queries
                     const usersQuery = await prisma.user.findMany({
                         select: {
                             id: true,
@@ -66,14 +67,13 @@ async function handler(req, res) {
                             // emergencyContact, invitedBy
                             // These can be fetched on-demand when viewing user details
                         },
-                        orderBy: { createdAt: 'desc' }
+                        orderBy: { createdAt: 'desc' },
+                        // No need to parse permissions here - client can do it if needed
                     })
                     
-                    // Use permissions from database, with fallback to empty array if null
-                    users = usersQuery.map(user => ({
-                        ...user,
-                        permissions: user.permissions || '[]' // Use database value or default to empty array
-                    }))
+                    // Return permissions as-is (string) - client will parse if needed
+                    // This avoids expensive JSON parsing on server for every user
+                    users = usersQuery
                     
                     // Get all invitations (only for admins)
                     try {
