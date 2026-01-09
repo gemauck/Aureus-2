@@ -3461,61 +3461,63 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </div>
                             )}
                             
-                            {commentInputAvailable && section && document ? (
-                                <window.CommentInputWithMentions
-                                    onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim() || commentAttachments.length > 0) {
-                                            handleAddComment(section.id, document.id, month, weekNumber, commentText);
-                                        }
-                                    }}
-                                    placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
-                                    rows={2}
-                                    showButton={true}
-                                    autoFocus={true}
-                                />
-                            ) : (
-                                <>
-                                    <textarea
-                                        value={quickComment}
-                                        onChange={(e) => setQuickComment(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                            <div>
+                                {commentInputAvailable && section && document ? (
+                                    <window.CommentInputWithMentions
+                                        onSubmit={(commentText) => {
+                                            if (commentText && commentText.trim() || commentAttachments.length > 0) {
+                                                handleAddComment(section.id, document.id, month, weekNumber, commentText);
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
-                                        rows="2"
-                                        placeholder="Type comment... (Ctrl+Enter to submit)"
-                                        autoFocus
+                                        placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                                        rows={2}
+                                        showButton={true}
+                                        autoFocus={true}
                                     />
-                                    <button
-                                        onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, weekNumber, quickComment);
-                                        }}
-                                        disabled={!quickComment.trim() && commentAttachments.length === 0}
-                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
-                                    >
-                                        Add Comment
-                                    </button>
-                                </>
-                            )}
-                            
-                            {/* File upload input - Always visible after comment input */}
-                            <div className="mt-1.5">
-                                <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
-                                    <input
-                                        id="comment-file-upload"
-                                        type="file"
-                                        multiple
-                                        onChange={handleFileUpload}
-                                        disabled={isUploadingAttachment}
-                                        className="hidden"
-                                        accept="*/*"
-                                    />
-                                    <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
-                                    <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
-                                </label>
+                                ) : (
+                                    <>
+                                        <textarea
+                                            value={quickComment}
+                                            onChange={(e) => setQuickComment(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && e.ctrlKey && section && document) {
+                                                    handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                                                }
+                                            }}
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                            rows="2"
+                                            placeholder="Type comment... (Ctrl+Enter to submit)"
+                                            autoFocus
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (!section || !document) return;
+                                                handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                                            }}
+                                            disabled={!quickComment.trim() && commentAttachments.length === 0}
+                                            className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
+                                        >
+                                            Add Comment
+                                        </button>
+                                    </>
+                                )}
+                                
+                                {/* File upload input - Always visible after comment input */}
+                                <div className="mt-1.5">
+                                    <label htmlFor="comment-file-upload" className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                        <input
+                                            id="comment-file-upload"
+                                            type="file"
+                                            multiple
+                                            onChange={handleFileUpload}
+                                            disabled={isUploadingAttachment}
+                                            className="hidden"
+                                            accept="*/*"
+                                        />
+                                        <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
+                                        <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
