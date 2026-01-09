@@ -1822,19 +1822,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
                 const comments = document ? getDocumentComments(document, month) : [];
                 
+                // Debug: Log if section/document not found
+                if (!section || !document) {
+                    console.warn('⚠️ Comment popup: Section or document not found', {
+                        rawSectionId,
+                        rawDocumentId,
+                        month,
+                        sectionFound: !!section,
+                        documentFound: !!document,
+                        availableSections: sections.map(s => ({ id: s.id, name: s.name }))
+                    });
+                }
+                
                 return (
                     <div 
                         className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
                         style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                     >
-                        {/* Show section and document context */}
-                        {section && document && (
-                            <div className="mb-2 pb-2 border-b border-gray-200">
-                                <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
-                                    {section.name || 'Section'}
+                        {/* Show section and document context - ALWAYS show if section and document exist */}
+                        {section && document ? (
+                            <div className="mb-3 pb-2 border-b border-gray-300 bg-gray-50 -m-3 p-3 rounded-t-lg">
+                                <div className="text-[11px] font-bold text-gray-800 mb-1">
+                                    Section: {section.name || 'Unknown Section'}
                                 </div>
-                                <div className="text-[9px] text-gray-500">
-                                    {document.name || 'Document'} • {month}
+                                <div className="text-[10px] text-gray-600">
+                                    Document: {document.name || 'Unknown Document'} • {month}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mb-3 pb-2 border-b border-red-200 bg-red-50 -m-3 p-2 rounded-t-lg">
+                                <div className="text-[10px] text-red-600">
+                                    ⚠️ Unable to determine section/document context
                                 </div>
                             </div>
                         )}
