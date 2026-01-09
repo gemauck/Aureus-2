@@ -3461,7 +3461,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </div>
                             )}
                             
-                            <div>
+                            <>
                                 {commentInputAvailable && section && document ? (
                                     <window.CommentInputWithMentions
                                         onSubmit={(commentText) => {
@@ -3518,7 +3518,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
                                     </label>
                                 </div>
-                            </div>
+                            </>
                         </div>
                     </div>
                 );
