@@ -516,6 +516,9 @@ const ManagementMeetingNotes = () => {
     const autoSaveTimers = useRef({}); // { [departmentNotesId]: timeoutId }
     const AUTO_SAVE_DELAY = 1000; // 1 second delay after last keystroke (Google Docs style)
     const savedStatusTimers = useRef({}); // { [departmentNotesId]: timeoutId } - for clearing "Saved" status
+    
+    // Refs for cursor position preservation
+    const savedCursorPositions = useRef({}); // { [fieldKey]: { start: number, end: number, element: HTMLElement } }
 
     const weekCardRefs = useRef({});
     
@@ -2077,6 +2080,245 @@ const ManagementMeetingNotes = () => {
     const getFieldKey = (departmentNotesId, field) => {
         return `${departmentNotesId}-${field}`;
     };
+    
+    // Helper function to save cursor position for contentEditable elements and textareas
+    const saveCursorPositionForField = (departmentNotesId, field) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        
+        // Try to find the active element (RichTextEditor contentEditable or textarea)
+        const activeElement = document.activeElement;
+        if (!activeElement) return;
+        
+        // Check if it's a textarea first (easier to verify field match)
+        if (activeElement.tagName === 'TEXTAREA') {
+            const textarea = activeElement;
+            const fieldAttr = textarea.getAttribute('data-field');
+            const deptId = textarea.getAttribute('data-dept-note-id');
+            
+            // Verify this is the correct textarea for this field
+            if (deptId === String(departmentNotesId) && fieldAttr === field) {
+                savedCursorPositions.current[fieldKey] = {
+                    start: textarea.selectionStart,
+                    end: textarea.selectionEnd,
+                    element: textarea,
+                    isContentEditable: false,
+                    departmentNotesId,
+                    field
+                };
+            }
+        }
+        // Check if it's a contentEditable div (RichTextEditor)
+        else if (activeElement.contentEditable === 'true') {
+            // For contentEditable, we need to verify it belongs to the correct field
+            // by checking if there's a nearby textarea with matching attributes (fallback)
+            // or by checking the DOM structure
+            const contentEditable = activeElement;
+            
+            // Try to find a nearby textarea with the same department note ID and field
+            // to verify this is the correct editor
+            let isCorrectField = false;
+            try {
+                // Check if there's a textarea with matching attributes nearby (fallback element)
+                const parentSection = contentEditable.closest('[class*="space-y"], [class*="rounded"], div');
+                if (parentSection) {
+                    const nearbyTextarea = parentSection.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"][data-field="${field}"]`);
+                    if (nearbyTextarea) {
+                        isCorrectField = true;
+                    }
+                }
+                
+                // Also check if this contentEditable is within a section that contains our field label
+                // This is a heuristic but should work for most cases
+                if (!isCorrectField && parentSection) {
+                    const labels = parentSection.querySelectorAll('label');
+                    for (const label of labels) {
+                        const labelText = label.textContent.trim().toLowerCase();
+                        if ((field === 'successes' && labelText.includes("last week's successes")) ||
+                            (field === 'weekToFollow' && labelText.includes('weekly plan')) ||
+                            (field === 'frustrations' && (labelText.includes('frustrations') || labelText.includes('challenges')))) {
+                            // Check if this contentEditable is in the same field group as this label
+                            const fieldGroup = label.closest('div')?.parentElement;
+                            if (fieldGroup && fieldGroup.contains(contentEditable)) {
+                                isCorrectField = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // If verification fails, don't save (better to not save than save wrong position)
+                return;
+            }
+            
+            if (isCorrectField) {
+                try {
+                    const selection = window.getSelection();
+                    if (selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
+                        
+                        // Verify the selection is within our contentEditable element
+                        if (!contentEditable.contains(range.commonAncestorContainer)) {
+                            return;
+                        }
+                        
+                        // Calculate cursor position relative to editor content
+                        const preCaretRange = range.cloneRange();
+                        preCaretRange.selectNodeContents(contentEditable);
+                        preCaretRange.setEnd(range.startContainer, range.startOffset);
+                        const start = preCaretRange.toString().length;
+                        
+                        preCaretRange.setEnd(range.endContainer, range.endOffset);
+                        const end = preCaretRange.toString().length;
+                        
+                        savedCursorPositions.current[fieldKey] = {
+                            start,
+                            end,
+                            element: contentEditable,
+                            isContentEditable: true,
+                            departmentNotesId,
+                            field
+                        };
+                    }
+                } catch (e) {
+                    // Silently fail if we can't save cursor position
+                }
+            }
+        }
+    };
+    
+    // Helper function to restore cursor position for a field
+    const restoreCursorPositionForField = (departmentNotesId, field) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        const savedPos = savedCursorPositions.current[fieldKey];
+        
+        if (!savedPos) return;
+        
+        // Use multiple requestAnimationFrame calls to ensure React re-render and RichTextEditor's useEffect have completed
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+            try {
+                if (savedPos.isContentEditable) {
+                    // Restore cursor in contentEditable (RichTextEditor)
+                    // First, try to use the saved element reference if it's still valid
+                    let editorElement = null;
+                    if (savedPos.element && savedPos.element.contentEditable === 'true' && document.body.contains(savedPos.element)) {
+                        editorElement = savedPos.element;
+                    } else {
+                        // Element was recreated, find it by traversing DOM
+                        // Find textarea with matching department note ID and field as a reference point
+                        const textarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"][data-field="${field}"]`);
+                        if (textarea) {
+                            // Find the RichTextEditor contentEditable div near this textarea
+                            const parentSection = textarea.closest('[class*="space-y"], [class*="rounded"], div');
+                            if (parentSection) {
+                                // Look for contentEditable div in the same section (RichTextEditor is usually rendered before textarea fallback)
+                                const contentEditable = parentSection.querySelector('[contenteditable="true"]');
+                                if (contentEditable) {
+                                    editorElement = contentEditable;
+                                }
+                            }
+                        }
+                        // If still not found, try finding any contentEditable in the document that might be our field
+                        // This is a fallback and less reliable
+                        if (!editorElement) {
+                            const allContentEditables = document.querySelectorAll('[contenteditable="true"]');
+                            // We can't reliably identify which one, so skip restoration for this case
+                            delete savedCursorPositions.current[fieldKey];
+                            return;
+                        }
+                    }
+                    
+                    if (editorElement) {
+                        const range = document.createRange();
+                        const selection = window.getSelection();
+                        
+                        let charCount = 0;
+                        const walker = document.createTreeWalker(
+                            editorElement,
+                            NodeFilter.SHOW_TEXT,
+                            null
+                        );
+                        
+                        let startNode = null, startOffset = 0;
+                        let endNode = null, endOffset = 0;
+                        let foundStart = false, foundEnd = false;
+                        
+                        let node;
+                        while (node = walker.nextNode()) {
+                            const nodeLength = node.textContent.length;
+                            
+                            if (!foundStart && charCount + nodeLength >= savedPos.start) {
+                                startNode = node;
+                                startOffset = savedPos.start - charCount;
+                                foundStart = true;
+                            }
+                            
+                            if (!foundEnd && charCount + nodeLength >= savedPos.end) {
+                                endNode = node;
+                                endOffset = savedPos.end - charCount;
+                                foundEnd = true;
+                                break;
+                            }
+                            
+                            charCount += nodeLength;
+                        }
+                        
+                        if (foundStart && startNode) {
+                            if (!foundEnd) {
+                                endNode = startNode;
+                                endOffset = startOffset;
+                            }
+                            
+                            try {
+                                range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+                                range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                                
+                                // Focus the element
+                                editorElement.focus();
+                            } catch (e) {
+                                // Fallback: set cursor to end if range setting fails
+                                const lastNode = editorElement.lastChild || editorElement;
+                                if (lastNode.nodeType === Node.TEXT_NODE) {
+                                    range.setStart(lastNode, lastNode.textContent.length);
+                                    range.setEnd(lastNode, lastNode.textContent.length);
+                                } else {
+                                    range.selectNodeContents(editorElement);
+                                    range.collapse(false);
+                                }
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                                editorElement.focus();
+                            }
+                        }
+                    }
+                } 
+                else if (!savedPos.isContentEditable) {
+                    // Restore cursor in textarea
+                    let textarea = null;
+                    // Try to use saved element if still valid
+                    if (savedPos.element && savedPos.element.tagName === 'TEXTAREA' && document.body.contains(savedPos.element)) {
+                        textarea = savedPos.element;
+                    } else {
+                        // Element was recreated, find it by data attributes
+                        textarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"][data-field="${field}"]`);
+                    }
+                    
+                    if (textarea && textarea.selectionStart !== undefined && textarea.selectionEnd !== undefined) {
+                        textarea.focus();
+                        textarea.setSelectionRange(savedPos.start, savedPos.end);
+                    }
+                }
+            } catch (e) {
+                // Silently fail if cursor restoration fails
+            } finally {
+                // Clean up saved position after attempting restore
+                delete savedCursorPositions.current[fieldKey];
+            }
+            });
+        });
+    };
 
     // Start editing a field
     const handleStartEdit = (departmentNotesId, field, currentValue) => {
@@ -2261,6 +2503,50 @@ const ManagementMeetingNotes = () => {
             // Save successful - update last saved hash
             lastSavedValues.current[lastSavedKey] = currentHash;
             
+            // Determine which field is currently active/focused so we can preserve its cursor position
+            const activeElement = document.activeElement;
+            let activeField = null;
+            
+            if (activeElement) {
+                // Check if it's a textarea
+                if (activeElement.tagName === 'TEXTAREA') {
+                    const fieldAttr = activeElement.getAttribute('data-field');
+                    const deptId = activeElement.getAttribute('data-dept-note-id');
+                    if (deptId === String(departmentNotesId) && 
+                        ['successes', 'weekToFollow', 'frustrations'].includes(fieldAttr)) {
+                        activeField = fieldAttr;
+                    }
+                }
+                // Check if it's a contentEditable (RichTextEditor)
+                else if (activeElement.contentEditable === 'true') {
+                    // Try to identify which field this contentEditable belongs to
+                    const parentSection = activeElement.closest('[class*="space-y"], [class*="rounded"], div');
+                    if (parentSection) {
+                        // Look for nearby labels to identify the field
+                        const labels = parentSection.querySelectorAll('label');
+                        for (const label of labels) {
+                            const labelText = label.textContent.trim().toLowerCase();
+                            const fieldGroup = label.closest('div')?.parentElement;
+                            if (fieldGroup && fieldGroup.contains(activeElement)) {
+                                if (labelText.includes("last week's successes")) {
+                                    activeField = 'successes';
+                                } else if (labelText.includes('weekly plan')) {
+                                    activeField = 'weekToFollow';
+                                } else if (labelText.includes('frustrations') || labelText.includes('challenges')) {
+                                    activeField = 'frustrations';
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Save cursor position only for the active field
+            if (activeField) {
+                saveCursorPositionForField(departmentNotesId, activeField);
+            }
+            
             // Update local state with saved values
             const monthlyId = currentMonthlyNotes?.id || null;
             updateDepartmentNotesLocalBatched(
@@ -2273,6 +2559,13 @@ const ManagementMeetingNotes = () => {
                 },
                 monthlyId
             );
+            
+            // Restore cursor position only for the active field after state update
+            if (activeField) {
+                requestAnimationFrame(() => {
+                    restoreCursorPositionForField(departmentNotesId, activeField);
+                });
+            }
             
             // Set saved status
             setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'saved' }));
@@ -2312,9 +2605,20 @@ const ManagementMeetingNotes = () => {
     
     // Track field changes - with auto-save triggered after typing stops
     const handleFieldChange = (departmentNotesId, field, value) => {
+        // Save cursor position BEFORE state update
+        saveCursorPositionForField(departmentNotesId, field);
+        
         // Update local state immediately for responsive UI (no debounce on UI updates)
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+        
+        // Restore cursor position after React re-renders and DOM updates complete
+        // Use multiple animation frames to ensure RichTextEditor's useEffect has completed
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                restoreCursorPositionForField(departmentNotesId, field);
+            });
+        });
         
         const fieldKey = getFieldKey(departmentNotesId, field);
         
