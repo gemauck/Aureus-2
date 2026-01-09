@@ -25,6 +25,7 @@ const RichTextEditor = ({
     const isUserTypingRef = useRef(false); // Track if user is actively typing
     const lastUserInputTimeRef = useRef(0); // Track last user input time
     const lastSetValueFromUserRef = useRef(null); // Track last value set from user input
+    const isFocusedRef = useRef(false); // Track focus state reliably with events
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -184,9 +185,37 @@ const RichTextEditor = ({
         };
     }, []);
     
+    // Track focus state with event listeners for reliable detection
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        
+        const handleFocus = () => {
+            isFocusedRef.current = true;
+        };
+        
+        const handleBlur = () => {
+            isFocusedRef.current = false;
+        };
+        
+        editor.addEventListener('focus', handleFocus, true);
+        editor.addEventListener('blur', handleBlur, true);
+        
+        // Also check current focus state
+        if (document.activeElement === editor) {
+            isFocusedRef.current = true;
+        }
+        
+        return () => {
+            editor.removeEventListener('focus', handleFocus, true);
+            editor.removeEventListener('blur', handleBlur, true);
+        };
+    }, []); // Run once on mount
+    
     // Initialize editor content on mount and set up scroll protection
     useEffect(() => {
-        if (editorRef.current && !editorRef.current.innerHTML && value) {
+        // Only initialize if editor is empty and not focused
+        if (editorRef.current && !editorRef.current.innerHTML && value && !isFocusedRef.current) {
             editorRef.current.innerHTML = value;
             setHtml(value);
         }
@@ -449,15 +478,13 @@ const RichTextEditor = ({
         
         if (!editorRef.current) return;
         
-        const currentHtml = editorRef.current.innerHTML || '';
-        const isFocused = document.activeElement === editorRef.current;
-        
-        // CRITICAL: If editor is focused, NEVER update innerHTML from props
+        // CRITICAL: Use ref-based focus detection (more reliable than document.activeElement)
+        // If editor is focused OR user is actively typing, NEVER update innerHTML from props
         // This is the key to preventing cursor jumps. When focused, the editor
         // is "uncontrolled" and manages its own state. Only update when blurred.
-        if (isFocused) {
-            // Editor is focused - completely ignore prop updates
-            // Just sync internal state without touching DOM
+        if (isFocusedRef.current || isUserTypingRef.current) {
+            // Editor is focused or user is typing - completely ignore prop updates
+            // Just sync internal state without touching DOM to preserve cursor position
             if (value !== html) {
                 setHtml(value || '');
             }
@@ -465,6 +492,7 @@ const RichTextEditor = ({
         }
         
         // Editor is not focused - safe to update from props
+        const currentHtml = editorRef.current.innerHTML || '';
         // Only update if the value has actually changed
         if (value !== currentHtml && value !== html) {
             setHtml(value || '');
@@ -481,7 +509,8 @@ const RichTextEditor = ({
     const handleInput = () => {
         if (!editorRef.current) return;
         
-        // Mark that user is typing
+        // Mark that user is typing and editor is focused
+        isFocusedRef.current = true;
         isUserTypingRef.current = true;
         lastUserInputTimeRef.current = Date.now();
         
@@ -500,10 +529,16 @@ const RichTextEditor = ({
             onChange(newHtml);
         }
         
-        // Clear typing flag after a delay (not critical since we check focus, but good to have)
-        setTimeout(() => {
+        // Keep typing flag active for longer to prevent any prop updates
+        // Clear existing timeout
+        if (window.richTextEditorTypingTimeout) {
+            clearTimeout(window.richTextEditorTypingTimeout);
+        }
+        // Set new timeout - keep flag active for 2 seconds after last input
+        window.richTextEditorTypingTimeout = setTimeout(() => {
             isUserTypingRef.current = false;
-        }, 1000);
+            window.richTextEditorTypingTimeout = null;
+        }, 2000);
     };
 
     const handleCommand = (command, value = null) => {
@@ -808,5 +843,7 @@ const RichTextEditor = ({
 // Make available globally
 if (typeof window !== 'undefined') {
     window.RichTextEditor = RichTextEditor;
+    // Version: 20260109-cursor-fix-v3 - Focus-based innerHTML protection
+    console.log('✅ RichTextEditor loaded - cursor fix v3 (focus-based protection)');
 }
 
