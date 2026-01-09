@@ -2002,10 +2002,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
-                        sectionId,
-                        documentId,
-                        month,
-                        weekNumber,
+                        // Include both formats for compatibility with notification API
+                        weeklySectionId: sectionId,
+                        weeklyDocumentId: documentId,
+                        weeklyMonth: month,
+                        weeklyWeek: weekNumber,
+                        sectionId, // Keep for backward compatibility
+                        documentId, // Keep for backward compatibility
+                        month, // Keep for backward compatibility
+                        weekNumber, // Keep for backward compatibility
                         commentId: newCommentId
                     };
                     

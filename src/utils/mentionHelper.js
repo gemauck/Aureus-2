@@ -211,18 +211,40 @@ const MentionHelper = {
             }
             
             // Ensure URL is valid using NotificationUrlHelper if available
-            // IMPORTANT: If entityUrl already has document collection params, preserve it
+            // IMPORTANT: If entityUrl or contextLink already has weekly FMS review or document collection params, preserve it
             // Don't let NotificationUrlHelper reconstruct and lose the params
+            const entityUrlHasWeeklyParams = entityUrl && (
+                entityUrl.includes('weeklySectionId=') || 
+                entityUrl.includes('weeklyDocumentId=') || 
+                entityUrl.includes('weeklyWeek=') || 
+                entityUrl.includes('weeklyMonth=')
+            );
+            const contextLinkHasWeeklyParams = contextLink && (
+                contextLink.includes('weeklySectionId=') || 
+                contextLink.includes('weeklyDocumentId=') || 
+                contextLink.includes('weeklyWeek=') || 
+                contextLink.includes('weeklyMonth=')
+            );
             const entityUrlHasDocParams = entityUrl && (
                 entityUrl.includes('docSectionId=') || 
                 entityUrl.includes('docDocumentId=') || 
                 entityUrl.includes('docMonth=')
             );
+            const contextLinkHasDocParams = contextLink && (
+                contextLink.includes('docSectionId=') || 
+                contextLink.includes('docDocumentId=') || 
+                contextLink.includes('docMonth=')
+            );
             
-            if (entityUrlHasDocParams) {
-                // Entity URL already has document collection params, use it as-is
+            // Prioritize contextLink if it has the correct params, otherwise use entityUrl
+            if (contextLinkHasWeeklyParams || contextLinkHasDocParams) {
+                // ContextLink has the correct params, use it
+                entityUrl = contextLink;
+                console.log('📧 MentionHelper: Using contextLink with params:', entityUrl);
+            } else if (entityUrlHasWeeklyParams || entityUrlHasDocParams) {
+                // Entity URL already has params, use it as-is
                 // Don't call ensureUrl as it might reconstruct and lose params
-                console.log('📧 MentionHelper: Preserving entityUrl with doc collection params:', entityUrl);
+                console.log('📧 MentionHelper: Preserving entityUrl with params:', entityUrl);
             } else if (window.NotificationUrlHelper && typeof window.NotificationUrlHelper.ensureUrl === 'function') {
                 entityUrl = window.NotificationUrlHelper.ensureUrl(entityUrl || contextLink, metadata);
                 console.log('📧 MentionHelper: Using NotificationUrlHelper.ensureUrl result:', entityUrl);
@@ -238,8 +260,29 @@ const MentionHelper = {
                 if (contextLink && contextLink.trim() !== '' && contextLink !== '#') {
                     entityUrl = contextLink;
                     console.log('📧 MentionHelper: Using contextLink as fallback:', entityUrl);
+                } else if (metadata.weeklySectionId || metadata.weeklyDocumentId || (metadata.sectionId && metadata.weekNumber)) {
+                    // Build hash-based URL from metadata for weekly FMS review
+                    const projectId = metadata.projectId;
+                    if (projectId) {
+                        const queryParams = [];
+                        if (metadata.weeklySectionId || metadata.sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(metadata.weeklySectionId || metadata.sectionId)}`);
+                        if (metadata.weeklyDocumentId || metadata.documentId) queryParams.push(`weeklyDocumentId=${encodeURIComponent(metadata.weeklyDocumentId || metadata.documentId)}`);
+                        if (metadata.weeklyMonth !== undefined && metadata.weeklyMonth !== null) {
+                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadata.weeklyMonth)}`);
+                        } else if (metadata.month !== undefined && metadata.month !== null) {
+                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadata.month)}`);
+                        }
+                        if (metadata.weeklyWeek !== undefined && metadata.weeklyWeek !== null) {
+                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadata.weeklyWeek)}`);
+                        } else if (metadata.weekNumber !== undefined && metadata.weekNumber !== null) {
+                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadata.weekNumber)}`);
+                        }
+                        if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
+                        entityUrl = `#/projects/${projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
+                        console.log('📧 MentionHelper: Rebuilt entityUrl from weekly FMS review metadata:', entityUrl);
+                    }
                 } else if (metadata.sectionId || metadata.documentId) {
-                    // Build hash-based URL from metadata
+                    // Build hash-based URL from metadata for document collection
                     const projectId = metadata.projectId;
                     if (projectId) {
                         const queryParams = [];
@@ -248,7 +291,7 @@ const MentionHelper = {
                         if (metadata.month !== undefined && metadata.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadata.month)}`);
                         if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
                         entityUrl = `#/projects/${projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
-                        console.log('📧 MentionHelper: Rebuilt entityUrl from metadata:', entityUrl);
+                        console.log('📧 MentionHelper: Rebuilt entityUrl from document collection metadata:', entityUrl);
                     }
                 }
             }
