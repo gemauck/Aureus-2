@@ -1058,7 +1058,7 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 bg-gray-50 min-h-0" style={{ overflowY: 'auto', overflow: 'visible' }}>
+                <div className="flex-1 bg-gray-50 min-h-0">
                     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 lg:px-6">
                             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4 sm:gap-6">
                                 {/* Left Side - Main Content */}
