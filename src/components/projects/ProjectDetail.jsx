@@ -1084,32 +1084,83 @@ function initializeProjectDetail() {
     useEffect(() => {
         const handleRefreshTaskInModal = (event) => {
             const { taskId, updatedTask } = event.detail || {};
-            if (!taskId || !updatedTask || !viewingTask || viewingTask.id !== taskId) {
+            if (!taskId || !updatedTask) {
+                console.warn('⚠️ ProjectDetail: Invalid refresh event', { taskId, hasUpdatedTask: !!updatedTask });
                 return;
             }
 
+            // Check if this is for the currently viewing task
+            const isCurrentTask = viewingTask && (viewingTask.id === taskId || String(viewingTask.id) === String(taskId));
+            
+            if (!isCurrentTask) {
+                console.log('🔍 ProjectDetail: Refresh event for different task, ignoring', {
+                    eventTaskId: taskId,
+                    viewingTaskId: viewingTask?.id
+                });
+                return;
+            }
+
+            const currentCommentsCount = Array.isArray(viewingTask.comments) ? viewingTask.comments.length : 0;
+            const updatedCommentsCount = Array.isArray(updatedTask.comments) ? updatedTask.comments.length : 0;
+
             console.log('🔄 ProjectDetail: Refreshing task in modal', {
                 taskId,
-                currentCommentsCount: Array.isArray(viewingTask.comments) ? viewingTask.comments.length : 0,
-                updatedCommentsCount: Array.isArray(updatedTask.comments) ? updatedTask.comments.length : 0
+                currentCommentsCount,
+                updatedCommentsCount,
+                currentComments: viewingTask.comments?.map(c => ({ id: c.id, author: c.author })) || [],
+                updatedComments: updatedTask.comments?.map(c => ({ id: c.id, author: c.author })) || []
             });
 
-            // Update the viewingTask with the latest data
-            setViewingTask(updatedTask);
+            // Update the viewingTask with the latest data - ensure all fields are preserved
+            setViewingTask(prev => {
+                // Merge to preserve any local edits while updating with fresh data
+                const merged = {
+                    ...prev,
+                    ...updatedTask,
+                    // Explicitly ensure comments and checklist are from updated task
+                    comments: Array.isArray(updatedTask.comments) ? updatedTask.comments : (prev?.comments || []),
+                    checklist: Array.isArray(updatedTask.checklist) ? updatedTask.checklist : (prev?.checklist || []),
+                    attachments: Array.isArray(updatedTask.attachments) ? updatedTask.attachments : (prev?.attachments || []),
+                    tags: Array.isArray(updatedTask.tags) ? updatedTask.tags : (prev?.tags || [])
+                };
+                return merged;
+            });
 
             // Also update the task in the tasks array to keep everything in sync
             setTasks(prevTasks => {
                 return prevTasks.map(t => {
-                    if (t.id === taskId) {
-                        return updatedTask;
+                    if (t.id === taskId || String(t.id) === String(taskId)) {
+                        // Merge to preserve structure
+                        return {
+                            ...t,
+                            ...updatedTask,
+                            comments: Array.isArray(updatedTask.comments) ? updatedTask.comments : (t.comments || []),
+                            checklist: Array.isArray(updatedTask.checklist) ? updatedTask.checklist : (t.checklist || []),
+                            attachments: Array.isArray(updatedTask.attachments) ? updatedTask.attachments : (t.attachments || []),
+                            tags: Array.isArray(updatedTask.tags) ? updatedTask.tags : (t.tags || [])
+                        };
                     }
                     // Check subtasks
                     if (t.subtasks && Array.isArray(t.subtasks)) {
-                        const hasUpdatedSubtask = t.subtasks.some(st => st.id === taskId);
+                        const hasUpdatedSubtask = t.subtasks.some(st => 
+                            st.id === taskId || String(st.id) === String(taskId)
+                        );
                         if (hasUpdatedSubtask) {
                             return {
                                 ...t,
-                                subtasks: t.subtasks.map(st => st.id === taskId ? updatedTask : st)
+                                subtasks: t.subtasks.map(st => {
+                                    if (st.id === taskId || String(st.id) === String(taskId)) {
+                                        return {
+                                            ...st,
+                                            ...updatedTask,
+                                            comments: Array.isArray(updatedTask.comments) ? updatedTask.comments : (st.comments || []),
+                                            checklist: Array.isArray(updatedTask.checklist) ? updatedTask.checklist : (st.checklist || []),
+                                            attachments: Array.isArray(updatedTask.attachments) ? updatedTask.attachments : (st.attachments || []),
+                                            tags: Array.isArray(updatedTask.tags) ? updatedTask.tags : (st.tags || [])
+                                        };
+                                    }
+                                    return st;
+                                })
                             };
                         }
                     }

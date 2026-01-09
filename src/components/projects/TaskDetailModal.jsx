@@ -103,39 +103,67 @@ const TaskDetailModal = ({
                             const currentChecklist = Array.isArray(task.checklist) ? task.checklist : [];
                             const updatedChecklist = Array.isArray(updatedTask.checklist) ? updatedTask.checklist : [];
                             
-                            // Check if comments have changed (by comparing IDs or count)
-                            const commentsChanged = updatedComments.length !== currentComments.length ||
-                                updatedComments.some((comment, idx) => {
-                                    const currentComment = currentComments[idx];
-                                    return !currentComment || comment.id !== currentComment.id || 
-                                           comment.text !== currentComment.text || 
-                                           comment.timestamp !== currentComment.timestamp;
-                                });
+                            // Get current comment IDs for comparison
+                            const currentCommentIds = new Set(currentComments.map(c => c.id).filter(Boolean));
+                            const updatedCommentIds = new Set(updatedComments.map(c => c.id).filter(Boolean));
                             
-                            // Check if checklist has changed
-                            const checklistChanged = updatedChecklist.length !== currentChecklist.length ||
-                                updatedChecklist.some((item, idx) => {
-                                    const currentItem = currentChecklist[idx];
-                                    return !currentItem || item.id !== currentItem.id || 
-                                           item.completed !== currentItem.completed ||
-                                           item.text !== currentItem.text;
-                                });
+                            // Check if there are new comments (by ID comparison)
+                            const hasNewComments = updatedComments.length > currentComments.length ||
+                                Array.from(updatedCommentIds).some(id => !currentCommentIds.has(id));
                             
-                            // Update if anything changed
-                            if (commentsChanged || checklistChanged) {
+                            // Check if any existing comments have changed
+                            const commentsChanged = updatedComments.some(updatedComment => {
+                                if (!updatedComment.id) return false;
+                                const currentComment = currentComments.find(c => c.id === updatedComment.id);
+                                return !currentComment || 
+                                       updatedComment.text !== currentComment.text ||
+                                       updatedComment.timestamp !== currentComment.timestamp;
+                            });
+                            
+                            // Check if checklist has changed (by ID comparison)
+                            const currentChecklistIds = new Set(currentChecklist.map(item => item.id).filter(Boolean));
+                            const updatedChecklistIds = new Set(updatedChecklist.map(item => item.id).filter(Boolean));
+                            const hasNewChecklistItems = updatedChecklist.length > currentChecklist.length ||
+                                Array.from(updatedChecklistIds).some(id => !currentChecklistIds.has(id));
+                            
+                            const checklistChanged = updatedChecklist.some(updatedItem => {
+                                if (!updatedItem.id) return false;
+                                const currentItem = currentChecklist.find(item => item.id === updatedItem.id);
+                                return !currentItem ||
+                                       updatedItem.completed !== currentItem.completed ||
+                                       updatedItem.text !== currentItem.text;
+                            });
+                            
+                            // Always update if there are more comments/checklist items or if anything changed
+                            if (hasNewComments || commentsChanged || hasNewChecklistItems || checklistChanged) {
                                 console.log('🔄 TaskDetailModal: Found updated task data, refreshing...', {
                                     taskId: task.id,
                                     currentComments: currentComments.length,
                                     updatedComments: updatedComments.length,
+                                    hasNewComments,
                                     commentsChanged,
-                                    checklistChanged
+                                    hasNewChecklistItems,
+                                    checklistChanged,
+                                    currentCommentIds: Array.from(currentCommentIds),
+                                    updatedCommentIds: Array.from(updatedCommentIds)
                                 });
                                 
                                 // Dispatch event to parent to update the task
                                 window.dispatchEvent(new CustomEvent('refreshTaskInModal', {
                                     detail: { taskId: task.id, updatedTask }
                                 }));
+                            } else {
+                                console.log('🔍 TaskDetailModal: No changes detected', {
+                                    taskId: task.id,
+                                    currentComments: currentComments.length,
+                                    updatedComments: updatedComments.length
+                                });
                             }
+                        } else {
+                            console.warn('⚠️ TaskDetailModal: Task not found in updated project data', {
+                                taskId: task.id,
+                                projectId: project.id
+                            });
                         }
                     }
                 }
@@ -147,8 +175,9 @@ const TaskDetailModal = ({
         // Refresh immediately when modal opens
         refreshTaskData();
 
-        // Set up periodic refresh every 5 seconds while modal is open
-        refreshIntervalRef.current = setInterval(refreshTaskData, 5000);
+        // Set up periodic refresh - more frequent when on comments tab
+        const refreshInterval = activeTab === 'comments' ? 2000 : 5000; // 2 seconds on comments tab, 5 seconds otherwise
+        refreshIntervalRef.current = setInterval(refreshTaskData, refreshInterval);
 
         return () => {
             if (refreshIntervalRef.current) {
@@ -156,7 +185,7 @@ const TaskDetailModal = ({
                 refreshIntervalRef.current = null;
             }
         };
-    }, [task?.id, project?.id]);
+    }, [task?.id, project?.id, activeTab]); // Include activeTab to adjust refresh rate
 
     // Listen for refresh events from parent
     useEffect(() => {
@@ -837,7 +866,40 @@ const TaskDetailModal = ({
                                 Checklist ({checklist.filter(i => i.completed).length}/{checklist.length})
                             </button>
                             <button
-                                onClick={() => setActiveTab('comments')}
+                                onClick={async () => {
+                                    setActiveTab('comments');
+                                    // Trigger immediate refresh when switching to comments tab
+                                    if (window.DatabaseAPI?.getProject && project?.id && task?.id) {
+                                        try {
+                                            const response = await window.DatabaseAPI.getProject(project.id);
+                                            const updatedProject = response?.data?.project || response?.project || response?.data;
+                                            
+                                            if (updatedProject?.tasks && Array.isArray(updatedProject.tasks)) {
+                                                let updatedTask = updatedProject.tasks.find(t => t.id === task.id);
+                                                
+                                                if (!updatedTask) {
+                                                    for (const parentTask of updatedProject.tasks) {
+                                                        if (parentTask.subtasks && Array.isArray(parentTask.subtasks)) {
+                                                            const foundSubtask = parentTask.subtasks.find(st => st.id === task.id);
+                                                            if (foundSubtask) {
+                                                                updatedTask = foundSubtask;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                if (updatedTask) {
+                                                    window.dispatchEvent(new CustomEvent('refreshTaskInModal', {
+                                                        detail: { taskId: task.id, updatedTask }
+                                                    }));
+                                                }
+                                            }
+                                        } catch (error) {
+                                            console.warn('⚠️ Failed to refresh on comments tab switch:', error);
+                                        }
+                                    }
+                                }}
                                 className={`pb-2 px-1.5 text-sm font-medium transition whitespace-nowrap ${
                                     activeTab === 'comments'
                                         ? 'text-primary-600 border-b-2 border-primary-600'
@@ -1141,6 +1203,53 @@ const TaskDetailModal = ({
 
                         {activeTab === 'comments' && (
                             <div className="space-y-3">
+                                {/* Refresh Button */}
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={async () => {
+                                            console.log('🔄 Manual refresh triggered');
+                                            if (window.DatabaseAPI?.getProject && project?.id && task?.id) {
+                                                try {
+                                                    const response = await window.DatabaseAPI.getProject(project.id);
+                                                    const updatedProject = response?.data?.project || response?.project || response?.data;
+                                                    
+                                                    if (updatedProject?.tasks && Array.isArray(updatedProject.tasks)) {
+                                                        let updatedTask = updatedProject.tasks.find(t => t.id === task.id);
+                                                        
+                                                        if (!updatedTask) {
+                                                            for (const parentTask of updatedProject.tasks) {
+                                                                if (parentTask.subtasks && Array.isArray(parentTask.subtasks)) {
+                                                                    const foundSubtask = parentTask.subtasks.find(st => st.id === task.id);
+                                                                    if (foundSubtask) {
+                                                                        updatedTask = foundSubtask;
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        if (updatedTask) {
+                                                            console.log('🔄 Manual refresh: Found updated task', {
+                                                                taskId: task.id,
+                                                                commentsCount: Array.isArray(updatedTask.comments) ? updatedTask.comments.length : 0
+                                                            });
+                                                            window.dispatchEvent(new CustomEvent('refreshTaskInModal', {
+                                                                detail: { taskId: task.id, updatedTask }
+                                                            }));
+                                                        }
+                                                    }
+                                                } catch (error) {
+                                                    console.error('❌ Manual refresh failed:', error);
+                                                }
+                                            }
+                                        }}
+                                        className="px-2 py-1 text-xs text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors"
+                                        title="Refresh comments"
+                                    >
+                                        <i className="fas fa-sync-alt mr-1"></i>
+                                        Refresh
+                                    </button>
+                                </div>
                                 {/* Add Comment */}
                                 <div className="relative">
                                     <textarea
