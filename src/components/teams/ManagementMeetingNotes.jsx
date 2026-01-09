@@ -4540,6 +4540,7 @@ const ManagementMeetingNotes = () => {
                                                                 </label>
                                                             {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
+                                                                    key={`rich-editor-${deptNote.id}-successes`}
                                                                     value={deptNote.successes || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
                                                                     onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
@@ -4603,6 +4604,7 @@ const ManagementMeetingNotes = () => {
                                                                 </label>
                                                             {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
+                                                                    key={`rich-editor-${deptNote.id}-weekToFollow`}
                                                                     value={deptNote.weekToFollow || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'weekToFollow', html)}
                                                                     onBlur={(html) => handleFieldBlur(deptNote.id, 'weekToFollow', html)}
@@ -4653,6 +4655,7 @@ const ManagementMeetingNotes = () => {
                                                                 </label>
                                                             {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
+                                                                    key={`rich-editor-${deptNote.id}-frustrations`}
                                                                     value={deptNote.frustrations || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'frustrations', html)}
                                                                     onBlur={(html) => handleFieldBlur(deptNote.id, 'frustrations', html)}

@@ -1,5 +1,5 @@
 // Rich text editor component with formatting toolbar
-const { useState, useRef, useEffect, useCallback } = React;
+const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 
 const RichTextEditor = ({ 
     value = '', 
@@ -26,6 +26,7 @@ const RichTextEditor = ({
     const lastUserInputTimeRef = useRef(0); // Track last user input time
     const lastSetValueFromUserRef = useRef(null); // Track last value set from user input
     const isFocusedRef = useRef(false); // Track focus state reliably with events
+    const frozenValueRef = useRef(null); // Freeze value prop when editor is focused to prevent prop changes
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -195,6 +196,8 @@ const RichTextEditor = ({
             if (e.target === editor || editor.contains(e.target)) {
                 isFocusedRef.current = true;
                 isUserTypingRef.current = false; // Reset typing flag on focus
+                // Freeze the current value prop to prevent React from updating it
+                frozenValueRef.current = editor.innerHTML || '';
             }
         };
         
@@ -205,6 +208,8 @@ const RichTextEditor = ({
                 if (document.activeElement !== editor && 
                     !editor.contains(document.activeElement)) {
                     isFocusedRef.current = false;
+                    // Unfreeze value when blurring - allow prop updates again
+                    frozenValueRef.current = null;
                 }
             }, 0);
         };
@@ -486,7 +491,9 @@ const RichTextEditor = ({
     }, []);
 
         // Update editor when value prop changes (external updates)
-    useEffect(() => {
+    // Use useLayoutEffect instead of useEffect for synchronous execution before paint
+    // This ensures focus check happens BEFORE any DOM updates
+    useLayoutEffect(() => {
         if (isInternalUpdateRef.current) {
             isInternalUpdateRef.current = false;
             return;
@@ -504,10 +511,14 @@ const RichTextEditor = ({
         const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
         const recentlyTyped = isUserTypingRef.current && timeSinceLastInput < 3000;
         
+        // CRITICAL: If value is frozen (editor was focused), use frozen value instead
+        // This prevents React from forcing updates when editor is focused
+        const effectiveValue = frozenValueRef.current !== null ? frozenValueRef.current : value;
+        
         // If editor is focused OR user is actively typing, NEVER update innerHTML from props
         // This is the ABSOLUTE KEY to preventing cursor jumps. When focused, the editor
         // is "uncontrolled" and the DOM content is the source of truth.
-        if (isCurrentlyFocused || recentlyTyped) {
+        if (isCurrentlyFocused || recentlyTyped || frozenValueRef.current !== null) {
             // Editor is focused or user just typed - COMPLETELY IGNORE prop updates
             // Don't touch innerHTML, don't sync state, don't do anything
             // The editor's DOM content is the ONLY source of truth when focused/typing
@@ -517,9 +528,9 @@ const RichTextEditor = ({
         // Editor is not focused - safe to update from props
         const currentHtml = editorRef.current.innerHTML || '';
         // Only update if the value has actually changed
-        if (value !== currentHtml && value !== html) {
-            setHtml(value || '');
-            editorRef.current.innerHTML = value || '';
+        if (effectiveValue !== currentHtml && effectiveValue !== html) {
+            setHtml(effectiveValue || '');
+            editorRef.current.innerHTML = effectiveValue || '';
         }
         
         // Re-apply scroll protection in case React recreated the element
@@ -541,6 +552,9 @@ const RichTextEditor = ({
         const newHtml = editorRef.current.innerHTML;
         lastSetValueFromUserRef.current = newHtml;
         
+        // Update frozen value to match current content - this prevents prop updates
+        frozenValueRef.current = newHtml;
+        
         // Mark this as an internal update so useEffect doesn't interfere
         // This prevents the useEffect from running and updating innerHTML
         isInternalUpdateRef.current = true;
@@ -548,20 +562,27 @@ const RichTextEditor = ({
         // Update internal state (but don't update DOM - DOM already has the user's input)
         setHtml(newHtml);
         
-        // Notify parent component of the change (this will trigger state update in parent)
-        // But our useEffect will ignore it because isFocusedRef is true
-        if (onChange) {
-            onChange(newHtml);
+        // Debounce onChange to prevent too many state updates
+        // Clear existing timeout
+        const onChangeTimeoutKey = `richTextEditorOnChange_${editorRef.current.id || 'default'}`;
+        if (window[onChangeTimeoutKey]) {
+            clearTimeout(window[onChangeTimeoutKey]);
         }
         
+        // Call onChange after a short delay (but still call it for auto-save)
+        window[onChangeTimeoutKey] = setTimeout(() => {
+            if (onChange) {
+                onChange(newHtml);
+            }
+            window[onChangeTimeoutKey] = null;
+        }, 100); // Small delay to batch rapid typing
+        
         // Keep typing flag active for longer to prevent any prop updates
-        // Clear existing timeout for this specific editor instance
         const timeoutKey = `richTextEditorTypingTimeout_${editorRef.current.id || 'default'}`;
         if (window[timeoutKey]) {
             clearTimeout(window[timeoutKey]);
         }
         // Set new timeout - keep flag active for 3 seconds after last input
-        // This gives plenty of time for React state updates to complete without interfering
         window[timeoutKey] = setTimeout(() => {
             isUserTypingRef.current = false;
             window[timeoutKey] = null;
