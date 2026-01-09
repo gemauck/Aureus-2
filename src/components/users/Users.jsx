@@ -855,6 +855,7 @@ const Users = () => {
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Users Display */}
             {viewMode === 'grid' ? (
@@ -1234,7 +1235,6 @@ const Users = () => {
                         ))}
                     </div>
                 </div>
-            )}
             )}
 
             {/* User Modal */}
