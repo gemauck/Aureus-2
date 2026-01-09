@@ -828,21 +828,7 @@ const TaskDetailModal = ({
             // Pass closeModal: false to prevent modal from closing
             // Wrap in try-catch to ensure errors don't silently fail
             try {
-                // Call onUpdate - it may or may not return a promise
-                const updateResult = onUpdate(taskToAutoSave, { closeModal: false });
-                // If it returns a promise, handle it
-                if (updateResult && typeof updateResult.then === 'function') {
-                    updateResult.catch(error => {
-                        console.error('❌ TaskDetailModal: Failed to save comment', {
-                            taskId: taskToAutoSave.id,
-                            commentsCount: taskToAutoSave.comments.length,
-                            error: error.message,
-                            stack: error.stack
-                        });
-                        // Show user-friendly error message
-                        alert('Failed to save comment. Please try again or refresh the page.');
-                    });
-                }
+                onUpdate(taskToAutoSave, { closeModal: false });
                 console.log('✅ TaskDetailModal: Comment save initiated successfully', {
                     taskId: taskToAutoSave.id,
                     commentsCount: taskToAutoSave.comments.length
@@ -851,10 +837,8 @@ const TaskDetailModal = ({
                 console.error('❌ TaskDetailModal: Failed to save comment', {
                     taskId: taskToAutoSave.id,
                     commentsCount: taskToAutoSave.comments.length,
-                    error: error.message,
-                    stack: error.stack
+                    error: error.message
                 });
-                // Show user-friendly error message
                 alert('Failed to save comment. Please try again or refresh the page.');
             }
             
