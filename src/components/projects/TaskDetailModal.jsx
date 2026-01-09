@@ -560,8 +560,32 @@ const TaskDetailModal = ({
                 subscribers: newSubscribers
             });
             
-            setComments([...comments, comment]);
+            const updatedComments = [...comments, comment];
+            setComments(updatedComments);
             setNewComment('');
+            
+            // CRITICAL: Auto-save the comment immediately to ensure persistence
+            // Don't wait for user to click "Save Changes" - comments should persist immediately
+            const taskToAutoSave = {
+                ...editedTask,
+                comments: updatedComments,
+                checklist: Array.isArray(checklist) ? checklist : [],
+                attachments: Array.isArray(attachments) ? attachments : [],
+                tags: Array.isArray(tags) ? tags : [],
+                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                subscribers: newSubscribers,
+                id: editedTask.id || task?.id || Date.now()
+            };
+
+            console.log('💾 TaskDetailModal: Auto-saving comment immediately', {
+                taskId: taskToAutoSave.id,
+                commentsCount: taskToAutoSave.comments.length,
+                commentId: comment.id,
+                commentAuthor: comment.author
+            });
+
+            // Save immediately without closing the modal
+            onUpdate(taskToAutoSave);
             
             // Send notifications
             try {
@@ -690,7 +714,27 @@ const TaskDetailModal = ({
 
     const handleDeleteComment = (commentId) => {
         if (confirm('Delete this comment?')) {
-            setComments(comments.filter(c => c.id !== commentId));
+            const updatedComments = comments.filter(c => c.id !== commentId);
+            setComments(updatedComments);
+            
+            // CRITICAL: Auto-save comment deletion immediately
+            const taskToAutoSave = {
+                ...editedTask,
+                comments: updatedComments,
+                checklist: Array.isArray(checklist) ? checklist : [],
+                attachments: Array.isArray(attachments) ? attachments : [],
+                tags: Array.isArray(tags) ? tags : [],
+                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+                id: editedTask.id || task?.id || Date.now()
+            };
+
+            console.log('💾 TaskDetailModal: Auto-saving comment deletion immediately', {
+                taskId: taskToAutoSave.id,
+                commentsCount: taskToAutoSave.comments.length
+            });
+
+            onUpdate(taskToAutoSave);
         }
     };
 
@@ -720,19 +764,79 @@ const TaskDetailModal = ({
                 text: newChecklistItem,
                 completed: false
             };
-            setChecklist([...checklist, item]);
+            const updatedChecklist = [...checklist, item];
+            setChecklist(updatedChecklist);
             setNewChecklistItem('');
+            
+            // CRITICAL: Auto-save checklist item immediately
+            const taskToAutoSave = {
+                ...editedTask,
+                comments: Array.isArray(comments) ? comments : [],
+                checklist: updatedChecklist,
+                attachments: Array.isArray(attachments) ? attachments : [],
+                tags: Array.isArray(tags) ? tags : [],
+                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+                id: editedTask.id || task?.id || Date.now()
+            };
+
+            console.log('💾 TaskDetailModal: Auto-saving checklist item immediately', {
+                taskId: taskToAutoSave.id,
+                checklistCount: taskToAutoSave.checklist.length
+            });
+
+            onUpdate(taskToAutoSave);
         }
     };
 
     const handleToggleChecklistItem = (itemId) => {
-        setChecklist(checklist.map(item =>
+        const updatedChecklist = checklist.map(item =>
             item.id === itemId ? { ...item, completed: !item.completed } : item
-        ));
+        );
+        setChecklist(updatedChecklist);
+        
+        // CRITICAL: Auto-save checklist toggle immediately
+        const taskToAutoSave = {
+            ...editedTask,
+            comments: Array.isArray(comments) ? comments : [],
+            checklist: updatedChecklist,
+            attachments: Array.isArray(attachments) ? attachments : [],
+            tags: Array.isArray(tags) ? tags : [],
+            subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+            subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+            id: editedTask.id || task?.id || Date.now()
+        };
+
+        console.log('💾 TaskDetailModal: Auto-saving checklist toggle immediately', {
+            taskId: taskToAutoSave.id,
+            itemId
+        });
+
+        onUpdate(taskToAutoSave);
     };
 
     const handleDeleteChecklistItem = (itemId) => {
-        setChecklist(checklist.filter(item => item.id !== itemId));
+        const updatedChecklist = checklist.filter(item => item.id !== itemId);
+        setChecklist(updatedChecklist);
+        
+        // CRITICAL: Auto-save checklist deletion immediately
+        const taskToAutoSave = {
+            ...editedTask,
+            comments: Array.isArray(comments) ? comments : [],
+            checklist: updatedChecklist,
+            attachments: Array.isArray(attachments) ? attachments : [],
+            tags: Array.isArray(tags) ? tags : [],
+            subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+            subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+            id: editedTask.id || task?.id || Date.now()
+        };
+
+        console.log('💾 TaskDetailModal: Auto-saving checklist deletion immediately', {
+            taskId: taskToAutoSave.id,
+            checklistCount: taskToAutoSave.checklist.length
+        });
+
+        onUpdate(taskToAutoSave);
     };
 
     const handleAddTag = () => {
