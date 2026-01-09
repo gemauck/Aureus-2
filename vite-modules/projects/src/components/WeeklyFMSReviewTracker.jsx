@@ -3463,17 +3463,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             
                             <div>
                                 {commentInputAvailable && section && document ? (
-                                    <window.CommentInputWithMentions
-                                        onSubmit={(commentText) => {
-                                            if (commentText && commentText.trim() || commentAttachments.length > 0) {
-                                                handleAddComment(section.id, document.id, month, weekNumber, commentText);
-                                            }
-                                        }}
-                                        placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
-                                        rows={2}
-                                        showButton={true}
-                                        autoFocus={true}
-                                    />
+                                    <>
+                                        <window.CommentInputWithMentions
+                                            onSubmit={(commentText) => {
+                                                if (commentText && commentText.trim() || commentAttachments.length > 0) {
+                                                    handleAddComment(section.id, document.id, month, weekNumber, commentText);
+                                                }
+                                            }}
+                                            placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                                            rows={2}
+                                            showButton={true}
+                                            autoFocus={true}
+                                        />
+                                        <div className="mt-2">
+                                            <label htmlFor="comment-file-upload" className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 bg-gray-50 border border-gray-300 rounded cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors">
+                                                <input
+                                                    id="comment-file-upload"
+                                                    type="file"
+                                                    multiple
+                                                    onChange={handleFileUpload}
+                                                    disabled={isUploadingAttachment}
+                                                    className="hidden"
+                                                    accept="*/*"
+                                                />
+                                                <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-xs`}></i>
+                                                <span className="font-medium">{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                            </label>
+                                        </div>
+                                    </>
                                 ) : (
                                     <>
                                         <textarea
@@ -3499,32 +3516,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         >
                                             Add Comment
                                         </button>
+                                        <div className="mt-2">
+                                            <label htmlFor="comment-file-upload" className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 bg-gray-50 border border-gray-300 rounded cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors">
+                                                <input
+                                                    id="comment-file-upload"
+                                                    type="file"
+                                                    multiple
+                                                    onChange={handleFileUpload}
+                                                    disabled={isUploadingAttachment}
+                                                    className="hidden"
+                                                    accept="*/*"
+                                                />
+                                                <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-xs`}></i>
+                                                <span className="font-medium">{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                            </label>
+                                        </div>
                                     </>
                                 )}
                             </div>
                         </div>
-                        
-                        {/* File upload input - Render as direct child of popup to ensure it always shows */}
-                        {(() => {
-                            console.log('Rendering file upload section');
-                            return (
-                                <div className="mt-2" data-file-upload-section="true">
-                                    <label htmlFor="comment-file-upload" className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 bg-gray-50 border border-gray-300 rounded cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors">
-                                        <input
-                                            id="comment-file-upload"
-                                            type="file"
-                                            multiple
-                                            onChange={handleFileUpload}
-                                            disabled={isUploadingAttachment}
-                                            className="hidden"
-                                            accept="*/*"
-                                        />
-                                        <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-xs`}></i>
-                                        <span className="font-medium">{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
-                                    </label>
-                                </div>
-                            );
-                        })()}
                     </div>
                 );
             })()}
