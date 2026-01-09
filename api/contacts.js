@@ -32,18 +32,52 @@ async function handler(req, res) {
     
     
     // GET /api/contacts/client/:clientId - Get all contacts for a client
+    // Phase 5: Use normalized ClientContact table
     if (req.method === 'GET' && clientId && !contactId) {
       if (!clientId) return badRequest(res, 'clientId required')
       
       try {
+        // Phase 5: Read from normalized ClientContact table first
+        const normalizedContacts = await prisma.clientContact.findMany({
+          where: { clientId },
+          orderBy: [
+            { isPrimary: 'desc' },
+            { createdAt: 'asc' }
+          ]
+        })
+        
+        if (normalizedContacts.length > 0) {
+          // Convert to array format for backward compatibility
+          const contacts = normalizedContacts.map(c => ({
+            id: c.id,
+            name: c.name,
+            email: c.email || '',
+            phone: c.phone || '',
+            mobile: c.mobile || '',
+            role: c.role || '',
+            title: c.title || '',
+            isPrimary: c.isPrimary,
+            notes: c.notes || '',
+            createdAt: c.createdAt
+          }))
+          return ok(res, { contacts })
+        }
+        
+        // Fallback: Read from old JSON field (backward compatibility)
         const client = await prisma.client.findUnique({
           where: { id: clientId },
-          select: { contacts: true }
+          select: { contacts: true, contactsJsonb: true }
         })
         
         if (!client) return notFound(res)
         
-        const contacts = getContactsArray(client.contacts)
+        // Try JSONB first, then String
+        let contacts = []
+        if (client.contactsJsonb && Array.isArray(client.contactsJsonb) && client.contactsJsonb.length > 0) {
+          contacts = client.contactsJsonb
+        } else {
+          contacts = getContactsArray(client.contacts)
+        }
         
         return ok(res, { contacts })
       } catch (dbError) {
@@ -56,6 +90,7 @@ async function handler(req, res) {
     }
     
     // POST /api/contacts/client/:clientId - Add a contact to a client
+    // Phase 5: Write to normalized ClientContact table
     if (req.method === 'POST' && clientId) {
       if (!clientId) return badRequest(res, 'clientId required')
       
@@ -63,40 +98,46 @@ async function handler(req, res) {
       if (!body.name) return badRequest(res, 'contact name required')
       
       try {
-        // Get current contacts
+        // Verify client exists
         const client = await prisma.client.findUnique({
           where: { id: clientId },
-          select: { contacts: true }
+          select: { id: true }
         })
         
         if (!client) return notFound(res)
         
-        const existingContacts = getContactsArray(client.contacts)
-        
-        // Create new contact
-        const newContact = {
-          id: body.id || `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name: body.name,
-          email: body.email || '',
-          phone: body.phone || '',
-          role: body.role || '',
-          department: body.department || '',
-          town: body.town || '',
-          siteId: body.siteId || null,
-          isPrimary: !!body.isPrimary,
-          notes: body.notes || ''
-        }
-        
-        // Add to array
-        const updatedContacts = [...existingContacts, newContact]
-        
-        // Save back to database
-        const updatedClient = await prisma.client.update({
-          where: { id: clientId },
-          data: { contacts: JSON.stringify(updatedContacts) }
+        // Phase 5: Create contact in normalized ClientContact table
+        const newContact = await prisma.clientContact.create({
+          data: {
+            id: body.id || undefined, // Use provided ID or let Prisma generate cuid()
+            clientId: clientId,
+            name: body.name,
+            email: body.email || null,
+            phone: body.phone || null,
+            mobile: body.mobile || body.phone || null, // Use phone as mobile fallback
+            role: body.role || null,
+            title: body.title || body.department || null, // Map department to title if provided
+            isPrimary: !!body.isPrimary,
+            notes: body.notes || ''
+          }
         })
         
-        return created(res, { contact: newContact, contacts: updatedContacts })
+        // Normalized table is the source of truth - no JSON sync needed
+        
+        // Return in expected format
+        const contactResponse = {
+          id: newContact.id,
+          name: newContact.name,
+          email: newContact.email || '',
+          phone: newContact.phone || '',
+          mobile: newContact.mobile || '',
+          role: newContact.role || '',
+          title: newContact.title || '',
+          isPrimary: newContact.isPrimary,
+          notes: newContact.notes || ''
+        }
+        
+        return created(res, { contact: contactResponse })
       } catch (dbError) {
         console.error('❌ Database error adding contact:', dbError)
         if (isConnectionError(dbError)) {
@@ -107,76 +148,103 @@ async function handler(req, res) {
     }
     
     // PATCH /api/contacts/client/:clientId/:contactId - Update a contact
+    // Phase 5: Update in normalized ClientContact table
     if (req.method === 'PATCH' && clientId && contactId) {
       if (!clientId || !contactId) return badRequest(res, 'clientId and contactId required')
       
       const body = req.body || {}
       
       try {
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { contacts: true }
+        // Phase 5: Check if contact exists in normalized table
+        const existingContact = await prisma.clientContact.findFirst({
+          where: {
+            id: contactId,
+            clientId: clientId
+          }
         })
         
-        if (!client) return notFound(res)
-        
-        const contacts = getContactsArray(client.contacts)
-        
-        // Find and update the contact
-        const contactIndex = contacts.findIndex(c => c.id === contactId)
-        if (contactIndex === -1) return notFound(res, 'Contact not found')
-        
-        contacts[contactIndex] = {
-          ...contacts[contactIndex],
-          ...body,
-          id: contactId, // Don't allow changing the ID
-          isPrimary: body.isPrimary !== undefined ? !!body.isPrimary : contacts[contactIndex].isPrimary
+        if (!existingContact) {
+          return notFound(res, 'Contact not found')
         }
         
-        // Save back to database
-        await prisma.client.update({
-          where: { id: clientId },
-          data: { contacts: JSON.stringify(contacts) }
+        // Update contact in normalized table
+        const updateData = {}
+        if (body.name !== undefined) updateData.name = body.name
+        if (body.email !== undefined) updateData.email = body.email || null
+        if (body.phone !== undefined) updateData.phone = body.phone || null
+        if (body.mobile !== undefined) updateData.mobile = body.mobile || null
+        if (body.role !== undefined) updateData.role = body.role || null
+        if (body.title !== undefined) updateData.title = body.title || null
+        if (body.department !== undefined) updateData.title = body.department || null // Map department to title
+        if (body.isPrimary !== undefined) updateData.isPrimary = !!body.isPrimary
+        if (body.notes !== undefined) updateData.notes = body.notes || ''
+        
+        const updatedContact = await prisma.clientContact.update({
+          where: { id: contactId },
+          data: updateData
         })
         
-        return ok(res, { contact: contacts[contactIndex], contacts })
+        // Normalized table is the source of truth - no JSON sync needed
+        
+        // Return in expected format
+        const contactResponse = {
+          id: updatedContact.id,
+          name: updatedContact.name,
+          email: updatedContact.email || '',
+          phone: updatedContact.phone || '',
+          mobile: updatedContact.mobile || '',
+          role: updatedContact.role || '',
+          title: updatedContact.title || '',
+          isPrimary: updatedContact.isPrimary,
+          notes: updatedContact.notes || ''
+        }
+        
+        return ok(res, { contact: contactResponse })
       } catch (dbError) {
         console.error('❌ Database error updating contact:', dbError)
         if (isConnectionError(dbError)) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Contact not found')
         }
         return serverError(res, 'Failed to update contact', dbError.message)
       }
     }
     
     // DELETE /api/contacts/client/:clientId/:contactId - Delete a contact
+    // Phase 5: Delete from normalized ClientContact table
     if (req.method === 'DELETE' && clientId && contactId) {
       if (!clientId || !contactId) return badRequest(res, 'clientId and contactId required')
       
       try {
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { contacts: true }
+        // Phase 5: Check if contact exists in normalized table
+        const existingContact = await prisma.clientContact.findFirst({
+          where: {
+            id: contactId,
+            clientId: clientId
+          }
         })
         
-        if (!client) return notFound(res)
+        if (!existingContact) {
+          return notFound(res, 'Contact not found')
+        }
         
-        const contacts = getContactsArray(client.contacts)
-        
-        // Remove the contact
-        const updatedContacts = contacts.filter(c => c.id !== contactId)
-        
-        // Save back to database
-        await prisma.client.update({
-          where: { id: clientId },
-          data: { contacts: JSON.stringify(updatedContacts) }
+        // Delete from normalized table (CASCADE will handle cleanup)
+        await prisma.clientContact.delete({
+          where: { id: contactId }
         })
         
-        return ok(res, { deleted: true, contacts: updatedContacts })
+        // Normalized table is the source of truth - no JSON sync needed
+        
+        return ok(res, { deleted: true })
       } catch (dbError) {
         console.error('❌ Database error deleting contact:', dbError)
         if (isConnectionError(dbError)) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Contact not found')
         }
         return serverError(res, 'Failed to delete contact', dbError.message)
       }

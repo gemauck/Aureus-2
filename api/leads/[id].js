@@ -6,6 +6,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
+import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
 
 async function handler(req, res) {
   try {
@@ -90,113 +91,118 @@ async function handler(req, res) {
           }
         }
         
-        // Use raw SQL query first to avoid Prisma relation resolution issues
+        // Phase 3: Get lead with normalized tables, JSONB, and String fallback
         let lead
         try {
-          console.log(`🔍 [LEADS ID] Attempting to query lead with ID: ${id} using raw SQL`)
-          // Use raw SQL to completely bypass Prisma's relation resolution
-          const rawResult = await prisma.$queryRaw`
-            SELECT id, name, type, industry, status, stage, revenue, value, probability, 
-                   "lastContact", address, website, notes, contacts, "followUps", 
-                   "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
-                   proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
-                   thumbnail, "rssSubscribed"
-            FROM "Client"
-            WHERE id = ${id} AND type = 'lead'
-          `
-          lead = rawResult && rawResult[0] ? rawResult[0] : null
+          console.log(`🔍 [LEADS ID] Attempting to query lead with ID: ${id}`)
           
-          if (lead) {
-            // Manually set relations to null/empty to match expected structure
-            lead.externalAgent = null
-            lead.starredBy = validUserId ? [] : []
-            console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} using raw SQL`)
-          } else {
-            console.log(`⚠️ [LEADS ID] Lead ${id} not found using raw SQL`)
-          }
-        } catch (rawError) {
-          console.warn(`⚠️ [LEADS ID] Raw SQL query failed, trying Prisma without relations:`, rawError.message)
-          // If raw SQL fails, try Prisma without relations as fallback
+          // Try to get lead with normalized relations first
           try {
             lead = await prisma.client.findFirst({ 
-              where: { id, type: 'lead' }
+              where: { id, type: 'lead' },
+              include: {
+                clientContacts: true,
+                clientComments: true,
+                projects: { select: { id: true, name: true, status: true } },
+                ...(includeObj.externalAgent ? { externalAgent: true } : {}),
+                ...(includeObj.starredBy ? { starredBy: includeObj.starredBy } : {})
+              }
             })
+            
             if (lead) {
-              // Manually set empty/null relations
+              console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} with relations`)
+            }
+          } catch (prismaError) {
+            console.warn(`⚠️ [LEADS ID] Prisma query with relations failed, trying raw SQL:`, prismaError.message)
+            // Fallback to raw SQL
+            const rawResult = await prisma.$queryRaw`
+              SELECT id, name, type, industry, status, stage, revenue, value, probability, 
+                     "lastContact", address, website, notes, contacts, "followUps", 
+                     "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
+                     proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
+                     thumbnail, "rssSubscribed"
+              FROM "Client"
+              WHERE id = ${id} AND type = 'lead'
+            `
+            lead = rawResult && rawResult[0] ? rawResult[0] : null
+            
+            if (lead) {
+              // Manually set relations to null/empty
               lead.externalAgent = null
               lead.starredBy = []
-              console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} without relations`)
-            } else {
-              console.warn(`⚠️ [LEADS ID] Lead ${id} not found even without relations`)
-            }
-          } catch (fallbackError) {
-            // Re-throw the original error if fallback also fails
-            console.error(`❌ [LEADS ID] All query fallbacks failed for lead ${id}:`, fallbackError.message)
-            console.error(`❌ [LEADS ID] Fallback error details:`, {
-              message: fallbackError.message,
-              code: fallbackError.code,
-              name: fallbackError.name,
-              stack: fallbackError.stack
-            })
-            throw fallbackError
-          }
-        }
-        
-        if (!lead) {
-          // Check if client exists but is not a lead (for debugging)
-          try {
-            const client = await prisma.client.findUnique({ 
-              where: { id },
-              select: { id: true, type: true, name: true }
-            })
-            if (client) {
-              console.warn(`⚠️ Client found but is not a lead: ${id}, type: ${client.type || 'null'}, name: ${client.name || 'N/A'}`)
-            } else {
-              console.warn(`⚠️ Lead not found: ${id} (client does not exist)`)
-            }
-          } catch (checkError) {
-            console.warn(`⚠️ Lead not found: ${id} (error checking existence: ${checkError.message})`)
-          }
-          return notFound(res)
-        }
-        
-        // Parse JSON fields (proposals, contacts, etc.)
-        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-        const parsedLead = { ...lead }
-        
-        // Parse JSON fields with error handling
-        for (const field of jsonFields) {
-          try {
-            const value = parsedLead[field]
-            if (typeof value === 'string' && value) {
+              lead.clientContacts = []
+              lead.clientComments = []
+              lead.projects = []
+              
+              // Try to fetch normalized data separately
               try {
-                parsedLead[field] = JSON.parse(value)
-              } catch (parseError) {
-                // Set safe defaults on parse error
-                console.warn(`⚠️ Failed to parse JSON field "${field}" for lead ${id}:`, parseError.message)
-                parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+                const contactsResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", name, email, phone, mobile, role, title, "isPrimary", notes, "createdAt"
+                  FROM "ClientContact"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "isPrimary" DESC, "createdAt" ASC
+                `
+                lead.clientContacts = contactsResult || []
+                
+                const commentsResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", text, "authorId", author, "userName", "createdAt"
+                  FROM "ClientComment"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "createdAt" DESC
+                `
+                lead.clientComments = commentsResult || []
+                
+                const projectsResult = await prisma.$queryRaw`
+                  SELECT id, name, status
+                  FROM "Project"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "createdAt" DESC
+                `
+                lead.projects = projectsResult || []
+              } catch (normError) {
+                console.warn(`⚠️ Could not fetch normalized data:`, normError.message)
               }
-            } else if (!value) {
-              // Set defaults for missing/null fields
-              parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+              
+              console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} using raw SQL`)
             }
-          } catch (fieldError) {
-            console.warn(`⚠️ Error processing field "${field}" for lead ${id}:`, fieldError.message)
-            // Set safe default
-            parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
           }
-        }
-        
-        // Check if current user has starred this lead
-        try {
-          parsedLead.isStarred = validUserId && lead.starredBy && Array.isArray(lead.starredBy) && lead.starredBy.length > 0
-        } catch (starError) {
-          console.warn(`⚠️ Error checking starred status for lead ${id}:`, starError.message)
-          parsedLead.isStarred = false
-        }
-        
-        console.log(`✅ [LEADS ID] Successfully retrieved lead ${id}`)
-        return ok(res, { lead: parsedLead })
+          
+          if (!lead) {
+            // Check if client exists but is not a lead (for debugging)
+            try {
+              const client = await prisma.client.findUnique({ 
+                where: { id },
+                select: { id: true, type: true, name: true }
+              })
+              if (client) {
+                console.warn(`⚠️ Client found but is not a lead: ${id}, type: ${client.type || 'null'}, name: ${client.name || 'N/A'}`)
+              } else {
+                console.warn(`⚠️ Lead not found: ${id} (client does not exist)`)
+              }
+            } catch (checkError) {
+              console.warn(`⚠️ Lead not found: ${id} (error checking existence: ${checkError.message})`)
+            }
+            return notFound(res)
+          }
+          
+          // Phase 3: Use shared parseClientJsonFields which handles normalized tables, JSONB, and String fallback
+          const parsedLead = parseClientJsonFields(lead)
+          
+          // Check if current user has starred this lead
+          try {
+            parsedLead.isStarred = validUserId && lead.starredBy && Array.isArray(lead.starredBy) && lead.starredBy.length > 0
+          } catch (starError) {
+            console.warn(`⚠️ Error checking starred status for lead ${id}:`, starError.message)
+            parsedLead.isStarred = false
+          }
+          
+          // Set external agent if available
+          if (lead.externalAgent) {
+            parsedLead.externalAgent = lead.externalAgent
+          }
+          
+          console.log(`✅ [LEADS ID] Successfully retrieved lead ${id}`)
+          return ok(res, { lead: parsedLead })
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'getting lead')
         
@@ -229,8 +235,11 @@ async function handler(req, res) {
     }
 
     // Update Lead (PATCH /api/leads/[id])
+    // ⚠️ DEPRECATED ENDPOINT: This endpoint is deprecated. Use /api/leads (PATCH) instead.
     if (req.method === 'PATCH') {
       const body = req.body || await parseJsonBody(req)
+      
+      console.warn(`⚠️ DEPRECATED: PATCH /api/leads/[id] endpoint used for lead ${id}. Use /api/leads (PATCH) instead.`)
       
       const updateData = {
         name: body.name,
@@ -244,10 +253,10 @@ async function handler(req, res) {
         address: body.address,
         website: body.website,
         notes: body.notes !== undefined ? String(body.notes || '') : undefined,
-        contacts: body.contacts !== undefined ? (typeof body.contacts === 'string' ? body.contacts : JSON.stringify(Array.isArray(body.contacts) ? body.contacts : [])) : undefined,
+        // ⚠️ REMOVED: contacts should be managed via /api/contacts endpoint (normalized ClientContact table)
         followUps: body.followUps !== undefined ? (typeof body.followUps === 'string' ? body.followUps : JSON.stringify(Array.isArray(body.followUps) ? body.followUps : [])) : undefined,
         projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : [])) : undefined,
-        comments: body.comments !== undefined ? (typeof body.comments === 'string' ? body.comments : JSON.stringify(Array.isArray(body.comments) ? body.comments : [])) : undefined,
+        // ⚠️ REMOVED: comments should be managed via normalized ClientComment table (sync in main leads.js handler)
         sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : [])) : undefined,
         contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : [])) : undefined,
         activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,

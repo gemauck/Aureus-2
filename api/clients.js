@@ -667,6 +667,116 @@ async function handler(req, res) {
         })
         
         
+        // Phase 5: Sync contacts and comments to normalized tables after client creation
+        try {
+          // Sync contacts if provided - use upsert to handle duplicates
+          if (clientData.contactsJsonb && Array.isArray(clientData.contactsJsonb) && clientData.contactsJsonb.length > 0) {
+            for (const contact of clientData.contactsJsonb) {
+              const contactData = {
+                clientId: client.id,
+                name: contact.name || '',
+                email: contact.email || null,
+                phone: contact.phone || null,
+                mobile: contact.mobile || contact.phone || null,
+                role: contact.role || null,
+                title: contact.title || contact.department || null,
+                isPrimary: !!contact.isPrimary,
+                notes: contact.notes || ''
+              }
+              
+              if (contact.id) {
+                // Use upsert for contacts with IDs to handle duplicates
+                try {
+                  await prisma.clientContact.create({
+                    data: {
+                      id: contact.id,
+                      ...contactData
+                    }
+                  })
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContact.update({
+                      where: { id: contact.id },
+                      data: contactData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                // Create without ID (Prisma generates one)
+                await prisma.clientContact.create({
+                  data: contactData
+                })
+              }
+            }
+          }
+          
+          // Sync comments if provided - use upsert to handle duplicates
+          if (clientData.commentsJsonb && Array.isArray(clientData.commentsJsonb) && clientData.commentsJsonb.length > 0) {
+            const userId = ownerId || null
+            let authorName = ''
+            let userName = ''
+            
+            if (userId) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: userId },
+                  select: { name: true, email: true }
+                })
+                if (user) {
+                  authorName = user.name || ''
+                  userName = user.email || ''
+                }
+              } catch (userError) {
+                // User lookup failed, continue with empty values
+              }
+            }
+            
+            for (const comment of clientData.commentsJsonb) {
+              const commentData = {
+                clientId: client.id,
+                text: comment.text || '',
+                authorId: comment.authorId || userId || null,
+                author: comment.author || authorName || '',
+                userName: comment.userName || userName || null,
+                createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
+              }
+              
+              if (comment.id) {
+                // Use upsert for comments with IDs to handle duplicates
+                try {
+                  await prisma.clientComment.create({
+                    data: {
+                      id: comment.id,
+                      ...commentData
+                    }
+                  })
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientComment.update({
+                      where: { id: comment.id },
+                      data: commentData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                // Create without ID (Prisma generates one)
+                await prisma.clientComment.create({
+                  data: commentData
+                })
+              }
+            }
+          }
+        } catch (syncError) {
+          console.warn('⚠️ Failed to sync contacts/comments to normalized tables (non-critical):', syncError.message)
+          // Don't fail client creation if sync fails
+        }
+        
         // VERIFY: Immediately re-query the database to confirm the client exists and is queryable
         try {
           const verifyClient = await prisma.client.findUnique({ 
@@ -792,11 +902,167 @@ async function handler(req, res) {
         }
         
         // Phase 2: Add JSON fields with dual-write (both String and JSONB)
+        // Phase 5: Also sync contacts and comments to normalized tables
         // Phase 4: projectIds removed from jsonFields - use Project.clientId relation instead
         // Only include JSON fields if they're provided in the body
         const jsonFieldsToUpdate = {}
-        const jsonFields = ['contacts', 'followUps', 'comments', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
+        const jsonFields = ['followUps', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
         
+        // Handle contacts separately to sync to normalized table
+        if (body.contacts !== undefined) {
+          let contactsArray = []
+          if (Array.isArray(body.contacts)) {
+            contactsArray = body.contacts
+          } else if (typeof body.contacts === 'string' && body.contacts.trim()) {
+            try {
+              contactsArray = JSON.parse(body.contacts)
+            } catch (e) {
+              contactsArray = []
+            }
+          }
+          
+          // Normalized ClientContact table is the source of truth - no JSON writes
+          // Phase 5: Sync to normalized ClientContact table
+          try {
+            // Delete existing contacts for this client
+            await prisma.clientContact.deleteMany({
+              where: { clientId: id }
+            })
+            
+            // Create new contacts in normalized table
+            if (contactsArray.length > 0) {
+              await prisma.clientContact.createMany({
+                data: contactsArray.map(contact => ({
+                  id: contact.id || undefined, // Use provided ID or let Prisma generate
+                  clientId: id,
+                  name: contact.name || '',
+                  email: contact.email || null,
+                  phone: contact.phone || null,
+                  mobile: contact.mobile || contact.phone || null,
+                  role: contact.role || null,
+                  title: contact.title || contact.department || null,
+                  isPrimary: !!contact.isPrimary,
+                  notes: contact.notes || ''
+                }))
+              })
+            }
+          } catch (contactSyncError) {
+            console.warn('⚠️ Failed to sync contacts to normalized table (non-critical):', contactSyncError.message)
+            // Don't fail the update if contact sync fails
+          }
+        }
+        
+        // Handle comments separately to sync to normalized table
+        if (body.comments !== undefined) {
+          let commentsArray = []
+          if (Array.isArray(body.comments)) {
+            commentsArray = body.comments
+          } else if (typeof body.comments === 'string' && body.comments.trim()) {
+            try {
+              commentsArray = JSON.parse(body.comments)
+            } catch (e) {
+              commentsArray = []
+            }
+          }
+          
+          // Normalized ClientComment table is the source of truth - no JSON writes
+          // Phase 5: Sync to normalized ClientComment table
+          try {
+            // Get current user info for authorId
+            const userId = req.user?.sub || null
+            let authorName = ''
+            let userName = ''
+            
+            if (userId) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: userId },
+                  select: { name: true, email: true }
+                })
+                if (user) {
+                  authorName = user.name || ''
+                  userName = user.email || ''
+                }
+              } catch (userError) {
+                // User lookup failed, continue with empty values
+              }
+            }
+            
+            // Get existing comments to compare
+            const existingComments = await prisma.clientComment.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingCommentIds = new Set(existingComments.map(c => c.id))
+            const commentsToKeep = new Set()
+            
+            // Process each comment with upsert to handle duplicates properly
+            for (const comment of commentsArray) {
+              const commentData = {
+                clientId: id,
+                text: comment.text || '',
+                authorId: comment.authorId || userId || null,
+                author: comment.author || authorName || '',
+                userName: comment.userName || userName || null,
+                createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
+              }
+              
+              // Use upsert to handle both create and update
+              if (comment.id && existingCommentIds.has(comment.id)) {
+                // Update existing comment
+                await prisma.clientComment.update({
+                  where: { id: comment.id },
+                  data: commentData
+                })
+                commentsToKeep.add(comment.id)
+              } else if (comment.id) {
+                // Create with specific ID
+                try {
+                  await prisma.clientComment.create({
+                    data: {
+                      id: comment.id,
+                      ...commentData
+                    }
+                  })
+                  commentsToKeep.add(comment.id)
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientComment.update({
+                      where: { id: comment.id },
+                      data: commentData
+                    })
+                    commentsToKeep.add(comment.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                // Create without ID (Prisma generates one)
+                const created = await prisma.clientComment.create({
+                  data: commentData
+                })
+                commentsToKeep.add(created.id)
+              }
+            }
+            
+            // Delete comments that are no longer in the array
+            await prisma.clientComment.deleteMany({
+              where: {
+                clientId: id,
+                NOT: {
+                  id: { in: Array.from(commentsToKeep) }
+                }
+              }
+            })
+          } catch (commentSyncError) {
+            console.error('❌ Failed to sync comments to normalized table:', commentSyncError)
+            console.error('Error details:', commentSyncError.message, commentSyncError.code)
+            // Still continue - comments are saved in JSON for backward compatibility
+          }
+        }
+        
+        // Handle other JSON fields
         for (const field of jsonFields) {
           if (body[field] !== undefined) {
             let arrayValue = []

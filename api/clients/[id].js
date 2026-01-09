@@ -6,7 +6,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
-import { parseClientJsonFields } from '../_lib/clientJsonFields.js'
+import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
 
 async function handler(req, res) {
   try {
@@ -152,7 +152,7 @@ async function handler(req, res) {
           name: p.name,
           status: p.status
         }))
-        
+
         // Get group memberships separately using raw SQL to avoid Prisma relation issues
         let groupMemberships = []
         try {
@@ -289,68 +289,267 @@ async function handler(req, res) {
       // So use req.body instead of parseJsonBody(req)
       const body = req.body || {}
       
-      // Log to file for debugging
-      const fs = await import('fs')
-      const logEntry = `\n=== PATCH REQUEST ===\nTime: ${new Date().toISOString()}\nClient ID: ${id}\nBody: ${JSON.stringify(body, null, 2)}\n`
-      fs.writeFileSync('/tmp/client-update.log', logEntry, { flag: 'a' })
-      
-      const updateData = {
-        name: body.name,
-        industry: body.industry,
-        status: body.status,
-        revenue: body.revenue,
-        lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
-        address: body.address,
-        website: body.website,
-        notes: body.notes,
-        contacts: Array.isArray(body.contacts) ? JSON.stringify(body.contacts) : undefined,
-        followUps: Array.isArray(body.followUps) ? JSON.stringify(body.followUps) : undefined,
-        projectIds: Array.isArray(body.projectIds) ? JSON.stringify(body.projectIds) : undefined,
-        comments: Array.isArray(body.comments) ? JSON.stringify(body.comments) : undefined,
-        sites: Array.isArray(body.sites) ? JSON.stringify(body.sites) : undefined,
-        contracts: Array.isArray(body.contracts) ? JSON.stringify(body.contracts) : undefined,
-        activityLog: Array.isArray(body.activityLog) ? JSON.stringify(body.activityLog) : undefined,
-        services: Array.isArray(body.services) ? JSON.stringify(body.services) : (body.services ? JSON.stringify(body.services) : undefined),
-        billingTerms: typeof body.billingTerms === 'object' ? JSON.stringify(body.billingTerms) : undefined
-      }
-
-      // Remove undefined values
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-          delete updateData[key]
-        }
-      })
-
-      
-      // Log the actual strings being saved
-      if (updateData.comments) {
-      }
-      
       try {
-        // Check if name is being updated - fetch current client first using raw SQL
+        // Check if name is being updated - fetch current client first
         let oldName = null
         let oldWebsite = null
-        if (updateData.name !== undefined) {
-          const existingResult = await prisma.$queryRaw`
-            SELECT name, website FROM "Client" WHERE id = ${id}
-          `
-          if (existingResult && existingResult[0]) {
-            oldName = existingResult[0].name
-            oldWebsite = existingResult[0].website
+        const existing = await prisma.client.findUnique({ 
+          where: { id },
+          select: { name: true, website: true, type: true }
+        })
+        
+        if (!existing) {
+          return notFound(res)
+        }
+        
+        // Verify this is a client, not a lead
+        if (existing.type === 'lead') {
+          return badRequest(res, 'Cannot update lead through clients endpoint. Use /api/leads/[id] instead.')
+        }
+        
+        oldName = existing.name
+        oldWebsite = existing.website
+        
+        // Phase 5: Prepare update data with normalized table sync support
+        const updateData = {
+          ...(body.name !== undefined && { name: body.name }),
+          ...(body.industry !== undefined && { industry: body.industry }),
+          ...(body.status !== undefined && { status: body.status }),
+          ...(body.revenue !== undefined && { revenue: body.revenue }),
+          ...(body.value !== undefined && { value: body.value }),
+          ...(body.probability !== undefined && { probability: body.probability }),
+          ...(body.lastContact !== undefined && { lastContact: body.lastContact ? new Date(body.lastContact) : null }),
+          ...(body.address !== undefined && { address: body.address }),
+          ...(body.website !== undefined && { website: body.website }),
+          ...(body.notes !== undefined && { notes: body.notes })
+        }
+        
+        // Phase 5: Handle contacts separately to sync to normalized ClientContact table
+        if (body.contacts !== undefined) {
+          let contactsArray = []
+          if (Array.isArray(body.contacts)) {
+            contactsArray = body.contacts
+          } else if (typeof body.contacts === 'string' && body.contacts.trim()) {
+            try {
+              contactsArray = JSON.parse(body.contacts)
+            } catch (e) {
+              contactsArray = []
+            }
+          }
+          
+          // Normalized ClientContact table is the source of truth - no JSON writes
+          // Sync to normalized ClientContact table
+          // IMPORTANT: This is the source of truth - save to table first, then sync JSON
+          try {
+            // Get existing contacts to compare
+            const existingContacts = await prisma.clientContact.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingContactIds = new Set(existingContacts.map(c => c.id))
+            
+            // Process each contact with upsert to handle duplicates properly
+            const contactsToKeep = new Set()
+            
+            for (const contact of contactsArray) {
+              const contactData = {
+                clientId: id,
+                name: contact.name || '',
+                email: contact.email || null,
+                phone: contact.phone || null,
+                mobile: contact.mobile || contact.phone || null,
+                role: contact.role || null,
+                title: contact.title || contact.department || null,
+                isPrimary: !!contact.isPrimary,
+                notes: contact.notes || ''
+              }
+              
+              // Use upsert to handle both create and update
+              if (contact.id && existingContactIds.has(contact.id)) {
+                // Update existing contact
+                await prisma.clientContact.update({
+                  where: { id: contact.id },
+                  data: contactData
+                })
+                contactsToKeep.add(contact.id)
+              } else if (contact.id) {
+                // Create with specific ID
+                try {
+                  await prisma.clientContact.create({
+                    data: {
+                      id: contact.id,
+                      ...contactData
+                    }
+                  })
+                  contactsToKeep.add(contact.id)
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContact.update({
+                      where: { id: contact.id },
+                      data: contactData
+                    })
+                    contactsToKeep.add(contact.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                // Create without ID (Prisma generates one)
+                const created = await prisma.clientContact.create({
+                  data: contactData
+                })
+                contactsToKeep.add(created.id)
+              }
+            }
+            
+            // Delete contacts that are no longer in the array
+            await prisma.clientContact.deleteMany({
+              where: {
+                clientId: id,
+                NOT: {
+                  id: { in: Array.from(contactsToKeep) }
+                }
+              }
+            })
+            
+            console.log(`✅ Synced ${contactsArray.length} contacts to normalized table for client ${id}`)
+          } catch (contactSyncError) {
+            console.error('❌ Failed to sync contacts to normalized table:', contactSyncError)
+            console.error('Error details:', contactSyncError.message, contactSyncError.code)
+            // Still continue - contacts are saved in JSON for backward compatibility
+            // But log as error so it's visible in production
           }
         }
+        
+        // Phase 5: Handle comments separately to sync to normalized ClientComment table
+        if (body.comments !== undefined) {
+          let commentsArray = []
+          if (Array.isArray(body.comments)) {
+            commentsArray = body.comments
+          } else if (typeof body.comments === 'string' && body.comments.trim()) {
+            try {
+              commentsArray = JSON.parse(body.comments)
+            } catch (e) {
+              commentsArray = []
+            }
+          }
+          
+          // Normalized ClientComment table is the source of truth - no JSON writes
+          // Sync to normalized ClientComment table
+          // IMPORTANT: This is the source of truth - save to table first, then sync JSON
+          try {
+            // Get current user info for authorId
+            const userId = req.user?.sub || null
+            let authorName = ''
+            let userName = ''
+            
+            if (userId) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: userId },
+                  select: { name: true, email: true }
+                })
+                if (user) {
+                  authorName = user.name || ''
+                  userName = user.email || ''
+                }
+              } catch (userError) {
+                // User lookup failed, continue with empty values
+              }
+            }
+            
+            // Get existing comments to compare
+            const existingComments = await prisma.clientComment.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingCommentIds = new Set(existingComments.map(c => c.id))
+            const commentsToKeep = new Set()
+            
+            // Process each comment with upsert to handle duplicates properly
+            for (const comment of commentsArray) {
+              const commentData = {
+                clientId: id,
+                text: comment.text || '',
+                authorId: comment.authorId || userId || null,
+                author: comment.author || authorName || '',
+                userName: comment.userName || userName || null,
+                createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
+              }
+              
+              // Use upsert to handle both create and update
+              if (comment.id && existingCommentIds.has(comment.id)) {
+                // Update existing comment
+                await prisma.clientComment.update({
+                  where: { id: comment.id },
+                  data: commentData
+                })
+                commentsToKeep.add(comment.id)
+              } else if (comment.id) {
+                // Create with specific ID
+                try {
+                  await prisma.clientComment.create({
+                    data: {
+                      id: comment.id,
+                      ...commentData
+                    }
+                  })
+                  commentsToKeep.add(comment.id)
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientComment.update({
+                      where: { id: comment.id },
+                      data: commentData
+                    })
+                    commentsToKeep.add(comment.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                // Create without ID (Prisma generates one)
+                const created = await prisma.clientComment.create({
+                  data: commentData
+                })
+                commentsToKeep.add(created.id)
+              }
+            }
+            
+            // Delete comments that are no longer in the array
+            await prisma.clientComment.deleteMany({
+              where: {
+                clientId: id,
+                NOT: {
+                  id: { in: Array.from(commentsToKeep) }
+                }
+              }
+            })
+            
+            console.log(`✅ Synced ${commentsArray.length} comments to normalized table for client ${id}`)
+          } catch (commentSyncError) {
+            console.error('❌ Failed to sync comments to normalized table:', commentSyncError)
+            console.error('Error details:', commentSyncError.message, commentSyncError.code)
+            // Still continue - comments are saved in JSON for backward compatibility
+            // But log as error so it's visible in production
+          }
+        }
+        
+        // Phase 2: Prepare other JSON fields with dual-write (String + JSONB)
+        // Note: projectIds excluded - use Project.clientId relation instead
+        const jsonFieldsData = prepareJsonFieldsForDualWrite(body, ['contacts', 'comments', 'projectIds'])
+        Object.assign(updateData, jsonFieldsData)
         
         // If industry is being updated, ensure it exists in Industry table
         if (updateData.industry && updateData.industry.trim()) {
           const industryName = updateData.industry.trim()
           try {
-            // Check if industry exists in Industry table
             const existingIndustry = await prisma.industry.findUnique({
               where: { name: industryName }
             })
             
             if (!existingIndustry) {
-              // Create the industry if it doesn't exist
               try {
                 await prisma.industry.create({
                   data: {
@@ -359,124 +558,61 @@ async function handler(req, res) {
                   }
                 })
               } catch (createError) {
-                // Ignore unique constraint violations (race condition)
                 if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
                   console.warn(`⚠️ Could not create industry "${industryName}":`, createError.message)
                 }
               }
             } else if (!existingIndustry.isActive) {
-              // Reactivate if it was deactivated
               await prisma.industry.update({
                 where: { id: existingIndustry.id },
                 data: { isActive: true }
               })
             }
           } catch (industryError) {
-            // Don't block the client update if industry sync fails
             console.warn('⚠️ Error syncing industry:', industryError.message)
           }
         }
         
-        // Use Prisma's update method with explicit select to avoid relation resolution issues
-        // First check if there are any fields to update
+        // Check if there are any fields to update
         if (Object.keys(updateData).length === 0) {
-          // No fields to update, just fetch and return current client using raw SQL
-          const currentResult = await prisma.$queryRaw`
-            SELECT * FROM "Client" WHERE id = ${id}
-          `
-          if (!currentResult || !currentResult[0]) {
+          // No fields to update, just fetch and return current client
+          const client = await prisma.client.findUnique({
+            where: { id },
+            include: {
+              clientContacts: true,
+              clientComments: true,
+              projects: { select: { id: true, name: true, status: true } }
+            }
+          })
+          
+          if (!client) {
             return notFound(res)
           }
-          const client = currentResult[0]
           
-          // Parse JSON fields
-          const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-          const parsedClient = { ...client }
-          for (const field of jsonFields) {
-            const value = parsedClient[field]
-            if (typeof value === 'string' && value) {
-              try {
-                parsedClient[field] = JSON.parse(value)
-              } catch (e) {
-                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
-              }
-            } else if (!value) {
-              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
-            }
-          }
+          const parsedClient = parseClientJsonFields(client)
           return ok(res, { client: parsedClient })
         }
         
-        // Use Prisma's update method with explicit select to avoid relation issues
-        // This is safer than raw SQL and handles type conversion automatically
+        // Update the client
         const client = await prisma.client.update({
           where: { id },
           data: updateData,
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            industry: true,
-            status: true,
-            stage: true,
-            revenue: true,
-            value: true,
-            probability: true,
-            lastContact: true,
-            address: true,
-            website: true,
-            notes: true,
-            contacts: true,
-            followUps: true,
-            projectIds: true,
-            comments: true,
-            sites: true,
-            contracts: true,
-            activityLog: true,
-            billingTerms: true,
-            proposals: true,
-            services: true,
-            ownerId: true,
-            externalAgentId: true,
-            createdAt: true,
-            updatedAt: true,
-            thumbnail: true,
-            rssSubscribed: true
+          include: {
+            clientContacts: true,
+            clientComments: true,
+            projects: { select: { id: true, name: true, status: true } }
           }
         })
         
-        // Log to file
-        const fs = await import('fs')
-        const afterUpdateLog = `\n=== AFTER UPDATE ===\nClient: ${client.name}\nComments: ${client.comments}\nComments Length: ${client.comments?.length}\n`
-        fs.writeFileSync('/tmp/client-update.log', afterUpdateLog, { flag: 'a' })
-        
         // If name changed, trigger RSS feed update (async, don't wait)
         if (updateData.name !== undefined && oldName && oldName !== client.name) {
-          // Trigger RSS search asynchronously (don't block the response)
           searchAndSaveNewsForClient(client.id, client.name, client.website || oldWebsite || '').catch(error => {
             console.error('❌ Error updating RSS feed after name change:', error)
           })
         }
         
-        // Parse JSON fields before returning (same as GET handler) - CRITICAL for services persistence
-        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-        const parsedClient = { ...client }
-        
-        // Parse JSON fields
-        for (const field of jsonFields) {
-          const value = parsedClient[field]
-          if (typeof value === 'string' && value) {
-            try {
-              parsedClient[field] = JSON.parse(value)
-            } catch (e) {
-              // Set safe defaults on parse error
-              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
-            }
-          } else if (!value) {
-            // Set defaults for missing/null fields
-            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
-          }
-        }
+        // Parse JSON fields before returning using shared utility
+        const parsedClient = parseClientJsonFields(client)
         
         return ok(res, { client: parsedClient })
       } catch (dbError) {
