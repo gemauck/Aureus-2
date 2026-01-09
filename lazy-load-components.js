@@ -323,6 +323,7 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
                                      src.includes('ProjectDetail') || 
                                      src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') || 
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
+                                     src.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
                                      src.includes('ManagementMeetingNotes') || src.includes('Teams.jsx') || src.includes('Teams.js') ||
                                      src.includes('AuditTrail') || src.includes('Reports') ||
@@ -333,6 +334,7 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
                                      scriptSrc.includes('/projects/Projects') || 
                                      scriptSrc.includes('/projects/ProjectDetail') ||
+                                     scriptSrc.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates
                                      scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
