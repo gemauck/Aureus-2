@@ -310,7 +310,12 @@ const RichTextEditor = ({
                 // Set up MutationObserver to detect DOM changes and restore cursor
                 if (!mutationObserver) {
                     mutationObserver = new MutationObserver((mutations) => {
-                        if (!isFocusedRef.current || isRestoring) return;
+                        // CRITICAL: Don't restore during active typing - this causes backwards typing
+                        if (!isFocusedRef.current || isRestoring || isUserTypingRef.current) return;
+                        
+                        // Also ignore if typing happened very recently (within last 100ms)
+                        const timeSinceLastInput = Date.now() - (lastUserInputTimeRef.current || 0);
+                        if (timeSinceLastInput < 100) return;
                         
                         // Check if innerHTML actually changed (not just user typing)
                         let externalChange = false;
@@ -329,6 +334,8 @@ const RichTextEditor = ({
                                 restoreCursorPosition(savedPosition);
                                 // Update saved position after restoration
                                 savedPosition = saveCursorPosition();
+                                // Update domValueRef to current to prevent false positives
+                                domValueRef.current = editor.innerHTML || '';
                                 isRestoring = false;
                             });
                         }
@@ -377,6 +384,8 @@ const RichTextEditor = ({
         // Save cursor position before any potential DOM changes
         const handleBeforeInput = () => {
             if (isFocusedRef.current) {
+                // Update domValueRef BEFORE user types to prevent MutationObserver false positives
+                domValueRef.current = editor.innerHTML || '';
                 savedPosition = saveCursorPosition();
             }
         };
@@ -664,7 +673,8 @@ const RichTextEditor = ({
         // Get the current HTML from the editor (this is the ONLY source of truth when user is typing)
         const newHtml = editorRef.current.innerHTML;
         
-        // Update all our tracking refs
+        // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
+        // This must happen synchronously before any other async operations
         domValueRef.current = newHtml;
         lastSetValueFromUserRef.current = newHtml;
         frozenValueRef.current = newHtml;
@@ -1018,7 +1028,7 @@ if (typeof window !== 'undefined') {
     window.RichTextEditor = MemoizedRichTextEditor;
     // Also export unmemoized version in case needed
     window.RichTextEditorUnmemoized = RichTextEditor;
-    // Version: 20260109-cursor-fix-v9 - MutationObserver cursor restoration
-    console.log('✅ RichTextEditor loaded - cursor fix v9 (MutationObserver cursor restoration)');
+    // Version: 20260109-cursor-fix-v10 - Fixed backwards typing by ignoring mutations during typing
+    console.log('✅ RichTextEditor loaded - cursor fix v10 (Fixed backwards typing issue)');
 }
 
