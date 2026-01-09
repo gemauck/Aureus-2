@@ -3500,6 +3500,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     </button>
                                 </>
                             )}
+                            
+                            {/* File upload input - Always visible after comment input */}
+                            <div className="mt-1.5">
+                                <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        onChange={handleFileUpload}
+                                        disabled={isUploadingAttachment}
+                                        className="hidden"
+                                        accept="*/*"
+                                    />
+                                    <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
+                                    <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 );
