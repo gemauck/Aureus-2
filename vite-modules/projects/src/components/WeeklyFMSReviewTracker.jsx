@@ -3461,45 +3461,47 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </div>
                             )}
                             
-                            {commentInputAvailable && section && document ? (
-                                <window.CommentInputWithMentions
-                                    onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim() || commentAttachments.length > 0) {
-                                            handleAddComment(section.id, document.id, month, weekNumber, commentText);
-                                        }
-                                    }}
-                                    placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
-                                    rows={2}
-                                    showButton={true}
-                                    autoFocus={true}
-                                />
-                            ) : (
-                                <>
-                                    <textarea
-                                        value={quickComment}
-                                        onChange={(e) => setQuickComment(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                            <div>
+                                {commentInputAvailable && section && document ? (
+                                    <window.CommentInputWithMentions
+                                        onSubmit={(commentText) => {
+                                            if (commentText && commentText.trim() || commentAttachments.length > 0) {
+                                                handleAddComment(section.id, document.id, month, weekNumber, commentText);
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
-                                        rows="2"
-                                        placeholder="Type comment... (Ctrl+Enter to submit)"
-                                        autoFocus
+                                        placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                                        rows={2}
+                                        showButton={true}
+                                        autoFocus={true}
                                     />
-                                    <button
-                                        onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, weekNumber, quickComment);
-                                        }}
-                                        disabled={!quickComment.trim() && commentAttachments.length === 0}
-                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
-                                    >
-                                        Add Comment
-                                    </button>
-                                </>
-                            )}
+                                ) : (
+                                    <>
+                                        <textarea
+                                            value={quickComment}
+                                            onChange={(e) => setQuickComment(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && e.ctrlKey && section && document) {
+                                                    handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                                                }
+                                            }}
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                            rows="2"
+                                            placeholder="Type comment... (Ctrl+Enter to submit)"
+                                            autoFocus
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (!section || !document) return;
+                                                handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                                            }}
+                                            disabled={!quickComment.trim() && commentAttachments.length === 0}
+                                            className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
+                                        >
+                                            Add Comment
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                             
                             {/* File upload input - Always visible after comment input, outside conditional */}
                             <div className="mt-2">
