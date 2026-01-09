@@ -2184,12 +2184,66 @@ function initializeProjectDetail() {
             }
             
             
+            // CRITICAL: Validate and ensure all tasks have comments arrays before saving
+            // This prevents comments from being lost during serialization
+            const validatedTasks = (tasksToSave || []).map(task => {
+                // Ensure comments is always an array
+                if (!Array.isArray(task.comments)) {
+                    console.warn('⚠️ Task missing comments array, fixing:', {
+                        taskId: task.id,
+                        taskTitle: task.title,
+                        commentsType: typeof task.comments
+                    });
+                    task.comments = [];
+                }
+                
+                // Validate subtasks too
+                if (Array.isArray(task.subtasks)) {
+                    task.subtasks = task.subtasks.map(subtask => {
+                        if (!Array.isArray(subtask.comments)) {
+                            console.warn('⚠️ Subtask missing comments array, fixing:', {
+                                subtaskId: subtask.id,
+                                subtaskTitle: subtask.title
+                            });
+                            subtask.comments = [];
+                        }
+                        return subtask;
+                    });
+                }
+                
+                return task;
+            });
+            
+            // Log comment information for debugging
+            const tasksWithComments = validatedTasks?.filter(t => 
+                Array.isArray(t.comments) && t.comments.length > 0
+            ) || [];
+            const totalComments = validatedTasks?.reduce((sum, t) => 
+                sum + (Array.isArray(t.comments) ? t.comments.length : 0), 0
+            ) || 0;
+            
+            // Count comments in subtasks too
+            const subtaskComments = validatedTasks?.reduce((sum, t) => {
+                if (Array.isArray(t.subtasks)) {
+                    return sum + t.subtasks.reduce((subSum, st) => 
+                        subSum + (Array.isArray(st.comments) ? st.comments.length : 0), 0
+                    );
+                }
+                return sum;
+            }, 0) || 0;
+            
             console.log('💾 Saving project data:', { 
                 projectId: project.id, 
-                hasTasks: !!tasksToSave,
-                tasksCount: tasksToSave?.length || 0,
+                hasTasks: !!validatedTasks,
+                tasksCount: validatedTasks?.length || 0,
+                tasksWithCommentsCount: tasksWithComments.length,
+                totalCommentsCount: totalComments,
+                subtaskCommentsCount: subtaskComments,
                 updatePayloadKeys: Object.keys(updatePayload)
             });
+            
+            // CRITICAL: Use validated tasks instead of original tasksToSave
+            updatePayload.tasksList = JSON.stringify(validatedTasks);
             
             try {
                 const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
@@ -3857,11 +3911,39 @@ function initializeProjectDetail() {
                     if (t.id === viewingTaskParent.id) {
                         // Find the original subtask to preserve all fields
                         const originalSubtask = (t.subtasks || []).find(st => st.id === updatedTaskData.id);
+                        
+                        // CRITICAL: Explicitly preserve comments array for subtasks
+                        // FIXED: Always merge comments - never lose existing comments
+                        const originalSubtaskComments = Array.isArray(originalSubtask?.comments) ? originalSubtask.comments : [];
+                        const updatedSubtaskComments = Array.isArray(updatedTaskData.comments) ? updatedTaskData.comments : null;
+                        
+                        // CRITICAL FIX: Always use updatedComments if provided (even if empty array)
+                        // This ensures newly added comments are never lost
+                        const finalSubtaskComments = updatedSubtaskComments !== null 
+                            ? updatedSubtaskComments  // Use updated comments (includes new comments)
+                            : originalSubtaskComments; // Fall back to original if not provided
+                        
+                        const mergedSubtask = {
+                            ...originalSubtask,
+                            ...updatedTaskData,
+                            // CRITICAL: Always set comments explicitly to ensure they're never lost
+                            comments: finalSubtaskComments
+                        };
+                        
+                        // VALIDATION: Ensure comments array is always present
+                        if (!Array.isArray(mergedSubtask.comments)) {
+                            console.error('❌ CRITICAL: mergedSubtask.comments is not an array!', {
+                                subtaskId: mergedSubtask.id,
+                                commentsType: typeof mergedSubtask.comments
+                            });
+                            mergedSubtask.comments = [];
+                        }
+                        
                         return {
                             ...t,
                             subtasks: (t.subtasks || []).map(st =>
                                 st.id === updatedTaskData.id 
-                                    ? { ...originalSubtask, ...updatedTaskData } // Merge to preserve all fields
+                                    ? mergedSubtask
                                     : st
                             )
                         };
@@ -3871,9 +3953,52 @@ function initializeProjectDetail() {
             } else {
                 // Find the original task to preserve all fields
                 const originalTask = tasks.find(t => t.id === updatedTaskData.id);
+                
+                // CRITICAL: Explicitly preserve comments array to ensure comments persist
+                // FIXED: Always merge comments - never lose existing comments
+                // If updatedTaskData has comments, use them (they should include all comments)
+                // If not, preserve original comments
+                // If both exist, prefer updatedTaskData.comments (it should be the complete list)
+                const originalComments = Array.isArray(originalTask?.comments) ? originalTask.comments : [];
+                const updatedComments = Array.isArray(updatedTaskData.comments) ? updatedTaskData.comments : null;
+                
+                // CRITICAL FIX: Always use updatedComments if provided (even if empty array)
+                // This ensures newly added comments are never lost
+                // Only fall back to originalComments if updatedTaskData doesn't have a comments property
+                const finalComments = updatedComments !== null 
+                    ? updatedComments  // Use updated comments (includes new comments)
+                    : originalComments; // Fall back to original if not provided
+                
+                const mergedTask = {
+                    ...originalTask,
+                    ...updatedTaskData,
+                    // CRITICAL: Always set comments explicitly to ensure they're never lost
+                    comments: finalComments
+                };
+                
+                console.log('💬 handleUpdateTaskFromDetail: Merging task with comments', {
+                    taskId: updatedTaskData.id,
+                    originalCommentsCount: originalComments.length,
+                    updatedCommentsCount: updatedComments?.length || 0,
+                    finalCommentsCount: mergedTask.comments.length,
+                    hasCommentsArray: Array.isArray(mergedTask.comments),
+                    usingUpdatedComments: updatedComments !== null,
+                    commentIds: mergedTask.comments.map(c => c.id).filter(Boolean)
+                });
+                
+                // VALIDATION: Ensure comments array is always present
+                if (!Array.isArray(mergedTask.comments)) {
+                    console.error('❌ CRITICAL: mergedTask.comments is not an array!', {
+                        taskId: mergedTask.id,
+                        commentsType: typeof mergedTask.comments,
+                        commentsValue: mergedTask.comments
+                    });
+                    mergedTask.comments = [];
+                }
+                
                 updatedTasks = tasks.map(t => 
                     t.id === updatedTaskData.id 
-                        ? { ...originalTask, ...updatedTaskData } // Merge to preserve all fields
+                        ? mergedTask
                         : t
                 );
             }
@@ -3884,20 +4009,86 @@ function initializeProjectDetail() {
         setTasks(updatedTasks);
         tasksRef.current = updatedTasks; // Also update ref immediately
         
+        // Set flag to skip the useEffect save to prevent race condition
+        // This prevents the debounced save from overwriting our immediate save
+        skipNextSaveRef.current = true;
+        
         // Immediately save to database to ensure checklist and other changes persist
         // Don't wait for the debounced useEffect - save immediately
         try {
-            console.log('💾 Persisting task update to database...');
-            await persistProjectData({ nextTasks: updatedTasks });
-            console.log('✅ Task update persisted successfully');
+            // Find the updated task to log comment info
+            const savedTask = updatedTasks.find(t => t.id === updatedTaskData.id) || 
+                            updatedTasks.find(t => (t.subtasks || []).some(st => st.id === updatedTaskData.id));
+            
+            // CRITICAL: Validate comments before saving
+            const commentsCount = savedTask?.comments?.length || 0;
+            const hasCommentsArray = Array.isArray(savedTask?.comments);
+            
+            if (!hasCommentsArray && commentsCount > 0) {
+                console.error('❌ CRITICAL: Task has comments but comments is not an array!', {
+                    taskId: updatedTaskData.id,
+                    commentsType: typeof savedTask?.comments,
+                    expectedCommentsCount: commentsCount
+                });
+            }
+            
+            console.log('💾 Persisting task update to database...', {
+                taskId: updatedTaskData.id,
+                commentsInTask: commentsCount,
+                hasCommentsArray: hasCommentsArray,
+                totalTasksCount: updatedTasks.length,
+                commentIds: savedTask?.comments?.map(c => c.id).filter(Boolean) || []
+            });
+            
+            // CRITICAL: Ensure all tasks have valid comments arrays before saving
+            const validatedTasksForSave = updatedTasks.map(t => {
+                if (!Array.isArray(t.comments)) {
+                    console.warn('⚠️ Fixing task with invalid comments array before save:', {
+                        taskId: t.id,
+                        taskTitle: t.title
+                    });
+                    t.comments = [];
+                }
+                // Validate subtasks too
+                if (Array.isArray(t.subtasks)) {
+                    t.subtasks = t.subtasks.map(st => {
+                        if (!Array.isArray(st.comments)) {
+                            st.comments = [];
+                        }
+                        return st;
+                    });
+                }
+                return t;
+            });
+            
+            await persistProjectData({ nextTasks: validatedTasksForSave });
+            
+            // Verify the save by checking the saved task again
+            const verifyTask = validatedTasksForSave.find(t => t.id === updatedTaskData.id) || 
+                            validatedTasksForSave.find(t => (t.subtasks || []).some(st => st.id === updatedTaskData.id));
+            
+            console.log('✅ Task update persisted successfully', {
+                taskId: updatedTaskData.id,
+                commentsCount: verifyTask?.comments?.length || 0,
+                commentIds: verifyTask?.comments?.map(c => c.id).filter(Boolean) || []
+            });
         } catch (error) {
             console.error('❌ Failed to save task update:', error);
             console.error('❌ Error details:', {
                 message: error.message,
                 stack: error.stack,
-                updatedTasksCount: updatedTasks.length
+                updatedTasksCount: updatedTasks.length,
+                taskId: updatedTaskData.id,
+                commentsCount: updatedTaskData.comments?.length || 0
             });
+            // Show user-friendly error message
+            alert('Failed to save task changes. Please try again or refresh the page.');
             // Don't block UI - the debounced save will retry
+        } finally {
+            // Reset flag after a delay to allow any pending useEffect to complete
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 500);
         }
         
         // Only close modal if closeModal option is true (default behavior for Save Changes button)
@@ -3914,17 +4105,28 @@ function initializeProjectDetail() {
             // Filter out the task and all its subtasks
             const updatedTasks = tasks.filter(t => t.id !== taskId);
             
-            // Update local state
+            // Update local state and ref
             setTasks(updatedTasks);
+            tasksRef.current = updatedTasks;
+            
+            // Set flag to skip the useEffect save to prevent race condition
+            skipNextSaveRef.current = true;
             
             // Persist to database immediately
             try {
                 await persistProjectData({ nextTasks: updatedTasks });
+                console.log('✅ Task deleted successfully');
             } catch (error) {
                 console.error('❌ Failed to delete task:', error);
                 alert('Failed to delete task: ' + error.message);
-                // Revert on error
+                // Revert on error - use the original tasks array
                 setTasks(tasks);
+                tasksRef.current = tasks;
+            } finally {
+                // Reset flag after a delay to allow any pending useEffect to complete
+                setTimeout(() => {
+                    skipNextSaveRef.current = false;
+                }, 500);
             }
         }
     };
@@ -3941,17 +4143,28 @@ function initializeProjectDetail() {
             return t;
         });
         
-        // Update local state
+        // Update local state and ref
         setTasks(updatedTasks);
+        tasksRef.current = updatedTasks;
+        
+        // Set flag to skip the useEffect save to prevent race condition
+        skipNextSaveRef.current = true;
         
         // Persist to database immediately
         try {
             await persistProjectData({ nextTasks: updatedTasks });
+            console.log('✅ Subtask deleted successfully');
         } catch (error) {
             console.error('❌ Failed to delete subtask:', error);
             alert('Failed to delete subtask: ' + error.message);
-            // Revert on error
+            // Revert on error - use the original tasks array
             setTasks(tasks);
+            tasksRef.current = tasks;
+        } finally {
+            // Reset flag after a delay to allow any pending useEffect to complete
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 500);
         }
     };
 

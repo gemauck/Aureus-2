@@ -792,9 +792,11 @@ const TaskDetailModal = ({
             
             // CRITICAL: Auto-save the comment immediately to ensure persistence
             // Don't wait for user to click "Save Changes" - comments should persist immediately
+            // CRITICAL FIX: Ensure comments array is always present and valid
             const taskToAutoSave = {
                 ...editedTask,
-                comments: updatedComments,
+                // CRITICAL: Always include comments array - never undefined
+                comments: Array.isArray(updatedComments) ? updatedComments : [],
                 checklist: Array.isArray(checklist) ? checklist : [],
                 attachments: Array.isArray(attachments) ? attachments : [],
                 tags: Array.isArray(tags) ? tags : [],
@@ -803,16 +805,58 @@ const TaskDetailModal = ({
                 id: editedTask.id || task?.id || Date.now()
             };
 
+            // VALIDATION: Ensure comments array is present before saving
+            if (!Array.isArray(taskToAutoSave.comments)) {
+                console.error('❌ CRITICAL: taskToAutoSave.comments is not an array!', {
+                    taskId: taskToAutoSave.id,
+                    commentsType: typeof taskToAutoSave.comments,
+                    commentsValue: taskToAutoSave.comments
+                });
+                taskToAutoSave.comments = updatedComments || [];
+            }
+
             console.log('💾 TaskDetailModal: Auto-saving comment immediately', {
                 taskId: taskToAutoSave.id,
                 commentsCount: taskToAutoSave.comments.length,
                 commentId: comment.id,
-                commentAuthor: comment.author
+                commentAuthor: comment.author,
+                commentText: comment.text?.substring(0, 50),
+                allCommentIds: taskToAutoSave.comments.map(c => c.id).filter(Boolean)
             });
 
             // Save immediately without closing the modal
             // Pass closeModal: false to prevent modal from closing
-            onUpdate(taskToAutoSave, { closeModal: false });
+            // Wrap in try-catch to ensure errors don't silently fail
+            try {
+                // Call onUpdate - it may or may not return a promise
+                const updateResult = onUpdate(taskToAutoSave, { closeModal: false });
+                // If it returns a promise, handle it
+                if (updateResult && typeof updateResult.then === 'function') {
+                    updateResult.catch(error => {
+                        console.error('❌ TaskDetailModal: Failed to save comment', {
+                            taskId: taskToAutoSave.id,
+                            commentsCount: taskToAutoSave.comments.length,
+                            error: error.message,
+                            stack: error.stack
+                        });
+                        // Show user-friendly error message
+                        alert('Failed to save comment. Please try again or refresh the page.');
+                    });
+                }
+                console.log('✅ TaskDetailModal: Comment save initiated successfully', {
+                    taskId: taskToAutoSave.id,
+                    commentsCount: taskToAutoSave.comments.length
+                });
+            } catch (error) {
+                console.error('❌ TaskDetailModal: Failed to save comment', {
+                    taskId: taskToAutoSave.id,
+                    commentsCount: taskToAutoSave.comments.length,
+                    error: error.message,
+                    stack: error.stack
+                });
+                // Show user-friendly error message
+                alert('Failed to save comment. Please try again or refresh the page.');
+            }
             
             // Send notifications
             try {
