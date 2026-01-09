@@ -7,6 +7,413 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 
+/**
+ * Convert DocumentSection table data to JSON format (for backward compatibility)
+ */
+async function documentSectionsToJson(projectId) {
+  try {
+    // Check if table exists (for environments that haven't migrated yet)
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+    } catch (e) {
+      // Table doesn't exist yet, return null to use JSON fallback
+      return null
+    }
+
+    const sections = await prisma.documentSection.findMany({
+      where: { projectId: projectId },
+      include: {
+        documents: {
+          include: {
+            statuses: true,
+            comments: true
+          },
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [{ year: 'desc' }, { order: 'asc' }]
+    })
+
+    if (sections.length === 0) {
+      return null // Return null to indicate no table data, use JSON fallback
+    }
+
+    // Group by year: { "2024": [...], "2025": [...] }
+    const byYear = {}
+    for (const section of sections) {
+      if (!byYear[section.year]) {
+        byYear[section.year] = []
+      }
+
+      const sectionData = {
+        id: section.id,
+        name: section.name,
+        description: section.description || '',
+        documents: section.documents.map(doc => {
+          // Build collectionStatus object: { "2024-01": "collected", ... }
+          const collectionStatus = {}
+          for (const status of doc.statuses) {
+            const key = `${status.year}-${String(status.month).padStart(2, '0')}`
+            collectionStatus[key] = status.status
+          }
+
+          // Build comments object: { "2024-01": [...], ... }
+          const comments = {}
+          for (const comment of doc.comments) {
+            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
+            if (!comments[key]) {
+              comments[key] = []
+            }
+            comments[key].push({
+              id: comment.id,
+              text: comment.text,
+              author: comment.author,
+              authorId: comment.authorId,
+              authorName: comment.author,
+              createdAt: comment.createdAt
+            })
+          }
+
+          return {
+            id: doc.id,
+            name: doc.name,
+            description: doc.description || '',
+            required: doc.required || false,
+            collectionStatus,
+            comments
+          }
+        })
+      }
+
+      byYear[section.year].push(sectionData)
+    }
+
+    return byYear
+  } catch (error) {
+    console.error('Error converting documentSections to JSON:', error)
+    return null
+  }
+}
+
+/**
+ * Convert WeeklyFMSReviewSection table data to JSON format (for backward compatibility)
+ */
+async function weeklyFMSReviewSectionsToJson(projectId) {
+  try {
+    // Check if table exists (for environments that haven't migrated yet)
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM "WeeklyFMSReviewSection" LIMIT 1`
+    } catch (e) {
+      // Table doesn't exist yet, return null to use JSON fallback
+      return null
+    }
+
+    const sections = await prisma.weeklyFMSReviewSection.findMany({
+      where: { projectId },
+      include: {
+        items: {
+          include: {
+            statuses: true,
+            comments: true
+          },
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [{ year: 'desc' }, { order: 'asc' }]
+    })
+
+    if (sections.length === 0) {
+      return null // Return null to indicate no table data, use JSON fallback
+    }
+
+    // Group by year: { "2024": [...], "2025": [...] }
+    const byYear = {}
+    for (const section of sections) {
+      if (!byYear[section.year]) {
+        byYear[section.year] = []
+      }
+
+      const sectionData = {
+        id: section.id,
+        name: section.name,
+        description: section.description || '',
+        documents: section.items.map(item => {
+          // Build collectionStatus object: { "2024-01-W1": "completed", ... }
+          const collectionStatus = {}
+          for (const status of item.statuses) {
+            const key = `${status.year}-${String(status.month).padStart(2, '0')}-W${status.week}`
+            collectionStatus[key] = status.status
+          }
+
+          // Build comments object: { "2024-01-W1": [...], ... }
+          const comments = {}
+          for (const comment of item.comments) {
+            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}-W${comment.week}`
+            if (!comments[key]) {
+              comments[key] = []
+            }
+            comments[key].push({
+              id: comment.id,
+              text: comment.text,
+              author: comment.author,
+              authorId: comment.authorId,
+              authorName: comment.author,
+              createdAt: comment.createdAt
+            })
+          }
+
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            required: item.required || false,
+            collectionStatus,
+            comments
+          }
+        })
+      }
+
+      byYear[section.year].push(sectionData)
+    }
+
+    return byYear
+  } catch (error) {
+    console.error('Error converting weeklyFMSReviewSections to JSON:', error)
+    return null
+  }
+}
+
+/**
+ * Save documentSections JSON to table structure
+ */
+async function saveDocumentSectionsToTable(projectId, jsonData) {
+  if (!jsonData) return
+
+  try {
+    // Check if table exists (for environments that haven't migrated yet)
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+    } catch (e) {
+      // Table doesn't exist yet, skip table save (JSON will still be saved)
+      console.warn('DocumentSection table does not exist, skipping table save')
+      return
+    }
+    let sections = jsonData
+    if (typeof jsonData === 'string') {
+      sections = JSON.parse(jsonData)
+    }
+
+    // Delete existing sections for this project
+    await prisma.documentSection.deleteMany({
+      where: { projectId }
+    })
+
+    if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
+      return
+    }
+
+    // Handle year-based structure: { "2024": [...], "2025": [...] }
+    if (typeof sections === 'object' && !Array.isArray(sections)) {
+      for (const [yearStr, yearSections] of Object.entries(sections)) {
+        const year = parseInt(yearStr, 10)
+        if (isNaN(year) || year < 1900 || year > 3000) continue
+        if (!Array.isArray(yearSections)) continue
+
+        for (let i = 0; i < yearSections.length; i++) {
+          const section = yearSections[i]
+          if (!section || !section.name) continue
+
+          await prisma.documentSection.create({
+            data: {
+              projectId,
+              year,
+              name: section.name || '',
+              description: section.description || '',
+              order: i,
+              documents: {
+                create: (section.documents || []).map((doc, docIdx) => {
+                  const statuses = []
+                  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+                    for (const [key, status] of Object.entries(doc.collectionStatus)) {
+                      const parts = key.split('-')
+                      if (parts.length >= 2) {
+                        const year = parseInt(parts[0], 10)
+                        const month = parseInt(parts[1], 10)
+                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+                          statuses.push({
+                            year,
+                            month,
+                            status: String(status || 'pending')
+                          })
+                        }
+                      }
+                    }
+                  }
+
+                  const comments = []
+                  if (doc.comments && typeof doc.comments === 'object') {
+                    for (const [key, commentArray] of Object.entries(doc.comments)) {
+                      const parts = key.split('-')
+                      if (parts.length >= 2) {
+                        const year = parseInt(parts[0], 10)
+                        const month = parseInt(parts[1], 10)
+                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+                          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+                          for (const comment of commentList) {
+                            if (comment && (comment.text || comment)) {
+                              comments.push({
+                                year,
+                                month,
+                                text: comment.text || String(comment),
+                                author: comment.author || comment.authorName || '',
+                                authorId: comment.authorId || null
+                              })
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  return {
+                    name: doc.name || '',
+                    description: doc.description || '',
+                    required: doc.required || false,
+                    order: docIdx,
+                    statuses: { create: statuses },
+                    comments: { create: comments }
+                  }
+                })
+              }
+            }
+          })
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error saving documentSections to table:', error)
+    // Don't throw - allow JSON fallback to work
+  }
+}
+
+/**
+ * Save weeklyFMSReviewSections JSON to table structure
+ */
+async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
+  if (!jsonData) return
+
+  try {
+    // Check if table exists (for environments that haven't migrated yet)
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM "WeeklyFMSReviewSection" LIMIT 1`
+    } catch (e) {
+      // Table doesn't exist yet, skip table save (JSON will still be saved)
+      console.warn('WeeklyFMSReviewSection table does not exist, skipping table save')
+      return
+    }
+    let sections = jsonData
+    if (typeof jsonData === 'string') {
+      sections = JSON.parse(jsonData)
+    }
+
+    // Delete existing sections for this project
+    await prisma.weeklyFMSReviewSection.deleteMany({
+      where: { projectId }
+    })
+
+    if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
+      return
+    }
+
+    // Handle year-based structure: { "2024": [...], "2025": [...] }
+    if (typeof sections === 'object' && !Array.isArray(sections)) {
+      for (const [yearStr, yearSections] of Object.entries(sections)) {
+        const year = parseInt(yearStr, 10)
+        if (isNaN(year) || year < 1900 || year > 3000) continue
+        if (!Array.isArray(yearSections)) continue
+
+        for (let i = 0; i < yearSections.length; i++) {
+          const section = yearSections[i]
+          if (!section || !section.name) continue
+
+          await prisma.weeklyFMSReviewSection.create({
+            data: {
+              projectId,
+              year,
+              name: section.name || '',
+              description: section.description || '',
+              order: i,
+              items: {
+                create: (section.documents || []).map((doc, docIdx) => {
+                  const statuses = []
+                  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+                    for (const [key, status] of Object.entries(doc.collectionStatus)) {
+                      // Parse "2024-01-W1" format
+                      const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
+                      if (match) {
+                        const year = parseInt(match[1], 10)
+                        const month = parseInt(match[2], 10)
+                        const week = parseInt(match[3], 10)
+                        if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                          statuses.push({
+                            year,
+                            month,
+                            week,
+                            status: String(status || 'pending')
+                          })
+                        }
+                      }
+                    }
+                  }
+
+                  const comments = []
+                  if (doc.comments && typeof doc.comments === 'object') {
+                    for (const [key, commentArray] of Object.entries(doc.comments)) {
+                      const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
+                      if (match) {
+                        const year = parseInt(match[1], 10)
+                        const month = parseInt(match[2], 10)
+                        const week = parseInt(match[3], 10)
+                        if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+                          for (const comment of commentList) {
+                            if (comment && (comment.text || comment)) {
+                              comments.push({
+                                year,
+                                month,
+                                week,
+                                text: comment.text || String(comment),
+                                author: comment.author || comment.authorName || '',
+                                authorId: comment.authorId || null
+                              })
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  return {
+                    name: doc.name || '',
+                    description: doc.description || '',
+                    required: doc.required || false,
+                    order: docIdx,
+                    statuses: { create: statuses },
+                    comments: { create: comments }
+                  }
+                })
+              }
+            }
+          })
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error saving weeklyFMSReviewSections to table:', error)
+    // Don't throw - allow JSON fallback to work
+  }
+}
+
 async function handler(req, res) {
   try {
     
@@ -289,7 +696,30 @@ async function handler(req, res) {
         const project = await prisma.project.create({
           data: projectData
         })
-        return created(res, { project })
+
+        // Save to tables if documentSections or weeklyFMSReviewSections are provided
+        if (body.documentSections !== undefined && body.documentSections !== null) {
+          await saveDocumentSectionsToTable(project.id, body.documentSections)
+        }
+        if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+          await saveWeeklyFMSReviewSectionsToTable(project.id, body.weeklyFMSReviewSections)
+        }
+
+        // Fetch project again with table data converted to JSON
+        const docSectionsFromTable = await documentSectionsToJson(project.id)
+        const fmsSectionsFromTable = await weeklyFMSReviewSectionsToJson(project.id)
+
+        const projectWithChecklists = {
+          ...project,
+          documentSections: docSectionsFromTable !== null
+            ? JSON.stringify(docSectionsFromTable)
+            : project.documentSections,
+          weeklyFMSReviewSections: fmsSectionsFromTable !== null
+            ? JSON.stringify(fmsSectionsFromTable)
+            : project.weeklyFMSReviewSections
+        }
+
+        return created(res, { project: projectWithChecklists })
       } catch (dbError) {
         console.error('❌ Database error creating project:', dbError)
         console.error('❌ Error details:', {
@@ -308,7 +738,23 @@ async function handler(req, res) {
         try {
           const project = await prisma.project.findUnique({ where: { id } })
           if (!project) return notFound(res)
-          return ok(res, { project })
+
+          // Convert table-based checklists to JSON format (with fallback to JSON fields)
+          const docSectionsFromTable = await documentSectionsToJson(id)
+          const fmsSectionsFromTable = await weeklyFMSReviewSectionsToJson(id)
+
+          // Use table data if available, otherwise fall back to JSON fields
+          const projectWithChecklists = {
+            ...project,
+            documentSections: docSectionsFromTable !== null
+              ? JSON.stringify(docSectionsFromTable)
+              : project.documentSections,
+            weeklyFMSReviewSections: fmsSectionsFromTable !== null
+              ? JSON.stringify(fmsSectionsFromTable)
+              : project.weeklyFMSReviewSections
+          }
+
+          return ok(res, { project: projectWithChecklists })
         } catch (dbError) {
           console.error('❌ Database error getting project:', dbError)
           return serverError(res, 'Failed to get project', dbError.message)
@@ -384,6 +830,83 @@ async function handler(req, res) {
           }
         }
 
+        // BEST PRACTICE: Merge comments from database before saving to prevent data loss
+        // This ensures comments added by other sessions/users are preserved
+        let tasksListToSave = body.tasksList;
+        if (tasksListToSave !== undefined && tasksListToSave !== null) {
+          try {
+            // Fetch current state from database
+            const currentProject = await prisma.project.findUnique({
+              where: { id },
+              select: { tasksList: true }
+            });
+            
+            if (currentProject?.tasksList) {
+              const currentTasks = JSON.parse(currentProject.tasksList || '[]');
+              const incomingTasks = typeof tasksListToSave === 'string' 
+                ? JSON.parse(tasksListToSave) 
+                : tasksListToSave;
+              
+              // Merge comments by task ID
+              const mergedTasks = currentTasks.map(currentTask => {
+                const incomingTask = incomingTasks.find(t => t.id === currentTask.id);
+                if (!incomingTask) return currentTask;
+                
+                // Merge comments: combine database comments with incoming comments
+                const dbComments = Array.isArray(currentTask.comments) ? currentTask.comments : [];
+                const incomingComments = Array.isArray(incomingTask.comments) ? incomingTask.comments : [];
+                
+                // Use Map to deduplicate by comment ID
+                const commentsMap = new Map();
+                dbComments.forEach(comment => {
+                  if (comment.id) commentsMap.set(comment.id, comment);
+                });
+                incomingComments.forEach(comment => {
+                  if (comment.id) {
+                    commentsMap.set(comment.id, comment); // Update existing or add new
+                  } else {
+                    // New comment without ID - add with temporary key
+                    commentsMap.set(`new-${Date.now()}-${Math.random()}`, comment);
+                  }
+                });
+                
+                // Merge task data, preserving all comments
+                return {
+                  ...incomingTask,
+                  comments: Array.from(commentsMap.values())
+                };
+              });
+              
+              // Add any new tasks that don't exist in database
+              incomingTasks.forEach(incomingTask => {
+                if (!mergedTasks.find(t => t.id === incomingTask.id)) {
+                  mergedTasks.push(incomingTask);
+                }
+              });
+              
+              tasksListToSave = JSON.stringify(mergedTasks);
+              
+              console.log('🔄 Merged comments from database:', {
+                projectId: id,
+                currentTasksCount: currentTasks.length,
+                incomingTasksCount: incomingTasks.length,
+                mergedTasksCount: mergedTasks.length
+              });
+            } else {
+              // No existing tasks, just stringify incoming
+              tasksListToSave = typeof tasksListToSave === 'string' 
+                ? tasksListToSave 
+                : JSON.stringify(tasksListToSave);
+            }
+          } catch (mergeError) {
+            console.warn('⚠️ Failed to merge comments from database, using incoming data:', mergeError);
+            // Fallback to incoming data if merge fails
+            tasksListToSave = typeof tasksListToSave === 'string' 
+              ? tasksListToSave 
+              : JSON.stringify(tasksListToSave);
+          }
+        }
+        
         const updateData = {
           name: body.name,
           description: body.description,
@@ -396,9 +919,7 @@ async function handler(req, res) {
           priority: body.priority,
           type: body.type,
           assignedTo: body.assignedTo,
-          tasksList: body.tasksList !== undefined && body.tasksList !== null 
-            ? (typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList))
-            : undefined,
+          tasksList: tasksListToSave,
           taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
           customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
           team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),
@@ -580,6 +1101,14 @@ async function handler(req, res) {
           if ('hasDocumentCollectionProcess' in updateData) {
           } else {
             console.warn('⚠️ hasDocumentCollectionProcess NOT in updateData - will not be updated');
+          }
+          
+          // Save to tables if documentSections or weeklyFMSReviewSections are being updated
+          if (body.documentSections !== undefined && body.documentSections !== null) {
+            await saveDocumentSectionsToTable(id, body.documentSections)
+          }
+          if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+            await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
           }
           
           const project = await prisma.project.update({ 

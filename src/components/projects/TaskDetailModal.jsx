@@ -76,6 +76,77 @@ const TaskDetailModal = ({
     const leftContentRef = useRef(null);
     const refreshIntervalRef = useRef(null);
     const lastCommentAddTimeRef = useRef(null); // Track when comment was added to prevent refresh race condition
+    
+    // NEW: Load comments from TaskComment table API
+    const loadCommentsFromAPI = async () => {
+        if (!task?.id || !project?.id) return;
+        
+        try {
+            const taskId = String(task.id);
+            const projectId = String(project.id);
+            const url = '/task-comments?taskId=' + encodeURIComponent(taskId) + '&projectId=' + encodeURIComponent(projectId);
+            const response = await window.DatabaseAPI.makeRequest(url);
+            const data = await response.json();
+            
+            if (data.comments && Array.isArray(data.comments)) {
+                // Transform API comments to match expected format
+                const formattedComments = data.comments.map(c => ({
+                    id: c.id,
+                    text: c.text,
+                    author: c.author,
+                    authorId: c.authorId,
+                    userName: c.userName || c.author,
+                    authorEmail: c.userName,
+                    timestamp: c.createdAt,
+                    date: new Date(c.createdAt).toLocaleString(),
+                    createdAt: c.createdAt,
+                    updatedAt: c.updatedAt
+                }));
+                
+                // Merge with any JSON comments (for backward compatibility during migration)
+                const jsonComments = Array.isArray(task.comments) ? task.comments : [];
+                const allComments = [...formattedComments, ...jsonComments];
+                
+                // Deduplicate by ID or text+author combination
+                const uniqueComments = Array.from(
+                    new Map(
+                        allComments.map(c => {
+                            const key = c.id || (c.text + '-' + c.author + '-' + (c.timestamp || c.date || ''));
+                            return [key, c];
+                        })
+                    ).values()
+                );
+                
+                // Sort by timestamp/date
+                uniqueComments.sort((a, b) => {
+                    const timeA = new Date(a.timestamp || a.date || a.createdAt || 0).getTime();
+                    const timeB = new Date(b.timestamp || b.date || b.createdAt || 0).getTime();
+                    return timeA - timeB;
+                });
+                
+                setComments(uniqueComments);
+                console.log('✅ Loaded comments from API:', {
+                    taskId: task.id,
+                    apiComments: formattedComments.length,
+                    jsonComments: jsonComments.length,
+                    totalComments: uniqueComments.length
+                });
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to load comments from API, using JSON fallback:', error);
+            // Fallback to JSON comments
+            const jsonComments = Array.isArray(task.comments) ? task.comments : [];
+            setComments(jsonComments);
+        }
+    };
+    
+    // Load comments when task changes
+    useEffect(() => {
+        if (task?.id && project?.id) {
+            loadCommentsFromAPI();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [task?.id, project?.id]);
 
     // Refresh task data from database when modal opens and periodically while open
     // This ensures comments and checklists added by other users are visible
@@ -631,7 +702,7 @@ const TaskDetailModal = ({
     // Handles both @username and @John Doe (with spaces, but only up to the next space or end)
     const parseMentions = (text) => {
         // Match @ followed by word characters or spaces, but stop at space or punctuation
-        const mentionRegex = /@([\w]+(?:\s+[\w]+)*)/g;
+        const mentionRegex = new RegExp('@([\\w]+(?:\\s+[\\w]+)*)', 'g');
         const mentions = [];
         let match;
         while ((match = mentionRegex.exec(text)) !== null) {
@@ -815,31 +886,77 @@ const TaskDetailModal = ({
                 taskToAutoSave.comments = updatedComments || [];
             }
 
-            console.log('💾 TaskDetailModal: Auto-saving comment immediately', {
+            console.log('💾 TaskDetailModal: Saving comment to TaskComment table', {
                 taskId: taskToAutoSave.id,
-                commentsCount: taskToAutoSave.comments.length,
+                projectId: project?.id,
                 commentId: comment.id,
                 commentAuthor: comment.author,
-                commentText: comment.text?.substring(0, 50),
-                allCommentIds: taskToAutoSave.comments.map(c => c.id).filter(Boolean)
+                commentText: comment.text?.substring(0, 50)
             });
 
-            // Save immediately without closing the modal
-            // Pass closeModal: false to prevent modal from closing
-            // Wrap in try-catch to ensure errors don't silently fail
+            // NEW: Save comment directly to TaskComment table via API
             try {
-                onUpdate(taskToAutoSave, { closeModal: false });
-                console.log('✅ TaskDetailModal: Comment save initiated successfully', {
-                    taskId: taskToAutoSave.id,
-                    commentsCount: taskToAutoSave.comments.length
+                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                
+                const commentResponse = await window.DatabaseAPI.makeRequest('/task-comments', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        taskId: taskToAutoSave.id,
+                        projectId: project?.id,
+                        text: comment.text,
+                        author: comment.author || currentUser.name,
+                        authorId: comment.authorId || currentUser.id,
+                        userName: comment.userName || comment.authorEmail || currentUser.email
+                    })
                 });
-            } catch (error) {
-                console.error('❌ TaskDetailModal: Failed to save comment', {
+                
+                const commentData = await commentResponse.json();
+                
+                if (commentData.comment) {
+                    // Update local comment with the saved comment from API (includes generated ID)
+                    const savedComment = {
+                        ...comment,
+                        id: commentData.comment.id,
+                        createdAt: commentData.comment.createdAt,
+                        timestamp: commentData.comment.createdAt,
+                        date: new Date(commentData.comment.createdAt).toLocaleString()
+                    };
+                    
+                    // Update comments state with the saved comment
+                    setComments(prev => [...prev.filter(c => c.id !== comment.id), savedComment]);
+                    
+                    console.log('✅ TaskDetailModal: Comment saved to TaskComment table', {
+                        taskId: taskToAutoSave.id,
+                        commentId: savedComment.id
+                    });
+                    
+                    // Also update the task for backward compatibility (but don't rely on it)
+                    // This ensures the task still has comments in JSON during transition
+                    try {
+                        onUpdate(taskToAutoSave, { closeModal: false });
+                    } catch (updateError) {
+                        console.warn('⚠️ Failed to update task (non-critical):', updateError);
+                    }
+                } else {
+                    throw new Error('Comment save response missing comment data');
+                }
+            } catch (apiError) {
+                console.error('❌ TaskDetailModal: Failed to save comment to API, falling back to task update', {
                     taskId: taskToAutoSave.id,
-                    commentsCount: taskToAutoSave.comments.length,
-                    error: error.message
+                    error: apiError.message
                 });
-                alert('Failed to save comment. Please try again or refresh the page.');
+                
+                // Fallback to old method (saves through task update)
+                try {
+                    onUpdate(taskToAutoSave, { closeModal: false });
+                    console.log('✅ TaskDetailModal: Comment save via task update (fallback)');
+                } catch (error) {
+                    console.error('❌ TaskDetailModal: Failed to save comment (both methods failed)', {
+                        taskId: taskToAutoSave.id,
+                        error: error.message
+                    });
+                    alert('Failed to save comment. Please try again or refresh the page.');
+                }
             }
             
             // Send notifications
@@ -2108,7 +2225,6 @@ const TaskDetailModal = ({
                             {isCreating ? 'Create Task' : 'Save Changes'}
                         </button>
                     </div>
-                </div>
                 </div>
             </div>
         </div>
