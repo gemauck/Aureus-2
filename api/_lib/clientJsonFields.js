@@ -212,18 +212,42 @@ export function parseClientJsonFields(client) {
       parsed.followUps = Array.isArray(value) ? value : []
     }
     
-    // Phase 6: Services - Use normalized table first, fallback to JSON
+    // Phase 6: Services - Use normalized table first, but only if services have names
+    // If normalized services exist but have empty names, fall back to JSON (which has the actual service strings)
     if (client.clientServices && Array.isArray(client.clientServices) && client.clientServices.length > 0) {
-      parsed.services = client.clientServices.map(service => ({
-        id: service.id,
-        name: service.name,
-        description: service.description || '',
-        price: service.price || 0,
-        status: service.status || 'Active',
-        startDate: service.startDate ? new Date(service.startDate).toISOString() : null,
-        endDate: service.endDate ? new Date(service.endDate).toISOString() : null,
-        notes: service.notes || ''
-      }))
+      // Check if normalized services have actual names (not just IDs)
+      const hasNamedServices = client.clientServices.some(s => s.name && s.name.trim())
+      
+      if (hasNamedServices) {
+        // Use normalized table - services have full details
+        parsed.services = client.clientServices.map(service => ({
+          id: service.id,
+          name: service.name,
+          description: service.description || '',
+          price: service.price || 0,
+          status: service.status || 'Active',
+          startDate: service.startDate ? new Date(service.startDate).toISOString() : null,
+          endDate: service.endDate ? new Date(service.endDate).toISOString() : null,
+          notes: service.notes || ''
+        }))
+      } else {
+        // Normalized services exist but have no names - these are likely orphaned records
+        // Fall back to JSON field which has the actual service strings
+        let value = client.servicesJsonb
+        if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+          const stringValue = client.services
+          if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+            try {
+              value = JSON.parse(stringValue)
+            } catch (e) {
+              value = []
+            }
+          } else {
+            value = []
+          }
+        }
+        parsed.services = Array.isArray(value) ? value : []
+      }
     } else {
       // Fallback: Try JSONB field, then String field
       let value = client.servicesJsonb
