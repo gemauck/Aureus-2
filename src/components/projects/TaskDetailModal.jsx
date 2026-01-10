@@ -62,7 +62,10 @@ const TaskDetailModal = ({
     }, [task?.subscribers]);
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [newTag, setNewTag] = useState('');
-    const [tags, setTags] = useState(task?.tags || []);
+    const [tags, setTags] = useState(() => {
+        // Ensure tags is always an array
+        return Array.isArray(task?.tags) ? task.tags : [];
+    });
     const [users, setUsers] = useState(usersProp || []);
     const previousTaskIdRef = useRef(task?.id);
     const [mentionQuery, setMentionQuery] = useState('');
@@ -461,10 +464,11 @@ const TaskDetailModal = ({
                 setChecklist([]);
             }
             
-            // Sync tags
+            // Sync tags - ensure it's always an array
             if (Array.isArray(task.tags)) {
                 setTags(task.tags);
-            } else if (task.tags === undefined || task.tags === null) {
+            } else {
+                // Handle all non-array cases (undefined, null, object, string, etc.)
                 setTags([]);
             }
             
@@ -1215,14 +1219,16 @@ const TaskDetailModal = ({
     };
 
     const handleAddTag = () => {
-        if (newTag.trim() && !tags.includes(newTag.trim())) {
-            setTags([...tags, newTag.trim()]);
+        const tagsArray = Array.isArray(tags) ? tags : [];
+        if (newTag.trim() && !tagsArray.includes(newTag.trim())) {
+            setTags([...tagsArray, newTag.trim()]);
             setNewTag('');
         }
     };
 
     const handleRemoveTag = (tag) => {
-        setTags(tags.filter(t => t !== tag));
+        const tagsArray = Array.isArray(tags) ? tags : [];
+        setTags(tagsArray.filter(t => t !== tag));
     };
 
     const formatFileSize = (bytes) => {
@@ -1290,7 +1296,7 @@ const TaskDetailModal = ({
                                 />
                             </div>
                             {/* Tags Display */}
-                            {tags.length > 0 && (
+                            {Array.isArray(tags) && tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-2">
                                     {tags.map((tag, idx) => (
                                         <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-medium">
