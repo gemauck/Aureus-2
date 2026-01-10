@@ -132,24 +132,7 @@ async function handler(req, res) {
                 email: true
               }
             },
-            comments: {
-              orderBy: { createdAt: 'asc' },
-              include: {
-                authorUser: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            },
             subtasks: {
-              include: {
-                comments: {
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
               orderBy: { createdAt: 'asc' }
             }
           }
@@ -159,42 +142,163 @@ async function handler(req, res) {
           return notFound(res, 'Task not found');
         }
 
-        return ok(res, { task: transformTask(task) });
+        // Fetch comments separately (since Task.comments relation doesn't exist yet)
+        const allTaskIds = [
+          task.id,
+          ...(task.subtasks || []).map(st => st.id)
+        ];
+
+        const taskCommentsMap = {};
+        if (allTaskIds.length > 0) {
+          const taskComments = await prisma.taskComment.findMany({
+            where: { taskId: { in: allTaskIds } },
+            include: {
+              authorUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          });
+
+          // Group comments by taskId
+          taskComments.forEach(comment => {
+            if (!taskCommentsMap[comment.taskId]) {
+              taskCommentsMap[comment.taskId] = [];
+            }
+            taskCommentsMap[comment.taskId].push(comment);
+          });
+        }
+
+        // Attach comments manually
+        const taskWithComments = {
+          ...task,
+          comments: taskCommentsMap[task.id] || [],
+          subtasks: (task.subtasks || []).map(subtask => ({
+            ...subtask,
+            comments: taskCommentsMap[subtask.id] || []
+          }))
+        };
+
+        return ok(res, { task: transformTask(taskWithComments) });
       }
       
       // Get tasks for a specific project
       if (projectId) {
-        const tasks = await prisma.task.findMany({
-          where: { 
-            projectId: String(projectId),
-            parentTaskId: null // Only top-level tasks (subtasks included via relation)
-          },
-          include: {
-            assigneeUser: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
+        try {
+          // Validate projectId is not empty
+          const sanitizedProjectId = String(projectId).trim();
+          if (!sanitizedProjectId) {
+            return badRequest(res, 'Invalid projectId parameter');
+          }
+
+          // Fetch tasks (Task model doesn't have comments relation yet, so fetch them separately)
+          const tasks = await prisma.task.findMany({
+            where: { 
+              projectId: sanitizedProjectId,
+              parentTaskId: null // Only top-level tasks (subtasks included via relation)
             },
-            comments: {
-              orderBy: { createdAt: 'asc' }
-            },
-            subtasks: {
-              include: {
-                comments: {
-                  orderBy: { createdAt: 'asc' }
+            include: {
+              assigneeUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
                 }
               },
-              orderBy: { createdAt: 'asc' }
+              subtasks: {
+                orderBy: { createdAt: 'asc' }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          }).catch(dbError => {
+            // Handle specific Prisma errors
+            if (dbError.code === 'P2003') {
+              console.error('❌ Foreign key constraint violation:', {
+                projectId: sanitizedProjectId,
+                error: dbError.message
+              });
+              // Return empty tasks array if project doesn't exist (non-critical)
+              return [];
             }
-          },
-          orderBy: { createdAt: 'asc' }
-        });
+            // Re-throw other database errors
+            throw dbError;
+          });
 
-        return ok(res, { 
-          tasks: tasks.map(task => transformTask(task)) 
-        });
+          // Fetch all task IDs (including subtasks) to get comments
+          const allTaskIds = [
+            ...(tasks || []).map(t => t.id),
+            ...(tasks || []).flatMap(t => ((t.subtasks || [])).map(st => st.id))
+          ];
+
+          // Fetch comments separately (since Task.comments relation doesn't exist yet)
+          const taskCommentsMap = {};
+          if (allTaskIds.length > 0) {
+            try {
+              const taskComments = await prisma.taskComment.findMany({
+                where: { taskId: { in: allTaskIds } },
+                include: {
+                  authorUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'asc' }
+              });
+
+              // Group comments by taskId
+              (taskComments || []).forEach(comment => {
+                if (!taskCommentsMap[comment.taskId]) {
+                  taskCommentsMap[comment.taskId] = [];
+                }
+                taskCommentsMap[comment.taskId].push(comment);
+              });
+            } catch (commentsError) {
+              // Log but don't fail the entire request if comments can't be fetched
+              console.warn('⚠️ Failed to fetch task comments, continuing without comments:', {
+                error: commentsError.message,
+                taskIds: allTaskIds
+              });
+            }
+          }
+
+          // Attach comments to tasks manually
+          const tasksWithComments = (tasks || []).map(task => ({
+            ...task,
+            comments: taskCommentsMap[task.id] || [],
+            subtasks: (task.subtasks || []).map(subtask => ({
+              ...subtask,
+              comments: taskCommentsMap[subtask.id] || []
+            }))
+          }));
+
+          return ok(res, { 
+            tasks: tasksWithComments.map(task => transformTask(task)) 
+          });
+        } catch (queryError) {
+          console.error('❌ Database query error getting tasks by projectId:', {
+            projectId,
+            error: queryError.message,
+            code: queryError.code,
+            meta: queryError.meta,
+            stack: queryError.stack
+          });
+          
+          // Handle specific Prisma errors
+          if (queryError.code === 'P2025') {
+            // Record not found - return empty array instead of error
+            return ok(res, { tasks: [] });
+          }
+          
+          // Re-throw to be caught by outer try-catch
+          throw queryError;
+        }
       }
       
       // Lightweight mode: return tasks assigned to current user (for dashboard)
@@ -428,14 +532,31 @@ async function handler(req, res) {
               name: true,
               email: true
             }
-          },
-          comments: {
-            orderBy: { createdAt: 'asc' }
           }
         }
       });
 
-      return ok(res, { task: transformTask(task, { includeSubtasks: false }) });
+      // Fetch comments separately (since Task.comments relation doesn't exist yet)
+      const taskComments = await prisma.taskComment.findMany({
+        where: { taskId: task.id },
+        include: {
+          authorUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      const taskWithComments = {
+        ...task,
+        comments: taskComments || []
+      };
+
+      return ok(res, { task: transformTask(taskWithComments, { includeSubtasks: false }) });
     }
 
     if (method === 'DELETE') {
