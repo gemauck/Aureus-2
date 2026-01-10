@@ -262,12 +262,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, [initialTab, isAdmin]);
     
     // MANUFACTURING PATTERN: Only sync formData when client ID changes (switching to different client)
+    // Reset initial loading state when client changes
+    useEffect(() => {
+        if (client?.id) {
+            // Check if client already has complete data - if so, no need for initial loading
+            const hasContacts = client.contacts && Array.isArray(client.contacts) && client.contacts.length >= 0;
+            const hasSites = client.sites && Array.isArray(client.sites) && client.sites.length >= 0;
+            // If client has the expected structure (even if arrays are empty), we can consider it "loaded"
+            // Initial loading will be set based on whether we actually need to fetch additional data
+        } else {
+            // No client - not loading
+            setIsInitialLoading(false);
+        }
+    }, [client?.id]);
+    
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
     // This matches Manufacturing.jsx which has NO useEffect watching selectedItem prop
     useEffect(() => {
         // CRITICAL: If client is null (new client), NEVER sync formData from prop
         // User is creating a new client - formData should be completely user-controlled
         if (!client) {
+            setIsInitialLoading(false);
             return;
         }
         
@@ -558,28 +573,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setJobCards([]);
             lastLoadedClientIdRef.current = null;
             lastLoadedClientNameRef.current = null;
-            return;
+            return Promise.resolve([]);
         }
         
         const clientId = String(client.id);
         const clientName = client?.name || null;
         
-        // Prevent duplicate calls: if already loading or same client already loaded, skip
+        // Prevent duplicate calls: if already loading, return empty array (will be handled by deduplicator)
         if (isLoadingJobCardsRef.current) {
-            return;
+            return [];
         }
         
         // Only check clientId, not name - name changes shouldn't trigger reload
-        if (lastLoadedClientIdRef.current === clientId) {
-            // Same client already loaded, skip
-            return;
+        // If lastLoadedClientIdRef is null, it means we're doing an initial load - always proceed
+        // Otherwise, if same client already loaded, skip
+        if (lastLoadedClientIdRef.current === clientId && lastLoadedClientIdRef.current !== null) {
+            // Same client already loaded, return existing job cards from state
+            return jobCards || [];
         }
         
         const token = window.storage?.getToken?.();
         if (!token) {
             setLoadingJobCards(false);
             isLoadingJobCardsRef.current = false;
-            return;
+            return [];
         }
         
         // Use global request deduplication to prevent duplicate API calls
@@ -687,7 +704,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             lastLoadedClientNameRef.current = clientName;
                             setLoadingJobCards(false);
                             isLoadingJobCardsRef.current = false;
-                            return;
+                            return jobCards;
                         }
                     }
                     
@@ -713,14 +730,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         
                         lastLoadedClientIdRef.current = clientId;
                         lastLoadedClientNameRef.current = clientName;
+                        return matchingJobCards;
                     } else {
                         const errorText = await response.text().catch(() => 'Unknown error');
                         console.error('❌ Failed to load job cards:', response.status, errorText);
                         setJobCards([]);
+                        return [];
                     }
                 } catch (error) {
                     console.error('Error loading job cards:', error);
                     setJobCards([]);
+                    return [];
                 } finally {
                     setLoadingJobCards(false);
                     isLoadingJobCardsRef.current = false;
@@ -730,21 +750,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Error already handled in the inner try-catch
             setLoadingJobCards(false);
             isLoadingJobCardsRef.current = false;
+            return [];
         }
-    }, [client?.id]); // Only depend on client.id, not name - name changes don't require reloading job cards
+    }, [client?.id, jobCards]); // Include jobCards in deps so we can return it
     
     // Load sites from database
     const loadSitesFromDatabase = useCallback(async (clientId) => {
         // FIXED: Don't load if client ID doesn't match current client (prevents race conditions)
         if (client?.id && String(client.id) !== String(clientId)) {
             console.log(`⏭️ Skipping loadSitesFromDatabase - client ID mismatch (current: ${client.id}, requested: ${clientId})`);
-            return;
+            return Promise.resolve([]);
         }
         
         const token = window.storage?.getToken?.();
         if (!token) {
             console.log('⏭️ Skipping loadSitesFromDatabase - no token');
-            return;
+            return Promise.resolve([]);
         }
         
         // Use global request deduplication to prevent duplicate API calls
@@ -810,7 +831,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Fallback to original logic if RequestDeduplicator is not available
                 if (isLoadingSitesRef.current) {
                     console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
-                    return;
+                    return Promise.resolve([]);
                 }
                 
                 isLoadingSitesRef.current = true;
@@ -859,71 +880,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [client?.id, optimisticSites]);
     
-    // Load job cards when client changes or when Service & Maintenance tab becomes active
-    // Combined into single useEffect to prevent duplicate calls
-    useEffect(() => {
-        if (!client?.id) {
-            setJobCards([]);
-            lastLoadedClientIdRef.current = null;
-            lastLoadedClientNameRef.current = null;
-            return;
-        }
-        
-        // Only load if:
-        // 1. We're on the service-maintenance tab, OR
-        // 2. Client changed and we haven't loaded for this client yet
-        const clientId = String(client.id);
-        const shouldLoad = activeTab === 'service-maintenance' || 
-                          (lastLoadedClientIdRef.current !== clientId);
-        
-        if (shouldLoad) {
-            // Check if request is already pending using deduplicator
-            const requestKey = window.RequestDeduplicator?.getRequestKey('/api/jobcards', { clientId, pageSize: 1000 });
-            const isPending = window.RequestDeduplicator?.isPending?.(requestKey) || false;
-            
-            if (!isPending && !isLoadingJobCardsRef.current) {
-                // Reset refs only when switching to service-maintenance tab
-                if (activeTab === 'service-maintenance' && lastLoadedClientIdRef.current === clientId) {
-                    lastLoadedClientIdRef.current = null;
-                    lastLoadedClientNameRef.current = null;
-                }
-                loadJobCards();
-            }
-        }
-    }, [activeTab, client?.id, loadJobCards]);
+    // REMOVED: Tab-specific job cards loading
+    // Job cards are now loaded immediately when client opens (in the main client load useEffect)
+    // This prevents reloading when clicking tabs and ensures counts appear immediately
     
-    // Ensure sites are loaded when Sites tab becomes active
-    useEffect(() => {
-        if (activeTab === 'sites' && client?.id) {
-            const clientId = String(client.id);
-            
-            // Check if we've already loaded sites for this client
-            if (sitesLoadedForClientIdRef.current === clientId) {
-                // Already loaded for this client, skip
-                return;
-            }
-            
-            // Check if sites exist in formData - if not, load from database
-            const currentSites = formData?.sites || [];
-            const hasSites = currentSites.length > 0 || optimisticSites.length > 0;
-            
-            // Check if request is already pending using deduplicator
-            const requestKey = window.RequestDeduplicator?.getRequestKey(`/api/sites/client/${clientId}`, { clientId });
-            const isPending = window.RequestDeduplicator?.isPending?.(requestKey) || false;
-            
-            if (!hasSites && !isLoadingSitesRef.current && !isPending) {
-                console.log('📡 Sites tab active but no sites found - loading from database');
-                // Don't mark as loaded before calling - let the function handle it after successful load
-                loadSitesFromDatabase(client.id);
-            } else if (hasSites) {
-                // Sites already exist, mark as loaded
-                sitesLoadedForClientIdRef.current = clientId;
-            }
-        } else if (client?.id && String(client.id) !== sitesLoadedForClientIdRef.current) {
-            // Client changed, reset the loaded flag
-            sitesLoadedForClientIdRef.current = null;
-        }
-    }, [activeTab, client?.id, loadSitesFromDatabase]); // Added loadSitesFromDatabase to deps since it's now useCallback
+    // REMOVED: Tab-specific sites loading
+    // Sites are now loaded immediately when client opens (in the main client load useEffect)
+    // This prevents reloading when clicking tabs and ensures counts appear immediately
 
     // Handle job card click - navigate to full job card detail page
     const handleJobCardClick = (jobCard) => {
@@ -1104,25 +1067,52 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 pendingTimeoutsRef.current = [];
                 
-                // FIXED: Load all data in parallel instead of sequentially for faster, smoother loading
+                // FIXED: Load ALL data immediately in parallel - no tab-specific loading
+                // This ensures counts appear immediately and don't reload when clicking tabs
                 const loadPromises = [];
+                const criticalLoadPromises = []; // Loads that affect count badges (sites, contacts, opportunities, job cards)
                 
-                // Always load opportunities (they're separate from client object)
-                loadPromises.push(loadOpportunitiesFromDatabase(client.id));
+                // Always load opportunities immediately (affects count badge)
+                const opportunitiesPromise = loadOpportunitiesFromDatabase(client.id);
+                loadPromises.push(opportunitiesPromise);
+                criticalLoadPromises.push(opportunitiesPromise);
                 
-                // Only load contacts if not already in client object
-                if (!hasContactsInClient) {
-                    loadPromises.push(loadContactsFromDatabase(client.id));
-                }
-                // Removed console.log to reduce noise - only log when actually loading
+                // Always load job cards immediately (affects service-maintenance tab count)
+                // For initial load, we want to force a reload even if previously loaded
+                // So we temporarily reset the ref, then load
+                const originalLoadedClientId = lastLoadedClientIdRef.current;
+                lastLoadedClientIdRef.current = null;
+                const jobCardsPromise = (async () => {
+                    try {
+                        const result = await loadJobCards();
+                        return result || [];
+                    } catch (error) {
+                        console.error('❌ Error loading job cards in initial load:', error);
+                        return []; // Return empty array on error
+                    } finally {
+                        // Restore original value after loading attempt (or keep new value if successful)
+                        // The loadJobCards function will set lastLoadedClientIdRef.current if successful
+                        if (lastLoadedClientIdRef.current === null) {
+                            lastLoadedClientIdRef.current = originalLoadedClientId;
+                        }
+                    }
+                })();
+                loadPromises.push(jobCardsPromise);
+                criticalLoadPromises.push(jobCardsPromise);
                 
-                // Only load sites if not already in client object with data
-                // CRITICAL FIX: Always try to load sites if hasSitesInClient is false
-                // This ensures sites saved to DB are loaded even if client object has empty array
-                if (!hasSitesInClient) {
-                    loadPromises.push(loadSitesFromDatabase(client.id));
-                }
-                // Removed console.log to reduce noise - only log when actually loading
+                // ALWAYS load contacts immediately on initial load to ensure we have the latest data
+                // Even if client object has contacts, we still load from DB to get the most up-to-date count
+                // This prevents the count from changing when clicking the tab
+                const contactPromise = loadContactsFromDatabase(client.id);
+                loadPromises.push(contactPromise);
+                criticalLoadPromises.push(contactPromise);
+                
+                // ALWAYS load sites immediately on initial load to ensure we have the latest data
+                // Even if client object has sites, we still load from DB to get the most up-to-date count
+                // This prevents the count from changing when clicking the tab
+                const sitesPromise = loadSitesFromDatabase(client.id);
+                loadPromises.push(sitesPromise);
+                criticalLoadPromises.push(sitesPromise);
                 
                 // CRITICAL FIX: Skip loadClientFromDatabase if contacts are already present
                 // When contacts are present, it means the client object came from the API with all data parsed
@@ -1134,14 +1124,36 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // So we don't need to reload unless contacts are missing
                 if (!hasContactsInClient) {
                     // Only load if contacts are missing - this means we need to fetch everything
-                    loadPromises.push(loadClientFromDatabase(client.id));
+                    const clientPromise = loadClientFromDatabase(client.id);
+                    loadPromises.push(clientPromise);
+                    criticalLoadPromises.push(clientPromise);
                 }
-                // Removed console.log to reduce noise - only log when actually loading
                 
-                    // Execute all loads in parallel
-                Promise.all(loadPromises).catch(error => {
-                    console.error('❌ Error loading client data:', error);
-                });
+                // FIX FOR JITTERY LOADING: Track initial loading state to prevent progressive rendering
+                // Load ALL data that affects counts immediately, then render everything at once
+                if (criticalLoadPromises.length > 0) {
+                    setIsInitialLoading(true);
+                    // Execute all critical loads (sites, contacts, opportunities, job cards) in parallel
+                    // Wait for ALL to complete before showing count badges
+                    initialLoadPromiseRef.current = Promise.all(criticalLoadPromises)
+                        .then(() => {
+                            // Small delay to ensure all state updates are processed
+                            return new Promise(resolve => setTimeout(resolve, 50));
+                        })
+                        .catch(error => {
+                            console.error('❌ Error loading critical client data:', error);
+                        })
+                        .finally(() => {
+                            setIsInitialLoading(false);
+                            initialLoadPromiseRef.current = null;
+                        });
+                } else {
+                    // No critical data to load - client object already has everything
+                    setIsInitialLoading(false);
+                }
+            } else {
+                // Not loading from database - client data is already complete
+                setIsInitialLoading(false);
             }
             // Removed else block with empty body
         }
@@ -1284,17 +1296,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingContactsRef.current) {
-                return;
+                return Promise.resolve([]);
             }
             
             // Skip loading if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
-                return;
+                return Promise.resolve([]);
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                return;
+                return Promise.resolve([]);
             }
             
             isLoadingContactsRef.current = true;
@@ -1554,12 +1566,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingOpportunitiesRef.current) {
-                return;
+                return Promise.resolve([]);
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                return;
+                return Promise.resolve([]);
             }
             
             isLoadingOpportunitiesRef.current = true;
@@ -2545,37 +2557,37 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 } mr-1 sm:mr-2`}></i>
                                 <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
                                 <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab.charAt(0).toUpperCase()}</span>
-                                {tab === 'contacts' && formData.contacts?.length > 0 && (
+                                {tab === 'contacts' && !isInitialLoading && formData.contacts?.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.contacts.length}
                                     </span>
                                 )}
-                                {tab === 'sites' && formData.sites?.length > 0 && (
+                                {tab === 'sites' && !isInitialLoading && formData.sites?.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.sites.length}
                                     </span>
                                 )}
-                                {tab === 'opportunities' && formData.opportunities?.length > 0 && (
+                                {tab === 'opportunities' && !isInitialLoading && formData.opportunities?.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-xs">
                                         {formData.opportunities.length}
                                     </span>
                                 )}
-                                {tab === 'projects' && clientProjects.length > 0 && (
+                                {tab === 'projects' && !isInitialLoading && clientProjects.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {clientProjects.length}
                                     </span>
                                 )}
-                                {tab === 'service-maintenance' && jobCards.length > 0 && (
+                                {tab === 'service-maintenance' && !loadingJobCards && jobCards.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
                                         {jobCards.length}
                                     </span>
                                 )}
-                                {tab === 'calendar' && upcomingFollowUps.length > 0 && (
+                                {tab === 'calendar' && !isInitialLoading && upcomingFollowUps.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs">
                                         {upcomingFollowUps.length}
                                     </span>
                                 )}
-                                {tab === 'contracts' && formData.contracts?.length > 0 && (
+                                {tab === 'contracts' && !isInitialLoading && formData.contracts?.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.contracts.length}
                                     </span>
