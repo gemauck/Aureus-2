@@ -607,33 +607,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }
             }
             
-            // Fallback 1: Try filtering by clientName (in case job cards only have clientName set)
-            if (clientName) {
-                response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(clientName)}&pageSize=1000`, {
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    data = await response.json();
-                    // Handle both response structures
-                    const jobCards = data.jobCards || data.data?.jobCards || [];
-                    
-                    if (jobCards.length > 0) {
-                        console.log(`📋 Job cards found by clientName: ${jobCards.length}`);
-                        setJobCards(jobCards);
-                        lastLoadedClientIdRef.current = clientId;
-                        lastLoadedClientNameRef.current = clientName;
-                        setLoadingJobCards(false);
-                        isLoadingJobCardsRef.current = false;
-                        return;
-                    }
-                }
-            }
+            // REMOVED: Fallback to clientName - only use clientId for strict filtering
+            // This prevents showing job cards from similarly named clients
             
-            // Fallback 2: Fetch all job cards and filter by clientId/clientName client-side
+            // Fallback: Fetch all job cards and filter by clientId ONLY (strict match)
             // This handles cases where API filtering might not work correctly
             response = await fetch(`/api/jobcards?pageSize=1000`, {
                 headers: { 
@@ -647,22 +624,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Handle both response structures
                 const allJobCards = data.jobCards || data.data?.jobCards || [];
                 
-                // Filter by clientId first, then by clientName if no clientId match
+                // FIXED: Filter by clientId ONLY - strict exact match to prevent wrong jobs showing
+                // Do not fall back to clientName matching as it can show jobs for similarly named clients
                 let matchingJobCards = allJobCards.filter(jc => 
-                    jc.clientId && String(jc.clientId) === clientId
+                    jc.clientId && String(jc.clientId).trim() === clientId.trim()
                 );
                 
-                // If no matches by clientId, try matching by clientName
-                if (matchingJobCards.length === 0 && clientName) {
-                    const normalizedClientName = (clientName || '').trim().toLowerCase();
-                    matchingJobCards = allJobCards.filter(jc => {
-                        const jobCardClientName = (jc.clientName || '').trim().toLowerCase();
-                        // Match if clientName contains the client name or vice versa
-                        return jobCardClientName === normalizedClientName || 
-                               jobCardClientName.includes(normalizedClientName) ||
-                               normalizedClientName.includes(jobCardClientName);
-                    });
-                }
+                // Do NOT fall back to clientName matching - it's too loose and shows wrong jobs
+                // If clientId doesn't match, the job card doesn't belong to this client
                 
                 if (matchingJobCards.length > 0) {
                     setJobCards(matchingJobCards);
@@ -872,29 +841,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 pendingTimeoutsRef.current = [];
                 
-                // Stagger API calls to prevent rate limiting (429 errors)
-                // Each call waits for the previous one with a delay
-                const timeout1 = setTimeout(() => {
-                    loadOpportunitiesFromDatabase(client.id);
-                }, 0);
-                pendingTimeoutsRef.current.push(timeout1);
+                // FIXED: Load all data in parallel instead of sequentially for faster, smoother loading
+                const loadPromises = [];
+                
+                // Always load opportunities (they're separate from client object)
+                loadPromises.push(loadOpportunitiesFromDatabase(client.id));
                 
                 // Only load contacts if not already in client object
                 if (!hasContactsInClient) {
-                    const timeout2 = setTimeout(() => {
-                        loadContactsFromDatabase(client.id);
-                    }, 500);
-                    pendingTimeoutsRef.current.push(timeout2);
+                    loadPromises.push(loadContactsFromDatabase(client.id));
                 } else {
                     console.log('✅ Contacts already in client object, skipping loadContactsFromDatabase to prevent duplicates');
                 }
                 
                 // Only load sites if not already in client object
                 if (!hasSitesInClient) {
-                    const timeout3 = setTimeout(() => {
-                        loadSitesFromDatabase(client.id);
-                    }, 1000);
-                    pendingTimeoutsRef.current.push(timeout3);
+                    loadPromises.push(loadSitesFromDatabase(client.id));
                 } else {
                     console.log('✅ Sites already in client object, skipping loadSitesFromDatabase to prevent duplicates');
                 }
@@ -909,13 +871,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // So we don't need to reload unless contacts are missing
                 if (!hasContactsInClient) {
                     // Only load if contacts are missing - this means we need to fetch everything
-                    const timeout4 = setTimeout(() => {
-                        loadClientFromDatabase(client.id);
-                    }, 1500);
-                    pendingTimeoutsRef.current.push(timeout4);
+                    loadPromises.push(loadClientFromDatabase(client.id));
                 } else {
                     console.log('✅ Skipping loadClientFromDatabase - contacts already present, all data already loaded');
                 }
+                
+                // Execute all loads in parallel
+                Promise.all(loadPromises).catch(error => {
+                    console.error('❌ Error loading client data:', error);
+                });
             } else {
             }
         }

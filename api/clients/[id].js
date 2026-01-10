@@ -922,6 +922,19 @@ async function handler(req, res) {
                 NOT: { id: { in: Array.from(followUpsToKeep) } }
               }
             })
+            
+            // FIXED: Also write followUps to JSON field for backward compatibility
+            // This ensures follow-ups persist even if normalized table has issues
+            try {
+              const jsonFollowUps = JSON.stringify(followUpsArray)
+              await prisma.client.update({
+                where: { id },
+                data: { followUps: jsonFollowUps, followUpsJsonb: followUpsArray }
+              })
+              console.log(`✅ Also synced ${followUpsArray.length} followUps to JSON field for backward compatibility`)
+            } catch (jsonWriteError) {
+              console.warn('⚠️ Failed to write followUps to JSON field:', jsonWriteError.message)
+            }
           } catch (followUpSyncError) {
             console.warn('⚠️ Failed to sync followUps to normalized table:', followUpSyncError.message)
           }

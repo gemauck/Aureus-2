@@ -3608,11 +3608,12 @@ const Clients = React.memo(() => {
                         }
                     } else {
                         // For new clients, send ALL comprehensive data to API
+                        // FIXED: Default to 'active' instead of 'inactive' for new clients
                         const apiCreateData = {
                             name: comprehensiveClient.name,
                             type: comprehensiveClient.type || 'client',
                             industry: comprehensiveClient.industry,
-                            status: comprehensiveClient.status === 'Active' ? 'active' : 'inactive',
+                            status: comprehensiveClient.status === 'Active' || comprehensiveClient.status === 'active' || !comprehensiveClient.status ? 'active' : 'inactive',
                             revenue: comprehensiveClient.revenue,
                             lastContact: comprehensiveClient.lastContact,
                             address: comprehensiveClient.address,
