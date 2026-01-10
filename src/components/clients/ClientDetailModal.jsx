@@ -899,12 +899,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     console.log('✅ Sites already in client object, skipping loadSitesFromDatabase to prevent duplicates');
                 }
                 
-                // Reload the full client data from database to get comments, followUps, activityLog
-                // This is still needed for other fields, but parseClientJsonFields will handle contacts/sites correctly
-                const timeout4 = setTimeout(() => {
-                    loadClientFromDatabase(client.id);
-                }, 1500);
-                pendingTimeoutsRef.current.push(timeout4);
+                // CRITICAL FIX: Skip loadClientFromDatabase if contacts are already present
+                // When contacts are present, it means the client object came from the API with all data parsed
+                // Calling loadClientFromDatabase again causes a reload/re-render because:
+                // 1. The API's parseClientJsonFields formats contacts differently (cross-populates phone/mobile)
+                // 2. Even though we preserve existing contacts, the setFormData call triggers a re-render
+                // 3. This causes the contact to "reload with another version" as reported
+                // The initial client object from API already has contacts, comments, followUps, etc. parsed
+                // So we don't need to reload unless contacts are missing
+                if (!hasContactsInClient) {
+                    // Only load if contacts are missing - this means we need to fetch everything
+                    const timeout4 = setTimeout(() => {
+                        loadClientFromDatabase(client.id);
+                    }, 1500);
+                    pendingTimeoutsRef.current.push(timeout4);
+                } else {
+                    console.log('✅ Skipping loadClientFromDatabase - contacts already present, all data already loaded');
+                }
             } else {
             }
         }
@@ -951,17 +962,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 
                 if (dbClient) {
                     
-                    // Parse JSON strings
+                    // CRITICAL: API already parsed contacts/sites via parseClientJsonFields
+                    // They should already be arrays, not JSON strings
+                    // Only parse if they're still strings (backward compatibility)
                     const parsedClient = {
                         ...dbClient,
-                        contacts: typeof dbClient.contacts === 'string' ? JSON.parse(dbClient.contacts || '[]') : (dbClient.contacts || []),
-                        followUps: typeof dbClient.followUps === 'string' ? JSON.parse(dbClient.followUps || '[]') : (dbClient.followUps || []),
-                        projectIds: typeof dbClient.projectIds === 'string' ? JSON.parse(dbClient.projectIds || '[]') : (dbClient.projectIds || []),
-                        comments: typeof dbClient.comments === 'string' ? JSON.parse(dbClient.comments || '[]') : (dbClient.comments || []),
-                        sites: typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : (dbClient.sites || []),
-                        contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (dbClient.contracts || []),
-                        activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (dbClient.activityLog || []),
-                        billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (dbClient.billingTerms || {})
+                        // Skip parsing contacts - API already parsed them via parseClientJsonFields
+                        // Parsing again would create different format (cross-populated phone/mobile)
+                        contacts: Array.isArray(dbClient.contacts) ? dbClient.contacts : (typeof dbClient.contacts === 'string' ? JSON.parse(dbClient.contacts || '[]') : []),
+                        followUps: typeof dbClient.followUps === 'string' ? JSON.parse(dbClient.followUps || '[]') : (Array.isArray(dbClient.followUps) ? dbClient.followUps : []),
+                        projectIds: typeof dbClient.projectIds === 'string' ? JSON.parse(dbClient.projectIds || '[]') : (Array.isArray(dbClient.projectIds) ? dbClient.projectIds : []),
+                        comments: typeof dbClient.comments === 'string' ? JSON.parse(dbClient.comments || '[]') : (Array.isArray(dbClient.comments) ? dbClient.comments : []),
+                        // Skip parsing sites - API already parsed them via parseClientJsonFields
+                        sites: Array.isArray(dbClient.sites) ? dbClient.sites : (typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : []),
+                        contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (Array.isArray(dbClient.contracts) ? dbClient.contracts : []),
+                        activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (Array.isArray(dbClient.activityLog) ? dbClient.activityLog : []),
+                        billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (typeof dbClient.billingTerms === 'object' ? dbClient.billingTerms : {})
                     };
                     
                     
