@@ -692,8 +692,26 @@ const Clients = React.memo(() => {
     const [pipelineTypeFilter, setPipelineTypeFilter] = useState('all');
     const PipelineComponent = useEnsureGlobalComponent('Pipeline');
     const isNewPipelineAvailable = Boolean(PipelineComponent);
-    const [clients, setClients] = useState([]);
-    const [leads, setLeads] = useState([]);
+    // Initialize all data from cache immediately to prevent flashing counts
+    // This ensures counts appear instantly on page load
+    const [clients, setClients] = useState(() => {
+        const cachedClients = safeStorage.getClients();
+        if (cachedClients && Array.isArray(cachedClients)) {
+            // Separate clients and leads from cache
+            const clientsOnly = cachedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
+            return clientsOnly;
+        }
+        return [];
+    });
+    const [leads, setLeads] = useState(() => {
+        const cachedClients = safeStorage.getClients();
+        if (cachedClients && Array.isArray(cachedClients)) {
+            // Separate leads from cache
+            const leadsOnly = cachedClients.filter(c => c.type === 'lead');
+            return leadsOnly;
+        }
+        return [];
+    });
     // Initialize groups from cache immediately for instant loading
     const [groups, setGroups] = useState(() => {
         const cachedGroups = safeStorage.getGroups();
@@ -763,7 +781,15 @@ const Clients = React.memo(() => {
         if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
         return `${Math.ceil(diffDays / 365)} years ago`;
     };
-    const [leadsCount, setLeadsCount] = useState(0);
+    // Initialize leadsCount from cache immediately to prevent flashing
+    const [leadsCount, setLeadsCount] = useState(() => {
+        const cachedClients = safeStorage.getClients();
+        if (cachedClients && Array.isArray(cachedClients)) {
+            const leadsOnly = cachedClients.filter(c => c.type === 'lead');
+            return leadsOnly.length;
+        }
+        return 0;
+    });
     const [projects, setProjects] = useState([]);
     // Just store IDs - modals fetch their own data
     const [editingClientId, setEditingClientId] = useState(null);
@@ -1542,8 +1568,29 @@ const Clients = React.memo(() => {
                 // NOTE: These may not have groupMemberships if cached before groups were added
                 // The API call below will update them with fresh data including groupMemberships
                 // CRITICAL: Use prevClients to preserve any restored groups
+                // Only update if data actually changed to prevent unnecessary re-renders
                 if (filteredCachedClients.length > 0) {
                     setClients(prevClients => {
+                        // Check if clients actually changed
+                        if (prevClients.length === filteredCachedClients.length &&
+                            prevClients.every((c, i) => c?.id === filteredCachedClients[i]?.id)) {
+                            // Data hasn't changed, but check if groups need updating
+                            const needsUpdate = prevClients.some((prevClient, i) => {
+                                const cachedClient = filteredCachedClients[i];
+                                const prevGroups = prevClient.groupMemberships || [];
+                                const cachedGroups = cachedClient.groupMemberships || [];
+                                return prevGroups.length !== cachedGroups.length ||
+                                    !prevGroups.every((g, j) => {
+                                        const prevGroupId = g?.group?.id || g?.id || g;
+                                        const cachedGroupId = cachedGroups[j]?.group?.id || cachedGroups[j]?.id || cachedGroups[j];
+                                        return prevGroupId === cachedGroupId;
+                                    });
+                            });
+                            if (!needsUpdate) {
+                                return prevClients; // No change, return previous to prevent re-render
+                            }
+                        }
+                        
                         // If we already have clients with restored groups, preserve them
                         if (prevClients.length > 0) {
                             return prevClients.map(prevClient => {
@@ -1567,10 +1614,21 @@ const Clients = React.memo(() => {
                 }
                 
                 // Show cached leads IMMEDIATELY (this is critical for fast loading!)
+                // Only update if data actually changed to prevent unnecessary re-renders
                 if (cachedLeads.length > 0) {
                     const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
-                    setLeads(normalizedCachedLeads);
-                    setLeadsCount(normalizedCachedLeads.length);
+                    // Use startTransition for non-critical updates to prevent jittering
+                    startTransition(() => {
+                        setLeads(prevLeads => {
+                            // Only update if data actually changed
+                            if (prevLeads.length === normalizedCachedLeads.length &&
+                                prevLeads.every((l, i) => l?.id === normalizedCachedLeads[i]?.id)) {
+                                return prevLeads; // No change, return previous to prevent re-render
+                            }
+                            return normalizedCachedLeads;
+                        });
+                        setLeadsCount(normalizedCachedLeads.length);
+                    });
                 }
                 
                 // Only load opportunities in background if Pipeline view is active
@@ -1819,8 +1877,27 @@ const Clients = React.memo(() => {
                 
                 // CRITICAL: Use prevClients to preserve restored groupMemberships
                 // This ensures groups restored by useEffect are NOT overwritten by API response
-                setClients(prevClients => {
-                const verifiedClients = finalClients.map(client => {
+                // Use startTransition for background updates to prevent jittering
+                startTransition(() => {
+                    setClients(prevClients => {
+                        // Check if data actually changed before updating
+                        if (prevClients.length === finalClients.length &&
+                            prevClients.every((c, i) => c?.id === finalClients[i]?.id)) {
+                            // IDs match, but check if content changed (groups, services, etc.)
+                            const needsUpdate = prevClients.some((prevClient, i) => {
+                                const newClient = finalClients[i];
+                                // Check if critical fields changed
+                                return prevClient.name !== newClient.name ||
+                                    prevClient.status !== newClient.status ||
+                                    JSON.stringify(prevClient.groupMemberships || []) !== JSON.stringify(newClient.groupMemberships || []) ||
+                                    JSON.stringify(prevClient.services || []) !== JSON.stringify(newClient.services || []);
+                            });
+                            if (!needsUpdate) {
+                                return prevClients; // No meaningful change, prevent re-render
+                            }
+                        }
+                        
+                        const verifiedClients = finalClients.map(client => {
                         // CRITICAL: Always find prevClient FIRST to preserve any restored groups
                         const prevClient = prevClients.find(c => c && c.id === client.id);
                         
@@ -1932,18 +2009,32 @@ const Clients = React.memo(() => {
                             ...client,
                             groupMemberships: finalGroupMemberships
                         };
-                });
-                
-                    return verifiedClients;
-                });
+                        });
+                        
+                        return verifiedClients;
+                    });
+                }); // End startTransition
                 
                 // Only update leads if they're mixed with clients in the API response
                 // (Leads typically come from a separate getLeads() endpoint via loadLeads())
+                // Use startTransition to prevent jittering during background updates
                 if (leadsOnly.length > 0) {
-                    // API returned leads mixed with clients - use them
-                    setLeads(leadsOnly);
-                    setLeadsCount(leadsOnly.length);
-                    // Save to localStorage
+                    startTransition(() => {
+                        // API returned leads mixed with clients - use them
+                        // Only update if data actually changed
+                        setLeads(prevLeads => {
+                            if (prevLeads.length === leadsOnly.length &&
+                                prevLeads.every((l, i) => l?.id === leadsOnly[i]?.id)) {
+                                return prevLeads; // No change, return previous to prevent re-render
+                            }
+                            return leadsOnly;
+                        });
+                        setLeadsCount(prevCount => {
+                            // Only update count if it actually changed
+                            return leadsOnly.length !== prevCount ? leadsOnly.length : prevCount;
+                        });
+                    });
+                    // Save to localStorage (non-blocking)
                     if (window.storage?.setLeads) {
                         window.storage.setLeads(leadsOnly);
                     }
@@ -1954,13 +2045,19 @@ const Clients = React.memo(() => {
                 
                 // Save clients with preserved opportunities AND group data to localStorage
                 // This ensures group data is cached for future loads
+                // Use finalClients (which includes parsed groupMemberships) for saving
                 // CRITICAL: Ensure groupMemberships is properly serialized and saved
-                const clientsToSave = clientsWithCachedOpps.map(client => ({
+                // Note: We save finalClients, but the state update in startTransition might have additional merging
+                // The saved data will be updated again when state actually updates
+                const clientsToSave = finalClients.map(client => ({
                     ...client,
                     // Explicitly ensure groupMemberships is an array (not undefined)
                     groupMemberships: Array.isArray(client.groupMemberships) ? client.groupMemberships : []
                 }));
-                safeStorage.setClients(clientsToSave);
+                // Save to localStorage asynchronously to not block rendering
+                startTransition(() => {
+                    safeStorage.setClients(clientsToSave);
+                });
                 
                 // Debug: Verify group data is being saved
                 const exxaroInSaved = clientsWithCachedOpps.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
@@ -1988,26 +2085,39 @@ const Clients = React.memo(() => {
                             // Attach opportunities to their clients
                             // CRITICAL: Use current state (prevClients) to preserve restored groupMemberships
                             // This ensures group data restored by useEffect is NOT overwritten
-                            setClients(prevClients => {
-                                const updated = prevClients.map(client => {
-                                    const opps = opportunitiesByClient[client.id] || client.opportunities || [];
-                                    // CRITICAL: Always create new object reference and preserve ALL group data from current state
-                                    return {
-                                ...client,
-                                        opportunities: opps,
-                                        // CRITICAL: Preserve group data from current state (which may have been restored by useEffect)
-                                parentGroup: client.parentGroup || null,
-                                parentGroupId: client.parentGroupId || null,
-                                parentGroupName: client.parentGroupName || null,
-                                        groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
-                                    };
+                            // Use startTransition to prevent jittering during background updates
+                            startTransition(() => {
+                                setClients(prevClients => {
+                                    const updated = prevClients.map(client => {
+                                        const opps = opportunitiesByClient[client.id] || client.opportunities || [];
+                                        // Only update if opportunities actually changed
+                                        const currentOpps = client.opportunities || [];
+                                        const oppsChanged = currentOpps.length !== opps.length ||
+                                            !currentOpps.every((o, i) => o?.id === opps[i]?.id);
+                                        
+                                        if (!oppsChanged && client.opportunities) {
+                                            return client; // No change, return previous to prevent re-render
+                                        }
+                                        
+                                        // CRITICAL: Always create new object reference and preserve ALL group data from current state
+                                        return {
+                                            ...client,
+                                            opportunities: opps,
+                                            // CRITICAL: Preserve group data from current state (which may have been restored by useEffect)
+                                            parentGroup: client.parentGroup || null,
+                                            parentGroupId: client.parentGroupId || null,
+                                            parentGroupName: client.parentGroupName || null,
+                                            groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
+                                        };
+                                    });
+                                
+                                    const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                                    // Save to localStorage after state update (non-blocking)
+                                    if (totalOpps > 0 || updated.length > 0) {
+                                        safeStorage.setClients(updated);
+                                    }
+                                    return updated;
                                 });
-                            
-                            const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            if (totalOpps > 0) {
-                            }
-                            safeStorage.setClients(updated);
-                                return updated;
                             });
                         })
                         .catch(error => {
@@ -4654,10 +4764,19 @@ const Clients = React.memo(() => {
         const now = Date.now();
         const timeSinceLastCall = now - lastGroupsApiCallTimestamp;
         if (!forceRefresh && timeSinceLastCall < GROUPS_API_CALL_INTERVAL) {
-            // Still show cached data if available
+            // Still show cached data if available (but only if not already set)
             const cachedGroups = safeStorage.getGroups();
             if (cachedGroups && cachedGroups.length > 0) {
-                setGroups(cachedGroups);
+                // Only update if different from current state to prevent unnecessary re-renders
+                startTransition(() => {
+                    setGroups(prevGroups => {
+                        if (prevGroups.length === cachedGroups.length &&
+                            prevGroups.every((g, i) => g?.id === cachedGroups[i]?.id)) {
+                            return prevGroups; // No change
+                        }
+                        return cachedGroups;
+                    });
+                });
             }
             return;
         }
@@ -4666,7 +4785,14 @@ const Clients = React.memo(() => {
         if (!forceRefresh) {
             const cachedGroups = safeStorage.getGroups();
             if (cachedGroups && cachedGroups.length > 0) {
-                setGroups(cachedGroups);
+                // Only update if different from current state
+                setGroups(prevGroups => {
+                    if (prevGroups.length === cachedGroups.length &&
+                        prevGroups.every((g, i) => g?.id === cachedGroups[i]?.id)) {
+                        return prevGroups; // No change
+                    }
+                    return cachedGroups;
+                });
                 groupsLoadedRef.current = true;
                 // Still fetch in background to update cache, but only if enough time has passed
                 if (timeSinceLastCall >= GROUPS_API_CALL_INTERVAL) {
@@ -4702,8 +4828,18 @@ const Clients = React.memo(() => {
                     const data = await response.json();
                     // Response structure: { data: { groups: [...] } } or { groups: [...] }
                     const groupsList = data?.data?.groups || data?.groups || [];
-                    setGroups(groupsList); // Always set groups, even if empty
-                    // Save to cache for instant loading next time
+                    // Use startTransition for background updates to prevent jittering
+                    startTransition(() => {
+                        setGroups(prevGroups => {
+                            // Only update if data actually changed
+                            if (prevGroups.length === groupsList.length &&
+                                prevGroups.every((g, i) => g?.id === groupsList[i]?.id)) {
+                                return prevGroups; // No change, return previous to prevent re-render
+                            }
+                            return groupsList;
+                        });
+                    });
+                    // Save to cache for instant loading next time (non-blocking)
                     safeStorage.setGroups(groupsList);
                     groupsLoadedRef.current = true;
                 } else {
@@ -4885,25 +5021,28 @@ const Clients = React.memo(() => {
     
     // Load groups immediately on mount (from cache first, then API in background)
     // This ensures groups count is available instantly when clicking CRM
+    // Groups are already initialized from cache in useState, so only refresh if needed
     useEffect(() => {
-        // Always try to load from cache first for instant display
-        // This runs synchronously on mount to ensure count appears instantly
+        // Groups are already initialized from cache in useState initializer
+        // Only refresh from API in background if cache is stale or empty
+        // Use startTransition to prevent jittering during background refresh
         const cachedGroups = safeStorage.getGroups();
-        if (cachedGroups && cachedGroups.length > 0) {
-            // Set groups from cache immediately for instant count display
-            // Check if current groups don't match cache to avoid unnecessary updates
-            if (groups.length !== cachedGroups.length || 
-                JSON.stringify(groups.map(g => g.id).sort()) !== JSON.stringify(cachedGroups.map(g => g.id).sort())) {
-                setGroups(cachedGroups);
-                console.log(`⚡ Groups count updated from cache: ${cachedGroups.length} groups (instant)`);
+        if (!cachedGroups || cachedGroups.length === 0) {
+            // No cache available, load from API (but in background)
+            startTransition(() => {
+                loadGroups(false);
+            });
+        } else {
+            // Cache exists, refresh in background only if enough time has passed
+            const cacheTimestamp = localStorage.getItem('abcotronics_groups_timestamp');
+            const timeSinceCache = cacheTimestamp ? Date.now() - parseInt(cacheTimestamp, 10) : Infinity;
+            if (timeSinceCache >= GROUPS_API_CALL_INTERVAL) {
+                // Cache is stale, refresh in background
+                startTransition(() => {
+                    loadGroups(false); // Will use cache first, then refresh from API
+                });
             }
         }
-        
-        // Then refresh from API in background (regardless of cache)
-        // Use setTimeout to ensure cache update happens first
-        setTimeout(() => {
-            loadGroups(false); // Will use cache if available, then refresh from API
-        }, 0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Run once on mount
     
@@ -7907,8 +8046,10 @@ const Clients = React.memo(() => {
                 <button
                     type="button"
                     onClick={() => {
-                        console.log('Groups tab clicked, setting viewMode to groups');
-                        setViewMode('groups');
+                        // Only log and update if viewMode is actually changing
+                        if (viewMode !== 'groups') {
+                            setViewMode('groups');
+                        }
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'groups' 

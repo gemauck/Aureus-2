@@ -147,6 +147,7 @@ const ProjectsDatabaseFirst = () => {
     );
     const [isProjectDetailLoading, setIsProjectDetailLoading] = useState(false);
     const projectDetailLoadPromiseRef = useRef(null);
+    const routeCheckCompletedRef = useRef(false); // Track if route check has already run
     const { isDark } = window.useTheme();
     
     // View preference: 'grid' or 'list', loaded from localStorage
@@ -161,6 +162,12 @@ const ProjectsDatabaseFirst = () => {
     
     // IMMEDIATE route check on mount - opens project from URL directly
     useEffect(() => {
+        // Prevent running multiple times
+        if (routeCheckCompletedRef.current) {
+            return;
+        }
+        routeCheckCompletedRef.current = true;
+        
         console.log('🚀 ProjectsDatabaseFirst: IMMEDIATE route check on mount');
         
         // Parse URL directly - check both pathname and hash

@@ -564,8 +564,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        if (lastLoadedClientIdRef.current === clientId && 
-            lastLoadedClientNameRef.current === clientName) {
+        // Only check clientId, not name - name changes shouldn't trigger reload
+        if (lastLoadedClientIdRef.current === clientId) {
             // Same client already loaded, skip
             return;
         }
@@ -602,7 +602,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             data = await response.json();
                             const jobCards = data.jobCards || data.data?.jobCards || [];
                             if (jobCards.length > 0) {
-                                console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                                // Only log if this is the first time loading for this client
+                                if (lastLoadedClientIdRef.current !== clientId) {
+                                    console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                                }
                                 setJobCards(jobCards);
                                 lastLoadedClientIdRef.current = clientId;
                                 lastLoadedClientNameRef.current = clientName;
@@ -670,7 +673,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         data = await response.json();
                         const jobCards = data.jobCards || data.data?.jobCards || [];
                         if (jobCards.length > 0) {
-                            console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                            // Only log if this is the first time loading for this client
+                            if (lastLoadedClientIdRef.current !== clientId) {
+                                console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                            }
                             setJobCards(jobCards);
                             lastLoadedClientIdRef.current = clientId;
                             lastLoadedClientNameRef.current = clientName;
@@ -720,7 +726,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setLoadingJobCards(false);
             isLoadingJobCardsRef.current = false;
         }
-    }, [client?.id, client?.name]);
+    }, [client?.id]); // Only depend on client.id, not name - name changes don't require reloading job cards
     
     // Load sites from database
     const loadSitesFromDatabase = useCallback(async (clientId) => {
@@ -975,12 +981,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     });
 
     useEffect(() => {
-        if (client) {
-            const clientIdChanged = client.id !== lastSavedClientId.current;
+        if (client?.id) {
+            const currentClientId = String(client.id);
+            const clientIdChanged = currentClientId !== lastSavedClientId.current;
+            
+            // Prevent re-running if we've already processed this exact client ID in this render cycle
+            // This prevents excessive re-renders when the component re-renders with the same client
+            if (lastProcessedClientRef.current === currentClientId && !clientIdChanged) {
+                return; // Already processed this client, skip
+            }
             
             // Update lastSavedClientId if client changed
             if (clientIdChanged) {
-                lastSavedClientId.current = client.id;
+                lastSavedClientId.current = currentClientId;
+                lastProcessedClientRef.current = currentClientId;
                 // Reset edit flag when switching clients
                 hasUserEditedForm.current = false;
                 // Clear optimistic updates when switching clients
@@ -988,6 +1002,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setOptimisticSites([]);
                 // Reset sites loaded flag when client changes
                 sitesLoadedForClientIdRef.current = null;
+            } else {
+                // Mark as processed even if client ID didn't change (to prevent duplicate processing)
+                lastProcessedClientRef.current = currentClientId;
             }
             
             // Only load from database if client ID changed (new client) or form hasn't been edited
@@ -1073,7 +1090,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Load data from database ONLY if client changed or form hasn't been edited
             // AND only if data is missing from the client object
-            if (shouldLoadFromDatabase) {
+            // AND only if we haven't already processed this client ID (prevents duplicate processing)
+            if (shouldLoadFromDatabase && clientIdChanged) {
                 
                 // Cancel any existing pending timeouts for this client
                 pendingTimeoutsRef.current.forEach(timeoutId => {
@@ -1090,18 +1108,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Only load contacts if not already in client object
                 if (!hasContactsInClient) {
                     loadPromises.push(loadContactsFromDatabase(client.id));
-                } else {
-                    console.log('✅ Contacts already in client object, skipping loadContactsFromDatabase to prevent duplicates');
                 }
+                // Removed console.log to reduce noise - only log when actually loading
                 
                 // Only load sites if not already in client object with data
                 // CRITICAL FIX: Always try to load sites if hasSitesInClient is false
                 // This ensures sites saved to DB are loaded even if client object has empty array
                 if (!hasSitesInClient) {
                     loadPromises.push(loadSitesFromDatabase(client.id));
-                } else {
-                    console.log('✅ Sites already in client object, skipping loadSitesFromDatabase to prevent duplicates');
                 }
+                // Removed console.log to reduce noise - only log when actually loading
                 
                 // CRITICAL FIX: Skip loadClientFromDatabase if contacts are already present
                 // When contacts are present, it means the client object came from the API with all data parsed
@@ -1114,16 +1130,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 if (!hasContactsInClient) {
                     // Only load if contacts are missing - this means we need to fetch everything
                     loadPromises.push(loadClientFromDatabase(client.id));
-                } else {
-                    console.log('✅ Skipping loadClientFromDatabase - contacts already present, all data already loaded');
                 }
+                // Removed console.log to reduce noise - only log when actually loading
                 
-                // Execute all loads in parallel
+                    // Execute all loads in parallel
                 Promise.all(loadPromises).catch(error => {
                     console.error('❌ Error loading client data:', error);
                 });
-            } else {
             }
+            // Removed else block with empty body
         }
     }, [client?.id]); // Only depend on client.id, not entire client object to prevent infinite loops
     
@@ -1201,7 +1216,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         const mergedFollowUps = mergeUniqueById(parsedClient.followUps || [], prevFormData?.followUps || []);
                         const mergedContracts = mergeUniqueById(parsedClient.contracts || [], prevFormData?.contracts || []);
                         const mergedProposals = mergeUniqueById(parsedClient.proposals || [], prevFormData?.proposals || []);
-                        const mergedServices = mergeUniqueById(parsedClient.services || [], prevFormData?.services || []);
+                        
+                        // CRITICAL FIX: Services are simple string arrays, not objects with IDs
+                        // If user has edited services, preserve their current selection
+                        // Otherwise, use the database value
+                        let mergedServices;
+                        if (userEditedFieldsRef.current.has('services')) {
+                            // User has edited services - preserve their current selection
+                            mergedServices = prevFormData?.services || [];
+                        } else {
+                            // Use database value, but merge with existing to avoid duplicates
+                            const dbServices = Array.isArray(parsedClient.services) ? parsedClient.services : [];
+                            const existingServices = Array.isArray(prevFormData?.services) ? prevFormData.services : [];
+                            // For string arrays, just combine and remove duplicates
+                            mergedServices = [...new Set([...dbServices, ...existingServices])];
+                        }
                         
                         const updated = {
                             ...prevFormData,
@@ -3128,9 +3157,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         const next = isSelected
                                                             ? current.filter(s => s !== option)
                                                             : [...current, option];
-                                                        setFormData({ ...formData, services: next });
+                                                        const updatedFormData = { ...formData, services: next };
+                                                        setFormData(updatedFormData);
+                                                        formDataRef.current = updatedFormData; // CRITICAL: Update ref immediately for auto-save
                                                         hasUserEditedForm.current = true;
                                                         userEditedFieldsRef.current.add('services'); // Track that user has edited services
+                                                        
+                                                        // Auto-save services immediately (stay in edit mode)
+                                                        if (client && onSave) {
+                                                            isAutoSavingRef.current = true;
+                                                            onSave(updatedFormData, true).finally(() => {
+                                                                isAutoSavingRef.current = false;
+                                                            });
+                                                        }
                                                     }}
                                                     className={`px-3 py-1.5 text-xs rounded-full border transition ${
                                                         isSelected
