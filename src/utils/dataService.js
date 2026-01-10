@@ -331,13 +331,109 @@
         }
     },
 
-    async getTeamNotices() {
-        return safeStorageCall(window.storage, 'getTeamNotices', []);
+    async getTeamNotices(teamId = null) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) {
+                console.warn('getTeamNotices: No auth token available');
+                return [];
+            }
+
+            const url = teamId ? `/api/teams/notices?teamId=${teamId}` : '/api/teams/notices';
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch team notices: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.data?.notices || [];
+        } catch (error) {
+            console.error('Error fetching team notices from API:', error);
+            // Fallback to empty array on error
+            return [];
+        }
     },
 
-    async setTeamNotices(notices) {
-        if (typeof window.storage?.setTeamNotices === 'function') {
-            window.storage.setTeamNotices(notices);
+    async setTeamNotices(notice) {
+        // Handle both single notice object and array (for backward compatibility during migration)
+        if (Array.isArray(notice)) {
+            console.warn('setTeamNotices: Array passed, but API expects single notice. Please update calling code.');
+            // For now, just create/update the first notice if array is passed
+            if (notice.length === 0) return null;
+            notice = notice[notice.length - 1]; // Use last notice in array
+        }
+
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) {
+                throw new Error('No auth token available');
+            }
+
+            const url = notice.id ? `/api/teams/notices/${notice.id}` : '/api/teams/notices';
+            const method = notice.id ? 'PUT' : 'POST';
+
+            // Ensure teamId is set (support both team and teamId for backward compatibility)
+            const noticeData = {
+                ...notice,
+                teamId: notice.teamId || notice.team
+            };
+
+            if (!noticeData.teamId) {
+                throw new Error('teamId is required');
+            }
+
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(noticeData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Failed to ${notice.id ? 'update' : 'create'} team notice: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.data?.notice || notice;
+        } catch (error) {
+            console.error(`Error ${notice.id ? 'updating' : 'creating'} team notice:`, error);
+            throw error;
+        }
+    },
+
+    async deleteTeamNotice(noticeId) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) {
+                throw new Error('No auth token available');
+            }
+
+            const response = await fetch(`/api/teams/notices/${noticeId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to delete team notice: ${response.status}`);
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error deleting team notice:', error);
+            throw error;
         }
     },
 

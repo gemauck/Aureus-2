@@ -594,28 +594,62 @@ router.put('/documents/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingDocument = await prisma.teamDocument.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingDocument) {
       return res.status(404).json({ error: 'Document not found' })
     }
 
+    const { team, teamId, tags, attachments, ...rest } = req.body
+    const targetTeamId = teamId || team || existingDocument.teamId
+
     if (
       !isAdmin &&
-      (isManagementTeam(existingDocument.team) || isManagementTeam(req.body?.team))
+      (isManagementTeam(existingDocument.teamId) || isManagementTeam(targetTeamId))
     ) {
       return denyManagementAccess(res)
     }
 
+    // Convert tags and attachments to JSON if they're strings
+    const updateData = {
+      ...rest
+    }
+    
+    if (targetTeamId && targetTeamId !== existingDocument.teamId) {
+      updateData.teamId = targetTeamId
+    }
+    
+    if (tags !== undefined) {
+      updateData.tags = typeof tags === 'string' ? JSON.parse(tags || '[]') : tags
+    }
+    
+    if (attachments !== undefined) {
+      updateData.attachments = typeof attachments === 'string' ? JSON.parse(attachments || '[]') : attachments
+    }
+
     const document = await prisma.teamDocument.update({
       where: { id },
-      data: req.body
+      data: updateData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { document } })
   } catch (error) {
     console.error('Error updating team document:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to update document' })
   }
 })
@@ -627,14 +661,15 @@ router.delete('/documents/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingDocument = await prisma.teamDocument.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingDocument) {
       return res.status(404).json({ error: 'Document not found' })
     }
 
-    if (!isAdmin && isManagementTeam(existingDocument.team)) {
+    if (!isAdmin && isManagementTeam(existingDocument.teamId)) {
       return denyManagementAccess(res)
     }
 
@@ -654,16 +689,18 @@ router.delete('/documents/:id', authenticateToken, async (req, res) => {
 // Get all workflows (optionally filtered by team)
 router.get('/workflows', authenticateToken, async (req, res) => {
   try {
-    const { team } = req.query
+    const { team, teamId } = req.query
     const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
 
-    if (!isAdmin && isManagementTeam(team)) {
+    if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
     let where = {}
-    if (team) {
-      where.team = team
+    if (targetTeamId) {
+      where.teamId = targetTeamId
     }
 
     if (!isAdmin) {
@@ -672,6 +709,16 @@ router.get('/workflows', authenticateToken, async (req, res) => {
 
     const workflows = await prisma.teamWorkflow.findMany({
       where,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      },
       orderBy: { updatedAt: 'desc' }
     })
 
@@ -685,23 +732,46 @@ router.get('/workflows', authenticateToken, async (req, res) => {
 // Create workflow
 router.post('/workflows', authenticateToken, async (req, res) => {
   try {
-    const workflowData = {
-      ...req.body,
-      ownerId: getOwnerId(req)
+    const { team, teamId, steps, tags, ...rest } = req.body
+    const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
+    if (!targetTeamId) {
+      return res.status(400).json({ error: 'teamId is required' })
     }
 
-    const isAdmin = isAdminUser(req.user)
-    if (!isAdmin && isManagementTeam(workflowData.team)) {
+    if (!isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
+    const workflowData = {
+      ...rest,
+      teamId: targetTeamId,
+      ownerId: getOwnerId(req),
+      steps: typeof steps === 'string' ? JSON.parse(steps || '[]') : (steps || []),
+      tags: typeof tags === 'string' ? JSON.parse(tags || '[]') : (tags || [])
+    }
+
     const workflow = await prisma.teamWorkflow.create({
-      data: workflowData
+      data: workflowData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { workflow } })
   } catch (error) {
     console.error('Error creating team workflow:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to create workflow' })
   }
 })
@@ -713,28 +783,59 @@ router.put('/workflows/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingWorkflow = await prisma.teamWorkflow.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingWorkflow) {
       return res.status(404).json({ error: 'Workflow not found' })
     }
 
+    const { team, teamId, steps, tags, ...rest } = req.body
+    const targetTeamId = teamId || team || existingWorkflow.teamId
+
     if (
       !isAdmin &&
-      (isManagementTeam(existingWorkflow.team) || isManagementTeam(req.body?.team))
+      (isManagementTeam(existingWorkflow.teamId) || isManagementTeam(targetTeamId))
     ) {
       return denyManagementAccess(res)
     }
 
+    const updateData = { ...rest }
+    
+    if (targetTeamId && targetTeamId !== existingWorkflow.teamId) {
+      updateData.teamId = targetTeamId
+    }
+    
+    if (steps !== undefined) {
+      updateData.steps = typeof steps === 'string' ? JSON.parse(steps || '[]') : steps
+    }
+    
+    if (tags !== undefined) {
+      updateData.tags = typeof tags === 'string' ? JSON.parse(tags || '[]') : tags
+    }
+
     const workflow = await prisma.teamWorkflow.update({
       where: { id },
-      data: req.body
+      data: updateData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { workflow } })
   } catch (error) {
     console.error('Error updating team workflow:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to update workflow' })
   }
 })
@@ -746,14 +847,15 @@ router.delete('/workflows/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingWorkflow = await prisma.teamWorkflow.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingWorkflow) {
       return res.status(404).json({ error: 'Workflow not found' })
     }
 
-    if (!isAdmin && isManagementTeam(existingWorkflow.team)) {
+    if (!isAdmin && isManagementTeam(existingWorkflow.teamId)) {
       return denyManagementAccess(res)
     }
 
@@ -773,16 +875,18 @@ router.delete('/workflows/:id', authenticateToken, async (req, res) => {
 // Get all checklists (optionally filtered by team)
 router.get('/checklists', authenticateToken, async (req, res) => {
   try {
-    const { team } = req.query
+    const { team, teamId } = req.query
     const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
 
-    if (!isAdmin && isManagementTeam(team)) {
+    if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
     let where = {}
-    if (team) {
-      where.team = team
+    if (targetTeamId) {
+      where.teamId = targetTeamId
     }
 
     if (!isAdmin) {
@@ -791,6 +895,16 @@ router.get('/checklists', authenticateToken, async (req, res) => {
 
     const checklists = await prisma.teamChecklist.findMany({
       where,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      },
       orderBy: { updatedAt: 'desc' }
     })
 
@@ -804,23 +918,45 @@ router.get('/checklists', authenticateToken, async (req, res) => {
 // Create checklist
 router.post('/checklists', authenticateToken, async (req, res) => {
   try {
-    const checklistData = {
-      ...req.body,
-      ownerId: getOwnerId(req)
+    const { team, teamId, items, ...rest } = req.body
+    const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
+    if (!targetTeamId) {
+      return res.status(400).json({ error: 'teamId is required' })
     }
 
-    const isAdmin = isAdminUser(req.user)
-    if (!isAdmin && isManagementTeam(checklistData.team)) {
+    if (!isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
+    const checklistData = {
+      ...rest,
+      teamId: targetTeamId,
+      ownerId: getOwnerId(req),
+      items: typeof items === 'string' ? JSON.parse(items || '[]') : (items || [])
+    }
+
     const checklist = await prisma.teamChecklist.create({
-      data: checklistData
+      data: checklistData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { checklist } })
   } catch (error) {
     console.error('Error creating team checklist:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to create checklist' })
   }
 })
@@ -832,28 +968,55 @@ router.put('/checklists/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingChecklist = await prisma.teamChecklist.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingChecklist) {
       return res.status(404).json({ error: 'Checklist not found' })
     }
 
+    const { team, teamId, items, ...rest } = req.body
+    const targetTeamId = teamId || team || existingChecklist.teamId
+
     if (
       !isAdmin &&
-      (isManagementTeam(existingChecklist.team) || isManagementTeam(req.body?.team))
+      (isManagementTeam(existingChecklist.teamId) || isManagementTeam(targetTeamId))
     ) {
       return denyManagementAccess(res)
     }
 
+    const updateData = { ...rest }
+    
+    if (targetTeamId && targetTeamId !== existingChecklist.teamId) {
+      updateData.teamId = targetTeamId
+    }
+    
+    if (items !== undefined) {
+      updateData.items = typeof items === 'string' ? JSON.parse(items || '[]') : items
+    }
+
     const checklist = await prisma.teamChecklist.update({
       where: { id },
-      data: req.body
+      data: updateData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { checklist } })
   } catch (error) {
     console.error('Error updating team checklist:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to update checklist' })
   }
 })
@@ -865,14 +1028,15 @@ router.delete('/checklists/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingChecklist = await prisma.teamChecklist.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingChecklist) {
       return res.status(404).json({ error: 'Checklist not found' })
     }
 
-    if (!isAdmin && isManagementTeam(existingChecklist.team)) {
+    if (!isAdmin && isManagementTeam(existingChecklist.teamId)) {
       return denyManagementAccess(res)
     }
 
@@ -892,16 +1056,18 @@ router.delete('/checklists/:id', authenticateToken, async (req, res) => {
 // Get all notices (optionally filtered by team)
 router.get('/notices', authenticateToken, async (req, res) => {
   try {
-    const { team } = req.query
+    const { team, teamId } = req.query
     const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
 
-    if (!isAdmin && isManagementTeam(team)) {
+    if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
     let where = {}
-    if (team) {
-      where.team = team
+    if (targetTeamId) {
+      where.teamId = targetTeamId
     }
 
     if (!isAdmin) {
@@ -910,6 +1076,16 @@ router.get('/notices', authenticateToken, async (req, res) => {
 
     const notices = await prisma.teamNotice.findMany({
       where,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      },
       orderBy: { date: 'desc' }
     })
 
@@ -923,23 +1099,44 @@ router.get('/notices', authenticateToken, async (req, res) => {
 // Create notice
 router.post('/notices', authenticateToken, async (req, res) => {
   try {
-    const noticeData = {
-      ...req.body,
-      ownerId: getOwnerId(req)
+    const { team, teamId, ...rest } = req.body
+    const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
+    if (!targetTeamId) {
+      return res.status(400).json({ error: 'teamId is required' })
     }
 
-    const isAdmin = isAdminUser(req.user)
-    if (!isAdmin && isManagementTeam(noticeData.team)) {
+    if (!isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
+    const noticeData = {
+      ...rest,
+      teamId: targetTeamId,
+      ownerId: getOwnerId(req)
+    }
+
     const notice = await prisma.teamNotice.create({
-      data: noticeData
+      data: noticeData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { notice } })
   } catch (error) {
     console.error('Error creating team notice:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to create notice' })
   }
 })
@@ -951,28 +1148,50 @@ router.put('/notices/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingNotice = await prisma.teamNotice.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingNotice) {
       return res.status(404).json({ error: 'Notice not found' })
     }
 
+    const { team, teamId, ...rest } = req.body
+    const targetTeamId = teamId || team || existingNotice.teamId
+
     if (
       !isAdmin &&
-      (isManagementTeam(existingNotice.team) || isManagementTeam(req.body?.team))
+      (isManagementTeam(existingNotice.teamId) || isManagementTeam(targetTeamId))
     ) {
       return denyManagementAccess(res)
     }
 
+    const updateData = { ...rest }
+    if (targetTeamId && targetTeamId !== existingNotice.teamId) {
+      updateData.teamId = targetTeamId
+    }
+
     const notice = await prisma.teamNotice.update({
       where: { id },
-      data: req.body
+      data: updateData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { notice } })
   } catch (error) {
     console.error('Error updating team notice:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to update notice' })
   }
 })
@@ -984,14 +1203,15 @@ router.delete('/notices/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingNotice = await prisma.teamNotice.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingNotice) {
       return res.status(404).json({ error: 'Notice not found' })
     }
 
-    if (!isAdmin && isManagementTeam(existingNotice.team)) {
+    if (!isAdmin && isManagementTeam(existingNotice.teamId)) {
       return denyManagementAccess(res)
     }
 
@@ -1011,16 +1231,18 @@ router.delete('/notices/:id', authenticateToken, async (req, res) => {
 // Get all tasks (optionally filtered by team)
 router.get('/tasks', authenticateToken, async (req, res) => {
   try {
-    const { team } = req.query
+    const { team, teamId } = req.query
     const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
 
-    if (!isAdmin && isManagementTeam(team)) {
+    if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
     let where = {}
-    if (team) {
-      where.team = team
+    if (targetTeamId) {
+      where.teamId = targetTeamId
     }
 
     if (!isAdmin) {
@@ -1029,6 +1251,16 @@ router.get('/tasks', authenticateToken, async (req, res) => {
 
     const tasks = await prisma.teamTask.findMany({
       where,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      },
       orderBy: { updatedAt: 'desc' }
     })
 
@@ -1042,23 +1274,46 @@ router.get('/tasks', authenticateToken, async (req, res) => {
 // Create task
 router.post('/tasks', authenticateToken, async (req, res) => {
   try {
-    const taskData = {
-      ...req.body,
-      ownerId: getOwnerId(req)
+    const { team, teamId, tags, attachments, ...rest } = req.body
+    const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
+    if (!targetTeamId) {
+      return res.status(400).json({ error: 'teamId is required' })
     }
 
-    const isAdmin = isAdminUser(req.user)
-    if (!isAdmin && isManagementTeam(taskData.team)) {
+    if (!isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
+    const taskData = {
+      ...rest,
+      teamId: targetTeamId,
+      ownerId: getOwnerId(req),
+      tags: typeof tags === 'string' ? JSON.parse(tags || '[]') : (tags || []),
+      attachments: typeof attachments === 'string' ? JSON.parse(attachments || '[]') : (attachments || [])
+    }
+
     const task = await prisma.teamTask.create({
-      data: taskData
+      data: taskData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { task } })
   } catch (error) {
     console.error('Error creating team task:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to create task' })
   }
 })
@@ -1070,28 +1325,59 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingTask = await prisma.teamTask.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' })
     }
 
+    const { team, teamId, tags, attachments, ...rest } = req.body
+    const targetTeamId = teamId || team || existingTask.teamId
+
     if (
       !isAdmin &&
-      (isManagementTeam(existingTask.team) || isManagementTeam(req.body?.team))
+      (isManagementTeam(existingTask.teamId) || isManagementTeam(targetTeamId))
     ) {
       return denyManagementAccess(res)
     }
 
+    const updateData = { ...rest }
+    
+    if (targetTeamId && targetTeamId !== existingTask.teamId) {
+      updateData.teamId = targetTeamId
+    }
+    
+    if (tags !== undefined) {
+      updateData.tags = typeof tags === 'string' ? JSON.parse(tags || '[]') : tags
+    }
+    
+    if (attachments !== undefined) {
+      updateData.attachments = typeof attachments === 'string' ? JSON.parse(attachments || '[]') : attachments
+    }
+
     const task = await prisma.teamTask.update({
       where: { id },
-      data: req.body
+      data: updateData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { task } })
   } catch (error) {
     console.error('Error updating team task:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to update task' })
   }
 })
@@ -1103,14 +1389,15 @@ router.delete('/tasks/:id', authenticateToken, async (req, res) => {
     const isAdmin = isAdminUser(req.user)
 
     const existingTask = await prisma.teamTask.findUnique({
-      where: { id }
+      where: { id },
+      include: { team: true }
     })
 
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' })
     }
 
-    if (!isAdmin && isManagementTeam(existingTask.team)) {
+    if (!isAdmin && isManagementTeam(existingTask.teamId)) {
       return denyManagementAccess(res)
     }
 
@@ -1130,16 +1417,18 @@ router.delete('/tasks/:id', authenticateToken, async (req, res) => {
 // Get all executions (optionally filtered by workflowId or team)
 router.get('/executions', authenticateToken, async (req, res) => {
   try {
-    const { workflowId, team } = req.query
+    const { workflowId, team, teamId } = req.query
     const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
 
-    if (!isAdmin && isManagementTeam(team)) {
+    if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
     let where = {}
     if (workflowId) where.workflowId = workflowId
-    if (team) where.team = team
+    if (targetTeamId) where.teamId = targetTeamId
 
     if (!isAdmin) {
       where = withManagementRestriction(where)
@@ -1147,6 +1436,22 @@ router.get('/executions', authenticateToken, async (req, res) => {
 
     const executions = await prisma.workflowExecution.findMany({
       where,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        },
+        workflow: {
+          select: {
+            id: true,
+            title: true
+          }
+        }
+      },
       orderBy: { executionDate: 'desc' }
     })
 
@@ -1160,23 +1465,51 @@ router.get('/executions', authenticateToken, async (req, res) => {
 // Create execution
 router.post('/executions', authenticateToken, async (req, res) => {
   try {
-    const executionData = {
-      ...req.body,
-      ownerId: getOwnerId(req)
+    const { team, teamId, completedSteps, ...rest } = req.body
+    const isAdmin = isAdminUser(req.user)
+    
+    const targetTeamId = teamId || team
+    if (!targetTeamId) {
+      return res.status(400).json({ error: 'teamId is required' })
     }
 
-    const isAdmin = isAdminUser(req.user)
-    if (!isAdmin && isManagementTeam(executionData.team)) {
+    if (!isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
+    const executionData = {
+      ...rest,
+      teamId: targetTeamId,
+      ownerId: getOwnerId(req),
+      completedSteps: typeof completedSteps === 'string' ? JSON.parse(completedSteps || '[]') : (completedSteps || [])
+    }
+
     const execution = await prisma.workflowExecution.create({
-      data: executionData
+      data: executionData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        },
+        workflow: {
+          select: {
+            id: true,
+            title: true
+          }
+        }
+      }
     })
 
     res.json({ data: { execution } })
   } catch (error) {
     console.error('Error creating workflow execution:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team or Workflow not found' })
+    }
     res.status(500).json({ error: 'Failed to create execution' })
   }
 })

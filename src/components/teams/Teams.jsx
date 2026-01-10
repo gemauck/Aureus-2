@@ -8,115 +8,11 @@ const NoticeModal = window.NoticeModal;
 const WorkflowExecutionModal = window.WorkflowExecutionModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
-// Team definitions - defined outside component to avoid recreation on every render
-const TEAMS = [
-        { 
-            id: 'management', 
-            name: 'Management', 
-            icon: 'fa-user-tie', 
-            color: 'blue',
-            description: 'Executive leadership and strategic planning',
-            members: 0,
-            permissions: [
-                'Approve capital expenditure, budgets, and strategic initiatives',
-                'Assign cross-team priorities and override departmental escalations',
-                'Access organization-wide executive dashboards and audit summaries'
-            ]
-        },
-        { 
-            id: 'technical', 
-            name: 'Technical', 
-            icon: 'fa-tools', 
-            color: 'purple',
-            description: 'Technical operations and system maintenance',
-            members: 0,
-            permissions: [
-                'Deploy production releases and manage infrastructure integrations',
-                'Configure APIs, webhooks, and security credentials for services',
-                'View system diagnostics, error logs, and performance telemetry'
-            ]
-        },
-        { 
-            id: 'support', 
-            name: 'Support', 
-            icon: 'fa-headset', 
-            color: 'green',
-            description: 'Customer support and service delivery',
-            members: 0,
-            permissions: [
-                'Manage customer tickets, escalations, and service level agreements',
-                'Access unified communication channels and contact history',
-                'Publish and update customer-facing knowledge base documentation'
-            ]
-        },
-        { 
-            id: 'data-analytics', 
-            name: 'Data Analytics', 
-            icon: 'fa-chart-line', 
-            color: 'indigo',
-            description: 'Data analysis and business intelligence',
-            members: 0,
-            permissions: [
-                'Query governed datasets and schedule BI dashboard refreshes',
-                'Export aggregated analytics for leadership and finance reviews',
-                'Define metric definitions, KPIs, and reporting taxonomies'
-            ]
-        },
-        { 
-            id: 'finance', 
-            name: 'Finance', 
-            icon: 'fa-coins', 
-            color: 'yellow',
-            description: 'Financial management and accounting',
-            members: 0,
-            permissions: [
-                'Approve invoices, purchase orders, and payment runs',
-                'Access ledgers, balance sheets, and sensitive financial statements',
-                'Manage payroll configurations and tax compliance filings'
-            ]
-        },
-        { 
-            id: 'business-development', 
-            name: 'Business Development', 
-            icon: 'fa-rocket', 
-            color: 'pink',
-            description: 'Growth strategies and new opportunities',
-            members: 0,
-            permissions: [
-                'Create and negotiate partnership and channel opportunity records',
-                'Access competitive intelligence and pipeline analytics',
-                'Approve pricing proposals and bespoke commercial terms'
-            ]
-        },
-        { 
-            id: 'commercial', 
-            name: 'Commercial', 
-            icon: 'fa-handshake', 
-            color: 'orange',
-            description: 'Sales and commercial operations',
-            members: 0,
-            permissions: [
-                'Manage quotes, contracts, and sales order fulfilment tasks',
-                'Update product catalogues, pricing tiers, and discount rules',
-                'View customer credit status and contract renewal schedules'
-            ]
-        },
-        { 
-            id: 'compliance', 
-            name: 'Compliance', 
-            icon: 'fa-shield-alt', 
-            color: 'red',
-            description: 'Regulatory compliance and risk management',
-            members: 0,
-            permissions: [
-                'Review audit trails, exception reports, and attestation evidence',
-                'Manage regulatory documentation, policies, and control mappings',
-                'Enforce policy acknowledgment and training completion workflows'
-            ]
-        }
-];
-
 const Teams = () => {
+    // Teams state - fetched from API
+    const [teams, setTeams] = useState([]);
+    const [teamsLoading, setTeamsLoading] = useState(true);
+    const [teamsError, setTeamsError] = useState(null);
     const normalizePermissions = (permissions) => {
         if (!permissions) return [];
         if (Array.isArray(permissions)) return permissions;
@@ -193,6 +89,63 @@ const Teams = () => {
     };
 
     const [currentUser, setCurrentUser] = useState(() => sanitizeUser(authUser) || getCurrentUser());
+
+    // Fetch teams from API
+    useEffect(() => {
+        const fetchTeams = async () => {
+            try {
+                setTeamsLoading(true);
+                setTeamsError(null);
+                
+                const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+                if (!token) {
+                    console.warn('Teams: No auth token available');
+                    setTeamsLoading(false);
+                    return;
+                }
+
+                const response = await fetch('/api/teams', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch teams: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                if (data.data && Array.isArray(data.data.teams)) {
+                    // Format teams to match expected structure
+                    const formattedTeams = data.data.teams.map(team => ({
+                        id: team.id,
+                        name: team.name,
+                        icon: team.icon || '',
+                        color: team.color || 'blue',
+                        description: team.description || '',
+                        members: team.members || 0,
+                        permissions: team.permissions || [],
+                        isActive: team.isActive !== false
+                    }));
+                    setTeams(formattedTeams);
+                } else {
+                    console.warn('Teams: Unexpected API response format', data);
+                    setTeams([]);
+                }
+            } catch (error) {
+                console.error('Teams: Error fetching teams from API:', error);
+                setTeamsError(error.message);
+                // Fallback to empty array on error
+                setTeams([]);
+            } finally {
+                setTeamsLoading(false);
+            }
+        };
+
+        fetchTeams();
+    }, []);
 
     useEffect(() => {
         const sanitizedAuthUser = sanitizeUser(authUser);
@@ -314,16 +267,8 @@ const Teams = () => {
         }
     }, []);
     const [selectedTeam, setSelectedTeam] = useState(() => {
-        // Initialize from URL if available
-        const urlParams = new URLSearchParams(window.location.search);
-        const teamId = urlParams.get('team');
-        if (teamId) {
-            const team = TEAMS.find(t => t.id === teamId);
-            if (team) {
-                // Return team - accessibility will be checked in useEffect
-                return team;
-            }
-        }
+        // Initialize from URL if available (will be updated after teams load)
+        // Return null initially - team will be set in useEffect after teams are loaded
         return null;
     });
     const [searchTerm, setSearchTerm] = useState('');
@@ -358,12 +303,14 @@ const Teams = () => {
     // State to track ManagementMeetingNotes availability
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
     
-    // Validate selectedTeam from URL after component mounts and isAdminUser is computed
+    // Validate selectedTeam from URL after component mounts, teams load, and isAdminUser is computed
     useEffect(() => {
+        if (teamsLoading || teams.length === 0) return; // Wait for teams to load
+        
         const urlParams = new URLSearchParams(window.location.search);
         const teamId = urlParams.get('team');
         if (teamId) {
-            const team = TEAMS.find(t => t.id === teamId);
+            const team = teams.find(t => t.id === teamId);
             if (team) {
                 // If team is accessible, set it; otherwise clear it
                 if (isTeamAccessible(team.id)) {
@@ -379,7 +326,7 @@ const Teams = () => {
                 }
             }
         }
-    }, [isAdminUser, isTeamAccessible]);
+    }, [teamsLoading, teams, isAdminUser, isTeamAccessible, selectedTeam]);
     
     // Update URL when tab changes - preserve existing params like month and week
     useEffect(() => {
@@ -473,8 +420,8 @@ const Teams = () => {
             // Read team from URL
             const urlParams = new URLSearchParams(window.location.search);
             const teamId = urlParams.get('team');
-            if (teamId) {
-                const team = TEAMS.find(t => t.id === teamId);
+            if (teamId && teams.length > 0) {
+                const team = teams.find(t => t.id === teamId || String(t.id) === String(teamId));
                 if (team && isTeamAccessible(team.id)) {
                     setSelectedTeam(team);
                 } else {
@@ -511,8 +458,8 @@ const Teams = () => {
             
             // URL contains a team ID - open that team
             const teamId = route.segments[0];
-            if (teamId) {
-                const team = TEAMS.find(t => t.id === teamId || String(t.id) === String(teamId));
+            if (teamId && teams.length > 0) {
+                const team = teams.find(t => t.id === teamId || String(t.id) === String(teamId));
                 if (team && isTeamAccessible(team.id)) {
                     setSelectedTeam(team);
                     
@@ -594,12 +541,21 @@ const Teams = () => {
                     }
                 };
                 
-                const [savedDocuments, savedWorkflows, savedChecklists, savedNotices] = await Promise.all([
+                const [savedDocuments, savedWorkflows, savedChecklists, savedNoticesResult] = await Promise.all([
                     getSafeData('getTeamDocuments'),
                     getSafeData('getTeamWorkflows'),
                     getSafeData('getTeamChecklists'),
-                    getSafeData('getTeamNotices')
+                    selectedTeam ? (async () => {
+                        try {
+                            return await window.dataService.getTeamNotices(selectedTeam.id);
+                        } catch (err) {
+                            console.warn('⚠️ Teams: Error loading team notices:', err);
+                            return [];
+                        }
+                    })() : Promise.resolve([])
                 ]);
+                
+                const savedNotices = Array.isArray(savedNoticesResult) ? savedNoticesResult : [];
                 
                 // Ensure all values are arrays, even if they returned null/undefined
                 const documents = Array.isArray(savedDocuments) ? savedDocuments : [];
@@ -679,16 +635,16 @@ const Teams = () => {
     // Get counts for selected team - memoized per team to avoid recalculation
     const teamCountsCache = useMemo(() => {
         const cache = {};
-        TEAMS.forEach(team => {
+        teams.forEach(team => {
             cache[team.id] = {
-                documents: accessibleDocuments.filter(d => d.team === team.id).length,
-                workflows: accessibleWorkflows.filter(w => w.team === team.id).length,
-                checklists: accessibleChecklists.filter(c => c.team === team.id).length,
-                notices: accessibleNotices.filter(n => n.team === team.id).length
+                documents: accessibleDocuments.filter(d => d.teamId === team.id || d.team === team.id).length,
+                workflows: accessibleWorkflows.filter(w => w.teamId === team.id || w.team === team.id).length,
+                checklists: accessibleChecklists.filter(c => c.teamId === team.id || c.team === team.id).length,
+                notices: accessibleNotices.filter(n => n.teamId === team.id || n.team === team.id).length
             };
         });
         return cache;
-    }, [accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
+    }, [teams, accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
 
     const getTeamCounts = (teamId) => {
         return teamCountsCache[teamId] || { documents: 0, workflows: 0, checklists: 0, notices: 0 };
@@ -865,8 +821,19 @@ const Teams = () => {
             updatedNotices = [...notices, noticeData];
         }
         
-        setNotices(updatedNotices);
-        await window.dataService.setTeamNotices(updatedNotices);
+        // Save notice to API
+        try {
+            const savedNotice = await window.dataService.setTeamNotices(noticeData);
+            // Update local state with saved notice (which may have server-generated ID)
+            const finalNotices = existingIndex >= 0 
+                ? notices.map((n, idx) => idx === existingIndex ? savedNotice : n)
+                : [...notices, savedNotice];
+            setNotices(finalNotices);
+        } catch (error) {
+            console.error('Error saving team notice:', error);
+            alert(`Failed to save notice: ${error.message}`);
+            return;
+        }
         setEditingNotice(null);
     };
 
@@ -911,9 +878,14 @@ const Teams = () => {
 
     const handleDeleteNotice = async (id) => {
         if (confirm('Are you sure you want to delete this notice?')) {
-            const updatedNotices = notices.filter(n => n.id !== id);
-            setNotices(updatedNotices);
-            await window.dataService.setTeamNotices(updatedNotices);
+            try {
+                await window.dataService.deleteTeamNotice(id);
+                const updatedNotices = notices.filter(n => n.id !== id);
+                setNotices(updatedNotices);
+            } catch (error) {
+                console.error('Error deleting team notice:', error);
+                alert(`Failed to delete notice: ${error.message}`);
+            }
         }
     };
 
@@ -1131,7 +1103,13 @@ const Teams = () => {
 					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
 						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Department Teams</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                            {TEAMS.map(team => {
+                            {teamsLoading ? (
+                                <div className="col-span-full text-center py-4 text-gray-500">Loading teams...</div>
+                            ) : teamsError ? (
+                                <div className="col-span-full text-center py-4 text-red-500">Error loading teams: {teamsError}</div>
+                            ) : teams.length === 0 ? (
+                                <div className="col-span-full text-center py-4 text-gray-500">No teams available</div>
+                            ) : teams.map(team => {
                                 const isAccessible = isTeamAccessible(team.id);
                                 const counts = getTeamCounts(team.id);
                                 return (
@@ -1168,6 +1146,7 @@ const Teams = () => {
                                     </button>
                                 );
                             })}
+                            )}
                         </div>
                     </div>
 
@@ -1177,7 +1156,7 @@ const Teams = () => {
                         {recentActivity.length > 0 ? (
                             <div className="space-y-2">
                                 {recentActivity.map((item, idx) => {
-                                    const team = TEAMS.find(t => t.id === item.team);
+                                    const team = teams.find(t => t.id === (item.teamId || item.team));
                                     return (
 										<div key={idx} className={`flex items-center gap-3 py-2 border-b last:border-b-0 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
 											<div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-slate-700' : ''}`}>

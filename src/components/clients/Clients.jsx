@@ -1297,6 +1297,34 @@ const Clients = React.memo(() => {
             const entityId = route.segments[0];
             if (!entityId) return;
             
+            // Handle "new" route for creating new client/lead - don't try to fetch it
+            // Check if the first segment is "new" (new client) or if we have ["leads", "new"] (new lead)
+            const isNewClient = entityId === 'new';
+            const isNewLead = route.segments.length >= 2 && route.segments[0] === 'leads' && route.segments[1] === 'new';
+            
+            if (isNewClient || isNewLead) {
+                if (isNewLead) {
+                    // Open new lead form
+                    setEditingLeadId(null);
+                    setEditingClientId(null);
+                    selectedLeadRef.current = null;
+                    selectedClientRef.current = null;
+                    isFormOpenRef.current = true;
+                    setViewMode('lead-detail');
+                    setCurrentLeadTab('overview');
+                } else {
+                    // Open new client form
+                    setEditingClientId(null);
+                    setEditingLeadId(null);
+                    selectedClientRef.current = null;
+                    selectedLeadRef.current = null;
+                    isFormOpenRef.current = true;
+                    setViewMode('client-detail');
+                    setCurrentTab('overview');
+                }
+                return;
+            }
+            
             // Determine entity type from URL or try to find in clients/leads
             let entity = null;
             let entityType = null;
@@ -7896,6 +7924,14 @@ const Clients = React.memo(() => {
                         isFormOpenRef.current = true;
                         setCurrentTab('overview');
                         setViewMode('client-detail');
+                        // Update URL to reflect new client form
+                        if (window.RouteState) {
+                            window.RouteState.setPageSubpath('clients', ['new'], {
+                                replace: false,
+                                preserveSearch: false,
+                                preserveHash: false
+                            });
+                        }
                     }}
                         className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2.5 border rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px] sm:min-h-0 ${
                             isDark 
@@ -7922,6 +7958,14 @@ const Clients = React.memo(() => {
                         isFormOpenRef.current = true;
                         setCurrentLeadTab('overview');
                         setViewMode('lead-detail');
+                        // Update URL to reflect new lead form
+                        if (window.RouteState) {
+                            window.RouteState.setPageSubpath('clients', ['leads', 'new'], {
+                                replace: false,
+                                preserveSearch: false,
+                                preserveHash: false
+                            });
+                        }
                     }}
                         className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px] sm:min-h-0"
                     >
