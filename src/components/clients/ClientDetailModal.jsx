@@ -159,6 +159,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Track loading state to prevent duplicate API calls
     const isLoadingContactsRef = useRef(false);
     const isLoadingSitesRef = useRef(false);
+    const sitesLoadedForClientRef = useRef(null); // Track if sites have been loaded for current client (even if 0)
     const isLoadingClientRef = useRef(false);
     const isLoadingOpportunitiesRef = useRef(false);
     const pendingTimeoutsRef = useRef([]); // Track all pending timeouts to cancel on unmount
@@ -677,18 +678,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, [activeTab, client?.id, loadJobCards]);
     
     // Ensure sites are loaded when Sites tab becomes active
+    // CRITICAL FIX: Track if sites have been loaded for this client to prevent infinite loop
+    // Even if 0 sites are returned, we don't want to keep reloading
     useEffect(() => {
         if (activeTab === 'sites' && client?.id) {
-            // Check if sites exist in formData - if not, load from database
-            const currentSites = formData?.sites || [];
-            const hasSites = currentSites.length > 0 || optimisticSites.length > 0;
+            // Check if sites have already been loaded for this client (even if result was 0)
+            const sitesAlreadyLoaded = sitesLoadedForClientRef.current === client.id;
             
-            if (!hasSites && !isLoadingSitesRef.current) {
-                console.log('📡 Sites tab active but no sites found - loading from database');
+            // Only load if we haven't loaded for this client yet and we're not currently loading
+            if (!sitesAlreadyLoaded && !isLoadingSitesRef.current) {
+                console.log('📡 Sites tab active and sites not yet loaded for this client - loading from database');
                 loadSitesFromDatabase(client.id);
             }
         }
-    }, [activeTab, client?.id, formData?.sites, optimisticSites]);
+    }, [activeTab, client?.id]); // Removed formData?.sites and optimisticSites from dependencies to prevent infinite loop
 
     // Handle job card click - navigate to full job card detail page
     const handleJobCardClick = (jobCard) => {
@@ -762,6 +765,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Clear optimistic updates when switching clients
                 setOptimisticContacts([]);
                 setOptimisticSites([]);
+                // Reset sites loaded flag when switching clients to allow reload for new client
+                sitesLoadedForClientRef.current = null;
             }
             
             // Only load from database if client ID changed (new client) or form hasn't been edited
@@ -1253,6 +1258,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const sites = response?.data?.sites || [];
             console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
             
+            // CRITICAL FIX: Mark sites as loaded for this client (even if 0 sites) to prevent infinite reload loop
+            sitesLoadedForClientRef.current = clientId;
+            
             // CRITICAL FIX: Merge with existing sites to prevent duplicates
             // Always merge - even if form has been edited, we want to add new sites from DB
             setFormData(prevFormData => {
@@ -1280,6 +1288,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             });
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
+            // Mark as loaded even on error to prevent infinite retry loop
+            // User can manually refresh if needed
+            sitesLoadedForClientRef.current = clientId;
         } finally {
             isLoadingSitesRef.current = false;
         }
