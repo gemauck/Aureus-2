@@ -90,21 +90,45 @@ model User {
 }
 
 model Team {
-  id          String       @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  icon        String?           // FontAwesome icon class (e.g., 'fa-user-tie')
+  color       String?           // CSS color/theme color (e.g., 'blue', 'purple')
+  description String?           // Team description
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   memberships Membership[]
+  permissions TeamPermission[]
+  documents   TeamDocument[]
+  workflows   TeamWorkflow[]
+  checklists  TeamChecklist[]
+  notices     TeamNotice[]
+  tasks       TeamTask[]
+  executions  WorkflowExecution[]
 }
 
 model Membership {
   userId String
   teamId String
   role   String @default("user")
-  team   Team   @relation(fields: [teamId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, teamId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+model TeamPermission {
+  id          String   @id @default(cuid())
+  teamId      String
+  permission  String   // Permission description/identifier
+  createdAt   DateTime @default(now())
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  @@index([teamId])
+  @@unique([teamId, permission])
 }
 
 model Client {
@@ -832,51 +856,66 @@ model Ticket {
 }
 
 model TeamDocument {
-  id          String   @id @default(cuid())
-  team        String
+  id          String                    @id @default(cuid())
+  teamId      String
   title       String
-  category    String   @default("General")
-  description String   @default("")
-  content     String   @default("")
-  version     String   @default("1.0")
-  status      String   @default("Draft")
-  tags        String   @default("[]")
-  attachments String   @default("[]")
-  createdBy   String   @default("")
+  category    String                    @default("General")
+  description String                    @default("")
+  content     String                    @default("")
+  version     String                    @default("1.0")
+  status      String                    @default("Draft")
+  tags        Json?                     @default("[]") // JSONB array of strings
+  attachments Json?                     @default("[]") // JSONB array of attachment objects
+  createdBy   String                    @default("")
   ownerId     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+  team        Team                      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  @@index([teamId])
+  @@index([status])
+  @@index([category])
 }
 
 model TeamWorkflow {
-  id          String   @id @default(cuid())
-  team        String
+  id          String                  @id @default(cuid())
+  teamId      String
   title       String
-  description String   @default("")
-  status      String   @default("Draft")
-  steps       String   @default("[]")
-  tags        String   @default("[]")
+  description String                  @default("")
+  status      String                  @default("Draft")
+  steps       Json?                   @default("[]") // JSONB array of workflow step objects
+  tags        Json?                   @default("[]") // JSONB array of strings
   ownerId     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  team        Team                    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  executions  WorkflowExecution[]      @relation("WorkflowExecutions")
+  
+  @@index([teamId])
+  @@index([status])
 }
 
 model TeamChecklist {
   id          String   @id @default(cuid())
-  team        String
+  teamId      String
   title       String
   description String   @default("")
   category    String   @default("General")
   frequency   String   @default("One-time")
-  items       String   @default("[]")
+  items       Json?    @default("[]") // JSONB array of checklist item objects
   ownerId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  @@index([teamId])
+  @@index([category])
+  @@index([frequency])
 }
 
 model TeamNotice {
   id        String   @id @default(cuid())
-  team      String
+  teamId    String
   title     String
   content   String
   priority  String   @default("Normal")
@@ -885,37 +924,56 @@ model TeamNotice {
   ownerId   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  @@index([teamId])
+  @@index([date])
+  @@index([priority])
 }
 
 model WorkflowExecution {
-  id             String   @id @default(cuid())
-  workflowId     String
+  id             String        @id @default(cuid())
+  workflowId     String?       // Optional: may reference a TeamWorkflow or be standalone
   workflowTitle  String
-  team           String
-  completedSteps String   @default("[]")
-  notes          String   @default("")
-  executedBy     String   @default("")
-  executionDate  DateTime @default(now())
-  status         String   @default("Completed")
+  teamId         String
+  completedSteps Json?         @default("[]") // JSONB array of completed step identifiers
+  notes          String        @default("")
+  executedBy     String        @default("")
+  executionDate  DateTime      @default(now())
+  status         String        @default("Completed")
   ownerId        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  team           Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workflow       TeamWorkflow? @relation("WorkflowExecutions", fields: [workflowId], references: [id], onDelete: SetNull)
+  
+  @@index([teamId])
+  @@index([workflowId])
+  @@index([executionDate])
+  @@index([status])
 }
 
 model TeamTask {
   id          String    @id @default(cuid())
-  team        String
+  teamId      String
   title       String
   description String    @default("")
   status      String    @default("todo")
   priority    String    @default("Medium")
   assigneeId  String?
   dueDate     DateTime?
-  tags        String    @default("[]")
-  attachments String    @default("[]")
+  tags        Json?     @default("[]") // JSONB array of strings
+  attachments Json?     @default("[]") // JSONB array of attachment objects
   ownerId     String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  @@index([teamId])
+  @@index([status])
+  @@index([priority])
+  @@index([assigneeId])
+  @@index([dueDate])
 }
 
 model InventoryItem {

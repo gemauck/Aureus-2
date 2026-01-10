@@ -15,7 +15,18 @@ const MANAGEMENT_FORBIDDEN_MESSAGE = 'Only administrators can access the Managem
 
 const isManagementTeam = (team) => {
   if (!team) return false
-  return team.toString().trim().toLowerCase() === MANAGEMENT_TEAM_ID
+  // Handle both team object/ID and string
+  const teamId = typeof team === 'string' ? team : (team.id || team.teamId)
+  return teamId.toString().trim().toLowerCase() === MANAGEMENT_TEAM_ID
+}
+
+const getTeamId = (team) => {
+  if (!team) return null
+  // Handle team object, teamId string, or team name string
+  if (typeof team === 'string') {
+    return team
+  }
+  return team.id || team.teamId || null
 }
 
 const normalizePermissions = (permissions) => {
@@ -57,12 +68,12 @@ const denyManagementAccess = (res) => {
 }
 
 const withManagementRestriction = (where = {}) => {
+  // First, get the management team ID from database
+  // For now, we'll use the team name/id lookup
+  // In production, this should be cached or looked up once
   const restrictions = {
     NOT: {
-      team: {
-        equals: MANAGEMENT_TEAM_ID,
-        mode: 'insensitive'
-      }
+      teamId: MANAGEMENT_TEAM_ID
     }
   }
 
@@ -85,21 +96,420 @@ const getOwnerId = (req) => {
   return req.user?.id || req.user?.userId || null
 }
 
+// ============ TEAMS CRUD ============
+
+// Get all teams
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const isAdmin = isAdminUser(req.user)
+    
+    const teams = await prisma.team.findMany({
+      where: isAdmin ? {} : { isActive: true },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true
+              }
+            }
+          }
+        },
+        permissions: {
+          select: {
+            id: true,
+            permission: true
+          }
+        },
+        _count: {
+          select: {
+            documents: true,
+            workflows: true,
+            checklists: true,
+            notices: true,
+            tasks: true,
+            memberships: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    })
+
+    // Format teams with member count and permissions array
+    const formattedTeams = teams.map(team => ({
+      id: team.id,
+      name: team.name,
+      icon: team.icon,
+      color: team.color,
+      description: team.description,
+      isActive: team.isActive,
+      members: team._count.memberships,
+      permissions: team.permissions.map(p => p.permission),
+      memberships: team.memberships.map(m => ({
+        userId: m.userId,
+        user: m.user,
+        role: m.role
+      })),
+      counts: {
+        documents: team._count.documents,
+        workflows: team._count.workflows,
+        checklists: team._count.checklists,
+        notices: team._count.notices,
+        tasks: team._count.tasks
+      },
+      createdAt: team.createdAt,
+      updatedAt: team.updatedAt
+    }))
+
+    res.json({ data: { teams: formattedTeams } })
+  } catch (error) {
+    console.error('Error fetching teams:', error)
+    res.status(500).json({ error: 'Failed to fetch teams' })
+  }
+})
+
+// Get single team
+router.get('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const isAdmin = isAdminUser(req.user)
+
+    if (!isAdmin && isManagementTeam(id)) {
+      return denyManagementAccess(res)
+    }
+
+    const team = await prisma.team.findUnique({
+      where: { id },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                avatar: true
+              }
+            }
+          }
+        },
+        permissions: {
+          select: {
+            id: true,
+            permission: true,
+            createdAt: true
+          }
+        },
+        _count: {
+          select: {
+            documents: true,
+            workflows: true,
+            checklists: true,
+            notices: true,
+            tasks: true,
+            memberships: true
+          }
+        }
+      }
+    })
+
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' })
+    }
+
+    // Format team response
+    const formattedTeam = {
+      id: team.id,
+      name: team.name,
+      icon: team.icon,
+      color: team.color,
+      description: team.description,
+      isActive: team.isActive,
+      members: team._count.memberships,
+      permissions: team.permissions.map(p => p.permission),
+      memberships: team.memberships.map(m => ({
+        userId: m.userId,
+        user: m.user,
+        role: m.role
+      })),
+      counts: {
+        documents: team._count.documents,
+        workflows: team._count.workflows,
+        checklists: team._count.checklists,
+        notices: team._count.notices,
+        tasks: team._count.tasks
+      },
+      createdAt: team.createdAt,
+      updatedAt: team.updatedAt
+    }
+
+    res.json({ data: { team: formattedTeam } })
+  } catch (error) {
+    console.error('Error fetching team:', error)
+    res.status(500).json({ error: 'Failed to fetch team' })
+  }
+})
+
+// Create team
+router.post('/', authenticateToken, async (req, res) => {
+  try {
+    if (!isAdminUser(req.user)) {
+      return res.status(403).json({ error: 'Only administrators can create teams' })
+    }
+
+    const { name, icon, color, description, permissions = [], isActive = true } = req.body
+
+    if (!name) {
+      return res.status(400).json({ error: 'Team name is required' })
+    }
+
+    // Create team with permissions in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const team = await tx.team.create({
+        data: {
+          name,
+          icon: icon || null,
+          color: color || null,
+          description: description || null,
+          isActive
+        }
+      })
+
+      // Create permissions if provided
+      if (Array.isArray(permissions) && permissions.length > 0) {
+        await tx.teamPermission.createMany({
+          data: permissions.map(permission => ({
+            teamId: team.id,
+            permission: String(permission)
+          }))
+        })
+      }
+
+      // Fetch complete team with permissions
+      return tx.team.findUnique({
+        where: { id: team.id },
+        include: {
+          permissions: true,
+          _count: {
+            select: {
+              memberships: true
+            }
+          }
+        }
+      })
+    })
+
+    res.status(201).json({
+      data: {
+        team: {
+          id: result.id,
+          name: result.name,
+          icon: result.icon,
+          color: result.color,
+          description: result.description,
+          isActive: result.isActive,
+          members: result._count.memberships,
+          permissions: result.permissions.map(p => p.permission),
+          createdAt: result.createdAt,
+          updatedAt: result.updatedAt
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Error creating team:', error)
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Team with this name already exists' })
+    }
+    res.status(500).json({ error: 'Failed to create team' })
+  }
+})
+
+// Update team
+router.put('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const isAdmin = isAdminUser(req.user)
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can update teams' })
+    }
+
+    if (!isAdmin && isManagementTeam(id)) {
+      return denyManagementAccess(res)
+    }
+
+    const existingTeam = await prisma.team.findUnique({
+      where: { id },
+      include: { permissions: true }
+    })
+
+    if (!existingTeam) {
+      return res.status(404).json({ error: 'Team not found' })
+    }
+
+    const { name, icon, color, description, permissions, isActive } = req.body
+
+    // Update team and permissions in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Update team fields
+      const updateData = {}
+      if (name !== undefined) updateData.name = name
+      if (icon !== undefined) updateData.icon = icon || null
+      if (color !== undefined) updateData.color = color || null
+      if (description !== undefined) updateData.description = description || null
+      if (isActive !== undefined) updateData.isActive = isActive
+
+      const team = await tx.team.update({
+        where: { id },
+        data: updateData
+      })
+
+      // Update permissions if provided
+      if (Array.isArray(permissions)) {
+        // Delete existing permissions
+        await tx.teamPermission.deleteMany({
+          where: { teamId: id }
+        })
+
+        // Create new permissions
+        if (permissions.length > 0) {
+          await tx.teamPermission.createMany({
+            data: permissions.map(permission => ({
+              teamId: id,
+              permission: String(permission)
+            }))
+          })
+        }
+      }
+
+      // Fetch complete team
+      return tx.team.findUnique({
+        where: { id },
+        include: {
+          permissions: true,
+          _count: {
+            select: {
+              memberships: true
+            }
+          }
+        }
+      })
+    })
+
+    res.json({
+      data: {
+        team: {
+          id: result.id,
+          name: result.name,
+          icon: result.icon,
+          color: result.color,
+          description: result.description,
+          isActive: result.isActive,
+          members: result._count.memberships,
+          permissions: result.permissions.map(p => p.permission),
+          createdAt: result.createdAt,
+          updatedAt: result.updatedAt
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Error updating team:', error)
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Team with this name already exists' })
+    }
+    res.status(500).json({ error: 'Failed to update team' })
+  }
+})
+
+// Delete team
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const isAdmin = isAdminUser(req.user)
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can delete teams' })
+    }
+
+    if (isManagementTeam(id)) {
+      return res.status(403).json({ error: 'Cannot delete the Management team' })
+    }
+
+    const existingTeam = await prisma.team.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            memberships: true,
+            documents: true,
+            workflows: true,
+            checklists: true,
+            notices: true,
+            tasks: true
+          }
+        }
+      }
+    })
+
+    if (!existingTeam) {
+      return res.status(404).json({ error: 'Team not found' })
+    }
+
+    // Check if team has associated data
+    const hasData = existingTeam._count.memberships > 0 ||
+                    existingTeam._count.documents > 0 ||
+                    existingTeam._count.workflows > 0 ||
+                    existingTeam._count.checklists > 0 ||
+                    existingTeam._count.notices > 0 ||
+                    existingTeam._count.tasks > 0
+
+    if (hasData) {
+      // Soft delete: set isActive to false instead of hard delete
+      await prisma.team.update({
+        where: { id },
+        data: { isActive: false }
+      })
+      return res.json({ 
+        success: true, 
+        message: 'Team deactivated (has associated data)',
+        softDelete: true
+      })
+    }
+
+    // Hard delete if no associated data (cascade will handle related records)
+    await prisma.team.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'Team deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting team:', error)
+    res.status(500).json({ error: 'Failed to delete team' })
+  }
+})
+
 // ============ TEAM DOCUMENTS ============
 
 // Get all documents (optionally filtered by team)
 router.get('/documents', authenticateToken, async (req, res) => {
   try {
-    const { team } = req.query
+    const { team, teamId } = req.query
     const isAdmin = isAdminUser(req.user)
+    
+    // Support both team (name/id) and teamId for backward compatibility
+    const targetTeamId = teamId || team
 
-    if (!isAdmin && isManagementTeam(team)) {
+    if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
     let where = {}
-    if (team) {
-      where.team = team
+    if (targetTeamId) {
+      where.teamId = targetTeamId
     }
 
     if (!isAdmin) {
@@ -108,6 +518,16 @@ router.get('/documents', authenticateToken, async (req, res) => {
 
     const documents = await prisma.teamDocument.findMany({
       where,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      },
       orderBy: { updatedAt: 'desc' }
     })
 
@@ -121,23 +541,48 @@ router.get('/documents', authenticateToken, async (req, res) => {
 // Create document
 router.post('/documents', authenticateToken, async (req, res) => {
   try {
-    const documentData = {
-      ...req.body,
-      ownerId: getOwnerId(req)
+    const { team, teamId, tags, attachments, ...rest } = req.body
+    const isAdmin = isAdminUser(req.user)
+    
+    // Support both team and teamId, prefer teamId
+    const targetTeamId = teamId || team
+    if (!targetTeamId) {
+      return res.status(400).json({ error: 'teamId is required' })
     }
 
-    const isAdmin = isAdminUser(req.user)
-    if (!isAdmin && isManagementTeam(documentData.team)) {
+    if (!isAdmin && isManagementTeam(targetTeamId)) {
       return denyManagementAccess(res)
     }
 
+    // Convert tags and attachments to JSON if they're strings
+    const documentData = {
+      ...rest,
+      teamId: targetTeamId,
+      ownerId: getOwnerId(req),
+      tags: typeof tags === 'string' ? JSON.parse(tags || '[]') : (tags || []),
+      attachments: typeof attachments === 'string' ? JSON.parse(attachments || '[]') : (attachments || [])
+    }
+
     const document = await prisma.teamDocument.create({
-      data: documentData
+      data: documentData,
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true
+          }
+        }
+      }
     })
 
     res.json({ data: { document } })
   } catch (error) {
     console.error('Error creating team document:', error)
+    if (error.code === 'P2003') {
+      return res.status(404).json({ error: 'Team not found' })
+    }
     res.status(500).json({ error: 'Failed to create document' })
   }
 })
