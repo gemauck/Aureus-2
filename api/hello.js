@@ -78,9 +78,9 @@ export default async function handler(req, res) {
     if (existingContact) {
       return res.status(200).json({
         message: 'Contact 22 already exists in ClientContact table',
-    timestamp: new Date().toISOString(),
-    method: req.method,
-    url: req.url,
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        url: req.url,
         contact: {
           id: existingContact.id,
           name: existingContact.name,
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
           clientId: existingContact.clientId,
           clientName: clientWithContact22.name
         },
-    working: true
+        working: true
       })
     }
     

@@ -570,112 +570,314 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        isLoadingJobCardsRef.current = true;
-        setLoadingJobCards(true);
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            setLoadingJobCards(false);
+            isLoadingJobCardsRef.current = false;
+            return;
+        }
+        
+        // Use global request deduplication to prevent duplicate API calls
+        const requestKey = window.RequestDeduplicator?.getRequestKey('/api/jobcards', { clientId, pageSize: 1000 });
         
         try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                setLoadingJobCards(false);
-                isLoadingJobCardsRef.current = false;
-                return;
-            }
-            
-            // First, try fetching by clientId (most reliable)
-            let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            let data = null;
-            
-            if (response.ok) {
-                data = await response.json();
-                // Handle both response structures: { jobCards: [...] } and { data: { jobCards: [...] } }
-                const jobCards = data.jobCards || data.data?.jobCards || [];
-                // Only log once per successful load to reduce console noise
-                if (jobCards.length > 0) {
-                    console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
-                }
+            // Use deduplicator if available
+            if (window.RequestDeduplicator) {
+                await window.RequestDeduplicator.deduplicate(requestKey, async () => {
+                    isLoadingJobCardsRef.current = true;
+                    setLoadingJobCards(true);
+                    
+                    try {
+                        // First, try fetching by clientId (most reliable)
+                        let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
+                            headers: { 
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        let data = null;
+                        
+                        if (response.ok) {
+                            data = await response.json();
+                            const jobCards = data.jobCards || data.data?.jobCards || [];
+                            if (jobCards.length > 0) {
+                                console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                                setJobCards(jobCards);
+                                lastLoadedClientIdRef.current = clientId;
+                                lastLoadedClientNameRef.current = clientName;
+                                setLoadingJobCards(false);
+                                isLoadingJobCardsRef.current = false;
+                                return { jobCards };
+                            }
+                        }
+                        
+                        // Fallback: Fetch all job cards and filter by clientId ONLY (strict match)
+                        response = await fetch(`/api/jobcards?pageSize=1000`, {
+                            headers: { 
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            data = await response.json();
+                            const allJobCards = data.jobCards || data.data?.jobCards || [];
+                            let matchingJobCards = allJobCards.filter(jc => 
+                                jc.clientId && String(jc.clientId).trim() === clientId.trim()
+                            );
+                            
+                            if (matchingJobCards.length > 0) {
+                                setJobCards(matchingJobCards);
+                            } else {
+                                setJobCards([]);
+                            }
+                            
+                            lastLoadedClientIdRef.current = clientId;
+                            lastLoadedClientNameRef.current = clientName;
+                            return { jobCards: matchingJobCards };
+                        } else {
+                            const errorText = await response.text().catch(() => 'Unknown error');
+                            console.error('❌ Failed to load job cards:', response.status, errorText);
+                            setJobCards([]);
+                            throw new Error(`Failed to load job cards: ${response.status} ${errorText}`);
+                        }
+                    } catch (error) {
+                        console.error('Error loading job cards:', error);
+                        setJobCards([]);
+                        throw error;
+                    } finally {
+                        setLoadingJobCards(false);
+                        isLoadingJobCardsRef.current = false;
+                    }
+                }, 2000); // 2 second deduplication window
+            } else {
+                // Fallback to original logic if RequestDeduplicator is not available
+                isLoadingJobCardsRef.current = true;
+                setLoadingJobCards(true);
                 
-                if (jobCards.length > 0) {
-                    setJobCards(jobCards);
-                    lastLoadedClientIdRef.current = clientId;
-                    lastLoadedClientNameRef.current = clientName;
+                try {
+                    let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    let data = null;
+                    
+                    if (response.ok) {
+                        data = await response.json();
+                        const jobCards = data.jobCards || data.data?.jobCards || [];
+                        if (jobCards.length > 0) {
+                            console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                            setJobCards(jobCards);
+                            lastLoadedClientIdRef.current = clientId;
+                            lastLoadedClientNameRef.current = clientName;
+                            setLoadingJobCards(false);
+                            isLoadingJobCardsRef.current = false;
+                            return;
+                        }
+                    }
+                    
+                    response = await fetch(`/api/jobcards?pageSize=1000`, {
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        data = await response.json();
+                        const allJobCards = data.jobCards || data.data?.jobCards || [];
+                        let matchingJobCards = allJobCards.filter(jc => 
+                            jc.clientId && String(jc.clientId).trim() === clientId.trim()
+                        );
+                        
+                        if (matchingJobCards.length > 0) {
+                            setJobCards(matchingJobCards);
+                        } else {
+                            setJobCards([]);
+                        }
+                        
+                        lastLoadedClientIdRef.current = clientId;
+                        lastLoadedClientNameRef.current = clientName;
+                    } else {
+                        const errorText = await response.text().catch(() => 'Unknown error');
+                        console.error('❌ Failed to load job cards:', response.status, errorText);
+                        setJobCards([]);
+                    }
+                } catch (error) {
+                    console.error('Error loading job cards:', error);
+                    setJobCards([]);
+                } finally {
                     setLoadingJobCards(false);
                     isLoadingJobCardsRef.current = false;
-                    return;
                 }
-            }
-            
-            // REMOVED: Fallback to clientName - only use clientId for strict filtering
-            // This prevents showing job cards from similarly named clients
-            
-            // Fallback: Fetch all job cards and filter by clientId ONLY (strict match)
-            // This handles cases where API filtering might not work correctly
-            response = await fetch(`/api/jobcards?pageSize=1000`, {
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                data = await response.json();
-                // Handle both response structures
-                const allJobCards = data.jobCards || data.data?.jobCards || [];
-                
-                // FIXED: Filter by clientId ONLY - strict exact match to prevent wrong jobs showing
-                // Do not fall back to clientName matching as it can show jobs for similarly named clients
-                let matchingJobCards = allJobCards.filter(jc => 
-                    jc.clientId && String(jc.clientId).trim() === clientId.trim()
-                );
-                
-                // Do NOT fall back to clientName matching - it's too loose and shows wrong jobs
-                // If clientId doesn't match, the job card doesn't belong to this client
-                
-                if (matchingJobCards.length > 0) {
-                    setJobCards(matchingJobCards);
-                } else {
-                    setJobCards([]);
-                }
-                
-                lastLoadedClientIdRef.current = clientId;
-                lastLoadedClientNameRef.current = clientName;
-            } else {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                console.error('❌ Failed to load job cards:', response.status, errorText);
-                setJobCards([]);
             }
         } catch (error) {
-            console.error('Error loading job cards:', error);
-            setJobCards([]);
-        } finally {
+            // Error already handled in the inner try-catch
             setLoadingJobCards(false);
             isLoadingJobCardsRef.current = false;
         }
     }, [client?.id, client?.name]);
     
-    // Load job cards when client changes
+    // Load sites from database
+    const loadSitesFromDatabase = useCallback(async (clientId) => {
+        // FIXED: Don't load if client ID doesn't match current client (prevents race conditions)
+        if (client?.id && String(client.id) !== String(clientId)) {
+            console.log(`⏭️ Skipping loadSitesFromDatabase - client ID mismatch (current: ${client.id}, requested: ${clientId})`);
+            return;
+        }
+        
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            console.log('⏭️ Skipping loadSitesFromDatabase - no token');
+            return;
+        }
+        
+        // Use global request deduplication to prevent duplicate API calls
+        const requestKey = window.RequestDeduplicator?.getRequestKey(`/api/sites/client/${clientId}`, { clientId });
+        
+        try {
+            // Use deduplicator if available, otherwise use local ref check
+            if (window.RequestDeduplicator) {
+                await window.RequestDeduplicator.deduplicate(requestKey, async () => {
+                    // Prevent duplicate requests with local ref as additional safeguard
+                    if (isLoadingSitesRef.current) {
+                        console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
+                        return null;
+                    }
+                    
+                    isLoadingSitesRef.current = true;
+                    console.log(`📡 Loading sites from database for client: ${clientId}`);
+                    
+                    try {
+                        const response = await window.api.getSites(clientId);
+                        const sites = response?.data?.sites || [];
+                        console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
+                        
+                        // Mark as loaded for this client to prevent infinite loop
+                        sitesLoadedForClientIdRef.current = String(clientId);
+                        
+                        // CRITICAL FIX: Merge with existing sites to prevent duplicates
+                        setFormData(prevFormData => {
+                            const existingSites = prevFormData?.sites || [];
+                            const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
+                            const updated = {
+                                ...prevFormData,
+                                sites: mergedSites
+                            };
+                            formDataRef.current = updated;
+                            console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
+                            return updated;
+                        });
+
+                        // Remove optimistic sites that now exist in database
+                        setOptimisticSites(prev => {
+                            const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
+                            if (filtered.length !== prev.length) {
+                                console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
+                            }
+                            return filtered;
+                        });
+                        
+                        return { sites };
+                    } catch (apiError) {
+                        // If it's a 500 error, log but don't throw - sites might already be in client object
+                        if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
+                            console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
+                            sitesLoadedForClientIdRef.current = String(clientId);
+                            return null;
+                        }
+                        throw apiError;
+                    } finally {
+                        isLoadingSitesRef.current = false;
+                    }
+                }, 2000); // 2 second deduplication window
+            } else {
+                // Fallback to original logic if RequestDeduplicator is not available
+                if (isLoadingSitesRef.current) {
+                    console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
+                    return;
+                }
+                
+                isLoadingSitesRef.current = true;
+                console.log(`📡 Loading sites from database for client: ${clientId}`);
+                
+                try {
+                    const response = await window.api.getSites(clientId);
+                    const sites = response?.data?.sites || [];
+                    console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
+                    
+                    sitesLoadedForClientIdRef.current = String(clientId);
+                    
+                    setFormData(prevFormData => {
+                        const existingSites = prevFormData?.sites || [];
+                        const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
+                        const updated = {
+                            ...prevFormData,
+                            sites: mergedSites
+                        };
+                        formDataRef.current = updated;
+                        console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
+                        return updated;
+                    });
+
+                    setOptimisticSites(prev => {
+                        const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
+                        if (filtered.length !== prev.length) {
+                            console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
+                        }
+                        return filtered;
+                    });
+                } catch (apiError) {
+                    if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
+                        console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
+                        sitesLoadedForClientIdRef.current = String(clientId);
+                        return;
+                    }
+                    throw apiError;
+                } finally {
+                    isLoadingSitesRef.current = false;
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error loading sites from database:', error);
+            isLoadingSitesRef.current = false;
+        }
+    }, [client?.id, optimisticSites]);
+    
+    // Load job cards when client changes or when Service & Maintenance tab becomes active
+    // Combined into single useEffect to prevent duplicate calls
     useEffect(() => {
-        if (client?.id) {
-            loadJobCards();
-        } else {
+        if (!client?.id) {
             setJobCards([]);
             lastLoadedClientIdRef.current = null;
             lastLoadedClientNameRef.current = null;
+            return;
         }
-    }, [client?.id, loadJobCards]);
-
-    // Reload job cards when Service & Maintenance tab becomes active
-    useEffect(() => {
-        if (activeTab === 'service-maintenance' && client?.id) {
-            // Reset refs to allow reload when tab becomes active
-            lastLoadedClientIdRef.current = null;
-            lastLoadedClientNameRef.current = null;
-            loadJobCards();
+        
+        // Only load if:
+        // 1. We're on the service-maintenance tab, OR
+        // 2. Client changed and we haven't loaded for this client yet
+        const clientId = String(client.id);
+        const shouldLoad = activeTab === 'service-maintenance' || 
+                          (lastLoadedClientIdRef.current !== clientId);
+        
+        if (shouldLoad) {
+            // Check if request is already pending using deduplicator
+            const requestKey = window.RequestDeduplicator?.getRequestKey('/api/jobcards', { clientId, pageSize: 1000 });
+            const isPending = window.RequestDeduplicator?.isPending?.(requestKey) || false;
+            
+            if (!isPending && !isLoadingJobCardsRef.current) {
+                // Reset refs only when switching to service-maintenance tab
+                if (activeTab === 'service-maintenance' && lastLoadedClientIdRef.current === clientId) {
+                    lastLoadedClientIdRef.current = null;
+                    lastLoadedClientNameRef.current = null;
+                }
+                loadJobCards();
+            }
         }
     }, [activeTab, client?.id, loadJobCards]);
     
@@ -694,9 +896,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const currentSites = formData?.sites || [];
             const hasSites = currentSites.length > 0 || optimisticSites.length > 0;
             
-            if (!hasSites && !isLoadingSitesRef.current) {
+            // Check if request is already pending using deduplicator
+            const requestKey = window.RequestDeduplicator?.getRequestKey(`/api/sites/client/${clientId}`, { clientId });
+            const isPending = window.RequestDeduplicator?.isPending?.(requestKey) || false;
+            
+            if (!hasSites && !isLoadingSitesRef.current && !isPending) {
                 console.log('📡 Sites tab active but no sites found - loading from database');
-                sitesLoadedForClientIdRef.current = clientId; // Mark as loaded before calling
+                // Don't mark as loaded before calling - let the function handle it after successful load
                 loadSitesFromDatabase(client.id);
             } else if (hasSites) {
                 // Sites already exist, mark as loaded
@@ -706,7 +912,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Client changed, reset the loaded flag
             sitesLoadedForClientIdRef.current = null;
         }
-    }, [activeTab, client?.id]); // Removed formData?.sites and optimisticSites from deps to prevent infinite loop
+    }, [activeTab, client?.id, loadSitesFromDatabase]); // Added loadSitesFromDatabase to deps since it's now useCallback
 
     // Handle job card click - navigate to full job card detail page
     const handleJobCardClick = (jobCard) => {
@@ -1090,35 +1296,88 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const loadGroups = useCallback(async () => {
         if (isLoadingGroupsRef.current) return;
         
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            isLoadingGroupsRef.current = false;
+            setIsLoadingGroups(false);
+            return;
+        }
+        
+        // Use global request deduplication to prevent duplicate API calls
+        const groupsRequestKey = window.RequestDeduplicator?.getRequestKey('/api/clients/groups', {});
+        const membershipsRequestKey = client?.id 
+            ? window.RequestDeduplicator?.getRequestKey(`/api/clients/${client.id}/groups`, { clientId: client.id })
+            : null;
+        
         try {
-            isLoadingGroupsRef.current = true;
-            setIsLoadingGroups(true);
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                isLoadingGroupsRef.current = false;
-                setIsLoadingGroups(false);
-                return;
-            }
-            
-            // Load available groups
-            const groupsResponse = await fetch('/api/clients/groups', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include'
-            });
-            
-            if (groupsResponse.ok) {
-                const groupsData = await groupsResponse.json();
-                const groups = groupsData?.data?.groups || groupsData?.groups || [];
-                setAvailableGroups(groups);
-            }
-            
-            // Load client's current group memberships if client exists
-            if (client?.id) {
+            // Use deduplicator if available
+            if (window.RequestDeduplicator) {
+                // Load available groups with deduplication
+                await window.RequestDeduplicator.deduplicate(groupsRequestKey, async () => {
+                    isLoadingGroupsRef.current = true;
+                    setIsLoadingGroups(true);
+                    
+                    try {
+                        const groupsResponse = await fetch('/api/clients/groups', {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            credentials: 'include'
+                        });
+                        
+                        if (groupsResponse.ok) {
+                            const groupsData = await groupsResponse.json();
+                            const groups = groupsData?.data?.groups || groupsData?.groups || [];
+                            setAvailableGroups(groups);
+                        }
+                    } catch (error) {
+                        console.error('Error loading groups:', error);
+                    } finally {
+                        isLoadingGroupsRef.current = false;
+                        setIsLoadingGroups(false);
+                    }
+                }, 3000); // 3 second deduplication window for groups
+                
+                // Load client's current group memberships if client exists
+                if (client?.id && membershipsRequestKey) {
+                    await window.RequestDeduplicator.deduplicate(membershipsRequestKey, async () => {
+                        try {
+                            const membershipsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                                headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                credentials: 'include'
+                            });
+                            
+                            if (membershipsResponse.ok) {
+                                const membershipsData = await membershipsResponse.json();
+                                const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
+                                setClientGroupMemberships(memberships);
+                            } else if (membershipsResponse.status === 500) {
+                                // Server error - likely database issue with this client
+                                console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
+                                setClientGroupMemberships([]);
+                            } else {
+                                // Other errors (404, 403, etc.)
+                                console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
+                                setClientGroupMemberships([]);
+                            }
+                        } catch (groupError) {
+                            console.error('❌ Error loading client groups:', groupError);
+                            // Continue without group data rather than breaking the UI
+                            setClientGroupMemberships([]);
+                        }
+                    }, 3000); // 3 second deduplication window for memberships
+                }
+            } else {
+                // Fallback to original logic if RequestDeduplicator is not available
+                isLoadingGroupsRef.current = true;
+                setIsLoadingGroups(true);
+                
                 try {
-                    const membershipsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                    const groupsResponse = await fetch('/api/clients/groups', {
                         headers: {
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
@@ -1126,28 +1385,48 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         credentials: 'include'
                     });
                     
-                    if (membershipsResponse.ok) {
-                        const membershipsData = await membershipsResponse.json();
-                        const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
-                        setClientGroupMemberships(memberships);
-                    } else if (membershipsResponse.status === 500) {
-                        // Server error - likely database issue with this client
-                        console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
-                        setClientGroupMemberships([]);
-                    } else {
-                        // Other errors (404, 403, etc.)
-                        console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
-                        setClientGroupMemberships([]);
+                    if (groupsResponse.ok) {
+                        const groupsData = await groupsResponse.json();
+                        const groups = groupsData?.data?.groups || groupsData?.groups || [];
+                        setAvailableGroups(groups);
                     }
-                } catch (groupError) {
-                    console.error('❌ Error loading client groups:', groupError);
-                    // Continue without group data rather than breaking the UI
-                    setClientGroupMemberships([]);
+                    
+                    // Load client's current group memberships if client exists
+                    if (client?.id) {
+                        try {
+                            const membershipsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                                headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                credentials: 'include'
+                            });
+                            
+                            if (membershipsResponse.ok) {
+                                const membershipsData = await membershipsResponse.json();
+                                const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
+                                setClientGroupMemberships(memberships);
+                            } else if (membershipsResponse.status === 500) {
+                                console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
+                                setClientGroupMemberships([]);
+                            } else {
+                                console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
+                                setClientGroupMemberships([]);
+                            }
+                        } catch (groupError) {
+                            console.error('❌ Error loading client groups:', groupError);
+                            setClientGroupMemberships([]);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading groups:', error);
+                } finally {
+                    isLoadingGroupsRef.current = false;
+                    setIsLoadingGroups(false);
                 }
             }
         } catch (error) {
             console.error('Error loading groups:', error);
-        } finally {
             isLoadingGroupsRef.current = false;
             setIsLoadingGroups(false);
         }
@@ -1233,85 +1512,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } catch (error) {
             console.error('Error removing client from group:', error);
             alert('Failed to remove client from group. Please try again.');
-        }
-    };
-    
-    // Load sites from database
-    const loadSitesFromDatabase = async (clientId) => {
-        try {
-            // Prevent duplicate requests
-            if (isLoadingSitesRef.current) {
-                console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
-                return;
-            }
-            
-            // FIXED: Don't load if client ID doesn't match current client (prevents race conditions)
-            if (client?.id && String(client.id) !== String(clientId)) {
-                console.log(`⏭️ Skipping loadSitesFromDatabase - client ID mismatch (current: ${client.id}, requested: ${clientId})`);
-                return;
-            }
-            
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                console.log('⏭️ Skipping loadSitesFromDatabase - no token');
-                return;
-            }
-            
-            isLoadingSitesRef.current = true;
-            console.log(`📡 Loading sites from database for client: ${clientId}`);
-            
-            // FIXED: Add error handling for 500 errors
-            let response;
-            try {
-                response = await window.api.getSites(clientId);
-            } catch (apiError) {
-                // If it's a 500 error, log but don't throw - sites might already be in client object
-                if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
-                    console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
-                    // Still mark as loaded to prevent retry loop
-                    sitesLoadedForClientIdRef.current = String(clientId);
-                    return;
-                }
-                throw apiError;
-            }
-            
-            const sites = response?.data?.sites || [];
-            console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
-            
-            // Mark as loaded for this client to prevent infinite loop
-            sitesLoadedForClientIdRef.current = String(clientId);
-            
-            // CRITICAL FIX: Merge with existing sites to prevent duplicates
-            // Always merge - even if form has been edited, we want to add new sites from DB
-            setFormData(prevFormData => {
-                // Get existing sites from formData
-                const existingSites = prevFormData?.sites || [];
-                // Merge: API sites (from DB) + existing sites + optimistic sites
-                // Prioritize API sites (most up-to-date) but keep optimistic and existing to avoid losing user changes
-                const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
-                const updated = {
-                    ...prevFormData,
-                    sites: mergedSites
-                };
-                formDataRef.current = updated;
-                console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
-                return updated;
-            });
-
-            // Remove optimistic sites that now exist in database (they're confirmed saved)
-            setOptimisticSites(prev => {
-                const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
-                if (filtered.length !== prev.length) {
-                    console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
-                }
-                return filtered;
-            });
-        } catch (error) {
-            console.error('❌ Error loading sites from database:', error);
-            // Reset loading flag on error so it can be retried
-            // Don't mark as loaded on error so useEffect can retry if needed
-        } finally {
-            isLoadingSitesRef.current = false;
         }
     };
 

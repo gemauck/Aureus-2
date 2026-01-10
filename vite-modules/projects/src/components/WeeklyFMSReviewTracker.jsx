@@ -420,14 +420,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const componentIdRef = useRef(`weeklyFMS_${Date.now()}_${Math.random()}`);
     
     const loadFromProjectProp = useCallback(function loadFromProjectPropFn() {
-        // Store in ref and window for access (redundancy with useLayoutEffect)
-        loadFromProjectPropRef.current = loadFromProjectPropFn;
         const componentId = componentIdRef.current;
-        try {
-            window[`__loadFromProjectProp_${componentId}`] = loadFromProjectPropFn;
-        } catch (e) {
-            // Silently fail
-        }
         
         if (!project?.id) return;
         
