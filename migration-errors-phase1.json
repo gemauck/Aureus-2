@@ -1,0 +1,772 @@
+[
+  {
+    "clientId": "cmh9moamq000b723xwj7kyxt8",
+    "clientName": "Mondi South Africa (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmh9mi9ts0003723xygn2u22m",
+    "clientName": "Thungela Operations (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkfh000gm8zlwrda2ftt",
+    "clientName": "Em Bonsma",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmh9mmlyl0009723xv357wgyv",
+    "clientName": "Puckree Mining (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkgi000lm8zlf41ndten",
+    "clientName": "Friedenheim Landgoed",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkgw000nm8zls1hb0rcy",
+    "clientName": "GRW Farming (PTY) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkh4000om8zl4xb0m419",
+    "clientName": "Helmsley Farm (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkgo000mm8zldpqynvoc",
+    "clientName": "GP Joubert - Eastfield",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmh9mkrhp0007723xmmo1lqlf",
+    "clientName": "Mafube Coal (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkfn000hm8zlng07lohx",
+    "clientName": "Emseni Farming (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkg0000jm8zldtbeul3c",
+    "clientName": "Forest Lodge Estate (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkhp000qm8zl6rnndpc5",
+    "clientName": "Hillary Hart",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkhy000rm8zlnuszpsy3",
+    "clientName": "Ice Dew Trading (PTY) LTD",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajki6000sm8zl4cmj01t1",
+    "clientName": "Ikwezi Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkid000tm8zla0a76qrf",
+    "clientName": "Imperial LLP - DP World",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkj7000ym8zlft7jlms1",
+    "clientName": "Koodoolake Trust",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkjq0011m8zljivu2m5w",
+    "clientName": "Leigh Higgs",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkjw0012m8zlt1ibgg1l",
+    "clientName": "Liberty Coal",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkk00013m8zl5x2cn9fh",
+    "clientName": "Mattison Farms (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkjj0010m8zlv8tamyk4",
+    "clientName": "Lead Logistics (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkk40014m8zlkcijlilo",
+    "clientName": "McCain (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkkc0016m8zlugbnfuqv",
+    "clientName": "Mandi Umfolazi Area",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkkf0017m8zl1yojzhno",
+    "clientName": "Ndiza Poultry Rearing (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkjd000zm8zlgvoa0raq",
+    "clientName": "LC Rorich",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkki0018m8zlylhcx44r",
+    "clientName": "New Age Forest Solutions",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkkl0019m8zlg1j4ppfn",
+    "clientName": "New Kingstonvale Farm",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkkn001am8zl7v12eio5",
+    "clientName": "Normandien Farms (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkkq001bm8zlhxfeh76l",
+    "clientName": "Ntshovelo Mining Resources (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkkv001dm8zlvej506lz",
+    "clientName": "RCL Foods Consumer (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkl0001fm8zltuyl8hxt",
+    "clientName": "Samancor Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkl3001gm8zls3neq8bp",
+    "clientName": "Sample Customer",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajke9000am8zlg2jl8ixu",
+    "clientName": "CHJ Mining O and M Gurus (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkd90005m8zlzrvt0t8s",
+    "clientName": "Blue Farming (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkdo0007m8zl4b1l2opl",
+    "clientName": "Burlington Farming (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkl6001hm8zlcoc38j9k",
+    "clientName": "Sandy Hill (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkf3000em8zlxfw6bq1z",
+    "clientName": "Dikwena Chrome (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajke20009m8zlek5cztfj",
+    "clientName": "Chiro 4 Fours",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkle001km8zlalo5yrod",
+    "clientName": "Servseta - E12504",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajklg001lm8zlasx2jq25",
+    "clientName": "Streeff Farming CC",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkll001nm8zlo9zzq0z2",
+    "clientName": "The Schroder Group t/a Boiling Fountain Farm",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajklo001om8zlbm2zd4nv",
+    "clientName": "Tshedza Mining Resources (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkm0001sm8zlvkzm61rd",
+    "clientName": "WJ Rorich",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkf9000fm8zlp8xg18kx",
+    "clientName": "Ekhamanzi Transport (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajklb001jm8zlcmb3emqt",
+    "clientName": "Sclanders Transport",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajklr001pm8zlh7azj6y1",
+    "clientName": "Warrigal cc",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkly001rm8zlh07l0lpn",
+    "clientName": "Windham Hill (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmiob7ih30001xoebuxh2fv3x",
+    "clientName": "Exxaro Resources Limited",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajklv001qm8zliuwklszz",
+    "clientName": "Watermead Farming (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cf3445de8e865eb00122e3f87",
+    "clientName": "De Beers",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c199a6e92446150625fbdf29e",
+    "clientName": "African Rainbow Minerals - ARM ",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c4926667a7cec119a952ce701",
+    "clientName": "Anglo American",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajklj001mm8zl214lsqbi",
+    "clientName": "The Puckree Group (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmiqfhx0g001d3jwck269rl44",
+    "clientName": "Seriti Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkky001em8zliz8zig6l",
+    "clientName": "Redcliffe Farming",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cf49e76d949e38171feea184c",
+    "clientName": "Foscor",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkei000bm8zlnz01j7hb",
+    "clientName": "Chromex Mining Company (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkd00004m8zlaaj1dx7z",
+    "clientName": "Benhaus Mining Services (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkiv000wm8zlyuhz1nxd",
+    "clientName": "J & B Citrus (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmitqbh3l00014dm6txpu0iun",
+    "clientName": "Samancor Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c072f0ee91867a0c07e275169",
+    "clientName": "Engen",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkcd0001m8zlk72lb2bt",
+    "clientName": "AccuFarm (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmh9mj90l0005723xuxhnwjyd",
+    "clientName": "Exxaro Coal Mpumalanga (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmioiic8700036pxs85w8btte",
+    "clientName": "Exxaro Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmk3wfmav00014ybexzjc8dwg",
+    "clientName": "Mondi Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cdc8c99155622534684ea7a99",
+    "clientName": "Salaria Contractors",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkdf0006m8zlord7tjda",
+    "clientName": "Broadview Farm CC",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmiqfdanm00193jwc0zdshlpv",
+    "clientName": "Afarak South Africa (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c6fb7710de4cab9da2f1dabe6",
+    "clientName": "MN48",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5a5274ceabc15ad4603621ca",
+    "clientName": "Terracom",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cba22b0df77492e858e6f758e",
+    "clientName": "Ndalamo Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5f8b7a60872f64f3115214d6",
+    "clientName": "Rosh Pina Namibia",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cdf46b40b7c13fbff1fd2201c",
+    "clientName": "Tshipi e Ntele Manganese",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cacf8e24fa4ea95d79c7a3940",
+    "clientName": "Umsimbithi",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c981735b51d5ea4c73c3bbf88",
+    "clientName": "Andru Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cdf2e3b9e8edd930985075d6d",
+    "clientName": "Inayo Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5d3caa81b563206e2ddc940f",
+    "clientName": "B and E International",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c57cbea9460c3c1e047b53404",
+    "clientName": "Buffalo Coal",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5a16e1f993350a33f0354a87",
+    "clientName": "ALS Contractors",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhn2bz09001dqyu935fw3wwb",
+    "clientName": "Barberton Mines (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkep000cm8zlhdzn9psf",
+    "clientName": "Colbourne Farming (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cd22e5ca80872407cae3e6af9",
+    "clientName": "Mearth Oil & Energy (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cd8f4f4442c863b462482077d",
+    "clientName": "MC Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c16365eed6e9c6dee877a5ad0",
+    "clientName": "Sefateng Chrome",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cd9779e09372f498a90cb9f8b",
+    "clientName": "Trollope Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c3642d6ac62bdd6cee524b665",
+    "clientName": "Zizwe Opencast Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c938407630a50c7f2423dc2b7",
+    "clientName": "Moolmans",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c399ef4b99639766a13fab354",
+    "clientName": "Inala Mining - Inmine",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5dfd50ddcacbab4b71d5fc88",
+    "clientName": "Ritluka",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cfd8b3b3fb4954586d4bae166",
+    "clientName": "Africoal SA",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c963e1349cfe34fd41c9ddb90",
+    "clientName": "Menar Mining including Canyon Coal",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c1bc092d3a75f8f3a53502c59",
+    "clientName": "Zululand Antracite",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cc53e63864f628aed6d6f086b",
+    "clientName": "Afrintransit (PTY) Ltd -  AIT",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmiozrsni000110zwx6xbaosg",
+    "clientName": "Thungela Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c6a3113bcf2257477ef490335",
+    "clientName": "Implats",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c22ce357d027a9624e759ac85",
+    "clientName": "Liberty",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c316a1ce50d846fe1300e05b8",
+    "clientName": "Sibanye Stilwater",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c41cad35762adde4a80a47fe9",
+    "clientName": "Pan African Resources",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c95cfb26059fe493765deec06",
+    "clientName": "Glencore",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c31bb1a21b968f3c0106cea0c",
+    "clientName": "Implats MIC",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cf0c187082b1c562070c02002",
+    "clientName": "Assmang and Assore",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c07113c97ac126221155d3e4b",
+    "clientName": "Coastal Coal",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c92f7df2211317a74a4d5c0ea",
+    "clientName": "Khumba and Khumani",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c60a23b910961209e219149d5",
+    "clientName": "Shumba Energy (Botswana)",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkew000dm8zllxzdup2o",
+    "clientName": "Defacto Investements 255 (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c31c1af0b6c4edf254bc11ea2",
+    "clientName": "African Nickel",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "ce1baf9def7168d01f850861a",
+    "clientName": "Northam Platinum/Palladium Group Metals",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5de6258e425cefd1508ae08c",
+    "clientName": "Richards Bay Minerals",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c0db210c44e87ec823e9ea55b",
+    "clientName": "Afrimat",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c7afc687491a11fd8cc301a4d",
+    "clientName": "Northam Platinum",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cfff763bc8996b5f4a3b69100",
+    "clientName": "Siyanda Bakgatla Platinum Mine (Pty) Ltd (Union Mine)",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c2d9440fff4f00269526b2132",
+    "clientName": "Rio Tinto",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c125a8c55f64a1915c8659e44",
+    "clientName": "South 32",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c82b3dd09a9747335e42b62a0",
+    "clientName": "Sasol Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c586a04e2cd86b5535279e755",
+    "clientName": "Harmony Gold",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c5fa088ef92b2d83ff063eb89",
+    "clientName": "Palaborwa Mining Company",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cd2ff297cb635761e54b267e0",
+    "clientName": "Zivuma Commodities and Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cd6d0f75ae08ebc2c65058abd",
+    "clientName": "T and K Group Emalahleni",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "ce94b45747c702ba294a7b51d",
+    "clientName": "Copper 360",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c53e16b6de68962987c6679ae",
+    "clientName": "Cometa Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c965bc890516dfb6f1dbcc652",
+    "clientName": "Into Africa Mining and Exploration",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c07d835e5054f91414fc05a5b",
+    "clientName": "Plantcor Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c92a9e97b17aac2fe912dd5f0",
+    "clientName": "Mosobo Coal",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c7d714366192251193970625a",
+    "clientName": "Future Coal",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cdbd275fdf9c3a4e3ffbedc20",
+    "clientName": "Lebano Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c7113c7f3fb3d48a4f71cd4ff",
+    "clientName": "Benhaus Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c75fa5167c4d5498a7d5e427a",
+    "clientName": "BBT",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cdd95852ecd79385fbaa07a9d",
+    "clientName": "Zamera Logistics (PTY) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "ccc86d3ccda287ed69c7904c0",
+    "clientName": "Transnet",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmh9mhcne0001723xifv2lsqo",
+    "clientName": "Exxaro Coal (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkft000im8zluuvgp3mj",
+    "clientName": "Fifehead Dairy Co.",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkg9000km8zl8dfiili3",
+    "clientName": "Frederica Sugar Estate (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cfa42d94982410a969aa53127",
+    "clientName": "Total Energies",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "ca4aef4b2a1bf68d9dc606f6f",
+    "clientName": "Petredec Fuels KZN",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cb95c6c76a12387e5019cc6de",
+    "clientName": "Khuthele Forestry",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c446883ba1e6f8ec2dda0d2b2",
+    "clientName": "Sun City",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cf22a480a76fedb3bb0283bdc",
+    "clientName": "Sappi",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "ca64a5ac8fd35f4f0b7d909c8",
+    "clientName": "Energy Drive",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cdded3768e55ddfda6324ceb6",
+    "clientName": "Smart Vision",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cc948a1cb1fd4596cbc22fad3",
+    "clientName": "Rocket DNA",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "ca56f09fd104effe7ad785d26",
+    "clientName": "Middleburg Mining Services - Sereti",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c9263597ca09cff4348f4d95f",
+    "clientName": "Vedanta Zinc",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cb3d167750577d234043b947f",
+    "clientName": "United Manganese Of Kalahari",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c8a387bfbaa474b42a899aec3",
+    "clientName": "Namdeb",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkip000vm8zllcy77tpx",
+    "clientName": "IQ Plant Hire",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhdajkj1000xm8zlizm1gsc3",
+    "clientName": "KK Agri (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c56d932babacbb86cab2c2b30",
+    "clientName": "African Exploration Mining and Finance Corporation - AEMFC",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmiqf2bkq00153jwcmk8s1o98",
+    "clientName": "Afarak Group",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c75aa58b1353d720298c472fe",
+    "clientName": "Orion Minerals",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cb4a2790783ec1dbe410d3116",
+    "clientName": "Deep Yellow Uranium",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c1f0d438b664305bd936dfbe7",
+    "clientName": "Modi Mining",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "c3ea5dba4a316ecebdd5cb3bd",
+    "clientName": "Lubocon",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhkncezz00011rabq97p0zc4",
+    "clientName": "ReitCoal (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cmhoquy6d0001muejg01wu63l",
+    "clientName": "Reinhardt Transport Group (Pty) Ltd",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  },
+  {
+    "clientId": "cc86f69c495759c843d4d04a8",
+    "clientName": "Petra Diamonds",
+    "error": "\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column \"contactsJsonb\" of relation \"Client\" does not exist`"
+  }
+]

@@ -115,3 +115,5 @@ Once migration is verified and stable:
 - No data loss - JSON fields remain as backup
 - Frontend code doesn't need changes - API converts table data to JSON format
 
+
+

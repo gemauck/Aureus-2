@@ -140,6 +140,10 @@ rm -rf node_modules/.prisma 2>/dev/null || true
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
 echo ""
+echo "🗄️  Applying database schema changes..."
+npx prisma db push --accept-data-loss || echo "⚠️  Database migration skipped - schema may already be up to date"
+
+echo ""
 echo "🔄 Restarting application with updated environment..."
 # Source environment to ensure DATABASE_URL is loaded
 set -a

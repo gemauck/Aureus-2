@@ -289,3 +289,5 @@ async function migrateDocumentSections() {
 4. **Rollback Plan**: Keep JSON fields until migration is verified
 5. **Testing**: Test with sample data before full migration
 
+
+

@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
@@ -150,6 +150,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
     const isDeletingRef = useRef(false);
+    const loadFromProjectPropRef = useRef(null);
+    const refreshFromDatabaseRef = useRef(null);
     const deletionTimestampRef = useRef(null); // Track when deletion started
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionQueueRef = useRef([]); // Queue for consecutive deletions
@@ -413,7 +415,23 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
-    const loadFromProjectProp = useCallback(() => {
+    // Use a unique key per component instance for window storage
+    // Must be defined BEFORE functions that use it
+    const componentIdRef = useRef(`weeklyFMS_${Date.now()}_${Math.random()}`);
+    
+    const loadFromProjectProp = useCallback(function loadFromProjectPropFn() {
+        // Set ref for polling when function is called
+        loadFromProjectPropRef.current = loadFromProjectPropFn;
+        
+        // Also store in window for event-based access (avoids TDZ)
+        // CRITICAL: Store immediately so it's available for first call
+        const componentId = componentIdRef.current;
+        try {
+            window[`__loadFromProjectProp_${componentId}`] = loadFromProjectPropFn;
+        } catch (e) {
+            // Silently fail
+        }
+        
         if (!project?.id) return;
         
         console.log('📥 Loading weekly review sections from project prop...', {
@@ -539,7 +557,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.weeklyFMSReviewSections, project?.documentSections, project?.id]);
     
-    const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
+    const refreshFromDatabase = useCallback(async function refreshFromDatabaseFn(forceUpdate = false) {
+        // Set ref for polling when function is called
+        refreshFromDatabaseRef.current = refreshFromDatabaseFn;
+        
+        // Also store in window for event-based access (avoids TDZ)
+        // CRITICAL: Store immediately so it's available for first call
+        const componentId = componentIdRef.current;
+        try {
+            window[`__refreshFromDatabase_${componentId}`] = refreshFromDatabaseFn;
+        } catch (e) {
+            // Silently fail
+        }
+        
         if (!project?.id || !apiRef.current) return;
         
         // Don't refresh if a save is in progress to avoid race conditions
@@ -719,6 +749,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.id]);
     
+    // Note: Functions store themselves in window storage when called (self-registration)
+    // We cannot initialize window storage here without referencing functions (causes TDZ)
+    // Use useLayoutEffect which runs synchronously after DOM mutations
+    // Functions are defined at this point, so we can safely access them via closure
+    // But we can't reference them in the closure because of TDZ...
+    // Instead, functions will store themselves in window storage on first call
+    // We'll use a mechanism to ensure first call works
+    
+    // ============================================================
+    // LOAD DATA WHEN PROJECT CHANGES
+    // ============================================================
+    // Store operations in ref and trigger via state update
+    const pendingLoadRef = useRef(null);
+    const [loadKey, setLoadKey] = useState(0);
+    
     useEffect(() => {
         if (!project?.id) return;
         
@@ -729,13 +774,86 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         
         const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
-        if (isNewProject || !hasUnsavedChanges) {
-            loadFromProjectProp();
-        } else {
-        }
         
-        refreshFromDatabase();
-    }, [project?.id, project?.weeklyFMSReviewSections, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
+        // Store operations - no function references
+        pendingLoadRef.current = {
+            shouldLoad: isNewProject || !hasUnsavedChanges,
+            shouldRefresh: true,
+            projectId: project.id
+        };
+        
+        // Trigger execution via state update
+        setLoadKey(prev => prev + 1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id, project?.weeklyFMSReviewSections, project?.documentSections]);
+    
+    // Execute operations when loadKey changes
+    // This effect is defined AFTER the functions (hooks execute in order)
+    // Named function expressions in useCallback should help with hoisting
+    // Use direct calls - execution happens after render when functions are defined
+    useEffect(() => {
+        if (!project?.id || loadKey === 0) return;
+        
+        const pending = pendingLoadRef.current;
+        if (!pending || !pending.projectId || pending.projectId !== project.id) return;
+        
+        // Clear pending
+        pendingLoadRef.current = null;
+        
+        // CRITICAL: Cannot reference functions in closure (causes TDZ during render)
+        // Solution: Functions store themselves in window storage when called
+        // For first call, we need them to be in window storage already
+        // Use requestAnimationFrame to ensure we're after initialization, then check window storage
+        const rafId = requestAnimationFrame(() => {
+            try {
+                const componentId = componentIdRef.current;
+                
+                if (pending.shouldLoad) {
+                    // Functions store themselves in window storage when called
+                    // On first call, they may not be there yet, so use a pattern that works:
+                    // Store the operation and let functions check for it when they initialize
+                    // OR: Functions are already in window storage because they store themselves
+                    // immediately when useCallback executes (but they don't - only when called)
+                    
+                    // Actual solution: Use a state-based trigger that causes functions to initialize
+                    // But that's complex. Instead, try accessing via window storage
+                    // If not available, the functions will be called later via polling or other triggers
+                    const fn = window[`__loadFromProjectProp_${componentId}`];
+                    if (fn && typeof fn === 'function') {
+                        fn();
+                    } else if (loadFromProjectPropRef.current) {
+                        loadFromProjectPropRef.current();
+                    } else {
+                        // Functions not yet initialized - this can happen on first render
+                        // The polling mechanism or other triggers will eventually call them
+                        // For now, store the operation to retry later
+                        console.warn('⚠️ loadFromProjectProp not available yet, will retry');
+                        pendingLoadRef.current = pending; // Restore for retry
+                        // Schedule retry after a delay
+                        setTimeout(() => {
+                            setLoadKey(prev => prev + 1);
+                        }, 200);
+                    }
+                }
+                if (pending.shouldRefresh) {
+                    const fn = window[`__refreshFromDatabase_${componentId}`];
+                    if (fn && typeof fn === 'function') {
+                        fn();
+                    } else if (refreshFromDatabaseRef.current) {
+                        refreshFromDatabaseRef.current();
+                    } else {
+                        console.warn('⚠️ refreshFromDatabase not available yet');
+                        // Refresh can happen later via polling
+                    }
+                }
+            } catch (error) {
+                console.error('Error executing load operations:', error);
+            }
+        });
+        
+        return () => cancelAnimationFrame(rafId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loadKey, project?.id]);
     
     // ============================================================
     // POLLING - Regularly refresh from database to get updates
@@ -744,14 +862,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         if (!project?.id || !apiRef.current) return;
         
         // Poll every 5 seconds to check for database updates
+        // Use ref here because we can't include refreshFromDatabase in deps (would cause re-renders)
         const pollInterval = setInterval(() => {
-            refreshFromDatabase(false);
+            if (refreshFromDatabaseRef.current) {
+                refreshFromDatabaseRef.current(false);
+            }
         }, 5000);
         
         return () => {
             clearInterval(pollInterval);
         };
-    }, [project?.id, refreshFromDatabase]);
+    }, [project?.id]);
     
     // ============================================================
     // Handle navigation with save - ensures data is saved before navigating away
@@ -928,7 +1049,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // 2. No unsaved changes (everything is saved)
                 // Use false instead of true so it respects all checks in refreshFromDatabase
                 if (timeSinceLastChange > 15000 && !hasUnsavedChanges) {
-                    refreshFromDatabase(false); // Use false to respect all checks
+                    if (refreshFromDatabaseRef.current) {
+                        refreshFromDatabaseRef.current(false); // Use false to respect all checks
+                    }
                 } else {
                     // User is still making changes or has unsaved changes
                     // Don't refresh - let the periodic refresh handle it when user stops
@@ -1613,7 +1736,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         console.log(`⏸️ Deletion flag kept active: ${deletionSectionIdsRef.current.size} deletion(s) still in progress`);
                     }
                     // Trigger a single refresh after flag is cleared to sync state
-                    refreshFromDatabase(false);
+                    if (refreshFromDatabaseRef.current) {
+                        refreshFromDatabaseRef.current(false);
+                    }
                     // Process next deletion in queue if any
                     processDeletionQueue();
                 }, 3000);

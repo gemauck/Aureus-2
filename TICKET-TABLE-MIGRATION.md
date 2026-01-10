@@ -77,3 +77,5 @@ This should return an empty array `{"tickets": [], "pagination": {...}}` instead
 - After migration, restart your application server if needed
 
 
+
+

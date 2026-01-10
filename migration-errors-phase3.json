@@ -1,0 +1,23 @@
+[
+  {
+    "type": "comment",
+    "clientId": "cmhdajkcd0001m8zlk72lb2bt",
+    "clientName": "AccuFarm (Pty) Ltd",
+    "error": "\nInvalid `prisma.clientComment.create()` invocation:\n\n\nForeign key constraint violated: `ClientComment_authorId_fkey (index)`",
+    "commentsCount": 3
+  },
+  {
+    "type": "comment",
+    "clientId": "cmh9mhcne0001723xifv2lsqo",
+    "clientName": "Exxaro Coal (Pty) Ltd",
+    "error": "\nInvalid `prisma.clientComment.create()` invocation:\n\n\nForeign key constraint violated: `ClientComment_authorId_fkey (index)`",
+    "commentsCount": 1
+  },
+  {
+    "type": "comment",
+    "clientId": "c56d932babacbb86cab2c2b30",
+    "clientName": "African Exploration Mining and Finance Corporation - AEMFC",
+    "error": "\nInvalid `prisma.clientComment.create()` invocation:\n\n\nForeign key constraint violated: `ClientComment_authorId_fkey (index)`",
+    "commentsCount": 2
+  }
+]

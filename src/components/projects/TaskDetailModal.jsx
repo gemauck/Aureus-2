@@ -930,33 +930,20 @@ const TaskDetailModal = ({
                         commentId: savedComment.id
                     });
                     
-                    // Also update the task for backward compatibility (but don't rely on it)
-                    // This ensures the task still has comments in JSON during transition
-                    try {
-                        onUpdate(taskToAutoSave, { closeModal: false });
-                    } catch (updateError) {
-                        console.warn('⚠️ Failed to update task (non-critical):', updateError);
-                    }
+                    // tasksList JSON write removed - comments are now stored in TaskComment table
+                    // Task update no longer needed as comments are persisted via TaskComment API
                 } else {
                     throw new Error('Comment save response missing comment data');
                 }
             } catch (apiError) {
-                console.error('❌ TaskDetailModal: Failed to save comment to API, falling back to task update', {
+                console.error('❌ TaskDetailModal: Failed to save comment to TaskComment API:', {
                     taskId: taskToAutoSave.id,
                     error: apiError.message
                 });
                 
-                // Fallback to old method (saves through task update)
-                try {
-                    onUpdate(taskToAutoSave, { closeModal: false });
-                    console.log('✅ TaskDetailModal: Comment save via task update (fallback)');
-                } catch (error) {
-                    console.error('❌ TaskDetailModal: Failed to save comment (both methods failed)', {
-                        taskId: taskToAutoSave.id,
-                        error: error.message
-                    });
-                    alert('Failed to save comment. Please try again or refresh the page.');
-                }
+                // No fallback - TaskComment API is the only method now
+                // Re-throw to let the UI handle the error
+                throw apiError;
             }
             
             // Send notifications

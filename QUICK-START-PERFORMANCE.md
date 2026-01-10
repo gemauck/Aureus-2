@@ -78,3 +78,5 @@ If performance is still slow after applying indexes:
 After applying indexes and deploying, your site should be significantly faster!
 
 
+
+

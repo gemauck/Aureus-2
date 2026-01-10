@@ -1,67 +1,123 @@
-// Quick diagnostic script - paste this in browser console
-// This will check if templates exist in the database
+#!/usr/bin/env node
 
-(async function checkTemplates() {
-    console.log('🔍 Checking templates in database...');
-    
-    try {
-        const token = window.storage?.getToken?.();
-        if (!token) {
-            console.error('❌ No auth token found');
-            return;
-        }
-        
-        console.log('📡 Calling API: /api/document-collection-templates');
-        const cacheBuster = `?t=${Date.now()}`;
-        const response = await fetch(`/api/document-collection-templates${cacheBuster}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            },
-            cache: 'no-store'
-        });
-        
-        console.log('📥 Response status:', response.status, response.statusText);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ API Error:', response.status, errorText);
-            return;
-        }
-        
-        const data = await response.json();
-        console.log('📦 Full API response:', data);
-        
-        const templates = data?.data?.templates || data?.templates || [];
-        console.log(`\n✅ Found ${templates.length} templates in database:\n`);
-        
-        if (templates.length === 0) {
-            console.warn('⚠️ NO TEMPLATES FOUND!');
-            console.warn('   This means either:');
-            console.warn('   1. No templates have been created yet');
-            console.warn('   2. Templates were not saved to database');
-            console.warn('   3. Database query is failing');
-        } else {
-            templates.forEach((t, i) => {
-                console.log(`  ${i + 1}. "${t.name}"`);
-                console.log(`     ID: ${t.id}`);
-                console.log(`     Created by: ${t.createdBy || 'Unknown'}`);
-                console.log(`     Owner ID: ${t.ownerId || 'None'}`);
-                console.log(`     Sections: ${t.sections?.length || 0}`);
-                console.log(`     Is Default: ${t.isDefault ? 'Yes' : 'No'}`);
-                console.log('');
-            });
-            
-            console.log('✅ Templates are available and should be visible to all users');
-        }
-        
-        return templates;
-    } catch (error) {
-        console.error('❌ Error checking templates:', error);
-        console.error('Stack:', error.stack);
+/**
+ * Diagnostic script to check Weekly FMS Review Templates in the database
+ */
+
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+async function checkTemplates() {
+  try {
+    console.log('🔍 Checking Weekly FMS Review Templates...\n');
+
+    // Check all templates
+    const allTemplates = await prisma.documentCollectionTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+
+    console.log(`📊 Total templates in database: ${allTemplates.length}\n`);
+
+    if (allTemplates.length > 0) {
+      console.log('All templates by type:');
+      const byType = allTemplates.reduce((acc, t) => {
+        const type = t.type || 'undefined';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {});
+      
+      Object.entries(byType).forEach(([type, count]) => {
+        console.log(`  - ${type}: ${count} template(s)`);
+      });
+      console.log('');
     }
-})();
 
+    // Check weekly-fms-review templates specifically
+    let weeklyTemplates = [];
+    try {
+      weeklyTemplates = await prisma.documentCollectionTemplate.findMany({
+        where: {
+          type: 'weekly-fms-review'
+        },
+        orderBy: [
+          { isDefault: 'desc' },
+          { createdAt: 'desc' }
+        ]
+      });
+    } catch (error) {
+      // If type field doesn't exist, get all templates
+      if (error.message.includes('Unknown argument `type`') || error.message.includes('type')) {
+        console.log('⚠️  Database schema missing type field. Getting all templates...\n');
+        weeklyTemplates = await prisma.documentCollectionTemplate.findMany({
+          orderBy: [
+            { isDefault: 'desc' },
+            { createdAt: 'desc' }
+          ]
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    console.log(`📋 Weekly FMS Review Templates: ${weeklyTemplates.length}\n`);
+
+    if (weeklyTemplates.length > 0) {
+      console.log('Weekly FMS Review Templates:');
+      weeklyTemplates.forEach((template, index) => {
+        console.log(`\n${index + 1}. ${template.name}`);
+        console.log(`   ID: ${template.id}`);
+        console.log(`   Type: ${template.type}`);
+        console.log(`   Default: ${template.isDefault ? 'Yes' : 'No'}`);
+        console.log(`   Created: ${template.createdAt}`);
+        console.log(`   Updated: ${template.updatedAt}`);
+        console.log(`   Owner: ${template.ownerId || 'N/A'}`);
+        console.log(`   Description: ${template.description || 'N/A'}`);
+        
+        // Try to parse sections
+        try {
+          const sections = typeof template.sections === 'string' 
+            ? JSON.parse(template.sections) 
+            : template.sections;
+          const sectionCount = Array.isArray(sections) ? sections.length : 0;
+          console.log(`   Sections: ${sectionCount} section(s)`);
+        } catch (e) {
+          console.log(`   Sections: Error parsing - ${e.message}`);
+        }
+      });
+    } else {
+      console.log('❌ No Weekly FMS Review templates found!');
+      console.log('\nPossible reasons:');
+      console.log('  1. Templates were never created');
+      console.log('  2. Templates were deleted (check if purge-document-collection.js was run)');
+      console.log('  3. Templates have a different type value');
+      
+      if (allTemplates.length > 0) {
+        console.log('\n⚠️  Found other templates with different types:');
+        allTemplates.forEach(t => {
+          console.log(`   - "${t.name}" (type: ${t.type || 'undefined'})`);
+        });
+        console.log('\n💡 If your templates are listed above, they may have the wrong type.');
+        console.log('   They should have type: "weekly-fms-review"');
+      }
+    }
+
+    // Check for templates with no type or wrong type
+    const templatesWithoutType = allTemplates.filter(t => !t.type || t.type === 'document-collection');
+    if (templatesWithoutType.length > 0 && weeklyTemplates.length === 0) {
+      console.log('\n⚠️  Found templates that might be Weekly FMS Review templates:');
+      templatesWithoutType.forEach(t => {
+        console.log(`   - "${t.name}" (type: ${t.type || 'undefined'}, created: ${t.createdAt})`);
+      });
+      console.log('\n💡 These templates might need their type updated to "weekly-fms-review"');
+    }
+
+  } catch (error) {
+    console.error('❌ Error checking templates:', error);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+checkTemplates();

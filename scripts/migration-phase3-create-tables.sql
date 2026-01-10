@@ -49,3 +49,5 @@ CREATE INDEX IF NOT EXISTS "ClientComment_clientId_idx" ON "ClientComment"("clie
 CREATE INDEX IF NOT EXISTS "ClientComment_createdAt_idx" ON "ClientComment"("createdAt");
 CREATE INDEX IF NOT EXISTS "ClientComment_authorId_idx" ON "ClientComment"("authorId");
 
+
+

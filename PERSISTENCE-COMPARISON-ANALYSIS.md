@@ -94,3 +94,5 @@ When you navigate away and come back:
 The root cause was that `handleSaveSection` in Weekly FMS Review bypassed the API service that properly updates the parent component. By using the API service (like Document Collection does), the parent component's project prop gets updated correctly, ensuring data persists when navigating back.
 
 
+
+

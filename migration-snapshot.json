@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-01-09T18:09:53.627Z",
+  "totalClients": 154,
+  "totalLeads": 84,
+  "totalClientRecords": 65,
+  "stats": {
+    "withContacts": 26,
+    "withComments": 4,
+    "withProjectIds": 1,
+    "withSites": 9,
+    "withContracts": 0,
+    "withFollowUps": 0,
+    "withActivityLog": 144,
+    "invalidJson": 0,
+    "totalContacts": 27,
+    "totalComments": 7,
+    "totalProjectIds": 3
+  },
+  "totalOpportunities": 4,
+  "issues": 1,
+  "safeToMigrate": false
+}

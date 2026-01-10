@@ -15,15 +15,33 @@ async function handler(req, res) {
         // IMPORTANT: Templates are shared across all users, so we return ALL templates
         // regardless of ownerId. The ownerId field is only for tracking who created the template.
         // Filter by type to only return weekly-fms-review templates
-        const templates = await prisma.documentCollectionTemplate.findMany({
-          where: {
-            type: 'weekly-fms-review'
-          },
-          orderBy: [
-            { isDefault: 'desc' }, // Default templates first
-            { createdAt: 'desc' }
-          ]
-        })
+        let templates = [];
+        
+        try {
+          templates = await prisma.documentCollectionTemplate.findMany({
+            where: {
+              type: 'weekly-fms-review'
+            },
+            orderBy: [
+              { isDefault: 'desc' }, // Default templates first
+              { createdAt: 'desc' }
+            ]
+          })
+        } catch (prismaError) {
+          // If Prisma query fails (e.g., type field not recognized), use raw SQL
+          if (prismaError.message && (prismaError.message.includes('type') || prismaError.message.includes('Unknown argument'))) {
+            console.warn('⚠️ Prisma type filter failed, using raw SQL query');
+            const rawTemplates = await prisma.$queryRaw`
+              SELECT id, name, description, sections, "isDefault", type, "ownerId", "createdBy", "updatedBy", "createdAt", "updatedAt"
+              FROM "DocumentCollectionTemplate"
+              WHERE type = 'weekly-fms-review'
+              ORDER BY "isDefault" DESC, "createdAt" DESC
+            `;
+            templates = rawTemplates;
+          } else {
+            throw prismaError;
+          }
+        }
         
         if (templates.length > 0) {
           console.log(`✅ Found ${templates.length} weekly FMS review template(s) in database:`, templates.map(t => t.name))
