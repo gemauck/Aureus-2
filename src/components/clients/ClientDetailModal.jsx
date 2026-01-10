@@ -9,27 +9,58 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
     const mergeUniqueById = (items = [], extras = []) => {
-        const map = new Map();
-        // Ensure all IDs are strings for consistent comparison
+        const mapById = new Map();
+        const mapByKey = new Map(); // Also deduplicate by name+email combination
+        
         [...(items || []), ...(extras || [])].forEach(item => {
-            if (item && item.id) {
-                // Convert ID to string to ensure consistent comparison
+            if (!item) return;
+            
+            // Create a unique key from name+email for deduplication
+            const name = String(item.name || '').toLowerCase().trim();
+            const email = String(item.email || '').toLowerCase().trim();
+            const key = `${name}::${email}`;
+            
+            // First check by ID
+            if (item.id) {
                 const id = String(item.id);
-                // If same ID already exists, keep the one with more data (non-empty fields)
-                if (map.has(id)) {
-                    const existing = map.get(id);
-                    // Prefer item with more populated fields
+                if (mapById.has(id)) {
+                    // Same ID - keep the one with more data
+                    const existing = mapById.get(id);
                     const existingFieldCount = Object.values(existing).filter(v => v !== null && v !== undefined && v !== '').length;
                     const newFieldCount = Object.values(item).filter(v => v !== null && v !== undefined && v !== '').length;
                     if (newFieldCount > existingFieldCount) {
-                        map.set(id, item);
+                        mapById.set(id, item);
+                        if (key) mapByKey.set(key, item);
                     }
                 } else {
-                    map.set(id, item);
+                    mapById.set(id, item);
+                    if (key) mapByKey.set(key, item);
+                }
+            } else if (key && !mapByKey.has(key)) {
+                // No ID but has name+email - deduplicate by key
+                mapByKey.set(key, item);
+            } else if (key && mapByKey.has(key)) {
+                // Duplicate name+email - keep the one with more data
+                const existing = mapByKey.get(key);
+                const existingFieldCount = Object.values(existing).filter(v => v !== null && v !== undefined && v !== '').length;
+                const newFieldCount = Object.values(item).filter(v => v !== null && v !== undefined && v !== '').length;
+                if (newFieldCount > existingFieldCount) {
+                    mapByKey.set(key, item);
                 }
             }
         });
-        return Array.from(map.values());
+        
+        // Merge both maps - prioritize items with IDs
+        const finalMap = new Map();
+        mapById.forEach((item, id) => finalMap.set(id, item));
+        mapByKey.forEach((item, key) => {
+            if (!item.id || !finalMap.has(String(item.id))) {
+                // Item has no ID or ID not in final map, use key as identifier
+                finalMap.set(key, item);
+            }
+        });
+        
+        return Array.from(finalMap.values());
     };
     
     const [formData, setFormData] = useState(() => {
@@ -768,15 +799,63 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const shouldLoadFromDatabase = clientIdChanged || !hasUserEditedForm.current;
             
             // Parse all JSON strings from API response
-            // CRITICAL: Deduplicate contacts and sites immediately to prevent UI duplicates
-            const parsedContacts = typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []);
-            const parsedSites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+            // CRITICAL FIX: Prioritize normalized table data over JSON fields to prevent duplicates
+            // If clientContacts relation exists, use ONLY that (parseClientJsonFields already converted it to contacts)
+            // Ignore any JSON field contacts to prevent duplicates
+            
+            let finalContacts = [];
+            
+            // Check if we have normalized contacts (from parseClientJsonFields on API side)
+            if (client.contacts && Array.isArray(client.contacts) && client.contacts.length > 0) {
+                // API already ran parseClientJsonFields, so contacts are from normalized tables
+                finalContacts = client.contacts;
+            } else if (client.clientContacts && Array.isArray(client.clientContacts) && client.clientContacts.length > 0) {
+                // Fallback: if relation object still exists, convert it
+                finalContacts = client.clientContacts.map(contact => ({
+                    id: contact.id,
+                    name: contact.name,
+                    email: contact.email || '',
+                    phone: contact.phone || '',
+                    mobile: contact.mobile || '',
+                    role: contact.role || '',
+                    title: contact.title || '',
+                    isPrimary: contact.isPrimary || false,
+                    notes: contact.notes || ''
+                }));
+            } else {
+                // Last resort: parse from JSON fields (backward compatibility)
+                const parsedContacts = typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []);
+                finalContacts = Array.isArray(parsedContacts) ? parsedContacts : [];
+            }
+            
+            // Ensure contacts are deduplicated by ID
+            finalContacts = mergeUniqueById(finalContacts);
+            
+            // Same logic for sites
+            let finalSites = [];
+            if (client.sites && Array.isArray(client.sites) && client.sites.length > 0) {
+                finalSites = client.sites;
+            } else if (client.clientSites && Array.isArray(client.clientSites) && client.clientSites.length > 0) {
+                finalSites = client.clientSites.map(site => ({
+                    id: site.id,
+                    name: site.name,
+                    address: site.address || '',
+                    contactPerson: site.contactPerson || '',
+                    contactPhone: site.contactPhone || '',
+                    contactEmail: site.contactEmail || '',
+                    notes: site.notes || ''
+                }));
+            } else {
+                const parsedSites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+                finalSites = Array.isArray(parsedSites) ? parsedSites : [];
+            }
+            finalSites = mergeUniqueById(finalSites);
             
             const parsedClient = {
                 ...client,
                 opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-                sites: mergeUniqueById(parsedSites), // Deduplicate immediately
-                contacts: mergeUniqueById(parsedContacts), // Deduplicate immediately
+                sites: finalSites,
+                contacts: finalContacts, // Use deduplicated contacts
                 followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
                 comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
                 contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
@@ -3151,24 +3230,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
                                 <div className="space-y-2">
                                     {(() => {
-                                        // Merge formData contacts with optimistic contacts
+                                        // CRITICAL: Merge formData contacts with optimistic contacts and deduplicate
                                         const formContacts = formData.contacts || [];
                                         const optimistic = optimisticContacts || [];
                                         
-                                        // Merge and deduplicate by ID
-                                        const contactMap = new Map();
+                                        // Use mergeUniqueById for consistent deduplication
+                                        const allContacts = mergeUniqueById(formContacts, optimistic);
                                         
-                                        // Add formData contacts first
-                                        formContacts.forEach(contact => {
-                                            if (contact?.id) contactMap.set(contact.id, contact);
-                                        });
-                                        
-                                        // Add optimistic contacts (will overwrite if duplicate ID)
-                                        optimistic.forEach(contact => {
-                                            if (contact?.id) contactMap.set(contact.id, contact);
-                                        });
-                                        
-                                        const allContacts = Array.from(contactMap.values());
+                                        // Debug logging (remove after testing)
+                                        if (allContacts.length !== formContacts.length + optimistic.length - (optimistic.filter(o => formContacts.some(f => String(f?.id) === String(o?.id))).length)) {
+                                            console.log('🔍 Contacts deduplication:', {
+                                                formContactsCount: formContacts.length,
+                                                optimisticCount: optimistic.length,
+                                                finalCount: allContacts.length,
+                                                formContactIds: formContacts.map(c => c?.id),
+                                                optimisticIds: optimistic.map(c => c?.id),
+                                                finalIds: allContacts.map(c => c?.id)
+                                            });
+                                        }
                                         
 
                                         return allContacts.length === 0 ? (
