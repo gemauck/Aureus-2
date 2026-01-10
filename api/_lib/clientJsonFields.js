@@ -144,8 +144,10 @@ export function parseClientJsonFields(client) {
 
 // Phase 2: Helper to prepare data for dual-write (both String and JSONB)
 // Phase 4: Removed projectIds - use Project.clientId relation instead
+// Phase 5: Removed contacts and comments - use normalized tables (ClientContact, ClientComment) only
 export function prepareJsonFieldsForDualWrite(body) {
-  const jsonFields = ['contacts', 'followUps', 'comments', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
+  const jsonFields = ['followUps', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
+  // Note: 'contacts' and 'comments' removed - they should ONLY be written to normalized tables
   
   const result = {}
   

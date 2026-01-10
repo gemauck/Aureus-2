@@ -682,8 +682,43 @@ async function handler(req, res) {
       }
       
       // Phase 2: Add JSON fields with dual-write (both String and JSONB)
+      // Phase 5: Contacts/comments excluded - written to normalized tables only
       const jsonFields = prepareJsonFieldsForDualWrite(body)
       Object.assign(leadData, jsonFields)
+      
+      // Extract contacts/comments from body before removing (will sync to normalized tables)
+      let contactsToSync = []
+      let commentsToSync = []
+      
+      if (body.contacts !== undefined) {
+        if (Array.isArray(body.contacts)) {
+          contactsToSync = body.contacts
+        } else if (typeof body.contacts === 'string' && body.contacts.trim()) {
+          try {
+            contactsToSync = JSON.parse(body.contacts)
+          } catch (e) {
+            contactsToSync = []
+          }
+        }
+      }
+      
+      if (body.comments !== undefined) {
+        if (Array.isArray(body.comments)) {
+          commentsToSync = body.comments
+        } else if (typeof body.comments === 'string' && body.comments.trim()) {
+          try {
+            commentsToSync = JSON.parse(body.comments)
+          } catch (e) {
+            commentsToSync = []
+          }
+        }
+      }
+      
+      // Ensure contacts/comments are NOT in leadData (they go to normalized tables only)
+      delete leadData.contacts
+      delete leadData.contactsJsonb
+      delete leadData.comments
+      delete leadData.commentsJsonb
 
 
       // Filter out any undefined or null values that might cause issues
@@ -710,9 +745,51 @@ async function handler(req, res) {
         // Phase 5: Sync contacts and comments to normalized tables after lead creation
         try {
           // Sync contacts if provided
-          if (leadData.contactsJsonb && Array.isArray(leadData.contactsJsonb) && leadData.contactsJsonb.length > 0) {
-            await prisma.clientContact.createMany({
-              data: leadData.contactsJsonb.map(contact => ({
+          if (contactsToSync && Array.isArray(contactsToSync) && contactsToSync.length > 0) {
+            // Use upsert for each contact to handle duplicate IDs
+            for (const contact of contactsToSync) {
+              const contactData = {
+                clientId: lead.id,
+                name: contact.name || '',
+                email: contact.email || null,
+                phone: contact.phone || null,
+                mobile: contact.mobile || contact.phone || null,
+                role: contact.role || null,
+                title: contact.title || contact.department || null,
+                isPrimary: !!contact.isPrimary,
+                notes: contact.notes || ''
+              }
+              
+              if (contact.id) {
+                try {
+                  await prisma.clientContact.create({
+                    data: {
+                      id: contact.id,
+                      ...contactData
+                    }
+                  })
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContact.update({
+                      where: { id: contact.id },
+                      data: contactData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientContact.create({
+                  data: contactData
+                })
+              }
+            }
+          }
+          
+          // Old code using createMany (replaced with upsert above):
+          /* await prisma.clientContact.createMany({
+              data: contactsToSync.map(contact => ({
                 id: contact.id || undefined,
                 clientId: lead.id,
                 name: contact.name || '',
@@ -724,11 +801,10 @@ async function handler(req, res) {
                 isPrimary: !!contact.isPrimary,
                 notes: contact.notes || ''
               }))
-            })
-          }
+            }) */
           
           // Sync comments if provided
-          if (leadData.commentsJsonb && Array.isArray(leadData.commentsJsonb) && leadData.commentsJsonb.length > 0) {
+          if (commentsToSync && Array.isArray(commentsToSync) && commentsToSync.length > 0) {
             let authorName = ''
             let userName = ''
             
@@ -748,7 +824,7 @@ async function handler(req, res) {
             }
             
             // Use upsert to handle duplicates
-            for (const comment of leadData.commentsJsonb) {
+            for (const comment of commentsToSync) {
               const commentData = {
                 clientId: lead.id,
                 text: comment.text || '',

@@ -640,16 +640,13 @@ async function handler(req, res) {
             address: clientData.address,
             website: clientData.website,
             notes: clientData.notes,
-            // Phase 2: Dual-write - both String and JSONB fields are already prepared
-            contacts: clientData.contacts || '[]',
-            contactsJsonb: clientData.contactsJsonb || [],
+            // Phase 5: Contacts/comments are written to normalized tables ONLY - no JSON writes
+            // Removed: contacts, contactsJsonb, comments, commentsJsonb
             followUps: clientData.followUps || '[]',
             followUpsJsonb: clientData.followUpsJsonb || [],
             // Phase 4: projectIds deprecated - projects managed via Project.clientId relation
             // Still include for backward compatibility if provided, but prefer Project.clientId
             projectIds: clientData.projectIds || '[]',
-            comments: clientData.comments || '[]',
-            commentsJsonb: clientData.commentsJsonb || [],
             sites: clientData.sites || '[]',
             sitesJsonb: clientData.sitesJsonb || [],
             contracts: clientData.contracts || '[]',
