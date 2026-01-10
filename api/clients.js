@@ -654,6 +654,32 @@ async function handler(req, res) {
       // Phase 2: Prepare JSON fields for dual-write (both String and JSONB)
       const jsonFields = prepareJsonFieldsForDualWrite(body)
       
+      // CRITICAL FIX: Handle services separately (like in update endpoint)
+      // Services can be simple string arrays (tags) or object arrays (full service records)
+      let servicesForJson = []
+      if (body.services !== undefined) {
+        let servicesArray = []
+        if (Array.isArray(body.services)) {
+          servicesArray = body.services
+        } else if (typeof body.services === 'string' && body.services.trim()) {
+          try {
+            servicesArray = JSON.parse(body.services)
+          } catch (e) {
+            servicesArray = []
+          }
+        }
+        
+        // Convert to array of strings for JSON storage (frontend expects simple string array)
+        servicesForJson = servicesArray.map(s => {
+          // If service is a string, use it directly
+          if (typeof s === 'string') {
+            return s
+          }
+          // If service is an object, use its name
+          return s.name || s
+        })
+      }
+      
       const clientData = {
         name: body.name,
         type: 'client', // Always 'client' for client creation - never allow override
@@ -668,6 +694,9 @@ async function handler(req, res) {
         notes: body.notes || '',
         // Phase 2: Dual-write - both String (backward compatibility) and JSONB (new)
         ...jsonFields,
+        // CRITICAL FIX: Add services to JSON fields for persistence
+        services: JSON.stringify(servicesForJson),
+        servicesJsonb: servicesForJson,
         ...(ownerId ? { ownerId } : {})
       }
 
@@ -726,8 +755,12 @@ async function handler(req, res) {
             notes: clientData.notes,
             // Phase 5: Contacts/comments are written to normalized tables ONLY - no JSON writes
             // Removed: contacts, contactsJsonb, comments, commentsJsonb
-            // Phase 6: Sites, contracts, proposals, followUps, services are written to normalized tables ONLY
-            // Removed: sites, sitesJsonb, contracts, contractsJsonb, proposals, proposalsJsonb, followUps, followUpsJsonb, services, servicesJsonb
+            // Phase 6: Sites, contracts, proposals, followUps are written to normalized tables ONLY
+            // Removed: sites, sitesJsonb, contracts, contractsJsonb, proposals, proposalsJsonb, followUps, followUpsJsonb
+            // CRITICAL FIX: Services are saved to JSON fields (both String and JSONB) for persistence
+            // Services are simple string arrays (tags), not full service records
+            services: clientData.services || '[]',
+            servicesJsonb: clientData.servicesJsonb || [],
             // Phase 4: projectIds deprecated - projects managed via Project.clientId relation
             // Still include for backward compatibility if provided, but prefer Project.clientId
             projectIds: clientData.projectIds || '[]',
@@ -983,39 +1016,62 @@ async function handler(req, res) {
             }
           }
           
-          // Sync services if provided
-          if (clientData.servicesJsonb && Array.isArray(clientData.servicesJsonb) && clientData.servicesJsonb.length > 0) {
-            for (const service of clientData.servicesJsonb) {
-              const serviceData = {
-                clientId: client.id,
-                name: service.name || '',
-                description: service.description || '',
-                price: service.price || 0,
-                status: service.status || 'Active',
-                startDate: service.startDate ? new Date(service.startDate) : null,
-                endDate: service.endDate ? new Date(service.endDate) : null,
-                notes: service.notes || ''
-              }
-              
-              if (service.id) {
-                try {
-                  await prisma.clientService.create({
-                    data: { id: service.id, ...serviceData }
-                  })
-                } catch (createError) {
-                  if (createError.code === 'P2002') {
-                    await prisma.clientService.update({
-                      where: { id: service.id },
-                      data: serviceData
-                    })
-                  } else {
-                    throw createError
-                  }
-                }
-              } else {
-                await prisma.clientService.create({ data: serviceData })
+          // Sync services to normalized table ONLY if they are objects with full details
+          // Skip normalized table sync if services are simple strings (tags) - they're stored in JSON fields
+          if (body.services !== undefined) {
+            let servicesArray = []
+            if (Array.isArray(body.services)) {
+              servicesArray = body.services
+            } else if (typeof body.services === 'string' && body.services.trim()) {
+              try {
+                servicesArray = JSON.parse(body.services)
+              } catch (e) {
+                servicesArray = []
               }
             }
+            
+            // Only sync to normalized table if services are objects with full details
+            const hasServiceObjects = servicesArray.some(s => typeof s === 'object' && s !== null && (s.description !== undefined || s.price !== undefined))
+            
+            if (hasServiceObjects) {
+              for (const service of servicesArray) {
+                // Skip string services in normalized table - they're just tags
+                if (typeof service === 'string') {
+                  continue
+                }
+                
+                const serviceData = {
+                  clientId: client.id,
+                  name: service.name || '',
+                  description: service.description || '',
+                  price: service.price || 0,
+                  status: service.status || 'Active',
+                  startDate: service.startDate ? new Date(service.startDate) : null,
+                  endDate: service.endDate ? new Date(service.endDate) : null,
+                  notes: service.notes || ''
+                }
+                
+                if (service.id) {
+                  try {
+                    await prisma.clientService.create({
+                      data: { id: service.id, ...serviceData }
+                    })
+                  } catch (createError) {
+                    if (createError.code === 'P2002') {
+                      await prisma.clientService.update({
+                        where: { id: service.id },
+                        data: serviceData
+                      })
+                    } else {
+                      throw createError
+                    }
+                  }
+                } else {
+                  await prisma.clientService.create({ data: serviceData })
+                }
+              }
+            }
+            // If services are simple strings, they're already saved to JSON fields above - no normalized table sync needed
           }
         } catch (syncError) {
           console.warn('⚠️ Failed to sync normalized data to tables (non-critical):', syncError.message)
