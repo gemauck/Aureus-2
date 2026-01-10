@@ -166,6 +166,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Track which client ID we've already loaded sites for to prevent infinite loops
     const sitesLoadedForClientIdRef = useRef(null);
     
+    // Track initial loading state to prevent jittery progressive rendering
+    // Only render full content once all initial data loads are complete
+    const [isInitialLoading, setIsInitialLoading] = useState(false);
+    const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
+    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
