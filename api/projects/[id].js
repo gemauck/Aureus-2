@@ -63,126 +63,99 @@ async function handler(req, res) {
         }
         
         // Load project with all related data from tables
-        const project = await prisma.project.findUnique({
-          where: { id },
-          include: {
-            tasks: {
-              where: { parentTaskId: null }, // Only top-level tasks
-              include: {
-                subtasks: {
-                  orderBy: { createdAt: 'asc' }
-                },
-                assigneeUser: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              },
-              orderBy: { createdAt: 'asc' }
-            },
-            projectComments: {
-              include: {
-                authorUser: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                },
-                replies: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
+        // Only include relations that exist in the Prisma schema
+        let project;
+        try {
+          project = await prisma.project.findUnique({
+            where: { id },
+            include: {
+              tasks: {
+                where: { parentTaskId: null }, // Only top-level tasks
+                include: {
+                  subtasks: {
+                    orderBy: { createdAt: 'asc' }
+                  },
+                  assigneeUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true
                     }
                   }
-                }
+                },
+                orderBy: { createdAt: 'asc' }
               },
-              where: { parentId: null }, // Only top-level comments
-              orderBy: { createdAt: 'asc' }
-            },
-            projectDocuments: {
-              where: { isActive: true },
-              include: {
-                uploader: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              },
-              orderBy: { uploadDate: 'desc' }
-            },
-            projectTeamMembers: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
+              // Note: projectComments, projectDocuments, projectTeamMembers, 
+              // projectTaskLists, projectCustomFieldDefinitions, and projectActivityLogs
+              // are not defined as relations in the Prisma schema, so they're excluded here
+              documentSectionsTable: {
+                include: {
+                  documents: {
+                    include: {
+                      statuses: true,
+                      comments: {
+                        include: {
+                          authorUser: {
+                            select: {
+                              id: true,
+                              name: true,
+                              email: true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    orderBy: { order: 'asc' }
                   }
                 },
-                adder: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
+                orderBy: [{ year: 'desc' }, { order: 'asc' }]
+              },
+              weeklyFMSReviewSectionsTable: {
+                include: {
+                  items: {
+                    include: {
+                      statuses: true,
+                      comments: {
+                        include: {
+                          authorUser: {
+                            select: {
+                              id: true,
+                              name: true,
+                              email: true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    orderBy: { order: 'asc' }
                   }
-                }
-              },
-              orderBy: { addedDate: 'asc' }
-            },
-            projectTaskLists: {
-              orderBy: { order: 'asc' }
-            },
-            projectCustomFieldDefinitions: {
-              orderBy: { order: 'asc' }
-            },
-            projectActivityLogs: {
-              take: 50, // Limit to most recent 50
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              },
-              orderBy: { createdAt: 'desc' }
-            },
-            documentSectionsTable: {
-              include: {
-                documents: {
-                  include: {
-                    statuses: true,
-                    comments: true
-                  },
-                  orderBy: { order: 'asc' }
-                }
-              },
-              orderBy: [{ year: 'desc' }, { order: 'asc' }]
-            },
-            weeklyFMSReviewSectionsTable: {
-              include: {
-                items: {
-                  include: {
-                    statuses: true,
-                    comments: true
-                  },
-                  orderBy: { order: 'asc' }
-                }
-              },
-              orderBy: [{ year: 'desc' }, { order: 'asc' }]
+                },
+                orderBy: [{ year: 'desc' }, { order: 'asc' }]
+              }
             }
+          });
+        } catch (dbQueryError) {
+          console.error('❌ Database query error getting project:', {
+            error: dbQueryError.message,
+            code: dbQueryError.code,
+            meta: dbQueryError.meta,
+            stack: dbQueryError.stack
+          });
+          // Try to load project without relations to see if it exists
+          try {
+            const basicProject = await prisma.project.findUnique({
+              where: { id },
+              select: { id: true, name: true }
+            });
+            if (!basicProject) {
+              return notFound(res);
+            }
+            console.error('❌ Project exists but query with relations failed. Possible schema mismatch.');
+          } catch (basicError) {
+            console.error('❌ Even basic project query failed:', basicError.message);
           }
-        });
+          throw dbQueryError;
+        }
         
         if (!project) {
           return notFound(res);
@@ -196,18 +169,36 @@ async function handler(req, res) {
         
         const taskCommentsMap = {};
         if (allTaskIds.length > 0) {
-          const taskComments = await prisma.taskComment.findMany({
-            where: { taskId: { in: allTaskIds } },
-            orderBy: { createdAt: 'asc' }
-          });
-          
-          // Group comments by taskId
-          taskComments.forEach(comment => {
-            if (!taskCommentsMap[comment.taskId]) {
-              taskCommentsMap[comment.taskId] = [];
-            }
-            taskCommentsMap[comment.taskId].push(comment);
-          });
+          try {
+            const taskComments = await prisma.taskComment.findMany({
+              where: { taskId: { in: allTaskIds } },
+              include: {
+                authorUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'asc' }
+            });
+            
+            // Group comments by taskId
+            taskComments.forEach(comment => {
+              if (!taskCommentsMap[comment.taskId]) {
+                taskCommentsMap[comment.taskId] = [];
+              }
+              taskCommentsMap[comment.taskId].push(comment);
+            });
+          } catch (commentError) {
+            console.error('❌ Error fetching task comments:', {
+              error: commentError.message,
+              code: commentError.code,
+              allTaskIds
+            });
+            // Continue without comments rather than failing the entire request
+          }
         }
         
         // Attach comments to tasks
@@ -220,31 +211,46 @@ async function handler(req, res) {
           }))
         }));
         
+        // Helper to safely parse JSON fields (legacy support)
+        const parseJsonField = (field, defaultValue = []) => {
+          if (field === undefined || field === null || field === 'null' || (typeof field === 'string' && field.trim() === '')) {
+            return defaultValue;
+          }
+          try {
+            if (typeof field === 'string') {
+              const parsed = JSON.parse(field);
+              return Array.isArray(parsed) ? parsed : (typeof parsed === 'object' && parsed !== null ? parsed : defaultValue);
+            }
+            return Array.isArray(field) ? field : defaultValue;
+          } catch (e) {
+            return defaultValue;
+          }
+        };
+        
         // Transform project - replace JSON fields with table data
         // Frontend expects these field names, so map table data to them
         const transformedProject = {
           ...project,
           // Map table data to expected field names (for frontend compatibility)
           tasksList: tasksWithComments, // Tasks from Task table with comments attached
-          taskLists: project.projectTaskLists || [], // Task lists from ProjectTaskList table
-          customFieldDefinitions: project.projectCustomFieldDefinitions || [], // Custom fields from ProjectCustomFieldDefinition table
-          documents: project.projectDocuments || [], // Documents from ProjectDocument table
-          comments: project.projectComments || [], // Comments from ProjectComment table
-          activityLog: project.projectActivityLogs || [], // Activity logs from ProjectActivityLog table
-          team: project.projectTeamMembers || [], // Team from ProjectTeamMember table
-          // Document sections already in table format
-          documentSections: project.documentSectionsTable || [],
-          weeklyFMSReviewSections: project.weeklyFMSReviewSectionsTable || []
+          // These fields may not exist in the schema yet, so safely handle missing fields
+          taskLists: project.taskLists !== undefined ? parseJsonField(project.taskLists, []) : [],
+          customFieldDefinitions: project.customFieldDefinitions !== undefined ? parseJsonField(project.customFieldDefinitions, []) : [],
+          documents: project.documents !== undefined ? parseJsonField(project.documents, []) : [],
+          comments: project.comments !== undefined ? parseJsonField(project.comments, []) : [],
+          activityLog: project.activityLog !== undefined ? parseJsonField(project.activityLog, []) : [],
+          team: project.team !== undefined ? parseJsonField(project.team, []) : [],
+          // Document sections from table (preferred) or fallback to legacy JSON
+          documentSections: (project.documentSectionsTable && project.documentSectionsTable.length > 0)
+            ? project.documentSectionsTable
+            : (project.documentSections !== undefined ? parseJsonField(project.documentSections, []) : []),
+          weeklyFMSReviewSections: (project.weeklyFMSReviewSectionsTable && project.weeklyFMSReviewSectionsTable.length > 0)
+            ? project.weeklyFMSReviewSectionsTable
+            : (project.weeklyFMSReviewSections !== undefined ? parseJsonField(project.weeklyFMSReviewSections, []) : [])
         };
         
-        // Remove the table relation fields to avoid confusion
+        // Remove the table relation fields to avoid confusion (keep only transformed fields)
         delete transformedProject.tasks; // Use tasksList instead
-        delete transformedProject.projectComments;
-        delete transformedProject.projectActivityLogs;
-        delete transformedProject.projectDocuments;
-        delete transformedProject.projectTeamMembers;
-        delete transformedProject.projectTaskLists;
-        delete transformedProject.projectCustomFieldDefinitions;
         delete transformedProject.documentSectionsTable;
         delete transformedProject.weeklyFMSReviewSectionsTable;
         
