@@ -134,7 +134,21 @@ const DatabaseAPI = {
             try {
                 const json = JSON.parse(text);
                 if (typeof json === 'string') return json;
-                return json?.message || json?.error || json?.data?.message || JSON.stringify(json).substring(0, 200);
+                // Check for message at top level
+                if (json?.message && typeof json.message === 'string') return json.message;
+                // Check for error.message (common structure: { error: { message: '...' } })
+                if (json?.error?.message && typeof json.error.message === 'string') return json.error.message;
+                // Check for error object that might be a string
+                if (json?.error && typeof json.error === 'string') return json.error;
+                // Check for data.message
+                if (json?.data?.message && typeof json.data.message === 'string') return json.data.message;
+                // Fallback: try to extract any string message from the response
+                if (json?.error && typeof json.error === 'object') {
+                    // If error is an object, try to find a message property
+                    return json.error.message || json.error.code || JSON.stringify(json.error).substring(0, 200);
+                }
+                // Last resort: stringify the whole response (truncated)
+                return JSON.stringify(json).substring(0, 200);
             } catch (_) {
                 return text.substring(0, 200);
             }
@@ -875,11 +889,14 @@ const DatabaseAPI = {
                         throw new Error(`504: ${errorMessage}`);
                     }
                     
-                    // For other errors, use the server's error message if available
+                    // For other errors (including 404), use the server's error message if available
                     const statusText = response.statusText || 'Error';
                     const msg = serverErrorMessage || '';
-                    const errorMessage = msg ? `${statusText}${msg}` : `HTTP ${response.status}: ${statusText}`;
-                    throw new Error(errorMessage);
+                    // If we have a server error message, use it directly; otherwise format with status
+                    const errorMessage = msg ? msg : `HTTP ${response.status}: ${statusText}`;
+                    const error = new Error(errorMessage);
+                    error.status = response.status;
+                    throw error;
                 }
 
                 // Check if response is JSON

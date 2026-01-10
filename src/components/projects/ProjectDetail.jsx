@@ -4237,10 +4237,22 @@ function initializeProjectDetail() {
             try {
                 // NEW: Delete via Task API first (cascades to subtasks)
                 if (window.DatabaseAPI?.makeRequest) {
-                    await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
-                        method: 'DELETE'
-                    });
-                    console.log('✅ Task deleted via Task API:', taskId);
+                    try {
+                        await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
+                            method: 'DELETE'
+                        });
+                        console.log('✅ Task deleted via Task API:', taskId);
+                    } catch (deleteError) {
+                        // Handle 404 gracefully - task might already be deleted
+                        const errorStatus = deleteError?.status || (deleteError?.message?.includes('404') || deleteError?.message?.includes('not found') ? 404 : null);
+                        if (errorStatus === 404) {
+                            console.warn('⚠️ Task not found (may have already been deleted):', taskId);
+                            // Continue with local state cleanup even if task was already deleted
+                        } else {
+                            // Re-throw other errors
+                            throw deleteError;
+                        }
+                    }
                 } else {
                     throw new Error('Task API not available');
                 }
@@ -4282,8 +4294,24 @@ function initializeProjectDetail() {
                 }
             } catch (taskApiError) {
                 console.error('❌ Failed to delete task via Task API:', taskApiError);
-                alert('Failed to delete task. Please try again.');
-                throw taskApiError;
+                // Check if it's a 404 (task not found) - handle more gracefully
+                const errorStatus = taskApiError?.status || (taskApiError?.message?.includes('404') || taskApiError?.message?.includes('not found') || taskApiError?.message?.includes('Task not found') ? 404 : null);
+                if (errorStatus === 404) {
+                    // Task not found - might already be deleted, so just update local state
+                    const updatedTasks = tasks.filter(t => t.id !== taskId);
+                    setTasks(updatedTasks);
+                    tasksRef.current = updatedTasks;
+                    
+                    if (viewingTask?.id === taskId) {
+                        handleCloseTaskModal();
+                    }
+                    
+                    console.log('⚠️ Task was not found (may have already been deleted). Local state updated.');
+                } else {
+                    alert('Failed to delete task. Please try again.');
+                    // Don't re-throw to avoid unhandled promise rejection - error has been handled via alert
+                    console.error('Task deletion error details:', taskApiError);
+                }
             } finally {
                 // Reset flag after a delay to allow any pending useEffect to complete
                 setTimeout(() => {
