@@ -617,12 +617,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             console.log('  - Tasks count:', tasksToSave.length);
             console.log('  - Task lists count:', taskListsToSave.length);
             
-            const updatePayload = {
-                taskLists: JSON.stringify(taskListsToSave),
-                tasksList: JSON.stringify(tasksToSave),  // Note: backend uses 'tasksList' not 'tasks'
-                customFieldDefinitions: JSON.stringify(customFieldDefinitionsToSave),
-                documents: JSON.stringify(documentsToSave)
-            };
+            // JSON fields removed - data now stored in separate tables:
+            // - taskLists → ProjectTaskList table (via /api/project-task-lists)
+            // - customFieldDefinitions → ProjectCustomFieldDefinition table (via /api/project-custom-fields)
+            // - documents → ProjectDocument table (via /api/project-documents)
+            // - team → ProjectTeamMember table (via /api/project-team-members)
+            // - comments → ProjectComment table (via /api/project-comments)
+            // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
+            // Only update documentSections if needed (uses DocumentSection table)
+            const updatePayload = {};
             
             // Only include documentSections if not excluded
             // This prevents overwriting changes made by MonthlyDocumentCollectionTracker
