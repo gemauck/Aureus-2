@@ -10,9 +10,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // This prevents "Cannot access 'formData' before initialization" errors
     const mergeUniqueById = (items = [], extras = []) => {
         const map = new Map();
+        // Ensure all IDs are strings for consistent comparison
         [...(items || []), ...(extras || [])].forEach(item => {
             if (item && item.id) {
-                map.set(item.id, item);
+                // Convert ID to string to ensure consistent comparison
+                const id = String(item.id);
+                // If same ID already exists, keep the one with more data (non-empty fields)
+                if (map.has(id)) {
+                    const existing = map.get(id);
+                    // Prefer item with more populated fields
+                    const existingFieldCount = Object.values(existing).filter(v => v !== null && v !== undefined && v !== '').length;
+                    const newFieldCount = Object.values(item).filter(v => v !== null && v !== undefined && v !== '').length;
+                    if (newFieldCount > existingFieldCount) {
+                        map.set(id, item);
+                    }
+                } else {
+                    map.set(id, item);
+                }
             }
         });
         return Array.from(map.values());
@@ -754,11 +768,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const shouldLoadFromDatabase = clientIdChanged || !hasUserEditedForm.current;
             
             // Parse all JSON strings from API response
+            // CRITICAL: Deduplicate contacts and sites immediately to prevent UI duplicates
+            const parsedContacts = typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []);
+            const parsedSites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+            
             const parsedClient = {
                 ...client,
                 opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-                sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
-                contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+                sites: mergeUniqueById(parsedSites), // Deduplicate immediately
+                contacts: mergeUniqueById(parsedContacts), // Deduplicate immediately
                 followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
                 comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
                 contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
@@ -773,8 +791,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setFormData(parsedClient);
             }
             
+            // CRITICAL FIX: Don't reload contacts/sites if they're already in the client object
+            // The API already returns normalized data via parseClientJsonFields
+            // Loading again causes duplicates
+            const hasContactsInClient = parsedClient.contacts && Array.isArray(parsedClient.contacts) && parsedClient.contacts.length > 0;
+            const hasSitesInClient = parsedClient.sites && Array.isArray(parsedClient.sites) && parsedClient.sites.length > 0;
+            
             // Load data from database ONLY if client changed or form hasn't been edited
-            // This prevents overwriting optimistic updates
+            // AND only if data is missing from the client object
             if (shouldLoadFromDatabase) {
                 
                 // Cancel any existing pending timeouts for this client
@@ -790,20 +814,31 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }, 0);
                 pendingTimeoutsRef.current.push(timeout1);
                 
-                const timeout2 = setTimeout(() => {
-                    loadContactsFromDatabase(client.id);
-                }, 500); // Increased delay to 500ms
-                pendingTimeoutsRef.current.push(timeout2);
+                // Only load contacts if not already in client object
+                if (!hasContactsInClient) {
+                    const timeout2 = setTimeout(() => {
+                        loadContactsFromDatabase(client.id);
+                    }, 500);
+                    pendingTimeoutsRef.current.push(timeout2);
+                } else {
+                    console.log('✅ Contacts already in client object, skipping loadContactsFromDatabase to prevent duplicates');
+                }
                 
-                const timeout3 = setTimeout(() => {
-                    loadSitesFromDatabase(client.id);
-                }, 1000); // Increased delay to 1000ms
-                pendingTimeoutsRef.current.push(timeout3);
+                // Only load sites if not already in client object
+                if (!hasSitesInClient) {
+                    const timeout3 = setTimeout(() => {
+                        loadSitesFromDatabase(client.id);
+                    }, 1000);
+                    pendingTimeoutsRef.current.push(timeout3);
+                } else {
+                    console.log('✅ Sites already in client object, skipping loadSitesFromDatabase to prevent duplicates');
+                }
                 
                 // Reload the full client data from database to get comments, followUps, activityLog
+                // This is still needed for other fields, but parseClientJsonFields will handle contacts/sites correctly
                 const timeout4 = setTimeout(() => {
                     loadClientFromDatabase(client.id);
-                }, 1500); // Increased delay to 1500ms
+                }, 1500);
                 pendingTimeoutsRef.current.push(timeout4);
             } else {
             }
@@ -866,17 +901,34 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     
                     
                     // Update formData with the fresh data from database
-                    // IMPORTANT: Only update comments, followUps, activityLog, contracts
-                    // DO NOT update contacts or sites - those are managed separately
+                    // CRITICAL: Only update comments, followUps, activityLog, contracts, proposals, services
+                    // DO NOT update contacts or sites - those are managed separately via their own API endpoints
+                    // Updating them here would cause duplicates since they're already loaded from normalized tables
                     setFormData(prevFormData => {
+                        // Preserve existing contacts and sites to prevent duplicates
+                        const existingContacts = prevFormData?.contacts || [];
+                        const existingSites = prevFormData?.sites || [];
+                        
+                        // Merge new data with existing to ensure no loss
+                        const mergedComments = mergeUniqueById(parsedClient.comments || [], prevFormData?.comments || []);
+                        const mergedFollowUps = mergeUniqueById(parsedClient.followUps || [], prevFormData?.followUps || []);
+                        const mergedContracts = mergeUniqueById(parsedClient.contracts || [], prevFormData?.contracts || []);
+                        const mergedProposals = mergeUniqueById(parsedClient.proposals || [], prevFormData?.proposals || []);
+                        const mergedServices = mergeUniqueById(parsedClient.services || [], prevFormData?.services || []);
+                        
                         const updated = {
                             ...prevFormData,
-                            comments: parsedClient.comments,
-                            followUps: parsedClient.followUps,
-                            activityLog: parsedClient.activityLog,
-                            contracts: parsedClient.contracts
-                            // Explicitly preserve contacts and sites from current state
+                            comments: mergedComments,
+                            followUps: mergedFollowUps,
+                            activityLog: parsedClient.activityLog || prevFormData?.activityLog || [],
+                            contracts: mergedContracts,
+                            proposals: mergedProposals,
+                            services: mergedServices,
+                            // Explicitly preserve contacts and sites - NEVER update these here
+                            contacts: existingContacts,
+                            sites: existingSites
                         };
+                        formDataRef.current = updated;
                         return updated;
                     });
                     
@@ -928,10 +980,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const response = await window.api.getContacts(clientId);
             const contacts = response?.data?.contacts || [];
             
-            
-            // Merge database contacts with any optimistic contacts still pending
+            // CRITICAL FIX: Merge with existing contacts to prevent duplicates
+            // The client object may already have contacts from parseClientJsonFields
             setFormData(prevFormData => {
-                const mergedContacts = mergeUniqueById(contacts, optimisticContacts);
+                // Get existing contacts from formData
+                const existingContacts = prevFormData?.contacts || [];
+                // Merge: API contacts + existing contacts + optimistic contacts
+                const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
                 const updated = {
                     ...prevFormData,
                     contacts: mergedContacts
@@ -1122,10 +1177,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const response = await window.api.getSites(clientId);
             const sites = response?.data?.sites || [];
             
-            
-            // Merge database sites with any optimistic sites still pending
+            // CRITICAL FIX: Merge with existing sites to prevent duplicates
+            // The client object may already have sites from parseClientJsonFields
             setFormData(prevFormData => {
-                const mergedSites = mergeUniqueById(sites, optimisticSites);
+                // Get existing sites from formData
+                const existingSites = prevFormData?.sites || [];
+                // Merge: API sites + existing sites + optimistic sites
+                const mergedSites = mergeUniqueById(sites, [...existingSites, ...optimisticSites]);
                 const updated = {
                     ...prevFormData,
                     sites: mergedSites
