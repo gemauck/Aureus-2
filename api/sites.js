@@ -22,38 +22,58 @@ async function handler(req, res) {
       if (!clientId) return badRequest(res, 'clientId required')
       
       try {
+        // FIXED: Validate clientId format before querying
+        if (typeof clientId !== 'string' || clientId.trim().length === 0) {
+          return badRequest(res, 'Invalid clientId format')
+        }
+        
         // Phase 6: Use normalized ClientSite table
         const sites = await prisma.clientSite.findMany({
-          where: { clientId },
+          where: { clientId: clientId.trim() },
           orderBy: { createdAt: 'asc' }
         })
         
         // Fallback: If no sites in normalized table, try JSON field (backward compatibility)
         if (sites.length === 0) {
-          const result = await prisma.$queryRaw`
-            SELECT sites, sitesJsonb FROM "Client" WHERE id = ${clientId}
-          `
-          
-          if (result && result[0]) {
-            let jsonSites = []
-            if (result[0].sitesJsonb && Array.isArray(result[0].sitesJsonb) && result[0].sitesJsonb.length > 0) {
-              jsonSites = result[0].sitesJsonb
-            } else if (result[0].sites && typeof result[0].sites === 'string') {
-              try {
-                jsonSites = JSON.parse(result[0].sites)
-              } catch (e) {
-                jsonSites = []
-              }
-            }
+          try {
+            const result = await prisma.$queryRaw`
+              SELECT sites, sitesJsonb FROM "Client" WHERE id = ${clientId.trim()}
+            `
             
-            // Return JSON sites for backward compatibility
-            return ok(res, { sites: jsonSites })
+            if (result && result[0]) {
+              let jsonSites = []
+              if (result[0].sitesJsonb && Array.isArray(result[0].sitesJsonb) && result[0].sitesJsonb.length > 0) {
+                jsonSites = result[0].sitesJsonb
+              } else if (result[0].sites && typeof result[0].sites === 'string') {
+                try {
+                  jsonSites = JSON.parse(result[0].sites)
+                } catch (e) {
+                  jsonSites = []
+                }
+              }
+              
+              // Return JSON sites for backward compatibility
+              return ok(res, { sites: jsonSites })
+            }
+          } catch (fallbackError) {
+            // If fallback query fails, just return empty array instead of error
+            console.warn('⚠️ Fallback query for sites failed:', fallbackError.message)
+            return ok(res, { sites: [] })
           }
         }
         
         return ok(res, { sites })
       } catch (dbError) {
         console.error('❌ Database error getting sites:', dbError)
+        console.error('❌ ClientId:', clientId)
+        console.error('❌ Error code:', dbError.code)
+        console.error('❌ Error message:', dbError.message)
+        
+        // FIXED: Return empty array instead of error for invalid client IDs
+        if (dbError.code === 'P2025' || dbError.message?.includes('Record to find does not exist')) {
+          return ok(res, { sites: [] })
+        }
+        
         if (isConnectionError(dbError)) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }

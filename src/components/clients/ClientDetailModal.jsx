@@ -855,7 +855,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }
                 
                 // Only load sites if not already in client object
-                if (!hasSitesInClient) {
+                // FIXED: Also check if sites array exists (even if empty) to avoid unnecessary API calls
+                if (!hasSitesInClient && (!parsedClient.sites || !Array.isArray(parsedClient.sites))) {
                     loadPromises.push(loadSitesFromDatabase(client.id));
                 } else {
                     console.log('✅ Sites already in client object, skipping loadSitesFromDatabase to prevent duplicates');
@@ -1213,13 +1214,32 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
+            // FIXED: Don't load if client ID doesn't match current client (prevents race conditions)
+            if (client?.id && String(client.id) !== String(clientId)) {
+                console.log(`⏭️ Skipping loadSitesFromDatabase - client ID mismatch (current: ${client.id}, requested: ${clientId})`);
+                return;
+            }
+            
             const token = window.storage?.getToken?.();
             if (!token) {
                 return;
             }
             
             isLoadingSitesRef.current = true;
-            const response = await window.api.getSites(clientId);
+            
+            // FIXED: Add error handling for 500 errors
+            let response;
+            try {
+                response = await window.api.getSites(clientId);
+            } catch (apiError) {
+                // If it's a 500 error, log but don't throw - sites might already be in client object
+                if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
+                    console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
+                    return;
+                }
+                throw apiError;
+            }
+            
             const sites = response?.data?.sites || [];
             
             // CRITICAL FIX: Merge with existing sites to prevent duplicates

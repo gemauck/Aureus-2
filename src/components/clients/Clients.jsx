@@ -556,6 +556,34 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
+    // Helper functions to handle both objects and strings
+    const getServiceString = (service) => {
+        if (typeof service === 'string') return service;
+        if (typeof service === 'object' && service !== null) {
+            return service.name || service.id || service.description || JSON.stringify(service);
+        }
+        return String(service || '');
+    };
+
+    const getServiceKey = (service, index) => {
+        if (typeof service === 'string') return service;
+        if (typeof service === 'object' && service !== null) {
+            return service.id || service.name || `service-${index}`;
+        }
+        return `service-${index}`;
+    };
+
+    const areServicesEqual = (s1, s2) => {
+        if (s1 === s2) return true; // Reference equality or primitive equality
+        if (typeof s1 === 'object' && typeof s2 === 'object' && s1 !== null && s2 !== null) {
+            // Compare by id if available, otherwise by name
+            if (s1.id && s2.id) return s1.id === s2.id;
+            if (s1.name && s2.name) return s1.name === s2.name;
+            return JSON.stringify(s1) === JSON.stringify(s2);
+        }
+        return false;
+    };
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -571,8 +599,9 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
     }, [isOpen]);
 
     const handleToggle = (service) => {
-        if (selectedServices.includes(service)) {
-            onSelectionChange(selectedServices.filter(s => s !== service));
+        const isSelected = selectedServices.some(s => areServicesEqual(s, service));
+        if (isSelected) {
+            onSelectionChange(selectedServices.filter(s => !areServicesEqual(s, service)));
         } else {
             onSelectionChange([...selectedServices, service]);
         }
@@ -586,7 +615,7 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
     const displayText = selectedServices.length === 0 
         ? 'All Services' 
         : selectedServices.length === 1 
-            ? selectedServices[0] 
+            ? getServiceString(selectedServices[0])
             : `${selectedServices.length} selected`;
 
     return (
@@ -623,11 +652,11 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
                         ? 'bg-gray-700 border-gray-600' 
                         : 'bg-white border-gray-300'
                 }`}>
-                    {services.map(service => {
-                        const isSelected = selectedServices.includes(service);
+                    {services.map((service, index) => {
+                        const isSelected = selectedServices.some(s => areServicesEqual(s, service));
                         return (
                             <label
-                                key={service}
+                                key={getServiceKey(service, index)}
                                 className={`flex items-center px-4 py-2 cursor-pointer hover:bg-opacity-50 ${
                                     isDark 
                                         ? 'hover:bg-gray-600' 
@@ -643,7 +672,7 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
                                     }`}
                                 />
                                 <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                    {service}
+                                    {getServiceString(service)}
                                 </span>
                             </label>
                         );
@@ -4509,7 +4538,13 @@ const Clients = React.memo(() => {
                         ? client.services
                         : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
                     if (services.length === 0) return 'None';
-                    return services[0] || 'None'; // Sort by first service name
+                    const firstService = services[0];
+                    // Extract string from service (handles both objects and strings)
+                    if (typeof firstService === 'string') return firstService;
+                    if (typeof firstService === 'object' && firstService !== null) {
+                        return firstService.name || firstService.id || firstService.description || 'None';
+                    }
+                    return String(firstService || 'None');
                 };
                 aValue = getServicesValue(a);
                 bValue = getServicesValue(b);
@@ -4639,6 +4674,14 @@ const Clients = React.memo(() => {
             const services = Array.isArray(client.services)
                 ? client.services
                 : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
+            // Helper function to extract string from service (handles both objects and strings)
+            const getServiceString = (service) => {
+                if (typeof service === 'string') return service;
+                if (typeof service === 'object' && service !== null) {
+                    return service.name || service.id || service.description || JSON.stringify(service);
+                }
+                return String(service || '');
+            };
             const matchesSearch = searchTerm === '' || 
                 client.name.toLowerCase().includes(searchLower) ||
                 client.industry.toLowerCase().includes(searchLower) ||
@@ -4647,7 +4690,7 @@ const Clients = React.memo(() => {
                 client.notes.toLowerCase().includes(searchLower) ||
                 // Search in services
                 services.some(service => 
-                    service.toLowerCase().includes(searchLower)
+                    getServiceString(service).toLowerCase().includes(searchLower)
                 ) ||
                 // Search in all contacts
                 (client.contacts || []).some(contact => 
@@ -5859,11 +5902,30 @@ const Clients = React.memo(() => {
                                                 const MAX = 3;
                                                 const visible = services.slice(0, MAX);
                                                 const remaining = services.length - visible.length;
+                                                
+                                                // Helper function to extract string from service (handles both objects and strings)
+                                                const getServiceString = (service) => {
+                                                    if (typeof service === 'string') return service;
+                                                    if (typeof service === 'object' && service !== null) {
+                                                        return service.name || service.id || service.description || JSON.stringify(service);
+                                                    }
+                                                    return String(service || '');
+                                                };
+                                                
+                                                // Helper function to get unique key from service
+                                                const getServiceKey = (service, index) => {
+                                                    if (typeof service === 'string') return service;
+                                                    if (typeof service === 'object' && service !== null) {
+                                                        return service.id || service.name || `service-${index}`;
+                                                    }
+                                                    return `service-${index}`;
+                                                };
+                                                
                                                 return (
                                                     <>
-                                                        {visible.map(s => (
-                                                            <span key={s} className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                                <i className="fas fa-tag mr-1"></i>{s}
+                                                        {visible.map((s, index) => (
+                                                            <span key={getServiceKey(s, index)} className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                <i className="fas fa-tag mr-1"></i>{getServiceString(s)}
                                                             </span>
                                                         ))}
                                                         {remaining > 0 && (
