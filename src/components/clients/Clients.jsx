@@ -3447,8 +3447,15 @@ const Clients = React.memo(() => {
     
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         
-        // Validate required fields
-        if (!clientFormData || !clientFormData.name || clientFormData.name.trim() === '') {
+        // Validate required fields - handle undefined/null safely
+        if (!clientFormData) {
+            console.error('❌ Client form data is missing');
+            alert('Error: Form data is missing. Please try again.');
+            return;
+        }
+        
+        const clientName = clientFormData.name;
+        if (!clientName || (typeof clientName === 'string' && clientName.trim() === '')) {
             console.error('❌ Client name is required but empty');
             alert('Please enter a Client Name to save the client.');
             return;
@@ -3465,9 +3472,17 @@ const Clients = React.memo(() => {
             const token = window.storage?.getToken?.() || null;
             
             // Create comprehensive client object with ALL fields
+            // Ensure name is trimmed and non-empty (validation should have caught empty names, but double-check here)
+            const clientName = (typeof clientFormData.name === 'string' ? clientFormData.name.trim() : (clientFormData.name || ''));
+            if (!clientName) {
+                console.error('❌ Client name is empty after trimming');
+                alert('Please enter a Client Name to save the client.');
+                return null;
+            }
+            
             comprehensiveClient = {
                 id: selectedClient ? selectedClient.id : Date.now().toString(),
-                name: clientFormData.name || '',
+                name: clientName,
                 status: clientFormData.status || 'Active',
                 industry: clientFormData.industry || 'Other',
                 type: 'client',
@@ -3748,8 +3763,15 @@ const Clients = React.memo(() => {
     
     const handleSaveLead = async (leadFormData, stayInEditMode = false) => {
         
-        // Validate required fields
-        if (!leadFormData || !leadFormData.name || leadFormData.name.trim() === '') {
+        // Validate required fields - handle undefined/null safely
+        if (!leadFormData) {
+            console.error('❌ Lead form data is missing');
+            alert('Error: Form data is missing. Please try again.');
+            return;
+        }
+        
+        const leadName = leadFormData.name;
+        if (!leadName || (typeof leadName === 'string' && leadName.trim() === '')) {
             console.error('❌ Lead name is required but empty');
             alert('Please enter an Entity Name to save the lead.');
             return;
@@ -3956,8 +3978,9 @@ const Clients = React.memo(() => {
                     
                 }
             } else {
-                // Validate name for new leads
-                if (!leadFormData.name || leadFormData.name.trim() === '') {
+                // Validate name for new leads - handle undefined/null safely
+                const leadName = leadFormData.name;
+                if (!leadName || (typeof leadName === 'string' && leadName.trim() === '')) {
                     console.error('❌ Cannot create lead without a name');
                     alert('Please enter an Entity Name to create a lead.');
                     return;
@@ -3972,9 +3995,17 @@ const Clients = React.memo(() => {
                     id: user?.id || 'system'
                 };
                 
+                // Ensure name is trimmed and valid
+                const trimmedName = typeof leadName === 'string' ? leadName.trim() : String(leadName || '');
+                if (!trimmedName) {
+                    console.error('❌ Lead name is empty after trimming');
+                    alert('Please enter an Entity Name to create a lead.');
+                    return;
+                }
+                
                 const newLead = {
                     ...leadFormData,
-                    name: leadFormData.name.trim(), // Ensure name is trimmed
+                    name: trimmedName, // Ensure name is trimmed
                     id: Date.now().toString(), // Generate local ID
                     type: 'lead', // Ensure it's marked as a lead
                     lastContact: new Date().toISOString().split('T')[0],
