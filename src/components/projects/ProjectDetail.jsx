@@ -1038,11 +1038,13 @@ function initializeProjectDetail() {
     );
 
     // Initialize tasks with project-specific data
-    const [tasks, setTasks] = useState(project.tasks || []);
+    // NOTE: API returns tasks in tasksList field (from Task table), not tasks field
+    const initialTasks = project.tasksList || project.tasks || [];
+    const [tasks, setTasks] = useState(initialTasks);
     const [viewingTask, setViewingTask] = useState(null);
     const [viewingTaskParent, setViewingTaskParent] = useState(null);
     // Use a ref to store current tasks value to avoid TDZ issues in closures
-    const tasksRef = useRef(project.tasks || []);
+    const tasksRef = useRef(initialTasks);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
@@ -1092,33 +1094,35 @@ function initializeProjectDetail() {
         if (project?.id !== previousProjectIdRef.current) {
             previousProjectIdRef.current = project?.id;
             
-            // Try loading from Task API first (new approach)
+            // Always load from Task API first (tasks are stored in Task table, not JSON)
             if (project?.id) {
                 loadTasksFromAPI(project.id).then(apiTasks => {
-                    if (apiTasks && apiTasks.length > 0) {
+                    // Always use API tasks, even if empty array (empty means no tasks, not an error)
+                    if (apiTasks !== null) {
                         setTasks(apiTasks);
                         tasksRef.current = apiTasks;
-                        console.log('✅ ProjectDetail: Tasks loaded from API');
+                        console.log('✅ ProjectDetail: Tasks loaded from Task API:', apiTasks.length);
                     } else {
-                        // Fallback to JSON tasks from project prop
-            if (project?.tasks && Array.isArray(project.tasks)) {
-                setTasks(project.tasks);
-                            tasksRef.current = project.tasks;
-                            console.log('✅ ProjectDetail: Tasks loaded from JSON (fallback)');
-                        }
+                        // API returned null (error case), use tasksList from project prop as last resort
+                        // NOTE: tasksList comes from API and is populated from Task table, so this should be safe
+                        const fallbackTasks = project.tasksList || project.tasks || [];
+                        setTasks(fallbackTasks);
+                        tasksRef.current = fallbackTasks;
+                        console.warn('⚠️ ProjectDetail: Task API failed, using tasksList from project prop:', fallbackTasks.length);
                     }
                 }).catch(error => {
                     console.error('❌ ProjectDetail: Error loading tasks from API:', error);
-                    // Fallback to JSON
-                    if (project?.tasks && Array.isArray(project.tasks)) {
-                        setTasks(project.tasks);
-                        tasksRef.current = project.tasks;
-                    }
+                    // Fallback to tasksList from project prop (should come from Task table via API)
+                    const fallbackTasks = project.tasksList || project.tasks || [];
+                    setTasks(fallbackTasks);
+                    tasksRef.current = fallbackTasks;
+                    console.warn('⚠️ ProjectDetail: Using tasksList from project prop as fallback:', fallbackTasks.length);
                 });
-            } else if (project?.tasks && Array.isArray(project.tasks)) {
-                // No project ID, use JSON fallback
-                setTasks(project.tasks);
-                tasksRef.current = project.tasks;
+            } else {
+                // No project ID, use tasksList from project prop
+                const fallbackTasks = project.tasksList || project.tasks || [];
+                setTasks(fallbackTasks);
+                tasksRef.current = fallbackTasks;
             }
         }
     }, [project?.id, loadTasksFromAPI]); // Include loadTasksFromAPI in deps
@@ -2317,6 +2321,7 @@ function initializeProjectDetail() {
     const hasDocumentCollectionProcessChangedRef = useRef(false);
     
     // Save back to project whenever they change
+    // NOTE: tasks is NOT in dependencies - tasks are managed via Task API, not project JSON
     useEffect(() => {
         // Skip save if this was triggered by manual document collection process addition
         // This prevents the debounced save from overwriting an explicit save
@@ -2371,7 +2376,7 @@ function initializeProjectDetail() {
                 saveTimeoutRef.current = null;
             }
         };
-    }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, project.hasDocumentCollectionProcess, persistProjectData, project]);
+    }, [taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, project.hasDocumentCollectionProcess, persistProjectData, project]);
 
     // Save hasWeeklyFMSReviewProcess back to project whenever it changes
     useEffect(() => {
@@ -4176,6 +4181,24 @@ function initializeProjectDetail() {
                             console.error('❌ Task creation failed: No task ID returned from API');
                             throw new Error('Task creation failed: No task ID returned');
                         }
+                        
+                        // Reload tasks from server after creation to ensure consistency
+                        if (project?.id && window.DatabaseAPI?.makeRequest) {
+                            try {
+                                const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
+                                    method: 'GET'
+                                });
+                                const fetchedTasks = tasksResponse?.data?.tasks || [];
+                                if (Array.isArray(fetchedTasks)) {
+                                    console.log('✅ Refreshed tasks from server after creation. Task count:', fetchedTasks.length);
+                                    setTasks(fetchedTasks);
+                                    tasksRef.current = fetchedTasks;
+                                }
+                            } catch (refreshError) {
+                                console.warn('⚠️ Failed to refresh tasks after creation, using local state:', refreshError);
+                                // Continue with local state update - creation should still work
+                            }
+                        }
                     } else {
                         // Update existing task
                         const response = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskToSave.id)}`, {
@@ -4234,6 +4257,7 @@ function initializeProjectDetail() {
 
     const handleDeleteTask = async (taskId) => {
         if (confirm('Delete this task and all its subtasks?')) {
+            let deleteSuccessful = false;
             try {
                 // NEW: Delete via Task API first (cascades to subtasks)
                 if (window.DatabaseAPI?.makeRequest) {
@@ -4242,14 +4266,16 @@ function initializeProjectDetail() {
                             method: 'DELETE'
                         });
                         console.log('✅ Task deleted via Task API:', taskId);
+                        deleteSuccessful = true;
                     } catch (deleteError) {
                         // Handle 404 gracefully - task might already be deleted
-                        const errorStatus = deleteError?.status || (deleteError?.message?.includes('404') || deleteError?.message?.includes('not found') ? 404 : null);
+                        const errorStatus = deleteError?.status || (deleteError?.message?.includes('404') || deleteError?.message?.includes('not found') || deleteError?.message?.includes('Task not found') ? 404 : null);
                         if (errorStatus === 404) {
                             console.warn('⚠️ Task not found (may have already been deleted):', taskId);
+                            deleteSuccessful = true; // Treat as success since task is gone
                             // Continue with local state cleanup even if task was already deleted
                         } else {
-                            // Re-throw other errors
+                            // Re-throw other errors to be caught by outer catch
                             throw deleteError;
                         }
                     }
@@ -4267,21 +4293,29 @@ function initializeProjectDetail() {
                 // Set flag to skip the useEffect save to prevent race condition
                 skipNextSaveRef.current = true;
                 
-                // Reload tasks from server to ensure consistency
-                if (project?.id && window.DatabaseAPI?.makeRequest) {
+                // Only refresh tasks from server if deletion was successful
+                if (deleteSuccessful && project?.id && window.DatabaseAPI?.makeRequest) {
                     try {
                         const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
                             method: 'GET'
                         });
                         const fetchedTasks = tasksResponse?.data?.tasks || [];
-                        if (Array.isArray(fetchedTasks) && fetchedTasks.length >= 0) {
+                        if (Array.isArray(fetchedTasks)) {
                             console.log('✅ Refreshed tasks from server after deletion. Task count:', fetchedTasks.length);
                             setTasks(fetchedTasks);
                             tasksRef.current = fetchedTasks;
                         }
                     } catch (refreshError) {
-                        console.warn('⚠️ Failed to refresh tasks after deletion, using local state:', refreshError);
-                        // Continue with local state update - deletion should still work
+                        // Handle 500 errors gracefully - don't throw, just log
+                        const errorStatus = refreshError?.status || (refreshError?.message?.includes('500') || refreshError?.message?.includes('Internal Server Error') ? 500 : null);
+                        if (errorStatus === 500) {
+                            console.warn('⚠️ Server error refreshing tasks after deletion (may be temporary), using local state:', refreshError.message);
+                            // Continue with local state - task was already deleted from local state above
+                        } else {
+                            console.warn('⚠️ Failed to refresh tasks after deletion, using local state:', refreshError);
+                            // Continue with local state update - deletion should still work
+                        }
+                        // Don't throw - we've already updated local state, so UI is correct
                     }
                 }
                 
@@ -4308,9 +4342,10 @@ function initializeProjectDetail() {
                     
                     console.log('⚠️ Task was not found (may have already been deleted). Local state updated.');
                 } else {
+                    // For other errors, show alert but don't update state
                     alert('Failed to delete task. Please try again.');
-                    // Don't re-throw to avoid unhandled promise rejection - error has been handled via alert
                     console.error('Task deletion error details:', taskApiError);
+                    // Don't re-throw to avoid unhandled promise rejection - error has been handled via alert
                 }
             } finally {
                 // Reset flag after a delay to allow any pending useEffect to complete

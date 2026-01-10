@@ -211,42 +211,156 @@ async function handler(req, res) {
           }))
         }));
         
-        // Helper to safely parse JSON fields (legacy support)
-        const parseJsonField = (field, defaultValue = []) => {
-          if (field === undefined || field === null || field === 'null' || (typeof field === 'string' && field.trim() === '')) {
-            return defaultValue;
-          }
-          try {
-            if (typeof field === 'string') {
-              const parsed = JSON.parse(field);
-              return Array.isArray(parsed) ? parsed : (typeof parsed === 'object' && parsed !== null ? parsed : defaultValue);
-            }
-            return Array.isArray(field) ? field : defaultValue;
-          } catch (e) {
-            return defaultValue;
-          }
-        };
+        // Load data from separate tables (these are not relations in Prisma schema)
+        // Query them separately and use table data instead of JSON fields
+        let taskLists = [];
+        let projectComments = [];
+        let projectDocuments = [];
+        let projectTeamMembers = [];
+        let projectCustomFieldDefinitions = [];
+        let projectActivityLogs = [];
         
-        // Transform project - replace JSON fields with table data
+        try {
+          // Load task lists from ProjectTaskList table
+          taskLists = await prisma.projectTaskList.findMany({
+            where: { projectId: id },
+            orderBy: { order: 'asc' }
+          });
+        } catch (e) {
+          console.warn('⚠️ Failed to load task lists from table:', e.message);
+        }
+        
+        try {
+          // Load comments from ProjectComment table
+          projectComments = await prisma.projectComment.findMany({
+            where: { 
+              projectId: id,
+              parentId: null // Only top-level comments
+            },
+            include: {
+              authorUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              },
+              replies: {
+                include: {
+                  authorUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'asc' }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          });
+        } catch (e) {
+          console.warn('⚠️ Failed to load project comments from table:', e.message);
+        }
+        
+        try {
+          // Load documents from ProjectDocument table
+          projectDocuments = await prisma.projectDocument.findMany({
+            where: { 
+              projectId: id,
+              isActive: true
+            },
+            include: {
+              uploader: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              }
+            },
+            orderBy: { uploadDate: 'desc' }
+          });
+        } catch (e) {
+          console.warn('⚠️ Failed to load project documents from table:', e.message);
+        }
+        
+        try {
+          // Load team members from ProjectTeamMember table
+          projectTeamMembers = await prisma.projectTeamMember.findMany({
+            where: { projectId: id },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              },
+              adder: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              }
+            },
+            orderBy: { addedDate: 'asc' }
+          });
+        } catch (e) {
+          console.warn('⚠️ Failed to load project team members from table:', e.message);
+        }
+        
+        try {
+          // Load custom field definitions from ProjectCustomFieldDefinition table
+          projectCustomFieldDefinitions = await prisma.projectCustomFieldDefinition.findMany({
+            where: { projectId: id },
+            orderBy: { order: 'asc' }
+          });
+        } catch (e) {
+          console.warn('⚠️ Failed to load project custom field definitions from table:', e.message);
+        }
+        
+        try {
+          // Load activity logs from ProjectActivityLog table (limit to most recent 50)
+          projectActivityLogs = await prisma.projectActivityLog.findMany({
+            where: { projectId: id },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+          });
+        } catch (e) {
+          console.warn('⚠️ Failed to load project activity logs from table:', e.message);
+        }
+        
+        // Transform project - use table data instead of JSON fields
         // Frontend expects these field names, so map table data to them
         const transformedProject = {
           ...project,
           // Map table data to expected field names (for frontend compatibility)
           tasksList: tasksWithComments, // Tasks from Task table with comments attached
-          // These fields may not exist in the schema yet, so safely handle missing fields
-          taskLists: project.taskLists !== undefined ? parseJsonField(project.taskLists, []) : [],
-          customFieldDefinitions: project.customFieldDefinitions !== undefined ? parseJsonField(project.customFieldDefinitions, []) : [],
-          documents: project.documents !== undefined ? parseJsonField(project.documents, []) : [],
-          comments: project.comments !== undefined ? parseJsonField(project.comments, []) : [],
-          activityLog: project.activityLog !== undefined ? parseJsonField(project.activityLog, []) : [],
-          team: project.team !== undefined ? parseJsonField(project.team, []) : [],
-          // Document sections from table (preferred) or fallback to legacy JSON
+          taskLists: taskLists, // Task lists from ProjectTaskList table
+          customFieldDefinitions: projectCustomFieldDefinitions, // Custom fields from ProjectCustomFieldDefinition table
+          documents: projectDocuments, // Documents from ProjectDocument table
+          comments: projectComments, // Comments from ProjectComment table
+          activityLog: projectActivityLogs, // Activity logs from ProjectActivityLog table
+          team: projectTeamMembers, // Team from ProjectTeamMember table
+          // Document sections from table (preferred) or fallback to empty array
           documentSections: (project.documentSectionsTable && project.documentSectionsTable.length > 0)
             ? project.documentSectionsTable
-            : (project.documentSections !== undefined ? parseJsonField(project.documentSections, []) : []),
+            : [],
           weeklyFMSReviewSections: (project.weeklyFMSReviewSectionsTable && project.weeklyFMSReviewSectionsTable.length > 0)
             ? project.weeklyFMSReviewSectionsTable
-            : (project.weeklyFMSReviewSections !== undefined ? parseJsonField(project.weeklyFMSReviewSections, []) : [])
+            : []
         };
         
         // Remove the table relation fields to avoid confusion (keep only transformed fields)

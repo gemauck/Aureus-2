@@ -2269,13 +2269,14 @@ const Projects = () => {
             const normalizedProject = {
                 ...fullProject,
                 client: fullProject.clientName || fullProject.client || '',
-                taskLists: typeof fullProject.taskLists === 'string' ? JSON.parse(fullProject.taskLists || '[]') : (fullProject.taskLists || []),
-                tasks: typeof fullProject.tasksList === 'string' ? JSON.parse(fullProject.tasksList || '[]') : (fullProject.tasks || fullProject.tasksList || []),
-                customFieldDefinitions: typeof fullProject.customFieldDefinitions === 'string' ? JSON.parse(fullProject.customFieldDefinitions || '[]') : (fullProject.customFieldDefinitions || []),
-                documents: typeof fullProject.documents === 'string' ? JSON.parse(fullProject.documents || '[]') : (fullProject.documents || []),
-                comments: typeof fullProject.comments === 'string' ? JSON.parse(fullProject.comments || '[]') : (fullProject.comments || []),
-                activityLog: typeof fullProject.activityLog === 'string' ? JSON.parse(fullProject.activityLog || '[]') : (fullProject.activityLog || []),
-                team: typeof fullProject.team === 'string' ? JSON.parse(fullProject.team || '[]') : (fullProject.team || []),
+                // All data now comes from tables via API, not JSON fields - use arrays directly
+                taskLists: Array.isArray(fullProject.taskLists) ? fullProject.taskLists : [],
+                tasks: Array.isArray(fullProject.tasksList) ? fullProject.tasksList : (Array.isArray(fullProject.tasks) ? fullProject.tasks : []),
+                customFieldDefinitions: Array.isArray(fullProject.customFieldDefinitions) ? fullProject.customFieldDefinitions : [],
+                documents: Array.isArray(fullProject.documents) ? fullProject.documents : [],
+                comments: Array.isArray(fullProject.comments) ? fullProject.comments : [],
+                activityLog: Array.isArray(fullProject.activityLog) ? fullProject.activityLog : [],
+                team: Array.isArray(fullProject.team) ? fullProject.team : [],
                 // Ensure hasDocumentCollectionProcess is properly included (boolean from database)
                 // Handle both boolean and string values from database - normalize to boolean
                 hasDocumentCollectionProcess: (() => {
@@ -2291,7 +2292,7 @@ const Projects = () => {
                     if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                     return false;
                 })(),
-                weeklyFMSReviewSections: typeof fullProject.weeklyFMSReviewSections === 'string' ? JSON.parse(fullProject.weeklyFMSReviewSections || '[]') : (fullProject.weeklyFMSReviewSections || [])
+                weeklyFMSReviewSections: Array.isArray(fullProject.weeklyFMSReviewSections) ? fullProject.weeklyFMSReviewSections : []
             };
             
             // Expose a function to update viewingProject from child components
@@ -2304,17 +2305,18 @@ const Projects = () => {
                 
                 
                 // Normalize the project the same way we do in handleViewProject
+                // All data now comes from tables via API, not JSON fields - use arrays directly
                 const normalized = {
                     ...updatedProject,
                     client: updatedProject.clientName || updatedProject.client || '',
-                    taskLists: typeof updatedProject.taskLists === 'string' ? JSON.parse(updatedProject.taskLists || '[]') : (updatedProject.taskLists || []),
-                    tasks: typeof updatedProject.tasksList === 'string' ? JSON.parse(updatedProject.tasksList || '[]') : (updatedProject.tasks || updatedProject.tasksList || []),
-                    customFieldDefinitions: typeof updatedProject.customFieldDefinitions === 'string' ? JSON.parse(updatedProject.customFieldDefinitions || '[]') : (updatedProject.customFieldDefinitions || []),
-                    documents: typeof updatedProject.documents === 'string' ? JSON.parse(updatedProject.documents || '[]') : (updatedProject.documents || []),
-                    comments: typeof updatedProject.comments === 'string' ? JSON.parse(updatedProject.comments || '[]') : (updatedProject.comments || []),
-                    activityLog: typeof updatedProject.activityLog === 'string' ? JSON.parse(updatedProject.activityLog || '[]') : (updatedProject.activityLog || []),
-                    team: typeof updatedProject.team === 'string' ? JSON.parse(updatedProject.team || '[]') : (updatedProject.team || []),
-                    documentSections: typeof updatedProject.documentSections === 'string' ? JSON.parse(updatedProject.documentSections || '[]') : (updatedProject.documentSections || []),
+                    taskLists: Array.isArray(updatedProject.taskLists) ? updatedProject.taskLists : [],
+                    tasks: Array.isArray(updatedProject.tasksList) ? updatedProject.tasksList : (Array.isArray(updatedProject.tasks) ? updatedProject.tasks : []),
+                    customFieldDefinitions: Array.isArray(updatedProject.customFieldDefinitions) ? updatedProject.customFieldDefinitions : [],
+                    documents: Array.isArray(updatedProject.documents) ? updatedProject.documents : [],
+                    comments: Array.isArray(updatedProject.comments) ? updatedProject.comments : [],
+                    activityLog: Array.isArray(updatedProject.activityLog) ? updatedProject.activityLog : [],
+                    team: Array.isArray(updatedProject.team) ? updatedProject.team : [],
+                    documentSections: Array.isArray(updatedProject.documentSections) ? updatedProject.documentSections : [],
                     hasDocumentCollectionProcess: (() => {
                         const value = updatedProject.hasDocumentCollectionProcess;
                         if (value === true || value === 'true' || value === 1) return true;
@@ -2327,7 +2329,7 @@ const Projects = () => {
                         if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                         return false;
                     })(),
-                    weeklyFMSReviewSections: typeof updatedProject.weeklyFMSReviewSections === 'string' ? JSON.parse(updatedProject.weeklyFMSReviewSections || '[]') : (updatedProject.weeklyFMSReviewSections || [])
+                    weeklyFMSReviewSections: Array.isArray(updatedProject.weeklyFMSReviewSections) ? updatedProject.weeklyFMSReviewSections : []
                 };
                 
                 // Use smart comparison to prevent unnecessary re-renders

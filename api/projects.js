@@ -483,40 +483,30 @@ async function handler(req, res) {
             createdAt: true,
             updatedAt: true,
             monthlyProgress: true,
-            tasksList: true, // Include to count tasks stored in JSON
+            // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
             hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
             hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
             _count: {
               select: {
-                tasks: true
+                tasks: true // Count tasks from Task table (source of truth)
               }
             }
-            // Exclude other large JSON fields: taskLists, customFieldDefinitions, 
-            // documents, comments, activityLog, team, documentSections
+            // Exclude all JSON fields - data is now in separate tables:
+            // - tasksList → Task table
+            // - taskLists → ProjectTaskList table
+            // - customFieldDefinitions → ProjectCustomFieldDefinition table
+            // - documents → ProjectDocument table
+            // - comments → ProjectComment table
+            // - activityLog → ProjectActivityLog table
+            // - team → ProjectTeamMember table
           },
           orderBy: { createdAt: 'desc' } 
         })
         
-        // Calculate tasksCount from both tasks relation and tasksList JSON
+        // Calculate tasksCount from Task table only (no JSON fallback)
         const projectsWithTaskCount = projects.map(project => {
-          let tasksCount = project._count?.tasks || 0;
-          
-          // Also count tasks from tasksList JSON if available (fallback for legacy data)
-          if (project.tasksList) {
-            try {
-              const tasksList = typeof project.tasksList === 'string' 
-                ? JSON.parse(project.tasksList || '[]') 
-                : (project.tasksList || []);
-              
-              if (Array.isArray(tasksList) && tasksList.length > 0) {
-                // Use the larger count (either from relation or JSON)
-                tasksCount = Math.max(tasksCount, tasksList.length);
-              }
-            } catch (e) {
-              // If parsing fails, just use the relation count
-              console.warn('Failed to parse tasksList for project', project.id, e);
-            }
-          }
+          // Tasks are now only stored in Task table - use the count from relation
+          const tasksCount = project._count?.tasks || 0;
           
           return {
             ...project,

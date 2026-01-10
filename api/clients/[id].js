@@ -923,18 +923,8 @@ async function handler(req, res) {
               }
             })
             
-            // FIXED: Also write followUps to JSON field for backward compatibility
-            // This ensures follow-ups persist even if normalized table has issues
-            try {
-              const jsonFollowUps = JSON.stringify(followUpsArray)
-              await prisma.client.update({
-                where: { id },
-                data: { followUps: jsonFollowUps, followUpsJsonb: followUpsArray }
-              })
-              console.log(`✅ Also synced ${followUpsArray.length} followUps to JSON field for backward compatibility`)
-            } catch (jsonWriteError) {
-              console.warn('⚠️ Failed to write followUps to JSON field:', jsonWriteError.message)
-            }
+            console.log(`✅ Synced ${followUpsArray.length} followUps to normalized table for client ${id}`)
+            // NOTE: No longer writing to JSON fields - ClientFollowUp table is the source of truth
           } catch (followUpSyncError) {
             console.warn('⚠️ Failed to sync followUps to normalized table:', followUpSyncError.message)
           }
@@ -975,68 +965,68 @@ async function handler(req, res) {
           const hasServiceObjects = servicesArray.some(s => typeof s === 'object' && s !== null && (s.description !== undefined || s.price !== undefined))
           
           if (hasServiceObjects) {
-            try {
-              const existingServices = await prisma.clientService.findMany({
-                where: { clientId: id },
-                select: { id: true }
-              })
-              const existingServiceIds = new Set(existingServices.map(s => s.id))
-              const servicesToKeep = new Set()
-              
-              for (const service of servicesArray) {
+          try {
+            const existingServices = await prisma.clientService.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingServiceIds = new Set(existingServices.map(s => s.id))
+            const servicesToKeep = new Set()
+            
+            for (const service of servicesArray) {
                 // Skip string services in normalized table - they're just tags
                 if (typeof service === 'string') {
                   continue
                 }
                 
-                const serviceData = {
-                  clientId: id,
-                  name: service.name || '',
-                  description: service.description || '',
-                  price: service.price || 0,
-                  status: service.status || 'Active',
-                  startDate: service.startDate ? new Date(service.startDate) : null,
-                  endDate: service.endDate ? new Date(service.endDate) : null,
-                  notes: service.notes || ''
-                }
-                
-                if (service.id && existingServiceIds.has(service.id)) {
-                  await prisma.clientService.update({
-                    where: { id: service.id },
-                    data: serviceData
-                  })
-                  servicesToKeep.add(service.id)
-                } else if (service.id) {
-                  try {
-                    await prisma.clientService.create({
-                      data: { id: service.id, ...serviceData }
-                    })
-                    servicesToKeep.add(service.id)
-                  } catch (createError) {
-                    if (createError.code === 'P2002') {
-                      await prisma.clientService.update({
-                        where: { id: service.id },
-                        data: serviceData
-                      })
-                      servicesToKeep.add(service.id)
-                    } else {
-                      throw createError
-                    }
-                  }
-                } else {
-                  const created = await prisma.clientService.create({ data: serviceData })
-                  servicesToKeep.add(created.id)
-                }
+              const serviceData = {
+                clientId: id,
+                name: service.name || '',
+                description: service.description || '',
+                price: service.price || 0,
+                status: service.status || 'Active',
+                startDate: service.startDate ? new Date(service.startDate) : null,
+                endDate: service.endDate ? new Date(service.endDate) : null,
+                notes: service.notes || ''
               }
               
-              await prisma.clientService.deleteMany({
-                where: {
-                  clientId: id,
-                  NOT: { id: { in: Array.from(servicesToKeep) } }
+              if (service.id && existingServiceIds.has(service.id)) {
+                await prisma.clientService.update({
+                  where: { id: service.id },
+                  data: serviceData
+                })
+                servicesToKeep.add(service.id)
+              } else if (service.id) {
+                try {
+                  await prisma.clientService.create({
+                    data: { id: service.id, ...serviceData }
+                  })
+                  servicesToKeep.add(service.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientService.update({
+                      where: { id: service.id },
+                      data: serviceData
+                    })
+                    servicesToKeep.add(service.id)
+                  } else {
+                    throw createError
+                  }
                 }
-              })
-            } catch (serviceSyncError) {
-              console.warn('⚠️ Failed to sync services to normalized table:', serviceSyncError.message)
+              } else {
+                const created = await prisma.clientService.create({ data: serviceData })
+                servicesToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientService.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(servicesToKeep) } }
+              }
+            })
+          } catch (serviceSyncError) {
+            console.warn('⚠️ Failed to sync services to normalized table:', serviceSyncError.message)
               // Don't fail the entire update - JSON field is already saved above
             }
           }

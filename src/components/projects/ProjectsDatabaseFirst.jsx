@@ -64,17 +64,25 @@ const normalizeProject = (project) => {
         return null;
     }
 
-    const parsedTaskLists = parseJSONField(project.taskLists, DEFAULT_TASK_LISTS);
-    const parsedTasks = Array.isArray(project.tasks)
-        ? project.tasks
-        : parseJSONField(project.tasksList, []);
-    const parsedCustomFields = parseJSONField(project.customFieldDefinitions, []);
-    const parsedDocuments = parseJSONField(project.documents, []);
-    const parsedComments = parseJSONField(project.comments, []);
-    const parsedActivityLog = parseJSONField(project.activityLog, []);
-    const parsedTeam = parseJSONField(project.team, []);
-    const parsedDocumentSections = parseJSONField(project.documentSections, []);
-    const parsedWeeklyFMSReviewSections = parseJSONField(project.weeklyFMSReviewSections, []);
+    // All data now comes from tables via API, not JSON fields
+    // API returns these fields populated from tables:
+    // - tasksList: from Task table
+    // - taskLists: from ProjectTaskList table
+    // - customFieldDefinitions: from ProjectCustomFieldDefinition table
+    // - documents: from ProjectDocument table
+    // - comments: from ProjectComment table
+    // - activityLog: from ProjectActivityLog table
+    // - team: from ProjectTeamMember table
+    const parsedTaskLists = Array.isArray(project.taskLists) ? project.taskLists : DEFAULT_TASK_LISTS;
+    const parsedTasks = Array.isArray(project.tasksList) ? project.tasksList : [];
+    const parsedCustomFields = Array.isArray(project.customFieldDefinitions) ? project.customFieldDefinitions : [];
+    const parsedDocuments = Array.isArray(project.documents) ? project.documents : [];
+    const parsedComments = Array.isArray(project.comments) ? project.comments : [];
+    const parsedActivityLog = Array.isArray(project.activityLog) ? project.activityLog : [];
+    const parsedTeam = Array.isArray(project.team) ? project.team : [];
+    // Document sections and weekly FMS review sections come from tables via API
+    const parsedDocumentSections = Array.isArray(project.documentSections) ? project.documentSections : [];
+    const parsedWeeklyFMSReviewSections = Array.isArray(project.weeklyFMSReviewSections) ? project.weeklyFMSReviewSections : [];
     const hasDocProcess = project.hasDocumentCollectionProcess === true ||
         project.hasDocumentCollectionProcess === 'true' ||
         project.hasDocumentCollectionProcess === 1;
