@@ -1056,6 +1056,34 @@ function initializeProjectDetail() {
         includeSubtasks: true
     });
     
+    // Load tasks from Task API (new approach) or fallback to JSON (backward compatibility)
+    const loadTasksFromAPI = useCallback(async (projectId) => {
+        if (!projectId || !window.DatabaseAPI?.makeRequest) {
+            console.warn('⚠️ ProjectDetail: Cannot load tasks from API - missing projectId or DatabaseAPI');
+            return null;
+        }
+
+        try {
+            const url = `/tasks?projectId=${encodeURIComponent(projectId)}`;
+            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+            const data = response?.data || response;
+            
+            if (data?.tasks && Array.isArray(data.tasks)) {
+                console.log('✅ ProjectDetail: Loaded tasks from Task API:', {
+                    projectId,
+                    taskCount: data.tasks.length
+                });
+                return data.tasks;
+            }
+            
+            console.warn('⚠️ ProjectDetail: Task API returned no tasks');
+            return null;
+        } catch (error) {
+            console.warn('⚠️ ProjectDetail: Failed to load tasks from API, will use JSON fallback:', error);
+            return null;
+        }
+    }, []);
+
     // Sync tasks when project prop changes (e.g., after reload or navigation)
     // Use a ref to track previous project ID to prevent infinite loops
     const previousProjectIdRef = useRef(project?.id);
@@ -1063,12 +1091,37 @@ function initializeProjectDetail() {
         // Only sync if project ID changed (switching to a different project)
         if (project?.id !== previousProjectIdRef.current) {
             previousProjectIdRef.current = project?.id;
+            
+            // Try loading from Task API first (new approach)
+            if (project?.id) {
+                loadTasksFromAPI(project.id).then(apiTasks => {
+                    if (apiTasks && apiTasks.length > 0) {
+                        setTasks(apiTasks);
+                        tasksRef.current = apiTasks;
+                        console.log('✅ ProjectDetail: Tasks loaded from API');
+                    } else {
+                        // Fallback to JSON tasks from project prop
             if (project?.tasks && Array.isArray(project.tasks)) {
                 setTasks(project.tasks);
-                tasksRef.current = project.tasks; // Also update ref
+                            tasksRef.current = project.tasks;
+                            console.log('✅ ProjectDetail: Tasks loaded from JSON (fallback)');
+                        }
+                    }
+                }).catch(error => {
+                    console.error('❌ ProjectDetail: Error loading tasks from API:', error);
+                    // Fallback to JSON
+                    if (project?.tasks && Array.isArray(project.tasks)) {
+                        setTasks(project.tasks);
+                        tasksRef.current = project.tasks;
+                    }
+                });
+            } else if (project?.tasks && Array.isArray(project.tasks)) {
+                // No project ID, use JSON fallback
+                setTasks(project.tasks);
+                tasksRef.current = project.tasks;
             }
         }
-    }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
+    }, [project?.id, loadTasksFromAPI]); // Include loadTasksFromAPI in deps
     
     // CRITICAL: Ensure project ID is always in URL when ProjectDetail is rendered
     useEffect(() => {
@@ -2157,13 +2210,17 @@ function initializeProjectDetail() {
         const hasWeeklyFMSReviewProcessToSave = nextHasWeeklyFMSReviewProcess !== undefined ? nextHasWeeklyFMSReviewProcess : hasWeeklyFMSReviewProcess;
         
         try {
-            
-            const updatePayload = {
-                taskLists: JSON.stringify(taskListsToSave),
-                tasksList: JSON.stringify(tasksToSave),  // Note: backend uses 'tasksList' not 'tasks'
-                customFieldDefinitions: JSON.stringify(customFieldDefinitionsToSave),
-                documents: JSON.stringify(documentsToSave)
-            };
+            // tasksList JSON writes removed - tasks are now stored in Task table
+            // Comments are now stored in TaskComment table
+            // JSON fields removed - data now stored in separate tables:
+            // - taskLists → ProjectTaskList table (via /api/project-task-lists)
+            // - customFieldDefinitions → ProjectCustomFieldDefinition table (via /api/project-custom-fields)
+            // - documents → ProjectDocument table (via /api/project-documents)
+            // - team → ProjectTeamMember table (via /api/project-team-members)
+            // - comments → ProjectComment table (via /api/project-comments)
+            // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
+            // Only update documentSections if needed (uses DocumentSection table)
+            const updatePayload = {};
             
             // Only include documentSections if not excluded
             // This prevents overwriting changes made by MonthlyDocumentCollectionTracker
@@ -2184,109 +2241,18 @@ function initializeProjectDetail() {
             }
             
             
-            // CRITICAL: Validate and ensure all tasks have comments arrays before saving
-            // This prevents comments from being lost during serialization
-            const validatedTasks = (tasksToSave || []).map(task => {
-                // Ensure comments is always an array
-                if (!Array.isArray(task.comments)) {
-                    console.warn('⚠️ Task missing comments array, fixing:', {
-                        taskId: task.id,
-                        taskTitle: task.title,
-                        commentsType: typeof task.comments
-                    });
-                    task.comments = [];
-                }
-                
-                // Validate subtasks too
-                if (Array.isArray(task.subtasks)) {
-                    task.subtasks = task.subtasks.map(subtask => {
-                        if (!Array.isArray(subtask.comments)) {
-                            console.warn('⚠️ Subtask missing comments array, fixing:', {
-                                subtaskId: subtask.id,
-                                subtaskTitle: subtask.title
-                            });
-                            subtask.comments = [];
-                        }
-                        return subtask;
-                    });
-                }
-                
-                return task;
-            });
-            
-            // Log comment information for debugging
-            const tasksWithComments = validatedTasks?.filter(t => 
-                Array.isArray(t.comments) && t.comments.length > 0
-            ) || [];
-            const totalComments = validatedTasks?.reduce((sum, t) => 
-                sum + (Array.isArray(t.comments) ? t.comments.length : 0), 0
-            ) || 0;
-            
-            // Count comments in subtasks too
-            const subtaskComments = validatedTasks?.reduce((sum, t) => {
-                if (Array.isArray(t.subtasks)) {
-                    return sum + t.subtasks.reduce((subSum, st) => 
-                        subSum + (Array.isArray(st.comments) ? st.comments.length : 0), 0
-                    );
-                }
-                return sum;
-            }, 0) || 0;
-            
+            // tasksList JSON writes removed - tasks are now stored in Task table
+            // Validation and debug logging for tasksList removed
             console.log('💾 Saving project data:', { 
                 projectId: project.id, 
-                hasTasks: !!validatedTasks,
-                tasksCount: validatedTasks?.length || 0,
-                tasksWithCommentsCount: tasksWithComments.length,
-                totalCommentsCount: totalComments,
-                subtaskCommentsCount: subtaskComments,
                 updatePayloadKeys: Object.keys(updatePayload)
-            });
-            
-            // CRITICAL: Use validated tasks instead of original tasksToSave
-            updatePayload.tasksList = JSON.stringify(validatedTasks);
-            
-            // DEBUG: Log the actual payload being sent
-            const tasksListPreview = JSON.parse(updatePayload.tasksList);
-            const taskWithCommentsPreview = tasksListPreview.find(t => Array.isArray(t.comments) && t.comments.length > 0);
-            console.log('🔍 DEBUG: Payload being sent to API:', {
-                projectId: project.id,
-                tasksListLength: tasksListPreview.length,
-                tasksListStringLength: updatePayload.tasksList.length,
-                sampleTaskWithComments: taskWithCommentsPreview ? {
-                    id: taskWithCommentsPreview.id,
-                    title: taskWithCommentsPreview.title,
-                    commentsCount: taskWithCommentsPreview.comments.length,
-                    firstComment: taskWithCommentsPreview.comments[0]?.text?.substring(0, 50)
-                } : null
             });
             
             try {
                 const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 console.log('✅ Project save response:', apiResponse);
                 
-                // DEBUG: Verify what was actually saved
-                if (apiResponse?.project || apiResponse?.data?.project) {
-                    const savedProject = apiResponse.project || apiResponse.data.project;
-                    if (savedProject.tasksList) {
-                        try {
-                            const savedTasks = typeof savedProject.tasksList === 'string' 
-                                ? JSON.parse(savedProject.tasksList) 
-                                : savedProject.tasksList;
-                            const savedTaskWithComments = savedTasks.find(t => Array.isArray(t.comments) && t.comments.length > 0);
-                            console.log('🔍 DEBUG: What was actually saved to DB:', {
-                                savedTasksCount: savedTasks.length,
-                                savedTaskWithComments: savedTaskWithComments ? {
-                                    id: savedTaskWithComments.id,
-                                    title: savedTaskWithComments.title,
-                                    commentsCount: savedTaskWithComments.comments.length,
-                                    firstComment: savedTaskWithComments.comments[0]?.text?.substring(0, 50)
-                                } : null
-                            });
-                        } catch (parseError) {
-                            console.error('❌ DEBUG: Failed to parse saved tasksList:', parseError);
-                        }
-                    }
-                }
+                // tasksList JSON verification removed - tasks are now stored in Task table
                 
                 // Check if save was successful - API returns { data: { project: ... } }
                 const savedProject = apiResponse?.project || apiResponse?.data?.project;
@@ -2316,7 +2282,7 @@ function initializeProjectDetail() {
                             : documentSectionsArray;
                         return { 
                             ...p, 
-                            tasks: tasksToSave, 
+                            // tasks removed - tasks are now loaded from Task table via API
                             taskLists: taskListsToSave, 
                             customFieldDefinitions: customFieldDefinitionsToSave, 
                             documents: documentsToSave, 
@@ -2847,15 +2813,11 @@ function initializeProjectDetail() {
         skipNextSaveRef.current = true;
         setTasks(updatedTasks);
 
-        try {
-            await persistProjectData({ nextTasks: updatedTasks });
-        } catch (error) {
-            console.error('❌ Failed to persist project data after adding comment:', error);
-        } finally {
-            setTimeout(() => {
-                skipNextSaveRef.current = false;
-            }, 500);
-        }
+        // tasksList JSON write removed - comments are now stored in TaskComment table
+        // Comment persistence is handled by TaskComment API in TaskDetailModal
+        setTimeout(() => {
+            skipNextSaveRef.current = false;
+        }, 500);
 
         // Use hash-based routing format for email links (frontend uses hash routing)
         const projectLink = project ? `#/projects/${project.id}` : '#/projects';
@@ -4100,7 +4062,68 @@ function initializeProjectDetail() {
                 return t;
             });
             
-            await persistProjectData({ nextTasks: validatedTasksForSave });
+            // NEW: Save task via Task API (preferred method)
+            const taskToSave = validatedTasksForSave.find(t => t.id === updatedTaskData.id) || 
+                            validatedTasksForSave.find(t => (t.subtasks || []).some(st => st.id === updatedTaskData.id));
+            
+            if (taskToSave && window.DatabaseAPI?.makeRequest) {
+                try {
+                    const isSubtask = viewingTaskParent && taskToSave.id === updatedTaskData.id;
+                    const taskPayload = {
+                        projectId: project.id,
+                        title: taskToSave.title || '',
+                        description: taskToSave.description || '',
+                        status: taskToSave.status || 'todo',
+                        priority: taskToSave.priority || 'Medium',
+                        assignee: taskToSave.assignee || '',
+                        assigneeId: taskToSave.assigneeId || null,
+                        dueDate: taskToSave.dueDate || null,
+                        listId: taskToSave.listId || null,
+                        estimatedHours: taskToSave.estimatedHours || null,
+                        actualHours: taskToSave.actualHours || null,
+                        blockedBy: taskToSave.blockedBy || '',
+                        tags: taskToSave.tags || [],
+                        attachments: taskToSave.attachments || [],
+                        checklist: taskToSave.checklist || [],
+                        dependencies: taskToSave.dependencies || [],
+                        subscribers: taskToSave.subscribers || [],
+                        customFields: taskToSave.customFields || {},
+                        parentTaskId: isSubtask ? viewingTaskParent.id : null
+                    };
+
+                    if (isNewTask) {
+                        // Create new task
+                        const response = await window.DatabaseAPI.makeRequest('/tasks', {
+                            method: 'POST',
+                            body: JSON.stringify(taskPayload)
+                        });
+                        const savedTask = response?.data?.task || response?.task;
+                        if (savedTask?.id) {
+                            console.log('✅ Task created via Task API:', savedTask.id);
+                            // Update the task ID in local state
+                            const updatedTaskWithId = { ...taskToSave, id: savedTask.id };
+                            setTasks(prev => prev.map(t => 
+                                t.id === taskToSave.id ? updatedTaskWithId : t
+                            ));
+                        }
+                    } else {
+                        // Update existing task
+                        const response = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskToSave.id)}`, {
+                            method: 'PUT',
+                            body: JSON.stringify(taskPayload)
+                        });
+                        console.log('✅ Task updated via Task API:', taskToSave.id);
+                    }
+                } catch (taskApiError) {
+                    console.error('❌ Failed to save task via Task API:', taskApiError);
+                    // No fallback - Task API is the only method now
+                    throw taskApiError; // Re-throw to let caller handle the error
+                }
+            } else {
+                throw new Error('Task API not available');
+            }
+            
+            // tasksList JSON write removed - tasks are now stored in Task table via Task API above
             
             // Verify the save by checking the saved task again
             const verifyTask = validatedTasksForSave.find(t => t.id === updatedTaskData.id) || 
@@ -4141,7 +4164,22 @@ function initializeProjectDetail() {
 
     const handleDeleteTask = async (taskId) => {
         if (confirm('Delete this task and all its subtasks?')) {
-            // Filter out the task and all its subtasks
+            // NEW: Delete via Task API first (cascades to subtasks)
+            if (window.DatabaseAPI?.makeRequest) {
+                try {
+                    await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
+                        method: 'DELETE'
+                    });
+                    console.log('✅ Task deleted via Task API:', taskId);
+                } catch (taskApiError) {
+                    console.error('❌ Failed to delete task via Task API:', taskApiError);
+                    throw taskApiError; // Re-throw - Task API is the only method now
+                }
+            } else {
+                throw new Error('Task API not available');
+            }
+            
+            // Filter out the task and all its subtasks from local state
             const updatedTasks = tasks.filter(t => t.id !== taskId);
             
             // Update local state and ref
@@ -4151,26 +4189,32 @@ function initializeProjectDetail() {
             // Set flag to skip the useEffect save to prevent race condition
             skipNextSaveRef.current = true;
             
-            // Persist to database immediately
-            try {
-                await persistProjectData({ nextTasks: updatedTasks });
-                console.log('✅ Task deleted successfully');
-            } catch (error) {
-                console.error('❌ Failed to delete task:', error);
-                alert('Failed to delete task: ' + error.message);
-                // Revert on error - use the original tasks array
-                setTasks(tasks);
-                tasksRef.current = tasks;
-            } finally {
-                // Reset flag after a delay to allow any pending useEffect to complete
-                setTimeout(() => {
-                    skipNextSaveRef.current = false;
-                }, 500);
-            }
+            // tasksList JSON write removed - task deletion handled by Task API above
+            console.log('✅ Task deleted successfully');
+            
+            // Reset flag after a delay to allow any pending useEffect to complete
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 500);
         }
     };
 
     const handleDeleteSubtask = async (parentTaskId, subtaskId) => {
+        // NEW: Delete subtask via Task API first
+        if (window.DatabaseAPI?.makeRequest) {
+            try {
+                await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(subtaskId)}`, {
+                    method: 'DELETE'
+                });
+                console.log('✅ Subtask deleted via Task API:', subtaskId);
+            } catch (taskApiError) {
+                console.error('❌ Failed to delete subtask via Task API:', taskApiError);
+                throw taskApiError; // Re-throw - Task API is the only method now
+            }
+        } else {
+            throw new Error('Task API not available');
+        }
+        
         // Confirmation is handled by the modal UI, so we proceed directly
         const updatedTasks = tasks.map(t => {
             if (t.id === parentTaskId) {
@@ -4189,22 +4233,13 @@ function initializeProjectDetail() {
         // Set flag to skip the useEffect save to prevent race condition
         skipNextSaveRef.current = true;
         
-        // Persist to database immediately
-        try {
-            await persistProjectData({ nextTasks: updatedTasks });
-            console.log('✅ Subtask deleted successfully');
-        } catch (error) {
-            console.error('❌ Failed to delete subtask:', error);
-            alert('Failed to delete subtask: ' + error.message);
-            // Revert on error - use the original tasks array
-            setTasks(tasks);
-            tasksRef.current = tasks;
-        } finally {
-            // Reset flag after a delay to allow any pending useEffect to complete
-            setTimeout(() => {
-                skipNextSaveRef.current = false;
-            }, 500);
-        }
+        // tasksList JSON write removed - subtask deletion handled by Task API above
+        console.log('✅ Subtask deleted successfully');
+        
+        // Reset flag after a delay to allow any pending useEffect to complete
+        setTimeout(() => {
+            skipNextSaveRef.current = false;
+        }, 500);
     };
 
     // Document Collection Management
@@ -4615,12 +4650,26 @@ function initializeProjectDetail() {
             return updatedTasks;
         });
         
-        // Explicitly trigger save to ensure persistence (don't wait for debounce)
-        if (updatedTasks) {
+        // Save task status update via Task API
+        if (updatedTasks && window.DatabaseAPI?.makeRequest) {
             try {
-                await persistProjectData({ nextTasks: updatedTasks });
+                const taskToUpdate = isSubtask 
+                    ? updatedTasks.find(t => t.id === parentId)?.subtasks?.find(st => st.id === taskId)
+                    : updatedTasks.find(t => t.id === taskId);
+                
+                if (taskToUpdate) {
+                    await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            ...taskToUpdate,
+                            status: normalizedStatus,
+                            projectId: project?.id
+                        })
+                    });
+                    console.log('✅ Task status updated via Task API:', taskId);
+                }
             } catch (error) {
-                console.error('❌ Failed to save task status update:', error);
+                console.error('❌ Failed to save task status update via Task API:', error);
                 // Revert on error
                 setTasks(prevTasks => {
                     if (isSubtask && parentId) {

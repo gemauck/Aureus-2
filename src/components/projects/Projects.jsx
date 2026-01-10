@@ -2551,10 +2551,15 @@ const Projects = () => {
                     assignedTo: projectData.assignedTo || '',
                     budget: 0,
                     priority: 'Medium',
-                    taskLists: JSON.stringify([{ id: 1, name: 'To Do', color: 'blue' }]),
-                    tasksList: JSON.stringify([]),
-                    customFieldDefinitions: JSON.stringify([]),
-                    team: JSON.stringify([]),
+                    // JSON fields removed - data now stored in separate tables
+                    // Frontend should use dedicated APIs to create these:
+                    // - taskLists → /api/project-task-lists
+                    // - customFieldDefinitions → /api/project-custom-fields
+                    // - team → /api/project-team-members
+                    tasksList: '[]', // Legacy - deprecated, use Task table
+                    taskLists: '[]', // Legacy - deprecated, use ProjectTaskList table
+                    customFieldDefinitions: '[]', // Legacy - deprecated, use ProjectCustomFieldDefinition table
+                    team: '[]', // Legacy - deprecated, use ProjectTeamMember table
                     notes: ''
                 };
                 
