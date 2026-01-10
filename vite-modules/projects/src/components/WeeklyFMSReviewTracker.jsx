@@ -420,11 +420,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const componentIdRef = useRef(`weeklyFMS_${Date.now()}_${Math.random()}`);
     
     const loadFromProjectProp = useCallback(function loadFromProjectPropFn() {
-        // Set ref for polling when function is called
+        // Store in ref and window for access (redundancy with useLayoutEffect)
         loadFromProjectPropRef.current = loadFromProjectPropFn;
-        
-        // Also store in window for event-based access (avoids TDZ)
-        // CRITICAL: Store immediately so it's available for first call
         const componentId = componentIdRef.current;
         try {
             window[`__loadFromProjectProp_${componentId}`] = loadFromProjectPropFn;
@@ -556,6 +553,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             setIsLoading(false);
         }
     }, [project?.weeklyFMSReviewSections, project?.documentSections, project?.id]);
+    
+    // CRITICAL: Store function in ref and window storage immediately after creation to avoid TDZ
+    // This ensures the function is available even before first call
+    useLayoutEffect(() => {
+        loadFromProjectPropRef.current = loadFromProjectProp;
+        const componentId = componentIdRef.current;
+        try {
+            window[`__loadFromProjectProp_${componentId}`] = loadFromProjectProp;
+        } catch (e) {
+            // Silently fail
+        }
+    }, [loadFromProjectProp]);
     
     const refreshFromDatabase = useCallback(async function refreshFromDatabaseFn(forceUpdate = false) {
         // Set ref for polling when function is called
@@ -749,7 +758,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.id]);
     
-    // Note: Functions store themselves in window storage when called (self-registration)
+    // CRITICAL: Store refreshFromDatabase function in ref and window storage immediately after creation to avoid TDZ
+    useLayoutEffect(() => {
+        refreshFromDatabaseRef.current = refreshFromDatabase;
+        const componentId = componentIdRef.current;
+        try {
+            window[`__refreshFromDatabase_${componentId}`] = refreshFromDatabase;
+        } catch (e) {
+            // Silently fail
+        }
+    }, [refreshFromDatabase]);
+    
+    // Note: Functions also store themselves in window storage when called (self-registration for redundancy)
     // We cannot initialize window storage here without referencing functions (causes TDZ)
     // Use useLayoutEffect which runs synchronously after DOM mutations
     // Functions are defined at this point, so we can safely access them via closure

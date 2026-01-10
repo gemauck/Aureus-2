@@ -376,11 +376,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const loadFromProjectPropRef = useRef(null);
     const refreshFromDatabaseRef = useRef(null);
     
-    useEffect(() => {
-        loadFromProjectPropRef.current = loadFromProjectProp;
-        refreshFromDatabaseRef.current = refreshFromDatabase;
-    }, [loadFromProjectProp, refreshFromDatabase]);
-    
     // Templates state
     const [templates, setTemplates] = useState([]);
 
@@ -743,6 +738,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             console.error('❌ Error fetching fresh project data:', error);
         }
     }, [project?.id]);
+    
+    // Store callbacks in refs to prevent unnecessary re-renders
+    // This must be after both functions are declared to avoid temporal dead zone error
+    useEffect(() => {
+        loadFromProjectPropRef.current = loadFromProjectProp;
+        refreshFromDatabaseRef.current = refreshFromDatabase;
+    }, [loadFromProjectProp, refreshFromDatabase]);
     
     // Track previous project data to detect actual changes
     const previousProjectDataRef = useRef(null);
