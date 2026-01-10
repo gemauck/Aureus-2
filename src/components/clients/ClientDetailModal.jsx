@@ -9,58 +9,44 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
     const mergeUniqueById = (items = [], extras = []) => {
-        const mapById = new Map();
-        const mapByKey = new Map(); // Also deduplicate by name+email combination
+        // CRITICAL: Deduplicate by name+email FIRST, then by ID
+        // This prevents duplicates with same name/email but different IDs
+        const mapByKey = new Map(); // Primary: deduplicate by name+email
         
         [...(items || []), ...(extras || [])].forEach(item => {
             if (!item) return;
             
-            // Create a unique key from name+email for deduplication
+            // Create a unique key from name+email for primary deduplication
             const name = String(item.name || '').toLowerCase().trim();
             const email = String(item.email || '').toLowerCase().trim();
-            const key = `${name}::${email}`;
+            const key = name || email ? `${name}::${email}` : null;
             
-            // First check by ID
-            if (item.id) {
-                const id = String(item.id);
-                if (mapById.has(id)) {
-                    // Same ID - keep the one with more data
-                    const existing = mapById.get(id);
+            if (key) {
+                // Primary deduplication by name+email
+                if (mapByKey.has(key)) {
+                    // Same name+email already exists - keep the one with more data
+                    const existing = mapByKey.get(key);
                     const existingFieldCount = Object.values(existing).filter(v => v !== null && v !== undefined && v !== '').length;
                     const newFieldCount = Object.values(item).filter(v => v !== null && v !== undefined && v !== '').length;
+                    
+                    // If new item has more data, replace; otherwise keep existing
                     if (newFieldCount > existingFieldCount) {
-                        mapById.set(id, item);
-                        if (key) mapByKey.set(key, item);
+                        mapByKey.set(key, item);
                     }
                 } else {
-                    mapById.set(id, item);
-                    if (key) mapByKey.set(key, item);
-                }
-            } else if (key && !mapByKey.has(key)) {
-                // No ID but has name+email - deduplicate by key
-                mapByKey.set(key, item);
-            } else if (key && mapByKey.has(key)) {
-                // Duplicate name+email - keep the one with more data
-                const existing = mapByKey.get(key);
-                const existingFieldCount = Object.values(existing).filter(v => v !== null && v !== undefined && v !== '').length;
-                const newFieldCount = Object.values(item).filter(v => v !== null && v !== undefined && v !== '').length;
-                if (newFieldCount > existingFieldCount) {
+                    // First occurrence of this name+email combination
                     mapByKey.set(key, item);
                 }
+            } else if (item.id) {
+                // No name/email but has ID - use ID as fallback key
+                const id = String(item.id);
+                if (!mapByKey.has(id)) {
+                    mapByKey.set(id, item);
+                }
             }
         });
         
-        // Merge both maps - prioritize items with IDs
-        const finalMap = new Map();
-        mapById.forEach((item, id) => finalMap.set(id, item));
-        mapByKey.forEach((item, key) => {
-            if (!item.id || !finalMap.has(String(item.id))) {
-                // Item has no ID or ID not in final map, use key as identifier
-                finalMap.set(key, item);
-            }
-        });
-        
-        return Array.from(finalMap.values());
+        return Array.from(mapByKey.values());
     };
     
     const [formData, setFormData] = useState(() => {
