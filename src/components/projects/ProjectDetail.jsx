@@ -4099,12 +4099,82 @@ function initializeProjectDetail() {
                         });
                         const savedTask = response?.data?.task || response?.task;
                         if (savedTask?.id) {
-                            console.log('✅ Task created via Task API:', savedTask.id);
-                            // Update the task ID in local state
-                            const updatedTaskWithId = { ...taskToSave, id: savedTask.id };
-                            setTasks(prev => prev.map(t => 
-                                t.id === taskToSave.id ? updatedTaskWithId : t
-                            ));
+                            console.log('✅ Task created via Task API:', savedTask.id, isSubtask ? '(subtask)' : '(top-level)');
+                            // Replace temporary task (with Date.now() ID) with saved task (with real ID) in local state
+                            // The saved task from API has all the correct fields including proper structure
+                            const savedTaskFormatted = {
+                                ...savedTask,
+                                comments: savedTask.comments || [],
+                                subtasks: savedTask.subtasks || [],
+                                tags: savedTask.tags || [],
+                                attachments: savedTask.attachments || [],
+                                checklist: savedTask.checklist || [],
+                                dependencies: savedTask.dependencies || [],
+                                subscribers: savedTask.subscribers || [],
+                                customFields: savedTask.customFields || {}
+                            };
+                            
+                            const tempTaskId = taskToSave.id; // This is the temporary Date.now() ID
+                            
+                            if (isSubtask && viewingTaskParent) {
+                                // Handle subtask: update within parent task's subtasks array
+                                setTasks(prev => prev.map(t => {
+                                    if (t.id === viewingTaskParent.id) {
+                                        const updatedSubtasks = (t.subtasks || []).map(st => 
+                                            st.id === tempTaskId ? savedTaskFormatted : st
+                                        );
+                                        // If subtask wasn't found, add it
+                                        if (!(t.subtasks || []).find(st => st.id === tempTaskId)) {
+                                            console.warn('⚠️ Temporary subtask not found in parent, adding saved subtask');
+                                            updatedSubtasks.push(savedTaskFormatted);
+                                        }
+                                        return {
+                                            ...t,
+                                            subtasks: updatedSubtasks
+                                        };
+                                    }
+                                    return t;
+                                }));
+                                // Also update tasksRef
+                                tasksRef.current = tasksRef.current.map(t => {
+                                    if (t.id === viewingTaskParent.id) {
+                                        const updatedSubtasks = (t.subtasks || []).map(st => 
+                                            st.id === tempTaskId ? savedTaskFormatted : st
+                                        );
+                                        if (!(t.subtasks || []).find(st => st.id === tempTaskId)) {
+                                            updatedSubtasks.push(savedTaskFormatted);
+                                        }
+                                        return {
+                                            ...t,
+                                            subtasks: updatedSubtasks
+                                        };
+                                    }
+                                    return t;
+                                });
+                            } else {
+                                // Handle top-level task: update in main tasks array
+                                setTasks(prev => {
+                                    const updated = prev.map(t => 
+                                        t.id === tempTaskId ? savedTaskFormatted : t
+                                    );
+                                    // If task wasn't found (shouldn't happen), add it anyway
+                                    if (!prev.find(t => t.id === tempTaskId)) {
+                                        console.warn('⚠️ Temporary task not found in state, adding saved task');
+                                        updated.push(savedTaskFormatted);
+                                    }
+                                    return updated;
+                                });
+                                // Also update tasksRef immediately
+                                tasksRef.current = tasksRef.current.map(t => 
+                                    t.id === tempTaskId ? savedTaskFormatted : t
+                                );
+                                if (!tasksRef.current.find(t => t.id === tempTaskId)) {
+                                    tasksRef.current.push(savedTaskFormatted);
+                                }
+                            }
+                        } else {
+                            console.error('❌ Task creation failed: No task ID returned from API');
+                            throw new Error('Task creation failed: No task ID returned');
                         }
                     } else {
                         // Update existing task
@@ -4164,23 +4234,87 @@ function initializeProjectDetail() {
 
     const handleDeleteTask = async (taskId) => {
         if (confirm('Delete this task and all its subtasks?')) {
-            // NEW: Delete via Task API first (cascades to subtasks)
-            if (window.DatabaseAPI?.makeRequest) {
-                try {
+            try {
+                // NEW: Delete via Task API first (cascades to subtasks)
+                if (window.DatabaseAPI?.makeRequest) {
                     await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
                         method: 'DELETE'
                     });
                     console.log('✅ Task deleted via Task API:', taskId);
-                } catch (taskApiError) {
-                    console.error('❌ Failed to delete task via Task API:', taskApiError);
-                    throw taskApiError; // Re-throw - Task API is the only method now
+                } else {
+                    throw new Error('Task API not available');
                 }
+                
+                // Filter out the task and all its subtasks from local state
+                const updatedTasks = tasks.filter(t => t.id !== taskId);
+                
+                // Update local state and ref
+                setTasks(updatedTasks);
+                tasksRef.current = updatedTasks;
+                
+                // Set flag to skip the useEffect save to prevent race condition
+                skipNextSaveRef.current = true;
+                
+                // Reload tasks from server to ensure consistency
+                if (project?.id && window.DatabaseAPI?.makeRequest) {
+                    try {
+                        const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
+                            method: 'GET'
+                        });
+                        const fetchedTasks = tasksResponse?.data?.tasks || [];
+                        if (Array.isArray(fetchedTasks) && fetchedTasks.length >= 0) {
+                            console.log('✅ Refreshed tasks from server after deletion. Task count:', fetchedTasks.length);
+                            setTasks(fetchedTasks);
+                            tasksRef.current = fetchedTasks;
+                        }
+                    } catch (refreshError) {
+                        console.warn('⚠️ Failed to refresh tasks after deletion, using local state:', refreshError);
+                        // Continue with local state update - deletion should still work
+                    }
+                }
+                
+                // tasksList JSON write removed - task deletion handled by Task API above
+                console.log('✅ Task deleted successfully');
+                
+                // Close task modal if the deleted task is currently being viewed
+                if (viewingTask?.id === taskId) {
+                    handleCloseTaskModal();
+                }
+            } catch (taskApiError) {
+                console.error('❌ Failed to delete task via Task API:', taskApiError);
+                alert('Failed to delete task. Please try again.');
+                throw taskApiError;
+            } finally {
+                // Reset flag after a delay to allow any pending useEffect to complete
+                setTimeout(() => {
+                    skipNextSaveRef.current = false;
+                }, 500);
+            }
+        }
+    };
+
+    const handleDeleteSubtask = async (parentTaskId, subtaskId) => {
+        try {
+            // NEW: Delete subtask via Task API first
+            if (window.DatabaseAPI?.makeRequest) {
+                await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(subtaskId)}`, {
+                    method: 'DELETE'
+                });
+                console.log('✅ Subtask deleted via Task API:', subtaskId);
             } else {
                 throw new Error('Task API not available');
             }
             
-            // Filter out the task and all its subtasks from local state
-            const updatedTasks = tasks.filter(t => t.id !== taskId);
+            // Confirmation is handled by the modal UI, so we proceed directly
+            const updatedTasks = tasks.map(t => {
+                if (t.id === parentTaskId) {
+                    return {
+                        ...t,
+                        subtasks: (t.subtasks || []).filter(st => st.id !== subtaskId)
+                    };
+                }
+                return t;
+            });
             
             // Update local state and ref
             setTasks(updatedTasks);
@@ -4189,57 +4323,36 @@ function initializeProjectDetail() {
             // Set flag to skip the useEffect save to prevent race condition
             skipNextSaveRef.current = true;
             
-            // tasksList JSON write removed - task deletion handled by Task API above
-            console.log('✅ Task deleted successfully');
+            // Reload tasks from server to ensure consistency (subtasks will be included in parent task's subtasks array)
+            if (project?.id && window.DatabaseAPI?.makeRequest) {
+                try {
+                    const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
+                        method: 'GET'
+                    });
+                    const fetchedTasks = tasksResponse?.data?.tasks || [];
+                    if (Array.isArray(fetchedTasks) && fetchedTasks.length >= 0) {
+                        console.log('✅ Refreshed tasks from server after subtask deletion. Task count:', fetchedTasks.length);
+                        setTasks(fetchedTasks);
+                        tasksRef.current = fetchedTasks;
+                    }
+                } catch (refreshError) {
+                    console.warn('⚠️ Failed to refresh tasks after subtask deletion, using local state:', refreshError);
+                    // Continue with local state update - deletion should still work
+                }
+            }
             
+            // tasksList JSON write removed - subtask deletion handled by Task API above
+            console.log('✅ Subtask deleted successfully');
+        } catch (taskApiError) {
+            console.error('❌ Failed to delete subtask via Task API:', taskApiError);
+            alert('Failed to delete subtask. Please try again.');
+            throw taskApiError;
+        } finally {
             // Reset flag after a delay to allow any pending useEffect to complete
             setTimeout(() => {
                 skipNextSaveRef.current = false;
             }, 500);
         }
-    };
-
-    const handleDeleteSubtask = async (parentTaskId, subtaskId) => {
-        // NEW: Delete subtask via Task API first
-        if (window.DatabaseAPI?.makeRequest) {
-            try {
-                await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(subtaskId)}`, {
-                    method: 'DELETE'
-                });
-                console.log('✅ Subtask deleted via Task API:', subtaskId);
-            } catch (taskApiError) {
-                console.error('❌ Failed to delete subtask via Task API:', taskApiError);
-                throw taskApiError; // Re-throw - Task API is the only method now
-            }
-        } else {
-            throw new Error('Task API not available');
-        }
-        
-        // Confirmation is handled by the modal UI, so we proceed directly
-        const updatedTasks = tasks.map(t => {
-            if (t.id === parentTaskId) {
-                return {
-                    ...t,
-                    subtasks: (t.subtasks || []).filter(st => st.id !== subtaskId)
-                };
-            }
-            return t;
-        });
-        
-        // Update local state and ref
-        setTasks(updatedTasks);
-        tasksRef.current = updatedTasks;
-        
-        // Set flag to skip the useEffect save to prevent race condition
-        skipNextSaveRef.current = true;
-        
-        // tasksList JSON write removed - subtask deletion handled by Task API above
-        console.log('✅ Subtask deleted successfully');
-        
-        // Reset flag after a delay to allow any pending useEffect to complete
-        setTimeout(() => {
-            skipNextSaveRef.current = false;
-        }, 500);
     };
 
     // Document Collection Management
