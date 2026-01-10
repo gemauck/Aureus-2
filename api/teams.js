@@ -95,8 +95,11 @@ const getOwnerId = (req) => {
 async function handler(req, res) {
   try {
     // Parse URL path to determine route
+    // The server already strips /api prefix, so req.url is /teams or /teams/...
     const urlPath = req.url.split('?')[0].split('#')[0]
-    const pathSegments = urlPath.replace(/^\/api\/teams\/?/, '').split('/').filter(Boolean)
+    // Handle both /api/teams and /teams (in case /api wasn't stripped)
+    const cleanPath = urlPath.replace(/^\/api\/teams\/?/, '').replace(/^\/teams\/?/, '')
+    const pathSegments = cleanPath.split('/').filter(Boolean)
     
     const subResource = pathSegments[0] // documents, workflows, checklists, notices, tasks, executions
     const resourceId = pathSegments[1] // ID for sub-resources or team ID
