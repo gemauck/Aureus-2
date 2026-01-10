@@ -675,6 +675,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             loadJobCards();
         }
     }, [activeTab, client?.id, loadJobCards]);
+    
+    // Ensure sites are loaded when Sites tab becomes active
+    useEffect(() => {
+        if (activeTab === 'sites' && client?.id) {
+            // Check if sites exist in formData - if not, load from database
+            const currentSites = formData?.sites || [];
+            const hasSites = currentSites.length > 0 || optimisticSites.length > 0;
+            
+            if (!hasSites && !isLoadingSitesRef.current) {
+                console.log('📡 Sites tab active but no sites found - loading from database');
+                loadSitesFromDatabase(client.id);
+            }
+        }
+    }, [activeTab, client?.id, formData?.sites, optimisticSites]);
 
     // Handle job card click - navigate to full job card detail page
     const handleJobCardClick = (jobCard) => {
@@ -825,11 +839,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setFormData(parsedClient);
             }
             
-            // CRITICAL FIX: Don't reload contacts/sites if they're already in the client object
-            // The API already returns normalized data via parseClientJsonFields
-            // Loading again causes duplicates
+            // CRITICAL FIX: Always load sites from database to ensure we have the latest data
+            // Even if sites exist in the client object, they might be stale or incomplete
+            // The loadSitesFromDatabase function has merge logic to prevent duplicates
             const hasContactsInClient = parsedClient.contacts && Array.isArray(parsedClient.contacts) && parsedClient.contacts.length > 0;
-            const hasSitesInClient = parsedClient.sites && Array.isArray(parsedClient.sites) && parsedClient.sites.length > 0;
             
             // Load data from database ONLY if client changed or form hasn't been edited
             // AND only if data is missing from the client object
@@ -854,28 +867,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     console.log('✅ Contacts already in client object, skipping loadContactsFromDatabase to prevent duplicates');
                 }
                 
-                // Only load sites if not already in client object
-                // FIXED: Also check if sites array exists (even if empty) to avoid unnecessary API calls
-                if (!hasSitesInClient && (!parsedClient.sites || !Array.isArray(parsedClient.sites))) {
-                    loadPromises.push(loadSitesFromDatabase(client.id));
-                } else {
-                    console.log('✅ Sites already in client object, skipping loadSitesFromDatabase to prevent duplicates');
-                }
+                // CRITICAL FIX: Always load sites from database to ensure we have the latest data from the ClientSite table
+                // The loadSitesFromDatabase function merges with existing sites, so duplicates are prevented
+                // This fixes the issue where sites exist in the database but don't load because the client object has an empty sites array
+                loadPromises.push(loadSitesFromDatabase(client.id));
+                console.log('📡 Loading sites from database to ensure latest data (merge logic prevents duplicates)');
                 
-                // CRITICAL FIX: Skip loadClientFromDatabase if contacts are already present
-                // When contacts are present, it means the client object came from the API with all data parsed
-                // Calling loadClientFromDatabase again causes a reload/re-render because:
-                // 1. The API's parseClientJsonFields formats contacts differently (cross-populates phone/mobile)
-                // 2. Even though we preserve existing contacts, the setFormData call triggers a re-render
-                // 3. This causes the contact to "reload with another version" as reported
-                // The initial client object from API already has contacts, comments, followUps, etc. parsed
-                // So we don't need to reload unless contacts are missing
-                if (!hasContactsInClient) {
-                    // Only load if contacts are missing - this means we need to fetch everything
-                    loadPromises.push(loadClientFromDatabase(client.id));
-                } else {
-                    console.log('✅ Skipping loadClientFromDatabase - contacts already present, all data already loaded');
-                }
+                // CRITICAL FIX: Always load client data from database to ensure we have the latest:
+                // - comments (from ClientComment table)
+                // - followUps (from ClientFollowUp table - calendar items)
+                // - activityLog (from JSON field but may have new entries)
+                // - contracts (from ClientContract table)
+                // - proposals (from ClientProposal table)
+                // - services (from ClientService table)
+                // - notes (from Client.notes field)
+                // The loadClientFromDatabase function specifically preserves contacts and sites to prevent duplicates
+                // but updates all other fields with fresh data from the database
+                loadPromises.push(loadClientFromDatabase(client.id));
+                console.log('📡 Loading client data (comments, followUps, activityLog, contracts, proposals, services, notes) from database to ensure latest data');
                 
                 // Execute all loads in parallel
                 Promise.all(loadPromises).catch(error => {
@@ -942,12 +951,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         sites: Array.isArray(dbClient.sites) ? dbClient.sites : (typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : []),
                         contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (Array.isArray(dbClient.contracts) ? dbClient.contracts : []),
                         activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (Array.isArray(dbClient.activityLog) ? dbClient.activityLog : []),
+                        services: typeof dbClient.services === 'string' ? JSON.parse(dbClient.services || '[]') : (Array.isArray(dbClient.services) ? dbClient.services : []),
                         billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (typeof dbClient.billingTerms === 'object' ? dbClient.billingTerms : {})
                     };
                     
                     
                     // Update formData with the fresh data from database
-                    // CRITICAL: Only update comments, followUps, activityLog, contracts, proposals, services
+                    // CRITICAL: Update comments, followUps, activityLog, contracts, proposals, services, notes
                     // DO NOT update contacts or sites - those are managed separately via their own API endpoints
                     // Updating them here would cause duplicates since they're already loaded from normalized tables
                     setFormData(prevFormData => {
@@ -964,13 +974,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         
                         const updated = {
                             ...prevFormData,
+                            // Update these fields with latest data from database
                             comments: mergedComments,
                             followUps: mergedFollowUps,
                             activityLog: parsedClient.activityLog || prevFormData?.activityLog || [],
                             contracts: mergedContracts,
                             proposals: mergedProposals,
                             services: mergedServices,
-                            // Explicitly preserve contacts and sites - NEVER update these here
+                            notes: parsedClient.notes || prevFormData?.notes || '', // Update notes field with latest from database
+                            // Explicitly preserve contacts and sites - NEVER update these here (loaded separately)
                             contacts: existingContacts,
                             sites: existingSites
                         };
@@ -1206,11 +1218,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingSitesRef.current) {
-                return;
-            }
-            
-            // Skip loading if form has been edited to preserve optimistic updates
-            if (hasUserEditedForm.current) {
+                console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
                 return;
             }
             
@@ -1222,10 +1230,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             const token = window.storage?.getToken?.();
             if (!token) {
+                console.log('⏭️ Skipping loadSitesFromDatabase - no token');
                 return;
             }
             
             isLoadingSitesRef.current = true;
+            console.log(`📡 Loading sites from database for client: ${clientId}`);
             
             // FIXED: Add error handling for 500 errors
             let response;
@@ -1241,24 +1251,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
             
             const sites = response?.data?.sites || [];
+            console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
             
             // CRITICAL FIX: Merge with existing sites to prevent duplicates
-            // The client object may already have sites from parseClientJsonFields
+            // Always merge - even if form has been edited, we want to add new sites from DB
             setFormData(prevFormData => {
                 // Get existing sites from formData
                 const existingSites = prevFormData?.sites || [];
-                // Merge: API sites + existing sites + optimistic sites
-                const mergedSites = mergeUniqueById(sites, [...existingSites, ...optimisticSites]);
+                // Merge: API sites (from DB) + existing sites + optimistic sites
+                // Prioritize API sites (most up-to-date) but keep optimistic and existing to avoid losing user changes
+                const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
                 const updated = {
                     ...prevFormData,
                     sites: mergedSites
                 };
                 formDataRef.current = updated;
+                console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
                 return updated;
             });
 
-            // Remove optimistic sites that now exist in database
-            setOptimisticSites(prev => prev.filter(opt => !sites.some(db => db.id === opt.id)));
+            // Remove optimistic sites that now exist in database (they're confirmed saved)
+            setOptimisticSites(prev => {
+                const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
+                if (filtered.length !== prev.length) {
+                    console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
+                }
+                return filtered;
+            });
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
         } finally {
@@ -2879,9 +2898,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         const next = isSelected
                                                             ? current.filter(s => s !== option)
                                                             : [...current, option];
-                                                        setFormData({ ...formData, services: next });
+                                                        const updated = { ...formData, services: next };
+                                                        // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                        formDataRef.current = updated;
+                                                        setFormData(updated);
                                                         hasUserEditedForm.current = true;
                                                         userEditedFieldsRef.current.add('services'); // Track that user has edited services
+                                                        if (onEditingChange) onEditingChange(true);
                                                     }}
                                                     className={`px-3 py-1.5 text-xs rounded-full border transition ${
                                                         isSelected
