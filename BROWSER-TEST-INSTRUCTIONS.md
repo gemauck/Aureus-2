@@ -1,112 +1,223 @@
-# Browser Testing Instructions for Comment Table Implementation
+# Browser Testing Instructions for Projects Functionality
 
-## ✅ Implementation Complete
+## Quick Start
 
-The separate `TaskComment` table has been successfully implemented. Here's how to test it in the browser:
+1. **Navigate to**: https://abcoafrica.co.za
+2. **Log in** with your credentials
+3. **Open Browser Console** (F12 or Right-click → Inspect → Console)
+4. **Copy the test script** from `test-projects-browser.js`
+5. **Paste into console** and press Enter
 
-## Testing Steps
+## Manual Testing Steps
 
-### 1. Start the Server (if not already running)
-```bash
-npm start
+### 1. Create a New Project
+
+1. Navigate to **Projects** section
+2. Click **"New Project"** or **"+"** button
+3. Fill in project details:
+   - Name: `[TEST] Browser Test Project`
+   - Description: `Testing project creation and endpoints`
+   - Status: `Planning`
+   - Priority: `High`
+   - Type: `General`
+4. Click **"Save"** or **"Create"**
+5. **Verify**: Project appears in projects list
+6. **Check Console**: No errors should appear
+
+### 2. View Project Details
+
+1. Click on the newly created project
+2. **Verify**:
+   - Project details load correctly
+   - Tasks section is visible (may be empty initially)
+   - No console errors
+
+### 3. Create a Task
+
+1. In project detail view, click **"Add Task"** or **"New Task"**
+2. Fill in task details:
+   - Title: `[TEST] Browser Test Task`
+   - Description: `Testing task creation`
+   - Status: `To Do`
+   - Priority: `High`
+3. Click **"Save"**
+4. **Verify**:
+   - Task appears in task list
+   - Task persists after page refresh
+   - No console errors
+
+### 4. Add Comment to Task
+
+1. Click on the task to open task detail modal
+2. Navigate to **"Comments"** tab
+3. Type a comment: `[TEST] Browser test comment`
+4. Click **"Add Comment"** or **"Post"**
+5. **Verify**:
+   - Comment appears immediately
+   - Comment persists after closing and reopening modal
+   - Comment persists after page refresh
+   - No console errors
+
+### 5. Update Task
+
+1. Open task detail modal
+2. Change task status to `In Progress`
+3. Change priority to `Medium`
+4. Update description
+5. Click **"Save"**
+6. **Verify**:
+   - Changes are saved
+   - Changes persist after refresh
+   - No console errors
+
+### 6. Update Project
+
+1. In project detail view, click **"Edit"** or modify fields directly
+2. Change description to `Updated description from browser test`
+3. Change status to `In Progress`
+4. Click **"Save"**
+5. **Verify**:
+   - Changes are saved
+   - Changes persist after refresh
+   - No console errors
+
+### 7. Test Data Persistence
+
+1. Create a project with tasks and comments
+2. **Close the browser tab**
+3. **Reopen browser** and navigate to https://abcoafrica.co.za
+4. **Log in** again
+5. Navigate to **Projects** section
+6. **Verify**:
+   - Project still exists
+   - Tasks are still present
+   - Comments are still present
+   - All data persisted correctly
+
+### 8. Delete Task
+
+1. Open task detail modal
+2. Click **"Delete"** or **"Remove"** button
+3. Confirm deletion
+4. **Verify**:
+   - Task is removed from list
+   - Task comments are also deleted (cascade)
+   - No console errors
+
+### 9. Delete Project
+
+1. In project detail view, click **"Delete Project"** or **"Remove"**
+2. Confirm deletion
+3. **Verify**:
+   - Project is removed from list
+   - All tasks are deleted (cascade)
+   - All comments are deleted (cascade)
+   - No console errors
+
+## Automated Browser Test Script
+
+For automated testing, use the script in `test-projects-browser.js`:
+
+1. Log in to the application
+2. Open browser console (F12)
+3. Copy the entire contents of `test-projects-browser.js`
+4. Paste into console
+5. Press Enter
+6. Review test results
+
+The script will:
+- ✅ Test all CRUD operations
+- ✅ Verify data persistence
+- ✅ Test cascade deletion
+- ✅ Clean up test data automatically
+
+## What to Check
+
+### Console Messages
+- ✅ No red error messages
+- ✅ No 500 or 400 HTTP errors
+- ✅ API calls return 200 status codes
+- ✅ No "Failed to load resource" errors
+
+### Network Tab
+1. Open **Network** tab in DevTools
+2. Filter by **XHR** or **Fetch**
+3. Check API calls:
+   - `/api/projects` - Should return 200
+   - `/api/projects/[id]` - Should return 200
+   - `/api/tasks` - Should return 200
+   - `/api/task-comments` - Should return 200
+4. Verify request/response payloads are correct
+
+### Database Verification (Optional)
+
+To verify data is in tables (not JSON), you can check:
+
+```sql
+-- Check tasks in Task table
+SELECT id, title, status, "projectId" FROM "Task" WHERE title LIKE '%[TEST]%';
+
+-- Check comments in TaskComment table
+SELECT id, text, "taskId", "projectId" FROM "TaskComment" WHERE text LIKE '%[TEST]%';
+
+-- Verify JSON fields are empty
+SELECT id, name, "tasksList", "taskLists", "customFieldDefinitions", "team", "documents", "comments", "activityLog" 
+FROM "Project" 
+WHERE name LIKE '%[TEST]%';
 ```
 
-### 2. Log In to the Application
-- Navigate to http://localhost:3000
-- Log in with your credentials
+All JSON fields should be `'[]'` or empty strings.
 
-### 3. Navigate to a Project
-- Go to Projects section
-- Open any project (e.g., "Samancor DCR FMS")
+## Expected Results
 
-### 4. Test Comment Functionality
+### ✅ Success Indicators
+- All operations complete without errors
+- Data persists after page refresh
+- Tasks and comments load correctly
+- Cascade deletion works
+- No console errors
+- API calls return 200 status codes
 
-#### Test 1: View Existing Comments
-- Open a task that has comments
-- Click on the task to open the Task Detail Modal
-- Go to the "Comments" tab
-- **Expected**: You should see comments that were migrated from JSON (4 comments total in database)
+### ❌ Failure Indicators
+- Console errors
+- 500/400 HTTP errors
+- Data not persisting
+- Tasks/comments not loading
+- Cascade deletion not working
+- JSON fields being written to (check database)
 
-#### Test 2: Add a New Comment
-- In the Comments tab, type a new comment
-- Click "Add Comment" or press Enter
-- **Expected**: 
-  - Comment should appear immediately in the UI
-  - Comment should be saved to the `TaskComment` table (not JSON)
-  - Console should show: "✅ TaskDetailModal: Comment saved to TaskComment table"
+## Troubleshooting
 
-#### Test 3: Verify Persistence
-- Refresh the page (F5)
-- Navigate back to the same task
-- **Expected**: The comment you just added should still be there
+### If tests fail:
+1. Check browser console for errors
+2. Check Network tab for failed API calls
+3. Verify you're logged in
+4. Check server logs: `ssh root@165.22.127.196 'pm2 logs abcotronics-erp'`
+5. Verify database connection
+6. Check Prisma client is up to date
 
-#### Test 4: Check Database
-Run this to verify the comment is in the database:
-```bash
-node -e "const { prisma } = require('./api/_lib/prisma.js'); (async () => { const count = await prisma.taskComment.count(); console.log('Total comments in TaskComment table:', count); await prisma.\$disconnect(); })();"
-```
+### Common Issues:
+- **401 Unauthorized**: Not logged in or session expired
+- **500 Server Error**: Check server logs
+- **Data not persisting**: Check database connection
+- **Tasks not loading**: Check Task API endpoint
 
-#### Test 5: Concurrent Comments (Optional)
-- Open the same task in two browser windows/tabs
-- Add a comment in each window
-- **Expected**: Both comments should be saved without overwriting each other
+## Test Checklist
 
-## What to Look For
+- [ ] Create project
+- [ ] View project details
+- [ ] Create task
+- [ ] Add comment to task
+- [ ] Update task
+- [ ] Update project
+- [ ] Refresh page and verify data persistence
+- [ ] Delete task (verify cascade)
+- [ ] Delete project (verify cascade)
+- [ ] Run automated browser test script
+- [ ] Verify no JSON writes in database
+- [ ] Check console for errors
+- [ ] Check Network tab for API errors
 
-### ✅ Success Indicators:
-1. Comments appear immediately after adding
-2. Comments persist after page refresh
-3. Console shows: "✅ TaskDetailModal: Comment saved to TaskComment table"
-4. No errors in browser console
-5. Comments are visible in the database
+---
 
-### ❌ Potential Issues:
-1. **Comment doesn't appear**: Check browser console for errors
-2. **Comment disappears after refresh**: Check if API call is successful
-3. **Error saving comment**: Check network tab for failed API requests
-
-## Console Logs to Watch
-
-When adding a comment, you should see:
-```
-💾 TaskDetailModal: Saving comment to TaskComment table
-✅ TaskDetailModal: Comment saved to TaskComment table
-```
-
-If there's an error, you'll see:
-```
-❌ TaskDetailModal: Failed to save comment to API, falling back to task update
-```
-
-## API Endpoints Being Used
-
-- `GET /api/task-comments?taskId=XXX&projectId=XXX` - Load comments
-- `POST /api/task-comments` - Create new comment
-
-## Database Verification
-
-To check comments directly in the database:
-```bash
-node test-comment-api.js
-```
-
-Or query directly:
-```bash
-node -e "const { prisma } = require('./api/_lib/prisma.js'); (async () => { const comments = await prisma.taskComment.findMany({ take: 10, orderBy: { createdAt: 'desc' } }); console.log('Recent comments:', JSON.stringify(comments, null, 2)); await prisma.\$disconnect(); })();"
-```
-
-## Current Status
-
-- ✅ Database schema: TaskComment table created
-- ✅ API endpoints: `/api/task-comments` working
-- ✅ Frontend: TaskDetailModal updated to use new API
-- ✅ Migration: 4 existing comments migrated
-- ⏳ Browser testing: Ready for manual testing
-
-## Notes
-
-- Comments are stored in both places during transition (table + JSON for backward compatibility)
-- New comments go to the table only
-- Frontend merges both sources to show all comments
-- Once stable, JSON comment handling can be removed
-
+**Note**: All test data should be cleaned up after testing. The automated script will delete test projects automatically.
