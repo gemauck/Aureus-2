@@ -785,6 +785,17 @@ const Clients = React.memo(() => {
         }
     });
     
+    // State declarations moved before useEffect hooks to avoid temporal dead zone errors
+    const [showStarredOnly, setShowStarredOnly] = useState(false);
+    const [sortField, setSortField] = useState('name');
+    const [sortDirection, setSortDirection] = useState('asc');
+    const [leadSortField, setLeadSortField] = useState('name');
+    const [leadSortDirection, setLeadSortDirection] = useState('asc');
+    const [clientsPage, setClientsPage] = useState(1);
+    const [leadsPage, setLeadsPage] = useState(1);
+    const [groupsPage, setGroupsPage] = useState(1);
+    const ITEMS_PER_PAGE = 25;
+    
     // Persist filterServices to localStorage whenever it changes
     useEffect(() => {
         try {
@@ -812,16 +823,6 @@ const Clients = React.memo(() => {
             setGroupsPage(1);
         }
     }, [searchTerm, viewMode]);
-    
-    const [showStarredOnly, setShowStarredOnly] = useState(false);
-    const [sortField, setSortField] = useState('name');
-    const [sortDirection, setSortDirection] = useState('asc');
-    const [leadSortField, setLeadSortField] = useState('name');
-    const [leadSortDirection, setLeadSortDirection] = useState('asc');
-    const [clientsPage, setClientsPage] = useState(1);
-    const [leadsPage, setLeadsPage] = useState(1);
-    const [groupsPage, setGroupsPage] = useState(1);
-    const ITEMS_PER_PAGE = 25;
     
     // Get current user and check if admin
     const currentUser = window.storage?.getUser?.();
