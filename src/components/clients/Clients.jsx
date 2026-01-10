@@ -31,7 +31,7 @@ const safeStorage = {
             }
             return null;
         } catch (e) {
-            console.warn('Error loading groups from cache:', e);
+            // Silently fail - cache load error is non-critical
             return null;
         }
     },
@@ -40,7 +40,7 @@ const safeStorage = {
             localStorage.setItem('abcotronics_groups', JSON.stringify(data));
             localStorage.setItem('abcotronics_groups_timestamp', Date.now().toString());
         } catch (e) {
-            console.warn('Error saving groups to cache:', e);
+            // Silently fail - cache save error is non-critical
         }
     }
 };
@@ -738,7 +738,7 @@ const Clients = React.memo(() => {
         const validViews = [...validListViews, ...validDetailViews, 'news-feed'];
         
         if (!validViews.includes(viewMode)) {
-            console.warn('⚠️ Invalid viewMode detected:', viewMode, '- resetting to "clients"');
+            // Invalid viewMode detected - resetting to "clients"
             setViewMode('clients');
         }
     }, [viewMode]);
@@ -790,9 +790,29 @@ const Clients = React.memo(() => {
         try {
             localStorage.setItem('clients_filterServices', JSON.stringify(filterServices));
         } catch (error) {
-            console.warn('Failed to save filterServices to localStorage:', error);
+            // Silently fail - localStorage persistence is non-critical
         }
     }, [filterServices]);
+    
+    // PERFORMANCE FIX: Reset pagination to page 1 when filters change
+    useEffect(() => {
+        if (viewMode === 'clients' && clientsPage > 1) {
+            setClientsPage(1);
+        }
+    }, [searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly, viewMode]);
+    
+    useEffect(() => {
+        if (viewMode === 'leads' && leadsPage > 1) {
+            setLeadsPage(1);
+        }
+    }, [searchTerm, filterIndustry, filterStatus, filterStage, showStarredOnly, viewMode]);
+    
+    useEffect(() => {
+        if (viewMode === 'groups' && groupsPage > 1) {
+            setGroupsPage(1);
+        }
+    }, [searchTerm, viewMode]);
+    
     const [showStarredOnly, setShowStarredOnly] = useState(false);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
@@ -821,7 +841,7 @@ const Clients = React.memo(() => {
             setIsLoadingIndustries(true);
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.warn('No token available for fetching industries');
+                // No token available - skip industry fetch
                 return;
             }
             
@@ -1092,13 +1112,12 @@ const Clients = React.memo(() => {
                     return updatedClients;
                 });
             } catch (error) {
+                // Silently fail for server errors (500s) - opportunities preserved from cache
                 const isServerError =
                     error?.message?.includes('500') ||
                     error?.message?.includes('Server error') ||
                     error?.message?.includes('Failed to list opportunities');
-                if (!isServerError) {
-                    console.warn('⚠️ Pipeline: Failed to load opportunities in bulk:', error?.message || error);
-                }
+                // Don't log - opportunities are preserved from cache
             } finally {
                 if (!cancelled) {
                     isLoadingOpportunitiesRef.current = false;
@@ -1191,7 +1210,7 @@ const Clients = React.memo(() => {
         }
 
         if (!leadId) {
-            console.warn('⚠️ handleOpenLead: Unable to open lead without identifier', { lead: candidateLead, options });
+            // Unable to open lead without identifier - skip
             return;
         }
 
@@ -1205,10 +1224,7 @@ const Clients = React.memo(() => {
         }
 
         if (usedFallback) {
-            console.warn('⚠️ handleOpenLead: Fallback identifier used for lead', {
-                leadName: candidateLead?.name || '(unknown lead)',
-                fallbackId: normalizedId
-            });
+            // Fallback identifier used for lead (disabled debug logging)
         }
 
         stopSync();
@@ -1231,7 +1247,7 @@ const Clients = React.memo(() => {
             try {
                 sessionStorage.setItem('returnToPipeline', 'true');
             } catch (error) {
-                console.warn('⚠️ Clients: Unable to set returnToPipeline flag for lead', error);
+                // Silently fail - sessionStorage access is non-critical
             }
         }
         setCurrentLeadTab('overview');
@@ -1284,7 +1300,7 @@ const Clients = React.memo(() => {
                     }
                 } else {
                     // Entity not found in cache, try to fetch it
-                    console.log(`Entity ${entityType} with id ${entityId} not found in cache, attempting to fetch...`);
+                    // Entity not found in cache, attempting to fetch from API
                     // The component will handle loading when viewMode changes
                 }
             }
@@ -1309,7 +1325,6 @@ const Clients = React.memo(() => {
                 
                 // If viewMode is invalid, reset to 'clients' (the default list view)
                 if (!isValidView) {
-                    console.log('🔄 Resetting viewMode to "clients" - invalid viewMode detected:', viewMode);
                     setViewMode('clients');
                     selectedClientRef.current = null;
                     selectedLeadRef.current = null;
@@ -1467,8 +1482,7 @@ const Clients = React.memo(() => {
     const loadClients = async (forceRefresh = false) => {
         // Prevent concurrent calls - if already loading, skip unless force refresh
         if (isClientsLoading && !forceRefresh) {
-            console.log('⏭️ Skipping loadClients - already in progress');
-            return;
+            return; // Already loading, skip duplicate call
         }
         
         // Set loading flag
@@ -1597,7 +1611,7 @@ const Clients = React.memo(() => {
                             // Handle error gracefully - don't log for server errors (500s)
                             const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
                             if (!isServerError) {
-                                console.warn('⚠️ Failed to load opportunities in bulk from cache:', error.message || error);
+                                // Silently fail - cache load error is non-critical
                             }
                         });
                 }
@@ -1621,11 +1635,6 @@ const Clients = React.memo(() => {
             
             // Check if cached clients are missing group data - if so, force API call
             // CRITICAL: Always check cachedClients (not clients state) since that's what we're displaying
-            console.log('🔍 Starting group data check:', {
-                cachedClientsLength: cachedClients?.length || 0,
-                timeSinceLastCall: timeSinceLastCall,
-                forceRefresh: forceRefresh
-            });
             const clientsToCheck = cachedClients || [];
             // CRITICAL FIX: Check if ANY client is missing groupMemberships field entirely (undefined/null)
             // This ensures we always fetch fresh data if cache doesn't have the field
@@ -1638,23 +1647,7 @@ const Clients = React.memo(() => {
                 return groupMembershipsMissing || needsParsing;
             });
             
-            // Debug: Log the check result
-            if (clientsToCheck.length > 0) {
-                const exxaroCheck = clientsToCheck.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
-                if (exxaroCheck.length > 0) {
-                    console.log('🔍 Group data check - Exxaro clients:', {
-                        totalClientsToCheck: clientsToCheck.length,
-                        exxaroCount: exxaroCheck.length,
-                        hasMissingGroupData: hasMissingGroupData,
-                        timeSinceLastCall: timeSinceLastCall,
-                        willSkipApi: !forceRefresh && !hasMissingGroupData && timeSinceLastCall < API_CALL_INTERVAL,
-                        exxaroSample: exxaroCheck[0] ? {
-                            name: exxaroCheck[0].name,
-                            hasGroupMemberships: !!exxaroCheck[0].groupMemberships && Array.isArray(exxaroCheck[0].groupMemberships) && exxaroCheck[0].groupMemberships.length > 0
-                        } : null
-                    });
-                }
-            }
+            // Debug logging removed for performance - only log in development mode if needed
             
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // UNLESS cached data is missing group data - then force refresh to get it
@@ -1665,8 +1658,8 @@ const Clients = React.memo(() => {
                 
                 // But still trigger LiveDataSync in background to get updates
                 if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(err => {
-                        console.warn('⚠️ Background sync failed:', err);
+                    window.LiveDataSync.forceSync().catch(() => {
+                        // Silently fail - background sync is non-critical
                     });
                 }
                 // Refresh opportunities in background using bulk fetch (much faster)
@@ -1707,7 +1700,7 @@ const Clients = React.memo(() => {
                             // Handle error gracefully - don't log for server errors (500s)
                             const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
                             if (!isServerError) {
-                                console.warn('⚠️ Failed to refresh opportunities in background:', error.message || error);
+                                // Silently fail - background refresh is non-critical
                             }
                         });
                 }
@@ -1734,7 +1727,7 @@ const Clients = React.memo(() => {
                         ? window.api.listClients.bind(window.api)
                         : null;
                 if (!apiMethod) {
-                    console.warn('⚠️ No API method available for fetching clients');
+                    // No API method available - skip API fetch
                     return;
                 }
                 const res = await apiMethod();
@@ -1744,77 +1737,31 @@ const Clients = React.memo(() => {
                 
                 // CRITICAL: Store raw API response in ref for groupMemberships preservation
                 latestApiClientsRef.current = apiClients;
-                console.log('📦 Stored API response in ref. Total clients:', apiClients.length);
                 
                 // If API returns no clients, use cached data
                 if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
-                    console.warn('⚠️ API returned no clients, using cached data');
+                    // API returned no clients - using cached data
                     return; // Keep showing cached data
                 }
                 
                 // Use memoized data processor for better performance
                 const processStartTime = performance.now();
                 
-                // Debug: Check AccuFarm data from API before processing
-                const accufarmFromApi = apiClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
-                if (accufarmFromApi) {
-                    console.log('🔍 API response - AccuFarm before processClientData:', {
-                        name: accufarmFromApi.name,
-                        id: accufarmFromApi.id,
-                        groupMemberships: accufarmFromApi.groupMemberships,
-                        groupMembershipsType: typeof accufarmFromApi.groupMemberships,
-                        isArray: Array.isArray(accufarmFromApi.groupMemberships),
-                        length: Array.isArray(accufarmFromApi.groupMemberships) ? accufarmFromApi.groupMemberships.length : 'not array',
-                        firstMembership: Array.isArray(accufarmFromApi.groupMemberships) && accufarmFromApi.groupMemberships.length > 0 ? accufarmFromApi.groupMemberships[0] : null,
-                        rawKeys: Object.keys(accufarmFromApi)
-                    });
-                }
-                
-                // Debug: Check if Exxaro clients have group data before processing
-                const exxaroBeforeProcess = apiClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
-                if (exxaroBeforeProcess.length > 0) {
-                    console.log('🔍 Before processClientData - Exxaro clients:', exxaroBeforeProcess.map(c => ({
-                        name: c.name,
-                        id: c.id,
-                        groupMemberships: c.groupMemberships
-                    })));
-                }
+                // Debug logging removed for performance
                 
                 const processedClients = processClientData(apiClients);
                 
-                // Debug: Check AccuFarm data after processClientData
-                const accufarmAfterProcess = processedClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
-                if (accufarmAfterProcess) {
-                    console.log('🔍 After processClientData - AccuFarm:', {
-                        name: accufarmAfterProcess.name,
-                        id: accufarmAfterProcess.id,
-                        groupMemberships: accufarmAfterProcess.groupMemberships,
-                        groupMembershipsType: typeof accufarmAfterProcess.groupMemberships,
-                        isArray: Array.isArray(accufarmAfterProcess.groupMemberships),
-                        length: Array.isArray(accufarmAfterProcess.groupMemberships) ? accufarmAfterProcess.groupMemberships.length : 'not array',
-                        firstMembership: Array.isArray(accufarmAfterProcess.groupMemberships) && accufarmAfterProcess.groupMemberships.length > 0 ? accufarmAfterProcess.groupMemberships[0] : null,
-                        firstMembershipGroup: Array.isArray(accufarmAfterProcess.groupMemberships) && accufarmAfterProcess.groupMemberships.length > 0 && accufarmAfterProcess.groupMemberships[0]?.group ? accufarmAfterProcess.groupMemberships[0].group : null
-                    });
-                }
+                // Debug logging removed for performance
+                // Process clients data
+                const processedClients = processClientData(apiClients);
                 
-                // Debug: Check if Exxaro clients have group data after processing
-                const exxaroAfterProcess = processedClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
-                if (exxaroAfterProcess.length > 0) {
-                    console.log('🔍 After processClientData - Exxaro clients:', exxaroAfterProcess.map(c => ({
-                        name: c.name,
-                        id: c.id,
-                        groupMemberships: c.groupMemberships
-                    })));
-                }
+                // Debug logging removed for performance
                 // Separate clients and leads based on type
                 // Include records with type='client' OR null/undefined (legacy clients without type field)
                 const clientsOnly = processedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
                 const leadsOnly = processedClients.filter(c => c.type === 'lead');
-                // Log any records with unexpected types for debugging
-                const unexpectedType = processedClients.filter(c => c.type && c.type !== 'client' && c.type !== 'lead');
-                if (unexpectedType.length > 0) {
-                    console.warn(`⚠️ Found ${unexpectedType.length} records with unexpected type:`, unexpectedType.map(c => ({ id: c.id, name: c.name, type: c.type })));
-                }
+                // Filter out any records with unexpected types (silently)
+                // Records with valid types are already separated into clientsOnly and leadsOnly
                 
                 // Preserve opportunities from cached clients for instant display
                 // CRITICAL: Always use tags from API response (client object) - never use cached tags
@@ -1841,15 +1788,7 @@ const Clients = React.memo(() => {
                     return merged;
                 });
                 
-                // Debug: Check Exxaro clients before setting state
-                const exxaroBeforeSetState = clientsWithCachedOpps.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
-                if (exxaroBeforeSetState.length > 0) {
-                    console.log('🔍 Before setClients - Exxaro clients:', exxaroBeforeSetState.map(c => ({
-                        name: c.name,
-                        id: c.id,
-                        groupMemberships: c.groupMemberships
-                    })));
-                }
+                // Debug logging removed for performance
                 
                 // Show clients immediately with preserved opportunities AND group data
                 // CRITICAL: Ensure groupMemberships is ALWAYS present and properly structured
@@ -1879,7 +1818,6 @@ const Clients = React.memo(() => {
                 // CRITICAL: Ensure groupMemberships is preserved in state
                 // Double-check that finalClients have groupMemberships before setting state
                 // Use raw API response from ref as the source of truth
-                console.log('🔍 Verifying clients before setting state. Raw API ref exists:', !!latestApiClientsRef.current, 'Raw API clients count:', latestApiClientsRef.current?.length || 0);
                 
                 // CRITICAL: Use prevClients to preserve restored groupMemberships
                 // This ensures groups restored by useEffect are NOT overwritten by API response
@@ -1906,7 +1844,8 @@ const Clients = React.memo(() => {
                                 try {
                                     groupMemberships = JSON.parse(groupMemberships);
                                 } catch (e) {
-                                    console.warn('⚠️ Failed to parse groupMemberships string for', client.name, e);
+                                    // Silently fail - groupMemberships parsing error is non-critical
+                                    groupMemberships = [];
                                 }
                             }
                             
@@ -1951,16 +1890,10 @@ const Clients = React.memo(() => {
                             const restoredGroups = restoredGroupMembershipsRef.current.get(String(client.id));
                             if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
                                 finalGroupMemberships = [...restoredGroups];
-                                if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                    console.log('✅ Preserving restored groupMemberships from REF (HIGHEST PRIORITY) for:', client.name, 'Count:', finalGroupMemberships.length);
-                                }
                             }
                         } else if (groupMembershipsFromApi && Array.isArray(groupMembershipsFromApi) && groupMembershipsFromApi.length > 0) {
                             // Use API data (only if ref doesn't have restored groups)
                             finalGroupMemberships = groupMembershipsFromApi;
-                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                console.log('✅ Using API groupMemberships for:', client.name, 'Count:', finalGroupMemberships.length);
-                            }
                         } else if (prevClient && 
                                    prevClient.groupMemberships && 
                                    Array.isArray(prevClient.groupMemberships) && 
@@ -1968,18 +1901,12 @@ const Clients = React.memo(() => {
                             // CRITICAL: ALWAYS preserve restored groups from current state - NEVER clear them!
                             // Even if API doesn't have them in this call, they were restored by useEffect
                             finalGroupMemberships = [...prevClient.groupMemberships];
-                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                console.log('✅ Preserving restored groupMemberships from prevClient for:', client.name, 'Count:', finalGroupMemberships.length);
-                            }
                         } else if (restoredGroupMembershipsRef.current.has(client.id)) {
                             // CRITICAL: Check ref again here - even if prevClient doesn't have groups, ref might have them
                             // This prevents clearing groups that were restored but prevClient is stale
                             const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
                             if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
                                 finalGroupMemberships = [...restoredGroups];
-                                if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                    console.log('✅ Preserving restored groupMemberships from REF (fallback check) for:', client.name, 'Count:', finalGroupMemberships.length);
-                                }
                             } else {
                                 finalGroupMemberships = [];
                             }
@@ -1995,9 +1922,6 @@ const Clients = React.memo(() => {
                                 const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
                                 if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
                                     finalGroupMemberships = [...restoredGroups];
-                                    if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                        console.log('✅ Preserving restored groupMemberships from REF (final check) for:', client.name, 'Count:', finalGroupMemberships.length);
-                                    }
                                 } else {
                                     finalGroupMemberships = [];
                                 }
@@ -2042,12 +1966,7 @@ const Clients = React.memo(() => {
                 
                 // Debug: Verify group data is being saved
                 const exxaroInSaved = clientsWithCachedOpps.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
-                if (exxaroInSaved.length > 0) {
-                    console.log('🔍 Saving to cache - Exxaro clients with group data:', exxaroInSaved.map(c => ({
-                        name: c.name,
-                        groupMemberships: c.groupMemberships
-                    })));
-                }
+                // Debug logging removed for performance
                 
                 // Load fresh opportunities from API in background (only if Pipeline is active)
                 // Use bulk fetch instead of per-client calls for much better performance
@@ -2097,7 +2016,7 @@ const Clients = React.memo(() => {
                             // Handle error gracefully - don't log for server errors (500s)
                             const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
                             if (!isServerError) {
-                                console.warn('⚠️ Failed to load opportunities in bulk, falling back to cached opportunities:', error.message || error);
+                                // Silently fail - falling back to cached opportunities
                             }
                             // Keep existing opportunities from cache
                         });
@@ -2140,7 +2059,7 @@ const Clients = React.memo(() => {
             } else if (window.api && typeof window.api.getProjects === 'function') {
                 response = await window.api.getProjects();
             } else {
-                console.warn('⚠️ No projects API available');
+                // No projects API available - skip project loading
                 return;
             }
             
@@ -2482,12 +2401,9 @@ const Clients = React.memo(() => {
             const normalizedId = String(normalizedIdentity.id);
             const stage = resolvePipelineStage(c);
 
-            if (normalizedIdentity.generated) {
-                console.warn('⚠️ mapDbClient: Entity missing primary identifier, generated fallback', {
-                    type: isLead ? 'lead' : 'client',
-                    name: c?.name || '(unnamed)',
-                    fallbackId: normalizedId
-                });
+            // Entity ID normalized (generated fallback if needed)
+            if (normalizedIdentity.generated && process.env.NODE_ENV === 'development') {
+                // Only log in development mode
             }
 
             const parseArrayField = (value, fieldName) => {
@@ -2500,7 +2416,7 @@ const Clients = React.memo(() => {
                         const parsed = JSON.parse(value);
                         return Array.isArray(parsed) ? parsed : [];
                     } catch (error) {
-                        console.warn(`⚠️ Failed to parse ${fieldName} JSON:`, error?.message || error);
+                        // Failed to parse JSON field - return empty array
                         return [];
                     }
                 }
@@ -2520,7 +2436,7 @@ const Clients = React.memo(() => {
                             return parsed;
                         }
                     } catch (error) {
-                        console.warn(`⚠️ Failed to parse ${fieldName} JSON:`, error?.message || error);
+                        // Failed to parse JSON field - use fallback
                     }
                 }
 
@@ -2719,10 +2635,9 @@ const Clients = React.memo(() => {
                             safeStorage.setClients(clientsWithOpportunities);
                         } catch (error) {
                             // Handle error gracefully - don't log for server errors (500s)
+                            // Silently fail for server errors (500s) - opportunities preserved from current state
                             const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
-                            if (!isServerError) {
-                                console.warn('⚠️ LiveDataSync: Failed to load opportunities in bulk, preserving existing opportunities:', error.message || error);
-                            }
+                            // Don't log - opportunities are preserved from current state
                             // Preserve existing opportunities even when API call fails
                             const clientsWithPreservedOpps = processed.map(client => ({
                                 ...client,
@@ -2772,7 +2687,7 @@ const Clients = React.memo(() => {
                         try {
                             window.storage.setLeads(processedLeads);
                         } catch (e) {
-                            console.warn('⚠️ Failed to save LiveDataSync leads to localStorage:', e);
+                            // Silently fail - localStorage persistence is non-critical
                         }
                     }
                 }
@@ -2926,10 +2841,9 @@ const Clients = React.memo(() => {
                 if (reitcoulLead) {
                 }
                 
-                // Log specific lead IDs to help debug missing leads
-                const leadIds = rawLeads.map(l => l.id).sort();
+                // Leads loaded successfully
             } else {
-                console.warn(`⚠️ WARNING: API returned 0 leads for ${userEmail}. This might indicate a visibility issue.`);
+                // API returned 0 leads - might indicate visibility issue, but don't log in production
             }
             
             // Map database fields to UI expected format with JSON parsing
@@ -2937,13 +2851,8 @@ const Clients = React.memo(() => {
                 const normalized = normalizeEntityId(lead, 'lead');
                 const normalizedId = String(normalized.id);
 
-                if (normalized.generated) {
-                    console.warn('⚠️ loadLeads: Lead missing primary identifier, generated fallback ID', {
-                        leadName: lead?.name || '(unnamed lead)',
-                        createdAt: lead?.createdAt,
-                        fallbackId: normalizedId
-                    });
-                }
+                // Lead ID normalized (generated fallback if needed)
+                // Only log in development mode if needed
 
                 const parseArrayField = (value, fallback = []) => {
                     if (Array.isArray(value)) {
@@ -3163,7 +3072,7 @@ const Clients = React.memo(() => {
                         restoredGroupMembershipsRef.current.set(String(clientId), groups);
                     }
                 });
-                console.log(`📥 Loaded ${Object.keys(groupsMap).length} restored groups from localStorage on mount`);
+                // Loaded restored groups from localStorage on mount
             }
         } catch (error) {
             console.warn('⚠️ Failed to load restored groups from localStorage:', error);
@@ -3210,7 +3119,7 @@ const Clients = React.memo(() => {
                         return client;
                     });
                     if (restoredCount > 0) {
-                        console.log(`✅ Restored ${restoredCount} clients' groups from localStorage`);
+                        // Restored clients' groups from localStorage
                     }
                     return updated;
                 });
@@ -3239,7 +3148,7 @@ const Clients = React.memo(() => {
         const unprocessedClients = clientsMissingGroups.filter(c => !processedClientIdsRef.current.has(c.id));
         if (unprocessedClients.length === 0) return;
         
-        console.log(`🔄 ${unprocessedClients.length} clients missing groupMemberships, fetching fresh data from API...`);
+        // Fetching group data for clients missing groupMemberships
         
         // Mark these clients as being processed
         unprocessedClients.forEach(c => processedClientIdsRef.current.add(c.id));
@@ -3280,7 +3189,7 @@ const Clients = React.memo(() => {
                 }
                 
                 const apiClients = res?.data?.clients || res?.clients || [];
-                console.log('📦 Fetched', apiClients.length, 'clients from API for groupMemberships restoration');
+                // Fetched clients from API for groupMemberships restoration
                 
                 // CRITICAL: Use latestApiClientsRef as PRIMARY source - it has groups from main API call
                 // Only fall back to separate API call if latestApiClientsRef doesn't have the client
@@ -3293,7 +3202,7 @@ const Clients = React.memo(() => {
                             apiClientsMap.set(client.id, client);
                         }
                     });
-                    console.log('📦 Loaded', apiClientsMap.size, 'clients from latestApiClientsRef (primary source)');
+                    // Loaded clients from latestApiClientsRef (primary source)
                 }
                 
                 // Then, merge in clients from separate API call (for clients not in latestApiClientsRef)
@@ -3311,15 +3220,7 @@ const Clients = React.memo(() => {
                     }
                 });
                 
-                // Debug: Check Exxaro clients
-                const exxaroInMap = Array.from(apiClientsMap.values()).filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
-                exxaroInMap.forEach(c => {
-                    console.log(`🔍 Exxaro in map: ${c.name}`, {
-                        hasGroupMemberships: !!c.groupMemberships,
-                        isArray: Array.isArray(c.groupMemberships),
-                        length: c.groupMemberships?.length || 0
-                    });
-                });
+                // Debug logging removed for performance
                 
                 // Find all clients that need groupMemberships updated
                 const clientsToUpdate = unprocessedClients.filter(client => {
@@ -3331,7 +3232,7 @@ const Clients = React.memo(() => {
                 });
                 
                 if (clientsToUpdate.length > 0) {
-                    console.log(`✅ Found groupMemberships for ${clientsToUpdate.length} clients, updating state...`);
+                    // Found groupMemberships for clients, updating state
                     
                     // Store restored groups in ref AND localStorage BEFORE state update to prevent API handler from overwriting
                     const groupsToPersist = new Map();
@@ -3346,7 +3247,7 @@ const Clients = React.memo(() => {
                             // Also store in Map for localStorage persistence
                             groupsToPersist.set(String(client.id), [...apiClient.groupMemberships]);
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                console.log('🔒 Stored in REF:', client.name, 'Count:', apiClient.groupMemberships.length);
+                                // Stored group data in ref
                             }
                         }
                     });
@@ -3375,7 +3276,7 @@ const Clients = React.memo(() => {
                                 Array.isArray(apiClient.groupMemberships) && 
                                 apiClient.groupMemberships.length > 0) {
                                 // Always update with API data if available (don't check if client already has it)
-                                    console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
+                                    // Restoring groupMemberships for client
                                 // Create new client object with groupMemberships
                                     return {
                                         ...client,
@@ -3404,7 +3305,7 @@ const Clients = React.memo(() => {
                         return updated;
                     });
                 } else {
-                    console.log('ℹ️ No clients found with groupMemberships in API response');
+                    // No clients found with groupMemberships in API response
                 }
             } catch (error) {
                 console.error('❌ Error fetching groupMemberships:', error);
@@ -3446,24 +3347,22 @@ const Clients = React.memo(() => {
                         preserveHash: false
                     });
                 } catch (routeError) {
-                    console.warn('⚠️ Failed to update URL on client modal close:', routeError);
+                    // Silently fail - URL update is non-critical
                 }
             }
             
-            // Refresh data from server
-            try {
-                await loadClients(true);
-            } catch (loadError) {
-                console.error('⚠️ Failed to refresh clients on modal close:', loadError);
-            }
+            // Refresh data from server in background (non-blocking)
+            loadClients(true).catch(() => {
+                // Silently fail - refresh is non-critical for modal close
+            });
             
+            // Start sync in background (non-blocking)
             try {
                 startSync();
             } catch (syncError) {
-                console.error('⚠️ Failed to start sync on modal close:', syncError);
+                // Silently fail - sync restart is non-critical
             }
         } catch (error) {
-            console.error('⚠️ Error in handleClientModalClose:', error);
             // Still try to close the modal even if there's an error
             setViewMode('clients');
             setEditingClientId(null);
@@ -3477,13 +3376,13 @@ const Clients = React.memo(() => {
         try {
             returnToPipeline = sessionStorage.getItem('returnToPipeline') === 'true';
         } catch (error) {
-            console.warn('⚠️ Clients: Unable to read returnToPipeline flag on lead modal close', error);
+            // Silently fail - sessionStorage access is non-critical
         }
         if (returnToPipeline) {
             try {
                 sessionStorage.removeItem('returnToPipeline');
             } catch (error) {
-                console.warn('⚠️ Clients: Unable to clear returnToPipeline flag on lead modal close', error);
+                // Silently fail - sessionStorage clear is non-critical
             }
             setViewMode('pipeline');
         } else {
@@ -3493,8 +3392,10 @@ const Clients = React.memo(() => {
         selectedLeadRef.current = null;
         isFormOpenRef.current = false;
         setCurrentLeadTab('overview');
-        // Refresh data from server
-        await loadLeads(true);
+        // Refresh data from server in background (non-blocking)
+        loadLeads(true).catch(() => {
+            // Silently fail - refresh is non-critical for modal close
+        });
         startSync();
     };
     
@@ -3506,14 +3407,12 @@ const Clients = React.memo(() => {
         
         // Validate required fields - handle undefined/null safely
         if (!clientFormData) {
-            console.error('❌ Client form data is missing');
             alert('Error: Form data is missing. Please try again.');
             return;
         }
         
         const clientName = clientFormData.name;
         if (!clientName || (typeof clientName === 'string' && clientName.trim() === '')) {
-            console.error('❌ Client name is required but empty');
             alert('Please enter a Client Name to save the client.');
             return;
         }
@@ -3532,7 +3431,6 @@ const Clients = React.memo(() => {
             // Ensure name is trimmed and non-empty (validation should have caught empty names, but double-check here)
             const clientName = (typeof clientFormData.name === 'string' ? clientFormData.name.trim() : (clientFormData.name || ''));
             if (!clientName) {
-                console.error('❌ Client name is empty after trimming');
                 alert('Please enter a Client Name to save the client.');
                 return null;
             }
@@ -3631,8 +3529,6 @@ const Clients = React.memo(() => {
                             // Trigger background sync (non-blocking)
                             window.LiveDataSync?.forceSync?.().catch(() => {});
                         } catch (apiCallError) {
-                            console.error('❌ API call failed with error:', apiCallError);
-                            console.error('Error details:', apiCallError.message);
                             throw apiCallError; // Re-throw to be caught by outer catch
                         }
                     } else {
@@ -3665,8 +3561,6 @@ const Clients = React.memo(() => {
                         // Update comprehensive client with API response
                         if (apiResponse?.data?.client?.id) {
                             comprehensiveClient.id = apiResponse.data.client.id;
-                        } else {
-                            console.error('❌ No client ID in API response!');
                         }
                         
                         // Trigger immediate LiveDataSync to ensure all users see the new client
@@ -3689,7 +3583,7 @@ const Clients = React.memo(() => {
                                     window.requestIdleCallback(cb);
                                     return;
                                 } catch (idleErr) {
-                                    console.warn('⚠️ requestIdleCallback failed, falling back to setTimeout', idleErr);
+                                    // Fallback to setTimeout if requestIdleCallback fails
                                 }
                             }
                             setTimeout(cb, 0);
@@ -3714,7 +3608,7 @@ const Clients = React.memo(() => {
                     if (selectedClient) {
                         const updated = clients.map(c => c.id === selectedClient.id ? finalClient : c);
                         if (updated.length !== clients.length) {
-                            console.error('❌ CRITICAL: Client count changed during API update!');
+                            // Data integrity check failed - skip update
                             return;
                         }
                         // Single batched update - React 18+ will batch these automatically
@@ -3724,7 +3618,7 @@ const Clients = React.memo(() => {
                     } else {
                         const newClients = [...clients, finalClient];
                         if (newClients.length !== clients.length + 1) {
-                            console.error('❌ CRITICAL: Client count not increased by 1 during API add!');
+                            // Data integrity check failed - skip update
                             return;
                         }
                         // Single batched update
@@ -3734,7 +3628,6 @@ const Clients = React.memo(() => {
                     }
                     
                 } catch (apiError) {
-                    console.error('API error saving client:', apiError);
                     const errorMessage = apiError.message || 'Unknown error';
                     
                     // Check for specific error messages and show user-friendly alerts
@@ -3823,14 +3716,12 @@ const Clients = React.memo(() => {
         
         // Validate required fields - handle undefined/null safely
         if (!leadFormData) {
-            console.error('❌ Lead form data is missing');
             alert('Error: Form data is missing. Please try again.');
             return;
         }
         
         const leadName = leadFormData.name;
         if (!leadName || (typeof leadName === 'string' && leadName.trim() === '')) {
-            console.error('❌ Lead name is required but empty');
             alert('Please enter an Entity Name to save the lead.');
             return;
         }
@@ -3882,19 +3773,15 @@ const Clients = React.memo(() => {
                         
                         // Trigger immediate LiveDataSync to ensure all users see the change
                         if (window.LiveDataSync?.forceSync) {
-                            window.LiveDataSync.forceSync().catch(err => {
-                                console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                            window.LiveDataSync.forceSync().catch(() => {
+                                // Sync will happen automatically, ignore errors
                             });
                         }
                         
                         // Extract the saved lead from API response - try multiple possible locations
                         let savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse?.data || updatedLead;
                         
-                        // If we got the same object back, log a warning
-                        if (savedLead === updatedLead && savedLead.id === updatedLead.id) {
-                            console.warn('⚠️ API response might not contain updated lead, using optimistic update');
-                        } else {
-                        }
+                        // API response processed
                         
                         // Safe JSON parser helper
                         const safeParseJSON = (value, defaultValue) => {
@@ -3902,7 +3789,6 @@ const Clients = React.memo(() => {
                             try {
                                 return JSON.parse(value || JSON.stringify(defaultValue));
                             } catch (e) {
-                                console.warn('⚠️ Failed to parse JSON field, using default:', e);
                                 return defaultValue;
                             }
                         };
@@ -3996,13 +3882,11 @@ const Clients = React.memo(() => {
                                     }
                                 }
                             } catch (refreshError) {
-                                console.warn('⚠️ Failed to refresh lead from database:', refreshError.message);
                                 // Not critical - data was already saved
                             }
                         }, 500); // Wait 500ms for database commit
                         
                     } catch (apiError) {
-                        console.error('❌ API error updating lead:', apiError);
                         // If API fails, still update local state but show warning
                         const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                         setLeads(updatedLeads);
@@ -4036,13 +3920,12 @@ const Clients = React.memo(() => {
                     
                 }
             } else {
-                // Validate name for new leads - handle undefined/null safely
-                const leadName = leadFormData.name;
-                if (!leadName || (typeof leadName === 'string' && leadName.trim() === '')) {
-                    console.error('❌ Cannot create lead without a name');
-                    alert('Please enter an Entity Name to create a lead.');
-                    return;
-                }
+                        // Validate name for new leads - handle undefined/null safely
+                        const leadName = leadFormData.name;
+                        if (!leadName || (typeof leadName === 'string' && leadName.trim() === '')) {
+                            alert('Please enter an Entity Name to create a lead.');
+                            return;
+                        }
                 
                 // Create new lead
                 // Get current user info
@@ -4056,7 +3939,6 @@ const Clients = React.memo(() => {
                 // Ensure name is trimmed and valid
                 const trimmedName = typeof leadName === 'string' ? leadName.trim() : String(leadName || '');
                 if (!trimmedName) {
-                    console.error('❌ Lead name is empty after trimming');
                     alert('Please enter an Entity Name to create a lead.');
                     return;
                 }
@@ -4087,10 +3969,8 @@ const Clients = React.memo(() => {
                         // Extract lead from response - API returns { data: { lead: {...} } }
                         let savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse?.data || null;
                         
-                        // If savedLead is still null or doesn't have an id, log warning
+                        // If savedLead is still null or doesn't have an id, throw error
                         if (!savedLead || !savedLead.id) {
-                            console.error('❌ CRITICAL: API response does not contain a valid lead with ID!');
-                            console.error('❌ Full API response:', JSON.stringify(apiResponse, null, 2));
                             throw new Error('API response missing lead data');
                         }
                         
@@ -4217,7 +4097,7 @@ const Clients = React.memo(() => {
                                 try {
                                     window.storage.setLeads(updatedLeads);
                                 } catch (e) {
-                                    console.warn('⚠️ Failed to save lead to localStorage:', e);
+                                    // Silently fail - localStorage persistence is non-critical
                                 }
                             }
                             
@@ -4232,20 +4112,13 @@ const Clients = React.memo(() => {
                                 try {
                                     window.storage.setLeads(updatedLeads);
                                 } catch (e) {
-                                    console.warn('⚠️ Failed to save lead to localStorage:', e);
+                                    // Silently fail - localStorage persistence is non-critical
                                 }
                             }
                             
                         }
                     } catch (apiError) {
-                        console.error('❌ API error creating lead:', apiError);
                         const errorMessage = apiError?.message || apiError?.response?.data?.error || 'Unknown error';
-                        console.error('❌ Full API error details:', {
-                            message: apiError.message,
-                            response: apiError.response,
-                            data: apiError.response?.data,
-                            status: apiError.response?.status
-                        });
                         
                         // Check if it's a validation error
                         if (errorMessage.includes('name required') || errorMessage.includes('name is required')) {
@@ -4264,7 +4137,7 @@ const Clients = React.memo(() => {
                             try {
                                 window.storage.setLeads(updatedLeads);
                             } catch (e) {
-                                console.warn('⚠️ Failed to save lead to localStorage:', e);
+                                // Silently fail - localStorage persistence is non-critical
                             }
                         }
                         
@@ -4307,10 +4180,8 @@ const Clients = React.memo(() => {
                 }
             }
         } catch (error) {
-            console.error('❌ Error saving lead:', error);
             const errorMessage = error?.message || 'Unknown error';
-            console.error('❌ Full error details:', error);
-            alert(`Failed to save lead: ${errorMessage}\n\nCheck the browser console for more details.`);
+            alert(`Failed to save lead: ${errorMessage}`);
         }
     };
 
@@ -4351,7 +4222,6 @@ const Clients = React.memo(() => {
                         }
                     }, 1500); // 1.5 second delay to prevent shimmer from LiveDataSync refresh
                 } catch (error) {
-                    console.warn('⚠️ Failed to delete client from database:', error);
                     // On error, restore the client and show error
                     const restoreState = () => {
                         setClients(clients);
@@ -4381,7 +4251,6 @@ const Clients = React.memo(() => {
                 }
             }
         } catch (error) {
-            console.error('❌ Error deleting client:', error);
             alert('Failed to delete client: ' + (error.message || 'Unknown error'));
         }
     };
@@ -4405,7 +4274,6 @@ const Clients = React.memo(() => {
                     if (is404) {
                         apiDeleteSuccess = true; // Treat 404 as success since lead is already gone
                     } else {
-                        console.error('❌ API error deleting lead:', apiError);
                         // For other errors, still try to remove locally but warn user
                         alert('Failed to delete lead from server: ' + errorMessage + '. The lead will be removed from your view.');
                     }
@@ -4662,12 +4530,11 @@ const Clients = React.memo(() => {
                 return false; // Exclude leads or any other type value
             }
             
-            // Additional safeguard: exclude records with status='Potential' (always a lead)
-            // This catches leads that might have been incorrectly saved with type='client'
-            if (client.status === 'Potential') {
-                console.warn(`⚠️ Filtering out lead with status='Potential' from clients: ${client.name}`);
-                return false;
-            }
+                // Additional safeguard: exclude records with status='Potential' (always a lead)
+                // This catches leads that might have been incorrectly saved with type='client'
+                if (client.status === 'Potential') {
+                    return false;
+                }
             
             // Enhanced search across multiple fields
             const searchLower = searchTerm.toLowerCase();
@@ -4782,15 +4649,13 @@ const Clients = React.memo(() => {
     const isLoadingGroupsRef = useRef(false);
     const loadGroups = useCallback(async (forceRefresh = false) => {
         if (isLoadingGroupsRef.current && !forceRefresh) {
-            console.log('⏸️ loadGroups already in progress, skipping...');
-            return;
+            return; // Already loading, skip duplicate call
         }
         
         // Throttle API calls - prevent too frequent requests
         const now = Date.now();
         const timeSinceLastCall = now - lastGroupsApiCallTimestamp;
         if (!forceRefresh && timeSinceLastCall < GROUPS_API_CALL_INTERVAL) {
-            console.log(`⏸️ Skipping loadGroups - too soon since last call (${Math.round(timeSinceLastCall / 1000)}s ago)`);
             // Still show cached data if available
             const cachedGroups = safeStorage.getGroups();
             if (cachedGroups && cachedGroups.length > 0) {
@@ -4803,7 +4668,6 @@ const Clients = React.memo(() => {
         if (!forceRefresh) {
             const cachedGroups = safeStorage.getGroups();
             if (cachedGroups && cachedGroups.length > 0) {
-                console.log(`⚡ Loaded ${cachedGroups.length} groups from cache (instant)`);
                 setGroups(cachedGroups);
                 groupsLoadedRef.current = true;
                 // Still fetch in background to update cache, but only if enough time has passed
@@ -4825,8 +4689,6 @@ const Clients = React.memo(() => {
                 return;
             }
             
-            console.log('🔄 Fetching groups from API...');
-            
             // Use RateLimitManager to throttle the request
             const fetchGroups = async () => {
                 const response = await fetch('/api/clients/groups', {
@@ -4838,18 +4700,13 @@ const Clients = React.memo(() => {
                     credentials: 'include'
                 });
                 
-                console.log('📡 Groups API response status:', response.status);
-                
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('📦 Groups API response data:', data);
                     // Response structure: { data: { groups: [...] } } or { groups: [...] }
                     const groupsList = data?.data?.groups || data?.groups || [];
-                    console.log(`✅ Loaded ${groupsList.length} groups from API:`, groupsList.map(g => ({ id: g.id, name: g.name, type: g.type, members: (g._count?.childCompanies || 0) + (g._count?.groupChildren || 0) })));
                     setGroups(groupsList); // Always set groups, even if empty
                     // Save to cache for instant loading next time
                     safeStorage.setGroups(groupsList);
-                    console.log(`✅ Groups state updated: ${groupsList.length} groups`);
                     groupsLoadedRef.current = true;
                 } else {
                     const errorText = await response.text().catch(() => 'Unknown error');
@@ -4914,15 +4771,13 @@ const Clients = React.memo(() => {
             loadGroupMembersDebounceRef.current = setTimeout(async () => {
                 // Check if this is the same group we just loaded
                 if (lastGroupMembersRequestRef.current === groupId && isLoadingGroupMembersRef.current) {
-                    console.log('⏸️ Already loading members for this group, skipping...');
                     resolve();
-                    return;
+                    return; // Already loading, skip duplicate call
                 }
                 
                 if (isLoadingGroupMembersRef.current) {
-                    console.log('⏸️ loadGroupMembers already in progress, skipping...');
                     resolve();
-                    return;
+                    return; // Already loading, skip duplicate call
                 }
                 
                 try {
@@ -4941,8 +4796,6 @@ const Clients = React.memo(() => {
                         return;
                     }
                     
-                    console.log('🔄 Fetching members for group:', groupId);
-                    
                     // Use RateLimitManager to throttle the request
                     const fetchMembers = async () => {
                         const response = await fetch(`/api/clients/groups/${groupId}/members`, {
@@ -4954,13 +4807,9 @@ const Clients = React.memo(() => {
                             credentials: 'include'
                         });
                         
-                        console.log('📡 Group members API response status:', response.status);
-                        
                         if (response.ok) {
                             const data = await response.json();
-                            console.log('📦 Group members API response data:', data);
                             const members = data?.data?.members || data?.members || [];
-                            console.log(`✅ Loaded ${members.length} members for group ${groupId}:`, members);
                             setGroupMembers(members);
                             setGroupMembersError(null); // Clear any previous errors
                         } else {
@@ -5238,7 +5087,7 @@ const Clients = React.memo(() => {
                 const response = await window.api.getLead(resolvedLeadId);
                 lead = response?.data?.lead || response?.lead || response || null;
             } catch (error) {
-                console.warn('⚠️ Clients: Unable to fetch lead for pipeline detail view', error);
+                // Silently fail - lead fetch is non-critical
             }
         }
 
@@ -5252,7 +5101,7 @@ const Clients = React.memo(() => {
         try {
             sessionStorage.setItem('returnToPipeline', 'true');
         } catch (error) {
-            console.warn('⚠️ Clients: Unable to set returnToPipeline flag for opportunity', error);
+            // Silently fail - sessionStorage access is non-critical
         }
 
         stopSync();
@@ -5269,7 +5118,7 @@ const Clients = React.memo(() => {
                 const response = await window.DatabaseAPI.getClient(resolvedClientId);
                 client = response?.data?.client || response?.client || response || null;
             } catch (error) {
-                console.warn('⚠️ Clients: Unable to fetch client for opportunity detail view', error);
+                // Silently fail - client fetch is non-critical
             }
         }
 
@@ -5300,7 +5149,7 @@ const Clients = React.memo(() => {
                 try {
                     window.storage?.setLeads?.(updated);
                 } catch (error) {
-                    console.warn('⚠️ Failed to persist leads to localStorage after star toggle:', error);
+                    // Silently fail - localStorage persistence is non-critical
                 }
                 return updated;
             });
@@ -5312,7 +5161,7 @@ const Clients = React.memo(() => {
                 try {
                     safeStorage.setClients(updated);
                 } catch (error) {
-                    console.warn('⚠️ Failed to persist clients to localStorage after star toggle:', error);
+                    // Silently fail - localStorage persistence is non-critical
                 }
                 return updated;
             });
@@ -5355,11 +5204,10 @@ const Clients = React.memo(() => {
                             window.dataManager.invalidate('clients');
                             window.dataManager.invalidate('leads');
                         } catch (err) {
-                            console.warn('⚠️ Failed to invalidate DataContext cache after star toggle:', err);
+                            // Silently fail - cache invalidation is non-critical
                         }
                     }
                 }).catch((error) => {
-                    console.error('❌ Failed to toggle star:', error);
                     // Revert optimistic update on error
                     if (isLead) {
                         updateLeadsState(prevLeads =>
@@ -5377,8 +5225,7 @@ const Clients = React.memo(() => {
                     alert('Failed to update star. Please try again.');
                 });
             } else {
-                console.error('❌ Star API not available');
-                // Revert if API not available
+                // Revert if API not available (no star API)
                 if (isLead) {
                     updateLeadsState(prevLeads =>
                         prevLeads.map(l =>
@@ -5394,7 +5241,6 @@ const Clients = React.memo(() => {
                 }
             }
         } catch (error) {
-            console.error('❌ Failed to toggle star:', error);
             // Revert optimistic update on error
             if (isLead) {
                 updateLeadsState(prevLeads =>
@@ -5482,50 +5328,76 @@ const Clients = React.memo(() => {
         }
     };
 
-    const convertLeadToClient = (lead) => {
-        const newClient = {
-            id: Math.max(0, ...clients.map(c => c.id)) + 1,
-            name: lead.name,
-            industry: lead.industry,
-            status: 'Active',
-            type: 'client',
-            revenue: 0,
-            lastContact: new Date().toISOString().split('T')[0],
-            address: '',
-            website: '',
-            notes: lead.notes,
-            contacts: lead.contacts || [],
-            followUps: lead.followUps || [],
-            projectIds: lead.projectIds || [],
-            comments: lead.comments || [],
-            sites: [],
-            opportunities: [],
-            services: lead.services || [],
-            activityLog: [{
-                id: Date.now(),
-                type: 'Lead Converted',
-                description: `Converted from lead to client`,
-                timestamp: new Date().toISOString(),
-                user: (() => {
-                    const u = window.storage?.getUser?.() || {};
-                    return u.name || 'System';
-                })(),
-                userId: (() => {
-                    const u = window.storage?.getUser?.() || {};
-                    return u.id || 'system';
-                })(),
-                userEmail: (() => {
-                    const u = window.storage?.getUser?.() || {};
-                    return u.email || 'system';
-                })()
-            }]
-        };
-        setClients([...clients, newClient]);
-        const normalizedLeadId = lead && lead.id !== undefined && lead.id !== null ? String(lead.id) : null;
-        setLeads(leads.filter(l => (normalizedLeadId ? String(l.id) !== normalizedLeadId : l !== lead)));
-        setViewMode('clients');
-        selectedLeadRef.current = null; // Clear selected lead ref
-        alert('Lead converted to client!');
+    const convertLeadToClient = async (lead) => {
+        if (!lead || !lead.id) {
+            alert('Cannot convert lead: Invalid lead data');
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            const newClientData = {
+                name: lead.name,
+                industry: lead.industry || 'Other',
+                status: 'active',
+                type: 'client',
+                revenue: lead.value || 0,
+                lastContact: new Date().toISOString().split('T')[0],
+                address: lead.address || '',
+                website: lead.website || '',
+                notes: lead.notes || '',
+                contacts: lead.contacts || [],
+                followUps: [],
+                projectIds: lead.projectIds || [],
+                comments: lead.comments || [],
+                sites: [],
+                services: lead.services || [],
+                activityLog: [{
+                    id: Date.now(),
+                    type: 'Lead Converted',
+                    description: `Converted from lead: ${lead.name}`,
+                    timestamp: new Date().toISOString(),
+                    user: (window.storage?.getUser?.() || {}).name || 'System',
+                    userId: (window.storage?.getUser?.() || {}).id || 'system',
+                    userEmail: (window.storage?.getUser?.() || {}).email || 'system'
+                }]
+            };
+
+            if (token && window.api?.createClient && window.api?.deleteLead) {
+                // Create client from lead data
+                const clientResponse = await window.api.createClient(newClientData);
+                const newClient = clientResponse?.data?.client || clientResponse?.client || clientResponse?.data;
+                
+                // Delete the original lead
+                await window.api.deleteLead(lead.id);
+                
+                // Refresh data from API
+                await Promise.all([
+                    loadClients(true).catch(() => {}),
+                    loadLeads(true).catch(() => {})
+                ]);
+                
+                setViewMode('clients');
+                selectedLeadRef.current = null;
+                alert('Lead converted to client successfully!');
+            } else {
+                // Fallback: local conversion only
+                const newClient = {
+                    id: Date.now().toString(),
+                    ...newClientData,
+                    type: 'client'
+                };
+                setClients([...clients, newClient]);
+                const normalizedLeadId = String(lead.id);
+                setLeads(prevLeads => prevLeads.filter(l => String(l.id) !== normalizedLeadId));
+                setLeadsCount(prev => Math.max(0, prev - 1));
+                setViewMode('clients');
+                selectedLeadRef.current = null;
+                alert('Lead converted to client (local only - not saved to server)');
+            }
+        } catch (error) {
+            alert('Failed to convert lead to client: ' + (error.message || 'Unknown error'));
+        }
     };
 
     // Legacy Pipeline View Component (fallback if new Pipeline module fails to load)
@@ -5570,7 +5442,7 @@ const Clients = React.memo(() => {
                     // Handle error gracefully - don't log for server errors (500s)
                     const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
                     if (!isServerError) {
-                        console.warn(`⚠️ Failed to reload opportunities in bulk:`, error.message || error);
+                        // Silently fail - opportunity reload is non-critical
                     }
                 }
             };
@@ -5745,6 +5617,77 @@ const Clients = React.memo(() => {
         );
     };
 
+    // Memoize parsed client data to prevent flickering during renders
+    // This ensures services, groups, and sites are parsed once and remain stable
+    const parsedClientsData = useMemo(() => {
+        return paginatedClients.map(client => {
+            // Parse services - always return array, never undefined/null
+            let parsedServices = [];
+            if (Array.isArray(client.services)) {
+                parsedServices = client.services;
+            } else if (typeof client.services === 'string') {
+                try {
+                    const parsed = JSON.parse(client.services || '[]');
+                    parsedServices = Array.isArray(parsed) ? parsed : [];
+                } catch {
+                    parsedServices = [];
+                }
+            }
+            
+            // Parse groups - always return array, never undefined/null
+            let parsedGroups = [];
+            // Priority 1: Check ref (restored groups that should never be cleared)
+            if (restoredGroupMembershipsRef.current.has(client.id)) {
+                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                    parsedGroups = restoredGroups;
+                }
+            }
+            // Priority 2: Use state if ref doesn't have groups
+            if (parsedGroups.length === 0 && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                parsedGroups = client.groupMemberships;
+            }
+            
+            // Parse sites - always return array, never undefined/null
+            let parsedSites = [];
+            if (Array.isArray(client.sites)) {
+                parsedSites = client.sites;
+            } else if (typeof client.sites === 'string') {
+                try {
+                    const parsed = JSON.parse(client.sites || '[]');
+                    parsedSites = Array.isArray(parsed) ? parsed : [];
+                } catch {
+                    parsedSites = [];
+                }
+            }
+            
+            return {
+                ...client,
+                parsedServices,
+                parsedGroups,
+                parsedSites
+            };
+        });
+    }, [paginatedClients]); // Only recompute when paginatedClients changes
+
+    // Helper function to extract string from service (stable reference)
+    const getServiceString = useCallback((service) => {
+        if (typeof service === 'string') return service;
+        if (typeof service === 'object' && service !== null) {
+            return service.name || service.id || service.description || JSON.stringify(service);
+        }
+        return String(service || '');
+    }, []);
+    
+    // Helper function to get unique key from service (stable reference)
+    const getServiceKey = useCallback((service, index) => {
+        if (typeof service === 'string') return service;
+        if (typeof service === 'object' && service !== null) {
+            return service.id || service.name || `service-${index}`;
+        }
+        return `service-${index}`;
+    }, []);
+
     // Clients List View
     const ClientsListView = () => (
         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
@@ -5810,7 +5753,7 @@ const Clients = React.memo(() => {
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
-                        {paginatedClients.length === 0 ? (
+                        {parsedClientsData.length === 0 ? (
                             <tr>
                                     <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
@@ -5818,10 +5761,7 @@ const Clients = React.memo(() => {
                                 </td>
                             </tr>
                         ) : (
-                            paginatedClients.filter(client => {
-                                // Final render-time safety check: ensure type is 'client' and not 'Potential' status
-                                return client.type === 'client' && client.status !== 'Potential';
-                            }).map(client => (
+                            parsedClientsData.map((client) => (
                                 <tr 
                                     key={client.id} 
                                     onClick={() => handleOpenClient(client)}
@@ -5848,38 +5788,7 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // CRITICAL: Check ref FIRST as fallback if state doesn't have groups
-                                            // This ensures groups are displayed even if state is cleared
-                                            let memberships = [];
-                                            
-                                            // Priority 1: Check ref (restored groups that should never be cleared)
-                                            if (restoredGroupMembershipsRef.current.has(client.id)) {
-                                                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
-                                                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
-                                                    memberships = restoredGroups;
-                                                }
-                                            }
-                                            
-                                            // Priority 2: Use state if ref doesn't have groups
-                                            if (memberships.length === 0 && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
-                                                memberships = client.groupMemberships;
-                                            }
-                                            
-                                            // Debug: log for Exxaro clients (only in development mode)
-                                            // Removed excessive logging in production to improve performance
-                                            if (process.env.NODE_ENV === 'development' && client.name && client.name.toLowerCase().includes('exxaro')) {
-                                                console.log(`🔍 Rendering ${client.name}:`, {
-                                                    hasGroupMemberships: !!client.groupMemberships,
-                                                    isArray: Array.isArray(client.groupMemberships),
-                                                    stateLength: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 0,
-                                                    refHasGroups: restoredGroupMembershipsRef.current.has(client.id),
-                                                    refLength: restoredGroupMembershipsRef.current.has(client.id) ? restoredGroupMembershipsRef.current.get(client.id).length : 0,
-                                                    finalLength: memberships.length,
-                                                    firstItem: memberships[0],
-                                                    allItems: memberships
-                                                });
-                                            }
-                                            
+                                            const memberships = client.parsedGroups || [];
                                             const groupNames = memberships
                                                 .map(m => {
                                                     // Try multiple possible structures
@@ -5896,30 +5805,10 @@ const Clients = React.memo(() => {
                                     <td className="px-6 py-2 whitespace-nowrap">
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
-                                                const services = Array.isArray(client.services)
-                                                    ? client.services
-                                                    : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
+                                                const services = client.parsedServices || [];
                                                 const MAX = 3;
                                                 const visible = services.slice(0, MAX);
                                                 const remaining = services.length - visible.length;
-                                                
-                                                // Helper function to extract string from service (handles both objects and strings)
-                                                const getServiceString = (service) => {
-                                                    if (typeof service === 'string') return service;
-                                                    if (typeof service === 'object' && service !== null) {
-                                                        return service.name || service.id || service.description || JSON.stringify(service);
-                                                    }
-                                                    return String(service || '');
-                                                };
-                                                
-                                                // Helper function to get unique key from service
-                                                const getServiceKey = (service, index) => {
-                                                    if (typeof service === 'string') return service;
-                                                    if (typeof service === 'object' && service !== null) {
-                                                        return service.id || service.name || `service-${index}`;
-                                                    }
-                                                    return `service-${index}`;
-                                                };
                                                 
                                                 return (
                                                     <>
@@ -6009,8 +5898,7 @@ const Clients = React.memo(() => {
     const handleSaveGroup = async () => {
         // Prevent duplicate requests
         if (isSavingGroupRef.current) {
-            console.warn('⚠️ Save group request already in progress, skipping duplicate call');
-            return;
+            return; // Save already in progress, skip duplicate call
         }
 
         if (!groupFormData.name || !groupFormData.name.trim()) {
@@ -6035,7 +5923,6 @@ const Clients = React.memo(() => {
 
             if (editingGroupId) {
                 // Update existing group - use client update API
-                console.log('🔄 Updating group:', editingGroupId, requestBody);
                 const response = await fetch(`/api/clients/${editingGroupId}`, {
                     method: 'PATCH',
                     headers: {
@@ -6053,16 +5940,10 @@ const Clients = React.memo(() => {
                 } else {
                     const errorData = await response.json().catch(() => ({}));
                     const errorMessage = errorData?.error?.message || errorData?.error || 'Failed to update group';
-                    console.error('❌ Failed to update group:', {
-                        status: response.status,
-                        statusText: response.statusText,
-                        error: errorData
-                    });
                     alert(errorMessage);
                 }
             } else {
                 // Create new group
-                console.log('🔄 Creating new group:', requestBody);
                 const response = await fetch('/api/clients/groups', {
                     method: 'POST',
                     headers: {
@@ -6075,7 +5956,6 @@ const Clients = React.memo(() => {
 
                 if (response.ok) {
                     const responseData = await response.json().catch(() => ({}));
-                    console.log('✅ Group created successfully:', responseData);
                     await loadGroups(true);
                     setShowGroupModal(false);
                     setGroupFormData({ name: '', industry: 'Other', notes: '' });
@@ -6083,23 +5963,10 @@ const Clients = React.memo(() => {
                     const errorData = await response.json().catch(() => ({}));
                     const errorMessage = errorData?.error?.message || errorData?.error || 'Failed to create group';
                     const errorDetails = errorData?.error?.details || '';
-                    
-                    console.error('❌ Failed to create group:', {
-                        status: response.status,
-                        statusText: response.statusText,
-                        error: errorData,
-                        requestBody: requestBody
-                    });
-                    
                     alert(errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage);
                 }
             }
         } catch (error) {
-            console.error('❌ Error saving group:', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            });
             alert('Error saving group: ' + error.message);
         } finally {
             isSavingGroupRef.current = false;
@@ -6945,22 +6812,19 @@ const Clients = React.memo(() => {
                                                                     if (lead.industry && lead.industry !== 'Other') {
                                                                         parts.push(lead.industry);
                                                                     }
-                                                                    // Don't display status for leads (removed Active status display)
-                                                                    // if (lead.status && lead.status !== 'New') {
-                                                                    //     parts.push(lead.status);
-                                                                    // }
                                                                     
-                                                                    // Parse and display sites for leads
+                                                                    // Parse sites once - always return array, never undefined/null
                                                                     let sites = [];
                                                                     if (lead.sites) {
-                                                                        if (typeof lead.sites === 'string') {
+                                                                        if (Array.isArray(lead.sites)) {
+                                                                            sites = lead.sites;
+                                                                        } else if (typeof lead.sites === 'string') {
                                                                             try {
-                                                                                sites = JSON.parse(lead.sites);
-                                                                            } catch (e) {
+                                                                                const parsed = JSON.parse(lead.sites || '[]');
+                                                                                sites = Array.isArray(parsed) ? parsed : [];
+                                                                            } catch {
                                                                                 sites = [];
                                                                             }
-                                                                        } else if (Array.isArray(lead.sites)) {
-                                                                            sites = lead.sites;
                                                                         }
                                                                     }
                                                                     
@@ -7824,7 +7688,7 @@ const Clients = React.memo(() => {
                                     try {
                                         return sessionStorage.getItem('returnToPipeline') === 'true';
                                     } catch (error) {
-                                        console.warn('⚠️ Clients: Unable to read returnToPipeline flag on lead close', error);
+                                        // Silently fail - sessionStorage access is non-critical
                                         return false;
                                     }
                                 })();
@@ -7833,7 +7697,7 @@ const Clients = React.memo(() => {
                                     try {
                                         sessionStorage.removeItem('returnToPipeline');
                                     } catch (error) {
-                                        console.warn('⚠️ Clients: Unable to clear returnToPipeline flag on lead close', error);
+                                        // Silently fail - sessionStorage clear is non-critical
                                     }
                                     setViewMode('pipeline');
                                 } else {
