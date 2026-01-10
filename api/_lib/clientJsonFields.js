@@ -96,15 +96,157 @@ export function parseClientJsonFields(client) {
       }
     }
     
+    // Phase 6: Sites - Use normalized table first, fallback to JSON
+    if (client.clientSites && Array.isArray(client.clientSites) && client.clientSites.length > 0) {
+      parsed.sites = client.clientSites.map(site => ({
+        id: site.id,
+        name: site.name,
+        address: site.address || '',
+        contactPerson: site.contactPerson || '',
+        contactPhone: site.contactPhone || '',
+        contactEmail: site.contactEmail || '',
+        notes: site.notes || ''
+      }))
+    } else {
+      // Fallback: Try JSONB field, then String field
+      let value = client.sitesJsonb
+      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+        const stringValue = client.sites
+        if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+          try {
+            value = JSON.parse(stringValue)
+          } catch (e) {
+            value = []
+          }
+        } else {
+          value = []
+        }
+      }
+      parsed.sites = Array.isArray(value) ? value : []
+    }
+    
+    // Phase 6: Contracts - Use normalized table first, fallback to JSON
+    if (client.clientContracts && Array.isArray(client.clientContracts) && client.clientContracts.length > 0) {
+      parsed.contracts = client.clientContracts.map(contract => ({
+        id: contract.id,
+        name: contract.name,
+        size: contract.size || 0,
+        type: contract.type || '',
+        uploadDate: contract.uploadDate ? new Date(contract.uploadDate).toISOString() : new Date().toISOString(),
+        url: contract.url || ''
+      }))
+    } else {
+      // Fallback: Try JSONB field, then String field
+      let value = client.contractsJsonb
+      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+        const stringValue = client.contracts
+        if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+          try {
+            value = JSON.parse(stringValue)
+          } catch (e) {
+            value = []
+          }
+        } else {
+          value = []
+        }
+      }
+      parsed.contracts = Array.isArray(value) ? value : []
+    }
+    
+    // Phase 6: Proposals - Use normalized table first, fallback to JSON
+    if (client.clientProposals && Array.isArray(client.clientProposals) && client.clientProposals.length > 0) {
+      parsed.proposals = client.clientProposals.map(proposal => ({
+        id: proposal.id,
+        title: proposal.title || '',
+        amount: proposal.amount || 0,
+        status: proposal.status || 'Pending',
+        workingDocumentLink: proposal.workingDocumentLink || '',
+        createdDate: proposal.createdDate ? new Date(proposal.createdDate).toISOString() : null,
+        expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate).toISOString() : null,
+        notes: proposal.notes || ''
+      }))
+    } else {
+      // Fallback: Try JSONB field, then String field
+      let value = client.proposalsJsonb
+      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+        const stringValue = client.proposals
+        if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+          try {
+            value = JSON.parse(stringValue)
+          } catch (e) {
+            value = []
+          }
+        } else {
+          value = []
+        }
+      }
+      parsed.proposals = Array.isArray(value) ? value : []
+    }
+    
+    // Phase 6: FollowUps - Use normalized table first, fallback to JSON
+    if (client.clientFollowUps && Array.isArray(client.clientFollowUps) && client.clientFollowUps.length > 0) {
+      parsed.followUps = client.clientFollowUps.map(followUp => ({
+        id: followUp.id,
+        date: followUp.date || '',
+        time: followUp.time || '',
+        type: followUp.type || 'Call',
+        description: followUp.description || '',
+        completed: followUp.completed || false,
+        assignedTo: followUp.assignedTo || null
+      }))
+    } else {
+      // Fallback: Try JSONB field, then String field
+      let value = client.followUpsJsonb
+      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+        const stringValue = client.followUps
+        if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+          try {
+            value = JSON.parse(stringValue)
+          } catch (e) {
+            value = []
+          }
+        } else {
+          value = []
+        }
+      }
+      parsed.followUps = Array.isArray(value) ? value : []
+    }
+    
+    // Phase 6: Services - Use normalized table first, fallback to JSON
+    if (client.clientServices && Array.isArray(client.clientServices) && client.clientServices.length > 0) {
+      parsed.services = client.clientServices.map(service => ({
+        id: service.id,
+        name: service.name,
+        description: service.description || '',
+        price: service.price || 0,
+        status: service.status || 'Active',
+        startDate: service.startDate ? new Date(service.startDate).toISOString() : null,
+        endDate: service.endDate ? new Date(service.endDate).toISOString() : null,
+        notes: service.notes || ''
+      }))
+    } else {
+      // Fallback: Try JSONB field, then String field
+      let value = client.servicesJsonb
+      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+        const stringValue = client.services
+        if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+          try {
+            value = JSON.parse(stringValue)
+          } catch (e) {
+            value = []
+          }
+        } else {
+          value = []
+        }
+      }
+      parsed.services = Array.isArray(value) ? value : []
+    }
+    
     // Other JSON fields - Phase 2: Read from JSONB first, fallback to String
+    // Only activityLog and billingTerms remain as JSON (not normalized)
     const jsonFieldMap = {
-      'followUps': 'followUpsJsonb',
-      'sites': 'sitesJsonb',
-      'contracts': 'contractsJsonb',
       'activityLog': 'activityLogJsonb',
-      'billingTerms': 'billingTermsJsonb',
-      'proposals': 'proposalsJsonb',
-      'services': 'servicesJsonb'
+      'billingTerms': 'billingTermsJsonb'
     }
     
     for (const [field, jsonbField] of Object.entries(jsonFieldMap)) {
@@ -133,6 +275,11 @@ export function parseClientJsonFields(client) {
     // Remove relation objects from parsed output (frontend doesn't need them)
     delete parsed.clientContacts
     delete parsed.clientComments
+    delete parsed.clientSites
+    delete parsed.clientContracts
+    delete parsed.clientProposals
+    delete parsed.clientFollowUps
+    delete parsed.clientServices
     
     return parsed
   } catch (error) {
@@ -145,9 +292,11 @@ export function parseClientJsonFields(client) {
 // Phase 2: Helper to prepare data for dual-write (both String and JSONB)
 // Phase 4: Removed projectIds - use Project.clientId relation instead
 // Phase 5: Removed contacts and comments - use normalized tables (ClientContact, ClientComment) only
+// Phase 6: Removed sites, contracts, proposals, followUps, services - use normalized tables only
 export function prepareJsonFieldsForDualWrite(body) {
-  const jsonFields = ['followUps', 'sites', 'contracts', 'activityLog', 'proposals', 'services']
-  // Note: 'contacts' and 'comments' removed - they should ONLY be written to normalized tables
+  const jsonFields = ['activityLog'] // Only activityLog remains as JSON (log data, not normalized)
+  // Note: 'contacts', 'comments', 'sites', 'contracts', 'proposals', 'followUps', 'services' removed
+  // These should ONLY be written to normalized tables
   
   const result = {}
   

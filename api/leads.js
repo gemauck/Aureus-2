@@ -149,7 +149,7 @@ async function handler(req, res) {
                   }
                 }
               } : {}),
-              // Phase 3: Include normalized tables
+              // Phase 3 & 6: Include normalized tables
               clientContacts: {
                 select: {
                   id: true,
@@ -179,7 +179,13 @@ async function handler(req, res) {
                 orderBy: {
                   createdAt: 'desc'
                 }
-              }
+              },
+              // Phase 6: Include normalized tables
+              clientSites: true,
+              clientContracts: true,
+              clientProposals: true,
+              clientFollowUps: true,
+              clientServices: true
             }
             
             // If table doesn't exist, we'll set empty groupMemberships after query
@@ -686,9 +692,14 @@ async function handler(req, res) {
       const jsonFields = prepareJsonFieldsForDualWrite(body)
       Object.assign(leadData, jsonFields)
       
-      // Extract contacts/comments from body before removing (will sync to normalized tables)
+      // Extract normalized fields from body before removing (will sync to normalized tables)
       let contactsToSync = []
       let commentsToSync = []
+      let sitesToSync = []
+      let contractsToSync = []
+      let proposalsToSync = []
+      let followUpsToSync = []
+      let servicesToSync = []
       
       if (body.contacts !== undefined) {
         if (Array.isArray(body.contacts)) {
@@ -714,11 +725,82 @@ async function handler(req, res) {
         }
       }
       
-      // Ensure contacts/comments are NOT in leadData (they go to normalized tables only)
+      // Phase 6: Extract sites, contracts, proposals, followUps, services
+      if (body.sites !== undefined) {
+        if (Array.isArray(body.sites)) {
+          sitesToSync = body.sites
+        } else if (typeof body.sites === 'string' && body.sites.trim()) {
+          try {
+            sitesToSync = JSON.parse(body.sites)
+          } catch (e) {
+            sitesToSync = []
+          }
+        }
+      }
+      
+      if (body.contracts !== undefined) {
+        if (Array.isArray(body.contracts)) {
+          contractsToSync = body.contracts
+        } else if (typeof body.contracts === 'string' && body.contracts.trim()) {
+          try {
+            contractsToSync = JSON.parse(body.contracts)
+          } catch (e) {
+            contractsToSync = []
+          }
+        }
+      }
+      
+      if (body.proposals !== undefined) {
+        if (Array.isArray(body.proposals)) {
+          proposalsToSync = body.proposals
+        } else if (typeof body.proposals === 'string' && body.proposals.trim()) {
+          try {
+            proposalsToSync = JSON.parse(body.proposals)
+          } catch (e) {
+            proposalsToSync = []
+          }
+        }
+      }
+      
+      if (body.followUps !== undefined) {
+        if (Array.isArray(body.followUps)) {
+          followUpsToSync = body.followUps
+        } else if (typeof body.followUps === 'string' && body.followUps.trim()) {
+          try {
+            followUpsToSync = JSON.parse(body.followUps)
+          } catch (e) {
+            followUpsToSync = []
+          }
+        }
+      }
+      
+      if (body.services !== undefined) {
+        if (Array.isArray(body.services)) {
+          servicesToSync = body.services
+        } else if (typeof body.services === 'string' && body.services.trim()) {
+          try {
+            servicesToSync = JSON.parse(body.services)
+          } catch (e) {
+            servicesToSync = []
+          }
+        }
+      }
+      
+      // Ensure normalized fields are NOT in leadData (they go to normalized tables only)
       delete leadData.contacts
       delete leadData.contactsJsonb
       delete leadData.comments
       delete leadData.commentsJsonb
+      delete leadData.sites
+      delete leadData.sitesJsonb
+      delete leadData.contracts
+      delete leadData.contractsJsonb
+      delete leadData.proposals
+      delete leadData.proposalsJsonb
+      delete leadData.followUps
+      delete leadData.followUpsJsonb
+      delete leadData.services
+      delete leadData.servicesJsonb
 
 
       // Filter out any undefined or null values that might cause issues
@@ -860,8 +942,180 @@ async function handler(req, res) {
               }
             }
           }
+          
+          // Phase 6: Sync sites, contracts, proposals, followUps, services to normalized tables
+          // Sync sites if provided
+          if (sitesToSync && Array.isArray(sitesToSync) && sitesToSync.length > 0) {
+            for (const site of sitesToSync) {
+              const siteData = {
+                clientId: lead.id,
+                name: site.name || '',
+                address: site.address || '',
+                contactPerson: site.contactPerson || '',
+                contactPhone: site.contactPhone || '',
+                contactEmail: site.contactEmail || '',
+                notes: site.notes || ''
+              }
+              
+              if (site.id) {
+                try {
+                  await prisma.clientSite.create({
+                    data: { id: site.id, ...siteData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientSite.update({
+                      where: { id: site.id },
+                      data: siteData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientSite.create({ data: siteData })
+              }
+            }
+          }
+          
+          // Sync contracts if provided
+          if (contractsToSync && Array.isArray(contractsToSync) && contractsToSync.length > 0) {
+            for (const contract of contractsToSync) {
+              const contractData = {
+                clientId: lead.id,
+                name: contract.name || '',
+                size: contract.size || 0,
+                type: contract.type || '',
+                url: contract.url || '',
+                uploadDate: contract.uploadDate ? new Date(contract.uploadDate) : new Date()
+              }
+              
+              if (contract.id) {
+                try {
+                  await prisma.clientContract.create({
+                    data: { id: contract.id, ...contractData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContract.update({
+                      where: { id: contract.id },
+                      data: contractData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientContract.create({ data: contractData })
+              }
+            }
+          }
+          
+          // Sync proposals if provided
+          if (proposalsToSync && Array.isArray(proposalsToSync) && proposalsToSync.length > 0) {
+            for (const proposal of proposalsToSync) {
+              const proposalData = {
+                clientId: lead.id,
+                title: proposal.title || '',
+                amount: proposal.amount || 0,
+                status: proposal.status || 'Pending',
+                workingDocumentLink: proposal.workingDocumentLink || '',
+                createdDate: proposal.createdDate ? new Date(proposal.createdDate) : null,
+                expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
+                notes: proposal.notes || ''
+              }
+              
+              if (proposal.id) {
+                try {
+                  await prisma.clientProposal.create({
+                    data: { id: proposal.id, ...proposalData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientProposal.update({
+                      where: { id: proposal.id },
+                      data: proposalData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientProposal.create({ data: proposalData })
+              }
+            }
+          }
+          
+          // Sync followUps if provided
+          if (followUpsToSync && Array.isArray(followUpsToSync) && followUpsToSync.length > 0) {
+            for (const followUp of followUpsToSync) {
+              const followUpData = {
+                clientId: lead.id,
+                date: followUp.date || '',
+                time: followUp.time || '',
+                type: followUp.type || 'Call',
+                description: followUp.description || '',
+                completed: !!followUp.completed,
+                assignedTo: followUp.assignedTo || null
+              }
+              
+              if (followUp.id) {
+                try {
+                  await prisma.clientFollowUp.create({
+                    data: { id: followUp.id, ...followUpData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientFollowUp.update({
+                      where: { id: followUp.id },
+                      data: followUpData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientFollowUp.create({ data: followUpData })
+              }
+            }
+          }
+          
+          // Sync services if provided
+          if (servicesToSync && Array.isArray(servicesToSync) && servicesToSync.length > 0) {
+            for (const service of servicesToSync) {
+              const serviceData = {
+                clientId: lead.id,
+                name: service.name || '',
+                description: service.description || '',
+                price: service.price || 0,
+                status: service.status || 'Active',
+                startDate: service.startDate ? new Date(service.startDate) : null,
+                endDate: service.endDate ? new Date(service.endDate) : null,
+                notes: service.notes || ''
+              }
+              
+              if (service.id) {
+                try {
+                  await prisma.clientService.create({
+                    data: { id: service.id, ...serviceData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientService.update({
+                      where: { id: service.id },
+                      data: serviceData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientService.create({ data: serviceData })
+              }
+            }
+          }
         } catch (syncError) {
-          console.warn('⚠️ Failed to sync contacts/comments to normalized tables (non-critical):', syncError.message)
+          console.warn('⚠️ Failed to sync normalized data to tables (non-critical):', syncError.message)
           // Don't fail lead creation if sync fails
         }
         

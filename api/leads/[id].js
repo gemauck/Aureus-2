@@ -103,6 +103,11 @@ async function handler(req, res) {
               include: {
                 clientContacts: true,
                 clientComments: true,
+                clientSites: true,
+                clientContracts: true,
+                clientProposals: true,
+                clientFollowUps: true,
+                clientServices: true,
                 projects: { select: { id: true, name: true, status: true } },
                 ...(includeObj.externalAgent ? { externalAgent: true } : {}),
                 ...(includeObj.starredBy ? { starredBy: includeObj.starredBy } : {})
@@ -132,6 +137,11 @@ async function handler(req, res) {
               lead.starredBy = []
               lead.clientContacts = []
               lead.clientComments = []
+              lead.clientSites = []
+              lead.clientContracts = []
+              lead.clientProposals = []
+              lead.clientFollowUps = []
+              lead.clientServices = []
               lead.projects = []
               
               // Try to fetch normalized data separately
@@ -151,6 +161,47 @@ async function handler(req, res) {
                   ORDER BY "createdAt" DESC
                 `
                 lead.clientComments = commentsResult || []
+                
+                // Phase 6: Fetch normalized tables
+                const sitesResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "createdAt"
+                  FROM "ClientSite"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "createdAt" ASC
+                `
+                lead.clientSites = sitesResult || []
+                
+                const contractsResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", name, size, type, "uploadDate", url, "createdAt"
+                  FROM "ClientContract"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "uploadDate" DESC
+                `
+                lead.clientContracts = contractsResult || []
+                
+                const proposalsResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", title, amount, status, "workingDocumentLink", "createdDate", "expiryDate", notes, "createdAt"
+                  FROM "ClientProposal"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "createdDate" DESC
+                `
+                lead.clientProposals = proposalsResult || []
+                
+                const followUpsResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", date, time, type, description, completed, "assignedTo", "createdAt"
+                  FROM "ClientFollowUp"
+                  WHERE "clientId" = ${id}
+                  ORDER BY date ASC, time ASC
+                `
+                lead.clientFollowUps = followUpsResult || []
+                
+                const servicesResult = await prisma.$queryRaw`
+                  SELECT id, "clientId", name, description, price, status, "startDate", "endDate", notes, "createdAt"
+                  FROM "ClientService"
+                  WHERE "clientId" = ${id}
+                  ORDER BY "startDate" DESC
+                `
+                lead.clientServices = servicesResult || []
                 
                 const projectsResult = await prisma.$queryRaw`
                   SELECT id, name, status
@@ -253,16 +304,12 @@ async function handler(req, res) {
         address: body.address,
         website: body.website,
         notes: body.notes !== undefined ? String(body.notes || '') : undefined,
-        // ⚠️ REMOVED: contacts should be managed via /api/contacts endpoint (normalized ClientContact table)
-        followUps: body.followUps !== undefined ? (typeof body.followUps === 'string' ? body.followUps : JSON.stringify(Array.isArray(body.followUps) ? body.followUps : [])) : undefined,
+        // ⚠️ REMOVED: contacts, comments, sites, contracts, proposals, followUps, services should be managed via normalized tables
+        // Phase 6: These fields are handled separately below to sync to normalized tables
         projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : [])) : undefined,
-        // ⚠️ REMOVED: comments should be managed via normalized ClientComment table (sync in main leads.js handler)
-        sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : [])) : undefined,
-        contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : [])) : undefined,
+        // Only activityLog and billingTerms remain as JSON (not normalized)
         activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,
         billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
-        proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined,
-        services: body.services !== undefined ? (typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : [])) : undefined,
         externalAgentId: body.externalAgentId !== undefined ? (body.externalAgentId || null) : undefined
       }
 
@@ -289,6 +336,368 @@ async function handler(req, res) {
         // Store old name and website for RSS feed update
         const oldName = existing.name
         const oldWebsite = existing.website
+        
+        // Phase 6: Handle normalized fields separately (sites, contracts, proposals, followUps, services)
+        // Sites
+        if (body.sites !== undefined) {
+          let sitesArray = []
+          if (Array.isArray(body.sites)) {
+            sitesArray = body.sites
+          } else if (typeof body.sites === 'string' && body.sites.trim()) {
+            try {
+              sitesArray = JSON.parse(body.sites)
+            } catch (e) {
+              sitesArray = []
+            }
+          }
+          
+          try {
+            const existingSites = await prisma.clientSite.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingSiteIds = new Set(existingSites.map(s => s.id))
+            const sitesToKeep = new Set()
+            
+            for (const site of sitesArray) {
+              const siteData = {
+                clientId: id,
+                name: site.name || '',
+                address: site.address || '',
+                contactPerson: site.contactPerson || '',
+                contactPhone: site.contactPhone || '',
+                contactEmail: site.contactEmail || '',
+                notes: site.notes || ''
+              }
+              
+              if (site.id && existingSiteIds.has(site.id)) {
+                await prisma.clientSite.update({
+                  where: { id: site.id },
+                  data: siteData
+                })
+                sitesToKeep.add(site.id)
+              } else if (site.id) {
+                try {
+                  await prisma.clientSite.create({
+                    data: { id: site.id, ...siteData }
+                  })
+                  sitesToKeep.add(site.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientSite.update({
+                      where: { id: site.id },
+                      data: siteData
+                    })
+                    sitesToKeep.add(site.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientSite.create({ data: siteData })
+                sitesToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientSite.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(sitesToKeep) } }
+              }
+            })
+          } catch (siteSyncError) {
+            console.warn('⚠️ Failed to sync sites to normalized table:', siteSyncError.message)
+          }
+        }
+        
+        // Contracts
+        if (body.contracts !== undefined) {
+          let contractsArray = []
+          if (Array.isArray(body.contracts)) {
+            contractsArray = body.contracts
+          } else if (typeof body.contracts === 'string' && body.contracts.trim()) {
+            try {
+              contractsArray = JSON.parse(body.contracts)
+            } catch (e) {
+              contractsArray = []
+            }
+          }
+          
+          try {
+            const existingContracts = await prisma.clientContract.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingContractIds = new Set(existingContracts.map(c => c.id))
+            const contractsToKeep = new Set()
+            
+            for (const contract of contractsArray) {
+              const contractData = {
+                clientId: id,
+                name: contract.name || '',
+                size: contract.size || 0,
+                type: contract.type || '',
+                url: contract.url || '',
+                uploadDate: contract.uploadDate ? new Date(contract.uploadDate) : new Date()
+              }
+              
+              if (contract.id && existingContractIds.has(contract.id)) {
+                await prisma.clientContract.update({
+                  where: { id: contract.id },
+                  data: contractData
+                })
+                contractsToKeep.add(contract.id)
+              } else if (contract.id) {
+                try {
+                  await prisma.clientContract.create({
+                    data: { id: contract.id, ...contractData }
+                  })
+                  contractsToKeep.add(contract.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContract.update({
+                      where: { id: contract.id },
+                      data: contractData
+                    })
+                    contractsToKeep.add(contract.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientContract.create({ data: contractData })
+                contractsToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientContract.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(contractsToKeep) } }
+              }
+            })
+          } catch (contractSyncError) {
+            console.warn('⚠️ Failed to sync contracts to normalized table:', contractSyncError.message)
+          }
+        }
+        
+        // Proposals
+        if (body.proposals !== undefined) {
+          let proposalsArray = []
+          if (Array.isArray(body.proposals)) {
+            proposalsArray = body.proposals
+          } else if (typeof body.proposals === 'string' && body.proposals.trim()) {
+            try {
+              proposalsArray = JSON.parse(body.proposals)
+            } catch (e) {
+              proposalsArray = []
+            }
+          }
+          
+          try {
+            const existingProposals = await prisma.clientProposal.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingProposalIds = new Set(existingProposals.map(p => p.id))
+            const proposalsToKeep = new Set()
+            
+            for (const proposal of proposalsArray) {
+              const proposalData = {
+                clientId: id,
+                title: proposal.title || '',
+                amount: proposal.amount || 0,
+                status: proposal.status || 'Pending',
+                workingDocumentLink: proposal.workingDocumentLink || '',
+                createdDate: proposal.createdDate ? new Date(proposal.createdDate) : null,
+                expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
+                notes: proposal.notes || ''
+              }
+              
+              if (proposal.id && existingProposalIds.has(proposal.id)) {
+                await prisma.clientProposal.update({
+                  where: { id: proposal.id },
+                  data: proposalData
+                })
+                proposalsToKeep.add(proposal.id)
+              } else if (proposal.id) {
+                try {
+                  await prisma.clientProposal.create({
+                    data: { id: proposal.id, ...proposalData }
+                  })
+                  proposalsToKeep.add(proposal.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientProposal.update({
+                      where: { id: proposal.id },
+                      data: proposalData
+                    })
+                    proposalsToKeep.add(proposal.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientProposal.create({ data: proposalData })
+                proposalsToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientProposal.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(proposalsToKeep) } }
+              }
+            })
+          } catch (proposalSyncError) {
+            console.warn('⚠️ Failed to sync proposals to normalized table:', proposalSyncError.message)
+          }
+        }
+        
+        // FollowUps
+        if (body.followUps !== undefined) {
+          let followUpsArray = []
+          if (Array.isArray(body.followUps)) {
+            followUpsArray = body.followUps
+          } else if (typeof body.followUps === 'string' && body.followUps.trim()) {
+            try {
+              followUpsArray = JSON.parse(body.followUps)
+            } catch (e) {
+              followUpsArray = []
+            }
+          }
+          
+          try {
+            const existingFollowUps = await prisma.clientFollowUp.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingFollowUpIds = new Set(existingFollowUps.map(f => f.id))
+            const followUpsToKeep = new Set()
+            
+            for (const followUp of followUpsArray) {
+              const followUpData = {
+                clientId: id,
+                date: followUp.date || '',
+                time: followUp.time || '',
+                type: followUp.type || 'Call',
+                description: followUp.description || '',
+                completed: !!followUp.completed,
+                assignedTo: followUp.assignedTo || null
+              }
+              
+              if (followUp.id && existingFollowUpIds.has(followUp.id)) {
+                await prisma.clientFollowUp.update({
+                  where: { id: followUp.id },
+                  data: followUpData
+                })
+                followUpsToKeep.add(followUp.id)
+              } else if (followUp.id) {
+                try {
+                  await prisma.clientFollowUp.create({
+                    data: { id: followUp.id, ...followUpData }
+                  })
+                  followUpsToKeep.add(followUp.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientFollowUp.update({
+                      where: { id: followUp.id },
+                      data: followUpData
+                    })
+                    followUpsToKeep.add(followUp.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientFollowUp.create({ data: followUpData })
+                followUpsToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientFollowUp.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(followUpsToKeep) } }
+              }
+            })
+          } catch (followUpSyncError) {
+            console.warn('⚠️ Failed to sync followUps to normalized table:', followUpSyncError.message)
+          }
+        }
+        
+        // Services
+        if (body.services !== undefined) {
+          let servicesArray = []
+          if (Array.isArray(body.services)) {
+            servicesArray = body.services
+          } else if (typeof body.services === 'string' && body.services.trim()) {
+            try {
+              servicesArray = JSON.parse(body.services)
+            } catch (e) {
+              servicesArray = []
+            }
+          }
+          
+          try {
+            const existingServices = await prisma.clientService.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingServiceIds = new Set(existingServices.map(s => s.id))
+            const servicesToKeep = new Set()
+            
+            for (const service of servicesArray) {
+              const serviceData = {
+                clientId: id,
+                name: service.name || '',
+                description: service.description || '',
+                price: service.price || 0,
+                status: service.status || 'Active',
+                startDate: service.startDate ? new Date(service.startDate) : null,
+                endDate: service.endDate ? new Date(service.endDate) : null,
+                notes: service.notes || ''
+              }
+              
+              if (service.id && existingServiceIds.has(service.id)) {
+                await prisma.clientService.update({
+                  where: { id: service.id },
+                  data: serviceData
+                })
+                servicesToKeep.add(service.id)
+              } else if (service.id) {
+                try {
+                  await prisma.clientService.create({
+                    data: { id: service.id, ...serviceData }
+                  })
+                  servicesToKeep.add(service.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientService.update({
+                      where: { id: service.id },
+                      data: serviceData
+                    })
+                    servicesToKeep.add(service.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientService.create({ data: serviceData })
+                servicesToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientService.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(servicesToKeep) } }
+              }
+            })
+          } catch (serviceSyncError) {
+            console.warn('⚠️ Failed to sync services to normalized table:', serviceSyncError.message)
+          }
+        }
         
         // If industry is being updated, ensure it exists in Industry table
         if (updateData.industry && updateData.industry.trim()) {
@@ -330,7 +739,17 @@ async function handler(req, res) {
         // Now update it
         const lead = await prisma.client.update({
           where: { id },
-          data: updateData
+          data: updateData,
+          include: {
+            clientContacts: true,
+            clientComments: true,
+            clientSites: true,
+            clientContracts: true,
+            clientProposals: true,
+            clientFollowUps: true,
+            clientServices: true,
+            projects: { select: { id: true, name: true, status: true } }
+          }
         })
         
         // If name changed, trigger RSS feed update (async, don't wait)
@@ -341,22 +760,8 @@ async function handler(req, res) {
           })
         }
         
-        // Parse JSON fields before returning
-        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
-        const parsedLead = { ...lead }
-        
-        for (const field of jsonFields) {
-          const value = parsedLead[field]
-          if (typeof value === 'string' && value) {
-            try {
-              parsedLead[field] = JSON.parse(value)
-            } catch (e) {
-              parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
-            }
-          } else if (!value) {
-            parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
-          }
-        }
+        // Parse JSON fields before returning using shared utility
+        const parsedLead = parseClientJsonFields(lead)
         
         return ok(res, { lead: parsedLead })
       } catch (dbError) {

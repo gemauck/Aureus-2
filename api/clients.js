@@ -100,7 +100,7 @@ async function handler(req, res) {
                     }
                   }
                 } : {}),
-                // Phase 3: Include normalized tables
+                // Phase 3 & 6: Include normalized tables
                 clientContacts: {
                   select: {
                     id: true,
@@ -130,6 +130,84 @@ async function handler(req, res) {
                   },
                   orderBy: {
                     createdAt: 'desc'
+                  }
+                },
+                // Phase 6: Include normalized tables for sites, contracts, proposals, followUps, services
+                clientSites: {
+                  select: {
+                    id: true,
+                    name: true,
+                    address: true,
+                    contactPerson: true,
+                    contactPhone: true,
+                    contactEmail: true,
+                    notes: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    createdAt: 'asc'
+                  }
+                },
+                clientContracts: {
+                  select: {
+                    id: true,
+                    name: true,
+                    size: true,
+                    type: true,
+                    uploadDate: true,
+                    url: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    uploadDate: 'desc'
+                  }
+                },
+                clientProposals: {
+                  select: {
+                    id: true,
+                    title: true,
+                    amount: true,
+                    status: true,
+                    workingDocumentLink: true,
+                    createdDate: true,
+                    expiryDate: true,
+                    notes: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    createdDate: 'desc'
+                  }
+                },
+                clientFollowUps: {
+                  select: {
+                    id: true,
+                    date: true,
+                    time: true,
+                    type: true,
+                    description: true,
+                    completed: true,
+                    assignedTo: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    date: 'asc',
+                    time: 'asc'
+                  }
+                },
+                clientServices: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    price: true,
+                    status: true,
+                    startDate: true,
+                    endDate: true,
+                    notes: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    startDate: 'desc'
                   }
                 },
                 // Phase 4: Include projects relation to derive projectIds
@@ -185,7 +263,7 @@ async function handler(req, res) {
                       }
                     }
                   } : {}),
-                  // Phase 3: Include normalized tables
+                  // Phase 3 & 6: Include normalized tables
                   clientContacts: {
                     select: {
                       id: true,
@@ -216,6 +294,12 @@ async function handler(req, res) {
                       createdAt: 'desc'
                     }
                   },
+                  // Phase 6: Include normalized tables
+                  clientSites: true,
+                  clientContracts: true,
+                  clientProposals: true,
+                  clientFollowUps: true,
+                  clientServices: true,
                   // Phase 4: Include projects relation to derive projectIds
                   projects: {
                     select: {
@@ -642,21 +726,13 @@ async function handler(req, res) {
             notes: clientData.notes,
             // Phase 5: Contacts/comments are written to normalized tables ONLY - no JSON writes
             // Removed: contacts, contactsJsonb, comments, commentsJsonb
-            followUps: clientData.followUps || '[]',
-            followUpsJsonb: clientData.followUpsJsonb || [],
+            // Phase 6: Sites, contracts, proposals, followUps, services are written to normalized tables ONLY
+            // Removed: sites, sitesJsonb, contracts, contractsJsonb, proposals, proposalsJsonb, followUps, followUpsJsonb, services, servicesJsonb
             // Phase 4: projectIds deprecated - projects managed via Project.clientId relation
             // Still include for backward compatibility if provided, but prefer Project.clientId
             projectIds: clientData.projectIds || '[]',
-            sites: clientData.sites || '[]',
-            sitesJsonb: clientData.sitesJsonb || [],
-            contracts: clientData.contracts || '[]',
-            contractsJsonb: clientData.contractsJsonb || [],
             activityLog: clientData.activityLog || '[]',
             activityLogJsonb: clientData.activityLogJsonb || [],
-            proposals: clientData.proposals || '[]',
-            proposalsJsonb: clientData.proposalsJsonb || [],
-            services: clientData.services || '[]',
-            servicesJsonb: clientData.servicesJsonb || [],
             billingTerms: clientData.billingTerms || JSON.stringify(DEFAULT_BILLING_TERMS),
             billingTermsJsonb: clientData.billingTermsJsonb || DEFAULT_BILLING_TERMS,
             ...(ownerId ? { ownerId } : {})
@@ -769,8 +845,180 @@ async function handler(req, res) {
               }
             }
           }
+          
+          // Phase 6: Sync sites, contracts, proposals, followUps, services to normalized tables
+          // Sync sites if provided
+          if (clientData.sitesJsonb && Array.isArray(clientData.sitesJsonb) && clientData.sitesJsonb.length > 0) {
+            for (const site of clientData.sitesJsonb) {
+              const siteData = {
+                clientId: client.id,
+                name: site.name || '',
+                address: site.address || '',
+                contactPerson: site.contactPerson || '',
+                contactPhone: site.contactPhone || '',
+                contactEmail: site.contactEmail || '',
+                notes: site.notes || ''
+              }
+              
+              if (site.id) {
+                try {
+                  await prisma.clientSite.create({
+                    data: { id: site.id, ...siteData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientSite.update({
+                      where: { id: site.id },
+                      data: siteData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientSite.create({ data: siteData })
+              }
+            }
+          }
+          
+          // Sync contracts if provided
+          if (clientData.contractsJsonb && Array.isArray(clientData.contractsJsonb) && clientData.contractsJsonb.length > 0) {
+            for (const contract of clientData.contractsJsonb) {
+              const contractData = {
+                clientId: client.id,
+                name: contract.name || '',
+                size: contract.size || 0,
+                type: contract.type || '',
+                url: contract.url || '',
+                uploadDate: contract.uploadDate ? new Date(contract.uploadDate) : new Date()
+              }
+              
+              if (contract.id) {
+                try {
+                  await prisma.clientContract.create({
+                    data: { id: contract.id, ...contractData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContract.update({
+                      where: { id: contract.id },
+                      data: contractData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientContract.create({ data: contractData })
+              }
+            }
+          }
+          
+          // Sync proposals if provided
+          if (clientData.proposalsJsonb && Array.isArray(clientData.proposalsJsonb) && clientData.proposalsJsonb.length > 0) {
+            for (const proposal of clientData.proposalsJsonb) {
+              const proposalData = {
+                clientId: client.id,
+                title: proposal.title || '',
+                amount: proposal.amount || 0,
+                status: proposal.status || 'Pending',
+                workingDocumentLink: proposal.workingDocumentLink || '',
+                createdDate: proposal.createdDate ? new Date(proposal.createdDate) : null,
+                expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
+                notes: proposal.notes || ''
+              }
+              
+              if (proposal.id) {
+                try {
+                  await prisma.clientProposal.create({
+                    data: { id: proposal.id, ...proposalData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientProposal.update({
+                      where: { id: proposal.id },
+                      data: proposalData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientProposal.create({ data: proposalData })
+              }
+            }
+          }
+          
+          // Sync followUps if provided
+          if (clientData.followUpsJsonb && Array.isArray(clientData.followUpsJsonb) && clientData.followUpsJsonb.length > 0) {
+            for (const followUp of clientData.followUpsJsonb) {
+              const followUpData = {
+                clientId: client.id,
+                date: followUp.date || '',
+                time: followUp.time || '',
+                type: followUp.type || 'Call',
+                description: followUp.description || '',
+                completed: !!followUp.completed,
+                assignedTo: followUp.assignedTo || null
+              }
+              
+              if (followUp.id) {
+                try {
+                  await prisma.clientFollowUp.create({
+                    data: { id: followUp.id, ...followUpData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientFollowUp.update({
+                      where: { id: followUp.id },
+                      data: followUpData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientFollowUp.create({ data: followUpData })
+              }
+            }
+          }
+          
+          // Sync services if provided
+          if (clientData.servicesJsonb && Array.isArray(clientData.servicesJsonb) && clientData.servicesJsonb.length > 0) {
+            for (const service of clientData.servicesJsonb) {
+              const serviceData = {
+                clientId: client.id,
+                name: service.name || '',
+                description: service.description || '',
+                price: service.price || 0,
+                status: service.status || 'Active',
+                startDate: service.startDate ? new Date(service.startDate) : null,
+                endDate: service.endDate ? new Date(service.endDate) : null,
+                notes: service.notes || ''
+              }
+              
+              if (service.id) {
+                try {
+                  await prisma.clientService.create({
+                    data: { id: service.id, ...serviceData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientService.update({
+                      where: { id: service.id },
+                      data: serviceData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientService.create({ data: serviceData })
+              }
+            }
+          }
         } catch (syncError) {
-          console.warn('⚠️ Failed to sync contacts/comments to normalized tables (non-critical):', syncError.message)
+          console.warn('⚠️ Failed to sync normalized data to tables (non-critical):', syncError.message)
           // Don't fail client creation if sync fails
         }
         

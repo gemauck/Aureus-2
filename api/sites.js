@@ -22,16 +22,34 @@ async function handler(req, res) {
       if (!clientId) return badRequest(res, 'clientId required')
       
       try {
-        // Use raw SQL to bypass Prisma relation resolution
-        const result = await prisma.$queryRaw`
-          SELECT sites FROM "Client" WHERE id = ${clientId}
-        `
+        // Phase 6: Use normalized ClientSite table
+        const sites = await prisma.clientSite.findMany({
+          where: { clientId },
+          orderBy: { createdAt: 'asc' }
+        })
         
-        if (!result || !result[0]) return notFound(res)
-        
-        const sites = typeof result[0].sites === 'string' 
-          ? JSON.parse(result[0].sites) 
-          : (Array.isArray(result[0].sites) ? result[0].sites : [])
+        // Fallback: If no sites in normalized table, try JSON field (backward compatibility)
+        if (sites.length === 0) {
+          const result = await prisma.$queryRaw`
+            SELECT sites, sitesJsonb FROM "Client" WHERE id = ${clientId}
+          `
+          
+          if (result && result[0]) {
+            let jsonSites = []
+            if (result[0].sitesJsonb && Array.isArray(result[0].sitesJsonb) && result[0].sitesJsonb.length > 0) {
+              jsonSites = result[0].sitesJsonb
+            } else if (result[0].sites && typeof result[0].sites === 'string') {
+              try {
+                jsonSites = JSON.parse(result[0].sites)
+              } catch (e) {
+                jsonSites = []
+              }
+            }
+            
+            // Return JSON sites for backward compatibility
+            return ok(res, { sites: jsonSites })
+          }
+        }
         
         return ok(res, { sites })
       } catch (dbError) {
@@ -51,38 +69,29 @@ async function handler(req, res) {
       if (!body.name) return badRequest(res, 'site name required')
       
       try {
-        // Get current sites using raw SQL
-        const result = await prisma.$queryRaw`
-          SELECT sites FROM "Client" WHERE id = ${clientId}
-        `
+        // Verify client exists
+        const client = await prisma.client.findUnique({
+          where: { id: clientId },
+          select: { id: true }
+        })
         
-        if (!result || !result[0]) return notFound(res)
+        if (!client) return notFound(res, 'Client not found')
         
-        const existingSites = typeof result[0].sites === 'string' 
-          ? JSON.parse(result[0].sites) 
-          : (Array.isArray(result[0].sites) ? result[0].sites : [])
+        // Phase 6: Create site in normalized ClientSite table
+        const newSite = await prisma.clientSite.create({
+          data: {
+            clientId,
+            name: body.name,
+            address: body.address || '',
+            contactPerson: body.contactPerson || '',
+            contactPhone: body.contactPhone || '',
+            contactEmail: body.contactEmail || '',
+            notes: body.notes || ''
+          }
+        })
         
-        // Create new site
-        const newSite = {
-          id: `site-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name: body.name,
-          address: body.address || '',
-          contactPerson: body.contactPerson || '',
-          contactPhone: body.contactPhone || '',
-          contactEmail: body.contactEmail || '',
-          notes: body.notes || ''
-        }
-        
-        // Add to array
-        const updatedSites = [...existingSites, newSite]
-        
-        // Save back to database using raw SQL
-        const sitesJson = JSON.stringify(updatedSites)
-        await prisma.$executeRaw`
-          UPDATE "Client" SET sites = ${sitesJson} WHERE id = ${clientId}
-        `
-        
-        return created(res, { site: newSite, sites: updatedSites })
+        // CRITICAL: Do NOT write to JSON fields - normalized table only
+        return created(res, { site: newSite })
       } catch (dbError) {
         console.error('❌ Database error adding site:', {
           clientId: clientId,
@@ -117,38 +126,38 @@ async function handler(req, res) {
       const body = req.body || {}
       
       try {
-        // Get current sites using raw SQL
-        const result = await prisma.$queryRaw`
-          SELECT sites FROM "Client" WHERE id = ${clientId}
-        `
+        // Phase 6: Update site in normalized ClientSite table
+        // Verify site belongs to client
+        const existingSite = await prisma.clientSite.findFirst({
+          where: { id: siteId, clientId }
+        })
         
-        if (!result || !result[0]) return notFound(res)
+        if (!existingSite) return notFound(res, 'Site not found')
         
-        const sites = typeof result[0].sites === 'string' 
-          ? JSON.parse(result[0].sites) 
-          : (Array.isArray(result[0].sites) ? result[0].sites : [])
+        const updatedSite = await prisma.clientSite.update({
+          where: { id: siteId },
+          data: {
+            name: body.name !== undefined ? body.name : undefined,
+            address: body.address !== undefined ? body.address : undefined,
+            contactPerson: body.contactPerson !== undefined ? body.contactPerson : undefined,
+            contactPhone: body.contactPhone !== undefined ? body.contactPhone : undefined,
+            contactEmail: body.contactEmail !== undefined ? body.contactEmail : undefined,
+            notes: body.notes !== undefined ? body.notes : undefined
+          }
+        })
         
-        // Find and update the site
-        const siteIndex = sites.findIndex(s => s.id === siteId)
-        if (siteIndex === -1) return notFound(res, 'Site not found')
-        
-        sites[siteIndex] = {
-          ...sites[siteIndex],
-          ...body,
-          id: siteId // Don't allow changing the ID
-        }
-        
-        // Save back to database using raw SQL
-        await prisma.$executeRaw`
-          UPDATE "Client" SET sites = ${JSON.stringify(sites)}::text WHERE id = ${clientId}
-        `
-        
-        return ok(res, { site: sites[siteIndex], sites })
+        // CRITICAL: Do NOT write to JSON fields - normalized table only
+        return ok(res, { site: updatedSite })
       } catch (dbError) {
         console.error('❌ Database error updating site:', dbError)
         if (isConnectionError(dbError)) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }
+        
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Site not found')
+        }
+        
         return serverError(res, 'Failed to update site', dbError.message)
       }
     }
@@ -158,32 +167,30 @@ async function handler(req, res) {
       if (!clientId || !siteId) return badRequest(res, 'clientId and siteId required')
       
       try {
-        // Get current sites using raw SQL
-        const result = await prisma.$queryRaw`
-          SELECT sites FROM "Client" WHERE id = ${clientId}
-        `
+        // Phase 6: Delete site from normalized ClientSite table
+        // Verify site belongs to client
+        const existingSite = await prisma.clientSite.findFirst({
+          where: { id: siteId, clientId }
+        })
         
-        if (!result || !result[0]) return notFound(res)
+        if (!existingSite) return notFound(res, 'Site not found')
         
-        const sites = typeof result[0].sites === 'string' 
-          ? JSON.parse(result[0].sites) 
-          : (Array.isArray(result[0].sites) ? result[0].sites : [])
+        await prisma.clientSite.delete({
+          where: { id: siteId }
+        })
         
-        // Remove the site
-        const updatedSites = sites.filter(s => s.id !== siteId)
-        
-        // Save back to database using raw SQL
-        const sitesJson = JSON.stringify(updatedSites)
-        await prisma.$executeRaw`
-          UPDATE "Client" SET sites = ${sitesJson} WHERE id = ${clientId}
-        `
-        
-        return ok(res, { deleted: true, sites: updatedSites })
+        // CRITICAL: Do NOT write to JSON fields - normalized table only
+        return ok(res, { deleted: true })
       } catch (dbError) {
         console.error('❌ Database error deleting site:', dbError)
         if (isConnectionError(dbError)) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }
+        
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Site not found')
+        }
+        
         return serverError(res, 'Failed to delete site', dbError.message)
       }
     }
