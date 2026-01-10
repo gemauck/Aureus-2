@@ -630,11 +630,17 @@ async function handler(req, res) {
             })
             
             console.log(`✅ Synced ${commentsArray.length} comments to normalized table for client ${id}`)
+            
+            // CRITICAL FIX: Write comments back to JSON fields for persistence and backward compatibility
+            // This ensures comments persist even if normalized table sync fails, and enables client-side caching
+            updateData.comments = JSON.stringify(commentsArray)
+            updateData.commentsJsonb = commentsArray
           } catch (commentSyncError) {
             console.error('❌ Failed to sync comments to normalized table:', commentSyncError)
             console.error('Error details:', commentSyncError.message, commentSyncError.code)
-            // Still continue - comments are saved in JSON for backward compatibility
-            // But log as error so it's visible in production
+            // Still write to JSON fields even if normalized table sync fails (backward compatibility)
+            updateData.comments = JSON.stringify(commentsArray)
+            updateData.commentsJsonb = commentsArray
           }
         }
         
