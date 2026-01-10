@@ -1749,9 +1749,6 @@ const Clients = React.memo(() => {
                 
                 // Debug logging removed for performance
                 
-                const processedClients = processClientData(apiClients);
-                
-                // Debug logging removed for performance
                 // Process clients data
                 const processedClients = processClientData(apiClients);
                 
