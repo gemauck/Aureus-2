@@ -36,16 +36,10 @@ async function handler(req, res) {
     // Get Single Project (GET /api/projects/[id])
     if (req.method === 'GET') {
       try {
-        
-        const project = await prisma.project.findUnique({ where: { id } })
-        if (!project) {
-          return notFound(res);
-        }
-        
-        // Also log the raw Prisma result to see what's actually in the database
-        
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();
+        let whereClause = { id };
+        
         if (userRole === 'guest') {
           try {
             // Parse accessibleProjectIds from user
@@ -59,7 +53,7 @@ async function handler(req, res) {
             }
             
             // Check if project ID is in accessible projects
-            if (!accessibleProjectIds || !accessibleProjectIds.includes(project.id)) {
+            if (!accessibleProjectIds || !accessibleProjectIds.includes(id)) {
               return notFound(res); // Return not found to hide project existence
             }
           } catch (parseError) {
@@ -68,7 +62,193 @@ async function handler(req, res) {
           }
         }
         
-        return ok(res, { project })
+        // Load project with all related data from tables
+        const project = await prisma.project.findUnique({
+          where: { id },
+          include: {
+            tasks: {
+              where: { parentTaskId: null }, // Only top-level tasks
+              include: {
+                subtasks: {
+                  orderBy: { createdAt: 'asc' }
+                },
+                assigneeUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'asc' }
+            },
+            projectComments: {
+              include: {
+                authorUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                },
+                replies: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  }
+                }
+              },
+              where: { parentId: null }, // Only top-level comments
+              orderBy: { createdAt: 'asc' }
+            },
+            projectDocuments: {
+              where: { isActive: true },
+              include: {
+                uploader: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              },
+              orderBy: { uploadDate: 'desc' }
+            },
+            projectTeamMembers: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                },
+                adder: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              },
+              orderBy: { addedDate: 'asc' }
+            },
+            projectTaskLists: {
+              orderBy: { order: 'asc' }
+            },
+            projectCustomFieldDefinitions: {
+              orderBy: { order: 'asc' }
+            },
+            projectActivityLogs: {
+              take: 50, // Limit to most recent 50
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' }
+            },
+            documentSectionsTable: {
+              include: {
+                documents: {
+                  include: {
+                    statuses: true,
+                    comments: true
+                  },
+                  orderBy: { order: 'asc' }
+                }
+              },
+              orderBy: [{ year: 'desc' }, { order: 'asc' }]
+            },
+            weeklyFMSReviewSectionsTable: {
+              include: {
+                items: {
+                  include: {
+                    statuses: true,
+                    comments: true
+                  },
+                  orderBy: { order: 'asc' }
+                }
+              },
+              orderBy: [{ year: 'desc' }, { order: 'asc' }]
+            }
+          }
+        });
+        
+        if (!project) {
+          return notFound(res);
+        }
+        
+        // Load TaskComments for all tasks (since Task model doesn't have comments relation yet)
+        const allTaskIds = [
+          ...(project.tasks || []).map(t => t.id),
+          ...(project.tasks || []).flatMap(t => (t.subtasks || []).map(st => st.id))
+        ];
+        
+        const taskCommentsMap = {};
+        if (allTaskIds.length > 0) {
+          const taskComments = await prisma.taskComment.findMany({
+            where: { taskId: { in: allTaskIds } },
+            orderBy: { createdAt: 'asc' }
+          });
+          
+          // Group comments by taskId
+          taskComments.forEach(comment => {
+            if (!taskCommentsMap[comment.taskId]) {
+              taskCommentsMap[comment.taskId] = [];
+            }
+            taskCommentsMap[comment.taskId].push(comment);
+          });
+        }
+        
+        // Attach comments to tasks
+        const tasksWithComments = (project.tasks || []).map(task => ({
+          ...task,
+          comments: taskCommentsMap[task.id] || [],
+          subtasks: (task.subtasks || []).map(subtask => ({
+            ...subtask,
+            comments: taskCommentsMap[subtask.id] || []
+          }))
+        }));
+        
+        // Transform project - replace JSON fields with table data
+        // Frontend expects these field names, so map table data to them
+        const transformedProject = {
+          ...project,
+          // Map table data to expected field names (for frontend compatibility)
+          tasksList: tasksWithComments, // Tasks from Task table with comments attached
+          taskLists: project.projectTaskLists || [], // Task lists from ProjectTaskList table
+          customFieldDefinitions: project.projectCustomFieldDefinitions || [], // Custom fields from ProjectCustomFieldDefinition table
+          documents: project.projectDocuments || [], // Documents from ProjectDocument table
+          comments: project.projectComments || [], // Comments from ProjectComment table
+          activityLog: project.projectActivityLogs || [], // Activity logs from ProjectActivityLog table
+          team: project.projectTeamMembers || [], // Team from ProjectTeamMember table
+          // Document sections already in table format
+          documentSections: project.documentSectionsTable || [],
+          weeklyFMSReviewSections: project.weeklyFMSReviewSectionsTable || []
+        };
+        
+        // Remove the table relation fields to avoid confusion
+        delete transformedProject.tasks; // Use tasksList instead
+        delete transformedProject.projectComments;
+        delete transformedProject.projectActivityLogs;
+        delete transformedProject.projectDocuments;
+        delete transformedProject.projectTeamMembers;
+        delete transformedProject.projectTaskLists;
+        delete transformedProject.projectCustomFieldDefinitions;
+        delete transformedProject.documentSectionsTable;
+        delete transformedProject.weeklyFMSReviewSectionsTable;
+        
+        return ok(res, { project: transformedProject })
       } catch (dbError) {
         console.error('❌ Database error getting project:', dbError)
         return serverError(res, 'Failed to get project', dbError.message)
@@ -142,15 +322,15 @@ async function handler(req, res) {
         priority: body.priority,
         type: body.type,
         assignedTo: body.assignedTo,
-        tasksList: body.tasksList !== undefined && body.tasksList !== null 
-          ? (typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList))
-          : undefined,
-        taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
-        customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
-        team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),
-        documents: typeof body.documents === 'string' ? body.documents : JSON.stringify(body.documents),
-        comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments),
-        activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog),
+        // JSON fields completely removed - data now stored ONLY in separate tables:
+        // - tasksList → Task table (via /api/tasks)
+        // - taskLists → ProjectTaskList table (via /api/project-task-lists)
+        // - customFieldDefinitions → ProjectCustomFieldDefinition table (via /api/project-custom-fields)
+        // - team → ProjectTeamMember table (via /api/project-team-members)
+        // - documents → ProjectDocument table (via /api/project-documents)
+        // - comments → ProjectComment table (via /api/project-comments)
+        // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
+        // These fields are no longer stored in Project table - use dedicated APIs instead
         notes: body.notes,
         hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? body.hasDocumentCollectionProcess : undefined
       }
@@ -353,26 +533,42 @@ async function handler(req, res) {
         
         // Ensure referential integrity by removing dependents first, then the project
         
-        // Delete all related records in a transaction
+        // Delete all related records in a transaction (cascade will handle most, but be explicit)
         await prisma.$transaction(async (tx) => {
-          // First, handle task hierarchy - set parentTaskId to null for all tasks
-          // This prevents foreign key constraint issues with self-referential tasks
-          const tasksUpdated = await tx.task.updateMany({ 
+          // Delete related table records (cascade may handle some, but be explicit for safety)
+          // Tasks (cascade should handle this, but explicit for clarity)
+          await tx.task.updateMany({ 
             where: { projectId: id },
             data: { parentTaskId: null }
-          })
+          });
+          await tx.task.deleteMany({ where: { projectId: id } });
           
-          // Now delete all tasks (they no longer have parent references)
-          const tasksDeleted = await tx.task.deleteMany({ where: { projectId: id } })
+          // Project comments (cascade should handle)
+          await tx.projectComment.deleteMany({ where: { projectId: id } });
+          
+          // Project activity logs (cascade should handle)
+          await tx.projectActivityLog.deleteMany({ where: { projectId: id } });
+          
+          // Project documents (cascade should handle)
+          await tx.projectDocument.deleteMany({ where: { projectId: id } });
+          
+          // Project team members (cascade should handle)
+          await tx.projectTeamMember.deleteMany({ where: { projectId: id } });
+          
+          // Project task lists (cascade should handle)
+          await tx.projectTaskList.deleteMany({ where: { projectId: id } });
+          
+          // Project custom field definitions (cascade should handle)
+          await tx.projectCustomFieldDefinition.deleteMany({ where: { projectId: id } });
           
           // Delete invoices
-          const invoicesDeleted = await tx.invoice.deleteMany({ where: { projectId: id } })
+          await tx.invoice.deleteMany({ where: { projectId: id } });
           
           // Delete time entries
-          const timeEntriesDeleted = await tx.timeEntry.deleteMany({ where: { projectId: id } })
+          await tx.timeEntry.deleteMany({ where: { projectId: id } });
           
-          // Delete the project
-          await tx.project.delete({ where: { id } })
+          // Delete the project (cascade should handle document sections and weekly FMS sections)
+          await tx.project.delete({ where: { id } });
         })
         
         return ok(res, { 

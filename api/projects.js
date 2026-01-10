@@ -95,6 +95,9 @@ async function documentSectionsToJson(projectId) {
   }
 }
 
+// JSON conversion functions removed - all data now stored in tables
+// Tables are the primary source of truth, no JSON synchronization needed
+
 /**
  * Convert WeeklyFMSReviewSection table data to JSON format (for backward compatibility)
  */
@@ -661,10 +664,19 @@ async function handler(req, res) {
         dueDate: dueDate,
         budget: parseFloat(body.budget) || 0,
         priority: body.priority || 'Medium',
-        tasksList: typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(Array.isArray(body.tasksList) ? body.tasksList : []),
-        taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(Array.isArray(body.taskLists) ? body.taskLists : []),
-        customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(Array.isArray(body.customFieldDefinitions) ? body.customFieldDefinitions : []),
-        team: typeof body.team === 'string' ? body.team : JSON.stringify(Array.isArray(body.team) ? body.team : []),
+        // JSON fields completely removed - data now stored ONLY in separate tables:
+        // - tasksList → Task table (via /api/tasks)
+        // - taskLists → ProjectTaskList table (via /api/project-task-lists)
+        // - customFieldDefinitions → ProjectCustomFieldDefinition table (via /api/project-custom-fields)
+        // - team → ProjectTeamMember table (via /api/project-team-members)
+        // - documents → ProjectDocument table (via /api/project-documents)
+        // - comments → ProjectComment table (via /api/project-comments)
+        // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
+        // These fields are no longer stored in Project table - use dedicated APIs instead
+        tasksList: '[]', // Legacy - deprecated, use Task table
+        taskLists: '[]', // Legacy - deprecated, use ProjectTaskList table
+        customFieldDefinitions: '[]', // Legacy - deprecated, use ProjectCustomFieldDefinition table
+        team: '[]', // Legacy - deprecated, use ProjectTeamMember table
         type: body.type || 'Monthly Review',
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
@@ -705,21 +717,47 @@ async function handler(req, res) {
           await saveWeeklyFMSReviewSectionsToTable(project.id, body.weeklyFMSReviewSections)
         }
 
-        // Fetch project again with table data converted to JSON
-        const docSectionsFromTable = await documentSectionsToJson(project.id)
-        const fmsSectionsFromTable = await weeklyFMSReviewSectionsToJson(project.id)
+        // Load project with related table data
+        const projectWithTables = await prisma.project.findUnique({
+          where: { id: project.id },
+          include: {
+            documentSectionsTable: {
+              include: {
+                documents: {
+                  include: {
+                    statuses: true,
+                    comments: true
+                  },
+                  orderBy: { order: 'asc' }
+                }
+              },
+              orderBy: [{ year: 'desc' }, { order: 'asc' }]
+            },
+            weeklyFMSReviewSectionsTable: {
+              include: {
+                items: {
+                  include: {
+                    statuses: true,
+                    comments: true
+                  },
+                  orderBy: { order: 'asc' }
+                }
+              },
+              orderBy: [{ year: 'desc' }, { order: 'asc' }]
+            }
+          }
+        });
 
-        const projectWithChecklists = {
-          ...project,
-          documentSections: docSectionsFromTable !== null
-            ? JSON.stringify(docSectionsFromTable)
-            : project.documentSections,
-          weeklyFMSReviewSections: fmsSectionsFromTable !== null
-            ? JSON.stringify(fmsSectionsFromTable)
-            : project.weeklyFMSReviewSections
-        }
+        // Transform to match expected frontend format
+        const transformedProject = {
+          ...projectWithTables,
+          documentSections: projectWithTables.documentSectionsTable || [],
+          weeklyFMSReviewSections: projectWithTables.weeklyFMSReviewSectionsTable || []
+        };
+        delete transformedProject.documentSectionsTable;
+        delete transformedProject.weeklyFMSReviewSectionsTable;
 
-        return created(res, { project: projectWithChecklists })
+        return created(res, { project: transformedProject })
       } catch (dbError) {
         console.error('❌ Database error creating project:', dbError)
         console.error('❌ Error details:', {
@@ -732,29 +770,16 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Project (GET, PUT, DELETE /api/projects/[id])
-    
+    // NOTE: This handler may be redundant if api/projects/[id].js is used instead
+    // But kept for backward compatibility with pathSegments routing
     if (pathSegments.length === 2 && pathSegments[0] === 'projects' && id) {
       if (req.method === 'GET') {
+        // Redirect to projects/[id].js handler - this GET should not be reached if routing is correct
+        // But if it is reached, return basic project data (tables should be loaded by projects/[id].js)
         try {
           const project = await prisma.project.findUnique({ where: { id } })
           if (!project) return notFound(res)
-
-          // Convert table-based checklists to JSON format (with fallback to JSON fields)
-          const docSectionsFromTable = await documentSectionsToJson(id)
-          const fmsSectionsFromTable = await weeklyFMSReviewSectionsToJson(id)
-
-          // Use table data if available, otherwise fall back to JSON fields
-          const projectWithChecklists = {
-            ...project,
-            documentSections: docSectionsFromTable !== null
-              ? JSON.stringify(docSectionsFromTable)
-              : project.documentSections,
-            weeklyFMSReviewSections: fmsSectionsFromTable !== null
-              ? JSON.stringify(fmsSectionsFromTable)
-              : project.weeklyFMSReviewSections
-          }
-
-          return ok(res, { project: projectWithChecklists })
+          return ok(res, { project })
         } catch (dbError) {
           console.error('❌ Database error getting project:', dbError)
           return serverError(res, 'Failed to get project', dbError.message)
@@ -809,103 +834,15 @@ async function handler(req, res) {
         const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
         const normalizedDueDate = typeof body.dueDate === 'string' ? body.dueDate.trim() : ''
 
-        // DEBUG: Log what we're receiving
-        let tasksListForDebug = null;
-        if (body.tasksList !== undefined && body.tasksList !== null) {
-          try {
-            const parsed = typeof body.tasksList === 'string' ? JSON.parse(body.tasksList) : body.tasksList;
-            const taskWithComments = Array.isArray(parsed) ? parsed.find(t => Array.isArray(t.comments) && t.comments.length > 0) : null;
-            tasksListForDebug = {
-              tasksCount: Array.isArray(parsed) ? parsed.length : 0,
-              taskWithComments: taskWithComments ? {
-                id: taskWithComments.id,
-                title: taskWithComments.title,
-                commentsCount: taskWithComments.comments.length,
-                firstComment: taskWithComments.comments[0]?.text?.substring(0, 50)
-              } : null
-            };
-            console.log('🔍 DEBUG API: Received tasksList:', tasksListForDebug);
-          } catch (e) {
-            console.error('❌ DEBUG API: Failed to parse tasksList for debug:', e);
-          }
-        }
-
-        // BEST PRACTICE: Merge comments from database before saving to prevent data loss
-        // This ensures comments added by other sessions/users are preserved
-        let tasksListToSave = body.tasksList;
-        if (tasksListToSave !== undefined && tasksListToSave !== null) {
-          try {
-            // Fetch current state from database
-            const currentProject = await prisma.project.findUnique({
-              where: { id },
-              select: { tasksList: true }
-            });
-            
-            if (currentProject?.tasksList) {
-              const currentTasks = JSON.parse(currentProject.tasksList || '[]');
-              const incomingTasks = typeof tasksListToSave === 'string' 
-                ? JSON.parse(tasksListToSave) 
-                : tasksListToSave;
-              
-              // Merge comments by task ID
-              const mergedTasks = currentTasks.map(currentTask => {
-                const incomingTask = incomingTasks.find(t => t.id === currentTask.id);
-                if (!incomingTask) return currentTask;
-                
-                // Merge comments: combine database comments with incoming comments
-                const dbComments = Array.isArray(currentTask.comments) ? currentTask.comments : [];
-                const incomingComments = Array.isArray(incomingTask.comments) ? incomingTask.comments : [];
-                
-                // Use Map to deduplicate by comment ID
-                const commentsMap = new Map();
-                dbComments.forEach(comment => {
-                  if (comment.id) commentsMap.set(comment.id, comment);
-                });
-                incomingComments.forEach(comment => {
-                  if (comment.id) {
-                    commentsMap.set(comment.id, comment); // Update existing or add new
-                  } else {
-                    // New comment without ID - add with temporary key
-                    commentsMap.set(`new-${Date.now()}-${Math.random()}`, comment);
-                  }
-                });
-                
-                // Merge task data, preserving all comments
-                return {
-                  ...incomingTask,
-                  comments: Array.from(commentsMap.values())
-                };
-              });
-              
-              // Add any new tasks that don't exist in database
-              incomingTasks.forEach(incomingTask => {
-                if (!mergedTasks.find(t => t.id === incomingTask.id)) {
-                  mergedTasks.push(incomingTask);
-                }
-              });
-              
-              tasksListToSave = JSON.stringify(mergedTasks);
-              
-              console.log('🔄 Merged comments from database:', {
-                projectId: id,
-                currentTasksCount: currentTasks.length,
-                incomingTasksCount: incomingTasks.length,
-                mergedTasksCount: mergedTasks.length
-              });
-            } else {
-              // No existing tasks, just stringify incoming
-              tasksListToSave = typeof tasksListToSave === 'string' 
-                ? tasksListToSave 
-                : JSON.stringify(tasksListToSave);
-            }
-          } catch (mergeError) {
-            console.warn('⚠️ Failed to merge comments from database, using incoming data:', mergeError);
-            // Fallback to incoming data if merge fails
-            tasksListToSave = typeof tasksListToSave === 'string' 
-              ? tasksListToSave 
-              : JSON.stringify(tasksListToSave);
-          }
-        }
+        // JSON fields completely removed - data now stored ONLY in separate tables:
+        // - tasksList → Task table (via /api/tasks)
+        // - taskLists → ProjectTaskList table (via /api/project-task-lists)
+        // - customFieldDefinitions → ProjectCustomFieldDefinition table (via /api/project-custom-fields)
+        // - team → ProjectTeamMember table (via /api/project-team-members)
+        // - documents → ProjectDocument table (via /api/project-documents)
+        // - comments → ProjectComment table (via /api/project-comments)
+        // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
+        // No merge logic needed - tables handle concurrent updates properly
         
         const updateData = {
           name: body.name,
@@ -919,39 +856,12 @@ async function handler(req, res) {
           priority: body.priority,
           type: body.type,
           assignedTo: body.assignedTo,
-          tasksList: tasksListToSave,
-          taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
-          customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
-          team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),
-          documents: typeof body.documents === 'string' ? body.documents : JSON.stringify(body.documents),
-          comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments),
-          activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog),
           notes: body.notes,
           // Always process hasDocumentCollectionProcess if provided, even if false
           // This ensures we can explicitly set it to false if needed
           hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined 
             ? Boolean(body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true' || body.hasDocumentCollectionProcess === 1) 
             : undefined
-        }
-        
-        // DEBUG: Log what we're about to save
-        if (updateData.tasksList) {
-          try {
-            const parsed = typeof updateData.tasksList === 'string' ? JSON.parse(updateData.tasksList) : updateData.tasksList;
-            const taskWithComments = Array.isArray(parsed) ? parsed.find(t => Array.isArray(t.comments) && t.comments.length > 0) : null;
-            console.log('🔍 DEBUG API: About to save tasksList:', {
-              tasksCount: Array.isArray(parsed) ? parsed.length : 0,
-              tasksListStringLength: typeof updateData.tasksList === 'string' ? updateData.tasksList.length : 0,
-              taskWithComments: taskWithComments ? {
-                id: taskWithComments.id,
-                title: taskWithComments.title,
-                commentsCount: taskWithComments.comments.length,
-                firstComment: taskWithComments.comments[0]?.text?.substring(0, 50)
-              } : null
-            });
-          } catch (e) {
-            console.error('❌ DEBUG API: Failed to parse tasksList before save:', e);
-          }
         }
         
         // Handle documentSections separately if provided - ensure it's properly saved
@@ -1115,30 +1025,6 @@ async function handler(req, res) {
             where: { id }, 
             data: updateData 
           })
-          
-          // Verify the update actually worked
-          const verifyProject = await prisma.project.findUnique({ where: { id } });
-          
-          // DEBUG: Verify what was actually saved
-          if (verifyProject && verifyProject.tasksList) {
-            try {
-              const savedTasks = typeof verifyProject.tasksList === 'string' 
-                ? JSON.parse(verifyProject.tasksList) 
-                : verifyProject.tasksList;
-              const savedTaskWithComments = Array.isArray(savedTasks) ? savedTasks.find(t => Array.isArray(t.comments) && t.comments.length > 0) : null;
-              console.log('🔍 DEBUG API: Verified saved tasksList:', {
-                tasksCount: Array.isArray(savedTasks) ? savedTasks.length : 0,
-                taskWithComments: savedTaskWithComments ? {
-                  id: savedTaskWithComments.id,
-                  title: savedTaskWithComments.title,
-                  commentsCount: savedTaskWithComments.comments.length,
-                  firstComment: savedTaskWithComments.comments[0]?.text?.substring(0, 50)
-                } : null
-              });
-            } catch (e) {
-              console.error('❌ DEBUG API: Failed to parse saved tasksList:', e);
-            }
-          }
           
           return ok(res, { project })
         } catch (dbError) {
