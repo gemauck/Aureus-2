@@ -924,9 +924,16 @@ async function handler(req, res) {
             })
             
             console.log(`✅ Synced ${followUpsArray.length} followUps to normalized table for client ${id}`)
-            // NOTE: No longer writing to JSON fields - ClientFollowUp table is the source of truth
+            
+            // CRITICAL FIX: Write followUps back to JSON fields for persistence and backward compatibility
+            // This ensures followUps persist even if normalized table sync fails, and enables client-side caching
+            updateData.followUps = JSON.stringify(followUpsArray)
+            updateData.followUpsJsonb = followUpsArray
           } catch (followUpSyncError) {
             console.warn('⚠️ Failed to sync followUps to normalized table:', followUpSyncError.message)
+            // Still write to JSON fields even if normalized table sync fails (backward compatibility)
+            updateData.followUps = JSON.stringify(followUpsArray)
+            updateData.followUpsJsonb = followUpsArray
           }
         }
         
