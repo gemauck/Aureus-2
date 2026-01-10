@@ -230,10 +230,12 @@ async function migrateFollowUps(client) {
 
     try {
       if (followUp.id) {
+        // Convert ID to string if it's numeric
+        const followUpId = String(followUp.id)
         try {
           await prisma.clientFollowUp.create({
             data: {
-              id: followUp.id,
+              id: followUpId,
               ...followUpData
             }
           })
@@ -241,7 +243,7 @@ async function migrateFollowUps(client) {
         } catch (createError) {
           if (createError.code === 'P2002') {
             await prisma.clientFollowUp.update({
-              where: { id: followUp.id },
+              where: { id: followUpId },
               data: followUpData
             })
             updated++
