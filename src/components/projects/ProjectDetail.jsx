@@ -1104,6 +1104,8 @@ function initializeProjectDetail() {
         }
         return '';
     });
+    // Track previous routeKey to detect navigation back
+    const previousRouteKeyRef = useRef(routeKey);
     
     // Listen for route/URL changes to detect navigation back
     useEffect(() => {
@@ -1144,10 +1146,16 @@ function initializeProjectDetail() {
         // 2. Route changed and we're still on the same project (navigated back), OR
         // 3. We haven't loaded tasks yet for this project (initial load)
         const projectIdChanged = project?.id !== previousProjectIdRef.current;
+        const routeChanged = routeKey !== previousRouteKeyRef.current;
         
         if (projectIdChanged) {
             previousProjectIdRef.current = project?.id;
             hasLoadedTasksRef.current = false; // Reset flag when project changes
+        }
+        
+        // Update previous routeKey after checking
+        if (routeChanged) {
+            previousRouteKeyRef.current = routeKey;
         }
         
         // Check if we're currently on the project page
@@ -1158,11 +1166,11 @@ function initializeProjectDetail() {
         );
         
         // Always load from Task API first (tasks are stored in Task table, not JSON)
-        // Load if: project ID changed, haven't loaded yet (initial load), or route changed (navigated back)
+        // Load if: project ID changed, haven't loaded yet (initial load), or route changed while on project page (navigated back)
         const shouldLoad = project?.id && (
             projectIdChanged || 
             !hasLoadedTasksRef.current || // Initial load - always load tasks on first mount
-            (isOnProjectPage && routeKey && hasLoadedTasksRef.current) // Route changed after initial load (navigated back)
+            (isOnProjectPage && routeChanged) // Route changed while on project page (navigated back)
         );
         
         if (shouldLoad) {
