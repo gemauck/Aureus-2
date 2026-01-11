@@ -1093,7 +1093,9 @@ function initializeProjectDetail() {
 
     // Sync tasks when project prop changes (e.g., after reload or navigation)
     // Use a ref to track previous project ID to prevent infinite loops
-    const previousProjectIdRef = useRef(project?.id);
+    const previousProjectIdRef = useRef(null);
+    // Track if we've loaded tasks for the current project (prevents showing zero on initial load)
+    const hasLoadedTasksRef = useRef(false);
     // Track URL/route to detect navigation back to the same project
     const [routeKey, setRouteKey] = useState(() => {
         // Initialize with current URL to detect changes
@@ -1139,14 +1141,16 @@ function initializeProjectDetail() {
     useEffect(() => {
         // Load tasks if:
         // 1. Project ID changed (switching to a different project), OR
-        // 2. Route changed and we're still on the same project (navigated back)
+        // 2. Route changed and we're still on the same project (navigated back), OR
+        // 3. We haven't loaded tasks yet for this project (initial load)
         const projectIdChanged = project?.id !== previousProjectIdRef.current;
         
         if (projectIdChanged) {
             previousProjectIdRef.current = project?.id;
+            hasLoadedTasksRef.current = false; // Reset flag when project changes
         }
         
-        // Check if we're currently on the project page (navigated back)
+        // Check if we're currently on the project page
         const isOnProjectPage = project?.id && (
             window.location?.pathname?.includes(`/projects/${project.id}`) ||
             (window.RouteState?.getRoute?.()?.page === 'projects' && 
@@ -1154,13 +1158,22 @@ function initializeProjectDetail() {
         );
         
         // Always load from Task API first (tasks are stored in Task table, not JSON)
-        // Reload if project ID changed OR if route changed and we're on the project page
-        if (project?.id && (projectIdChanged || (isOnProjectPage && routeKey))) {
+        // Load if: project ID changed, haven't loaded yet (initial load), or route changed (navigated back)
+        const shouldLoad = project?.id && (
+            projectIdChanged || 
+            !hasLoadedTasksRef.current || // Initial load - always load tasks on first mount
+            (isOnProjectPage && routeKey && hasLoadedTasksRef.current) // Route changed after initial load (navigated back)
+        );
+        
+        if (shouldLoad) {
             console.log('🔄 ProjectDetail: Loading tasks', { 
                 projectId: project.id, 
-                reason: projectIdChanged ? 'project changed' : 'navigated back to project',
-                routeKey 
+                reason: projectIdChanged ? 'project changed' : (!hasLoadedTasksRef.current ? 'initial load' : 'navigated back to project'),
+                routeKey,
+                hasLoadedTasks: hasLoadedTasksRef.current
             });
+            
+            hasLoadedTasksRef.current = true; // Mark as loaded to prevent duplicate calls
             
             loadTasksFromAPI(project.id).then(apiTasks => {
                 // Always use API tasks, even if empty array (empty means no tasks, not an error)

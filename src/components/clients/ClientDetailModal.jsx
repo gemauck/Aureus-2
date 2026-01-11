@@ -799,17 +799,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         
                         // CRITICAL FIX: Merge with existing sites to prevent duplicates
                         console.log(`🔧 About to call setFormData with ${sites.length} sites`);
-                        setFormData(prevFormData => {
-                            const existingSites = prevFormData?.sites || [];
-                            const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
-                            const updated = {
-                                ...prevFormData,
-                                sites: mergedSites
-                            };
-                            formDataRef.current = updated;
-                            console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
-                            return updated;
-                        });
+                        try {
+                            setFormData(prevFormData => {
+                                const existingSites = prevFormData?.sites || [];
+                                const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
+                                const updated = {
+                                    ...prevFormData,
+                                    sites: mergedSites
+                                };
+                                formDataRef.current = updated;
+                                console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
+                                return updated;
+                            });
+                            console.log(`✅ setFormData called successfully for sites`);
+                        } catch (error) {
+                            console.error('❌ Error in setFormData for sites:', error);
+                            throw error;
+                        }
 
                         // Remove optimistic sites that now exist in database
                         setOptimisticSites(prev => {
@@ -1405,11 +1411,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
             
             isLoadingContactsRef.current = true;
+            console.log(`📡 Loading contacts from database for client: ${clientId}`);
             const response = await window.api.getContacts(clientId);
             const contacts = response?.data?.contacts || [];
+            console.log(`✅ Loaded ${contacts.length} contacts from database for client: ${clientId}`);
             
             // CRITICAL FIX: Merge with existing contacts to prevent duplicates
             // The client object may already have contacts from parseClientJsonFields
+            console.log(`🔧 About to call setFormData with ${contacts.length} contacts`);
             setFormData(prevFormData => {
                 // Get existing contacts from formData
                 const existingContacts = prevFormData?.contacts || [];
