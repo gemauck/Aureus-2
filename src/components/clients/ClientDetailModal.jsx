@@ -985,8 +985,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 currentClientId,
                 lastSavedClientId: lastSavedClientId.current,
                 clientIdChanged,
-                initialDataLoadedForClientId: initialDataLoadedForClientIdRef.current
+                initialDataLoadedForClientId: initialDataLoadedForClientIdRef.current,
+                hasPromise: !!initialLoadPromiseRef.current
             });
+            
+            // CRITICAL FIX: Early guard check - if we're already loading this client, skip entirely
+            // This must happen BEFORE any other logic to prevent duplicate loads
+            // Check BOTH: ref value matches current client ID AND promise is running
+            if (initialDataLoadedForClientIdRef.current === currentClientId || initialLoadPromiseRef.current) {
+                console.log('⏭️ ClientDetailModal: Initial load already in progress or completed, skipping', {
+                    refValue: initialDataLoadedForClientIdRef.current,
+                    currentClientId,
+                    hasPromise: !!initialLoadPromiseRef.current,
+                    refMatches: initialDataLoadedForClientIdRef.current === currentClientId
+                });
+                return;
+            }
             
             // Update lastSavedClientId if client changed
             if (clientIdChanged) {
@@ -1113,7 +1127,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Load data from database if we should load AND form hasn't been edited
             if (shouldLoadFromDatabase && shouldDoInitialLoad) {
                 console.log('✅ Starting initial data load for client:', currentClientId);
-                // Mark that we're doing initial load for this client
+                // CRITICAL: Set the ref IMMEDIATELY at the start of loading to prevent duplicate loads
+                // This must be set BEFORE any async operations to prevent race conditions
                 initialDataLoadedForClientIdRef.current = currentClientId;
                 
                 // Cancel any existing pending timeouts for this client
@@ -1197,14 +1212,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         })
                         .catch(error => {
                             console.error('❌ Error loading critical client data:', error);
+                            // On error, reset the ref so we can retry
+                            initialDataLoadedForClientIdRef.current = null;
                         })
                         .finally(() => {
                             setIsInitialLoading(false);
                             initialLoadPromiseRef.current = null;
+                            // Ensure ref is set to prevent duplicate loads
+                            if (initialDataLoadedForClientIdRef.current !== currentClientId) {
+                                initialDataLoadedForClientIdRef.current = currentClientId;
+                            }
                         });
                 } else {
                     // No critical data to load - client object already has everything
                     setIsInitialLoading(false);
+                    // Still mark as loaded to prevent duplicate loads
+                    initialDataLoadedForClientIdRef.current = currentClientId;
                 }
             } else {
                 // Not loading from database - client data is already complete

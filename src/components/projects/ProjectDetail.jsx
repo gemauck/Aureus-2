@@ -1031,12 +1031,14 @@ function initializeProjectDetail() {
     }, [project]);
     
     // Initialize taskLists with project-specific data
-    // CRITICAL: If project.taskLists is empty array, use default list (id: 1) to ensure tasks can be displayed
+    // CRITICAL: If project.taskLists is empty array, use default lists to ensure tasks can be displayed
     const [taskLists, setTaskLists] = useState(
         (project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0) 
             ? project.taskLists 
             : [
-                { id: 1, name: 'To Do', color: 'blue', description: '' }
+                { id: 1, name: 'To Do', color: 'blue', description: '' },
+                { id: 2, name: 'In Progress', color: 'yellow', description: '' },
+                { id: 3, name: 'Done', color: 'green', description: '' }
             ]
     );
 
@@ -3305,7 +3307,7 @@ function initializeProjectDetail() {
         setShowCustomFieldModal(false);
     };
 
-    const handleDeleteList = (listId) => {
+    const handleDeleteList = async (listId) => {
         // Prevent deletion if it's the last list
         if (taskLists.length === 1) {
             alert('Cannot delete the last list. Projects must have at least one list.');
@@ -3322,9 +3324,36 @@ function initializeProjectDetail() {
             : `Delete "${listToDelete.name}"?`;
 
         if (confirm(message)) {
-            // Move tasks to the first remaining list
-            setTasks(tasks.map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
-            setTaskLists(taskLists.filter(l => l.id !== listId));
+            try {
+                // Save moved tasks to database first (only update listId)
+                if (tasksInList.length > 0 && window.DatabaseAPI?.makeRequest) {
+                    const savePromises = tasksInList.map(async (task) => {
+                        try {
+                            // Only send listId change for PATCH (API only updates provided fields)
+                            const taskPayload = {
+                                listId: remainingList.id // Move to remaining list
+                            };
+                            
+                            await window.DatabaseAPI.makeRequest(`/tasks?id=${task.id}`, {
+                                method: 'PATCH',
+                                body: JSON.stringify(taskPayload)
+                            });
+                        } catch (error) {
+                            console.error(`❌ Error moving task ${task.id} to new list:`, error);
+                            throw error; // Re-throw to stop the process if any task fails
+                        }
+                    });
+                    
+                    await Promise.all(savePromises);
+                }
+                
+                // Update local state after successful save
+                setTasks(tasks.map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
+                setTaskLists(taskLists.filter(l => l.id !== listId));
+            } catch (error) {
+                console.error('❌ Error deleting list:', error);
+                alert('Failed to delete list: ' + error.message);
+            }
         }
     };
 
@@ -5172,6 +5201,13 @@ function initializeProjectDetail() {
                                             title="Edit list"
                                         >
                                             <i className="fas fa-cog text-xs"></i>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteList(list.id)}
+                                            className="text-gray-400 hover:text-red-600 transition-colors p-1.5"
+                                            title="Delete list"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
                                         </button>
                                     </div>
                                 </header>
