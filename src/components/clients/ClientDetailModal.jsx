@@ -774,51 +774,51 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         
         // Prevent duplicate requests with local ref check
-        if (isLoadingSitesRef.current) {
-            console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
+                    if (isLoadingSitesRef.current) {
+                        console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
             return Promise.resolve([]);
-        }
-        
-        isLoadingSitesRef.current = true;
-        console.log(`📡 Loading sites from database for client: ${clientId}`);
-        
-        try {
-            const response = await window.api.getSites(clientId);
-            const sites = response?.data?.sites || [];
-            console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
-            
-            // Mark as loaded for this client to prevent infinite loop
-            sitesLoadedForClientIdRef.current = String(clientId);
-            
-            // CRITICAL FIX: Merge with existing sites to prevent duplicates
+                    }
+                    
+                    isLoadingSitesRef.current = true;
+                    console.log(`📡 Loading sites from database for client: ${clientId}`);
+                    
+                    try {
+                        const response = await window.api.getSites(clientId);
+                        const sites = response?.data?.sites || [];
+                        console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
+                        
+                        // Mark as loaded for this client to prevent infinite loop
+                        sitesLoadedForClientIdRef.current = String(clientId);
+                        
+                        // CRITICAL FIX: Merge with existing sites to prevent duplicates
             console.log(`🔧 About to call setFormData with ${sites.length} sites`);
             try {
-                setFormData(prevFormData => {
-                    const existingSites = prevFormData?.sites || [];
-                    const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
-                    const updated = {
-                        ...prevFormData,
-                        sites: mergedSites
-                    };
-                    formDataRef.current = updated;
-                    console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
-                    return updated;
-                });
+                        setFormData(prevFormData => {
+                            const existingSites = prevFormData?.sites || [];
+                            const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
+                            const updated = {
+                                ...prevFormData,
+                                sites: mergedSites
+                            };
+                            formDataRef.current = updated;
+                            console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
+                            return updated;
+                        });
                 console.log(`✅ setFormData called successfully for sites`);
             } catch (error) {
                 console.error('❌ Error in setFormData for sites:', error);
                 throw error;
             }
 
-            // Remove optimistic sites that now exist in database
-            setOptimisticSites(prev => {
-                const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
-                if (filtered.length !== prev.length) {
-                    console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
-                }
-                return filtered;
-            });
-            
+                        // Remove optimistic sites that now exist in database
+                        setOptimisticSites(prev => {
+                            const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
+                            if (filtered.length !== prev.length) {
+                                console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
+                            }
+                            return filtered;
+                        });
+                        
             return sites; // Return sites array directly
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
@@ -1138,16 +1138,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 loadPromises.push(sitesPromise);
                 criticalLoadPromises.push(sitesPromise);
                 
-                // CRITICAL FIX: Skip loadClientFromDatabase if contacts are already present
+                // CRITICAL FIX: Skip loadClientFromDatabase if contacts are already present OR being loaded
                 // When contacts are present, it means the client object came from the API with all data parsed
+                // When contacts are being loaded, we should wait for that to complete to avoid race conditions
                 // Calling loadClientFromDatabase again causes a reload/re-render because:
                 // 1. The API's parseClientJsonFields formats contacts differently (cross-populates phone/mobile)
                 // 2. Even though we preserve existing contacts, the setFormData call triggers a re-render
                 // 3. This causes the contact to "reload with another version" as reported
                 // The initial client object from API already has contacts, comments, followUps, etc. parsed
-                // So we don't need to reload unless contacts are missing
-                if (!hasContactsInClient) {
-                    // Only load if contacts are missing - this means we need to fetch everything
+                // So we don't need to reload unless contacts are missing AND not being loaded
+                if (!hasContactsInClient && !isLoadingContactsRef.current) {
+                    // Only load if contacts are missing AND not being loaded - this means we need to fetch everything
                     const clientPromise = loadClientFromDatabase(client.id);
                     loadPromises.push(clientPromise);
                     criticalLoadPromises.push(clientPromise);
@@ -1264,7 +1265,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // DO NOT update contacts or sites - those are managed separately via their own API endpoints
                     // Updating them here would cause duplicates since they're already loaded from normalized tables
                     setFormData(prevFormData => {
-                        // Preserve existing contacts and sites to prevent duplicates
+                        // CRITICAL FIX: Preserve existing contacts and sites, but only if they exist
+                        // If contacts/sites are empty but being loaded, preserve the empty array
+                        // This prevents overwriting contacts/sites that are being loaded separately
+                        // However, if contacts/sites are already loaded, preserve them
                         const existingContacts = prevFormData?.contacts || [];
                         const existingSites = prevFormData?.sites || [];
                         
@@ -1368,9 +1372,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log(`🔧 About to update formData with ${contacts.length} contacts`);
             console.log(`🔧 DEBUG: contacts array:`, contacts);
             console.log(`🔧 DEBUG: optimisticContacts array:`, optimisticContacts);
-            try {
-                // Get current formData from ref
-                const currentFormData = formDataRef.current || {};
+            
+            // Use functional update pattern (like sites) to ensure React detects the change
+            setFormData(prevFormData => {
+                const currentFormData = prevFormData || {};
                 const existingContacts = currentFormData.contacts || [];
                 console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
                 
@@ -1378,24 +1383,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
                 console.log(`🔧 Merged contacts array:`, mergedContacts);
                 
-                // Create updated formData
+                // Create updated formData - ensure it's a completely new object reference
                 const updated = {
                     ...currentFormData,
-                    contacts: mergedContacts
+                    contacts: [...mergedContacts] // Create new array reference
                 };
                 
-                // Update ref first
+                // Update ref inside callback
                 formDataRef.current = updated;
                 console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
                 console.log(`✅✅✅ Updated formData.contacts:`, updated.contacts);
-                
-                // Update state directly (not using callback)
-                setFormData(updated);
-                console.log(`✅ setFormData called successfully for contacts`);
-            } catch (error) {
-                console.error('❌ Error in setFormData for contacts:', error);
-                throw error;
-            }
+                return updated;
+            });
+            console.log(`✅ setFormData called with updated contacts`);
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
@@ -1658,27 +1658,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Update formData with opportunities from database
             console.log(`🔧 About to update formData with ${opportunities.length} opportunities`);
-            try {
-                // Get current formData from ref
-                const currentFormData = formDataRef.current || {};
+            
+            // Use functional update pattern (like sites) to ensure React detects the change
+            setFormData(prevFormData => {
+                const currentFormData = prevFormData || {};
                 
-                // Create updated formData
+                // Create updated formData - ensure it's a completely new object reference
                 const updated = {
                     ...currentFormData,
-                    opportunities: opportunities
+                    opportunities: [...opportunities] // Create new array reference
                 };
                 
-                // Update ref first
+                // Update ref inside callback
                 formDataRef.current = updated;
                 console.log(`✅ Updated formData.opportunities:`, updated.opportunities);
-                
-                // Update state directly (not using callback)
-                setFormData(updated);
-                console.log(`✅ setFormData called successfully for opportunities`);
-            } catch (error) {
-                console.error('❌ Error in setFormData for opportunities:', error);
-                throw error;
-            }
+                return updated;
+            });
+            console.log(`✅ setFormData called with updated opportunities`);
             
             return opportunities; // Return opportunities for Promise.all tracking
         } catch (error) {
