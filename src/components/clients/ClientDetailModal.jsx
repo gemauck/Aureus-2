@@ -5,6 +5,10 @@
 // FIX: formData initialization moved to top to prevent TDZ errors
 const { useState, useEffect, useRef, useCallback } = React;
 
+// Module-level tracking to prevent duplicate loads across remounts
+// This persists even if the component remounts
+const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
+
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
@@ -981,22 +985,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const currentClientId = String(client.id);
             const clientIdChanged = currentClientId !== lastSavedClientId.current;
             
+            // CRITICAL FIX: Use module-level tracker to prevent duplicate loads even across remounts
+            // Check if we're already loading this client (using module-level Map)
+            const existingLoadPromise = clientInitialLoadTracker.get(currentClientId);
+            const isAlreadyLoading = !!existingLoadPromise;
+            
             console.log('🔍 ClientDetailModal state check (before reset):', {
                 currentClientId,
                 lastSavedClientId: lastSavedClientId.current,
                 clientIdChanged,
                 initialDataLoadedForClientId: initialDataLoadedForClientIdRef.current,
-                hasPromise: !!initialLoadPromiseRef.current
+                hasPromise: !!initialLoadPromiseRef.current,
+                moduleTrackerHasPromise: isAlreadyLoading
             });
             
             // CRITICAL FIX: Early guard check - if we're already loading this client, skip entirely
-            // This must happen BEFORE any other logic to prevent duplicate loads
-            // Check BOTH: ref value matches current client ID AND promise is running
-            if (initialDataLoadedForClientIdRef.current === currentClientId || initialLoadPromiseRef.current) {
+            // Check module-level tracker (persists across remounts) OR ref/promise (current mount)
+            if (isAlreadyLoading || initialDataLoadedForClientIdRef.current === currentClientId || initialLoadPromiseRef.current) {
                 console.log('⏭️ ClientDetailModal: Initial load already in progress or completed, skipping', {
                     refValue: initialDataLoadedForClientIdRef.current,
                     currentClientId,
                     hasPromise: !!initialLoadPromiseRef.current,
+                    moduleTrackerHasPromise: isAlreadyLoading,
                     refMatches: initialDataLoadedForClientIdRef.current === currentClientId
                 });
                 return;
@@ -1127,8 +1137,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Load data from database if we should load AND form hasn't been edited
             if (shouldLoadFromDatabase && shouldDoInitialLoad) {
                 console.log('✅ Starting initial data load for client:', currentClientId);
-                // CRITICAL: Set the ref IMMEDIATELY at the start of loading to prevent duplicate loads
-                // This must be set BEFORE any async operations to prevent race conditions
+                // CRITICAL: Set ref and module-level tracker IMMEDIATELY to prevent duplicate loads
                 initialDataLoadedForClientIdRef.current = currentClientId;
                 
                 // Cancel any existing pending timeouts for this client
@@ -1205,7 +1214,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     setIsInitialLoading(true);
                     // Execute all critical loads (sites, contacts, opportunities, job cards) in parallel
                     // Wait for ALL to complete before showing count badges
-                    initialLoadPromiseRef.current = Promise.all(criticalLoadPromises)
+                    const loadPromise = Promise.all(criticalLoadPromises)
                         .then(() => {
                             // Small delay to ensure all state updates are processed
                             return new Promise(resolve => setTimeout(resolve, 50));
@@ -1218,11 +1227,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         .finally(() => {
                             setIsInitialLoading(false);
                             initialLoadPromiseRef.current = null;
+                            // Clear module-level tracker after load completes
+                            if (clientInitialLoadTracker.get(currentClientId) === loadPromise) {
+                                clientInitialLoadTracker.delete(currentClientId);
+                            }
                             // Ensure ref is set to prevent duplicate loads
                             if (initialDataLoadedForClientIdRef.current !== currentClientId) {
                                 initialDataLoadedForClientIdRef.current = currentClientId;
                             }
                         });
+                    initialLoadPromiseRef.current = loadPromise;
+                    // CRITICAL: Track in module-level Map to prevent duplicates across remounts
+                    clientInitialLoadTracker.set(currentClientId, loadPromise);
                 } else {
                     // No critical data to load - client object already has everything
                     setIsInitialLoading(false);

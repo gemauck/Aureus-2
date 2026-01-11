@@ -1132,6 +1132,50 @@ function initializeProjectDetail() {
         }
     }, [project?.id, loadTasksFromAPI]); // Include loadTasksFromAPI in deps
     
+    // CRITICAL: Initialize default taskLists when project loads with empty taskLists
+    // This ensures default lists are shown even if project.taskLists is an empty array from the database
+    const previousProjectIdForTaskListsRef = useRef(project?.id);
+    useEffect(() => {
+        // Only sync if project ID changed (switching to a different project)
+        if (project?.id !== previousProjectIdForTaskListsRef.current) {
+            previousProjectIdForTaskListsRef.current = project?.id;
+            
+            if (!project?.id) return;
+            
+            // Check if project.taskLists is empty or doesn't exist
+            const hasTaskLists = project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0;
+            
+            if (!hasTaskLists) {
+                // Set default lists when project.taskLists is empty
+                const defaultLists = [
+                    { id: 1, name: 'To Do', color: 'blue', description: '' },
+                    { id: 2, name: 'In Progress', color: 'yellow', description: '' },
+                    { id: 3, name: 'Done', color: 'green', description: '' }
+                ];
+                console.log('✅ ProjectDetail: Initializing default taskLists for project:', project.id);
+                setTaskLists(defaultLists);
+            } else {
+                // Project has taskLists, use them
+                setTaskLists(project.taskLists);
+            }
+        } else {
+            // Same project, but project.taskLists might have changed
+            // Only update if project.taskLists exists and is different from current state
+            const hasTaskLists = project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0;
+            if (hasTaskLists) {
+                // Check if current state differs from project.taskLists
+                setTaskLists(prev => {
+                    const prevIds = prev?.map(l => l.id).sort().join(',') || '';
+                    const projectIds = project.taskLists.map(l => l.id).sort().join(',');
+                    if (prevIds !== projectIds) {
+                        return project.taskLists;
+                    }
+                    return prev;
+                });
+            }
+        }
+    }, [project?.id, project?.taskLists]); // Run when project ID or taskLists changes
+    
     // CRITICAL: Ensure project ID is always in URL when ProjectDetail is rendered
     useEffect(() => {
         if (!project?.id) return;
