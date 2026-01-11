@@ -691,6 +691,7 @@ const Clients = React.memo(() => {
     const isLoadingOpportunitiesRef = useRef(false); // Prevent concurrent opportunity loads
     const [pipelineTypeFilter, setPipelineTypeFilter] = useState('all');
     const PipelineComponent = useEnsureGlobalComponent('Pipeline');
+    const NewsFeedComponent = useEnsureGlobalComponent('ClientNewsFeed');
     const isNewPipelineAvailable = Boolean(PipelineComponent);
     // Initialize all data from cache immediately to prevent flashing counts
     // This ensures counts appear instantly on page load
@@ -741,6 +742,44 @@ const Clients = React.memo(() => {
     const [showIndustryModal, setShowIndustryModal] = useState(false);
     const [newIndustryName, setNewIndustryName] = useState('');
     const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
+    
+    // PERFORMANCE FIX: Preload Pipeline and News Feed components on mount for instant button clicks
+    useEffect(() => {
+        // Preload Pipeline component if not already available
+        if (!window.Pipeline && !window.PipelineView && CRITICAL_COMPONENT_SCRIPTS.Pipeline) {
+            const existingPipelineScript = Array.from(document.getElementsByTagName('script')).find((script) => {
+                return script.src && (script.src.includes('Pipeline.js') || script.dataset?.componentName === 'Pipeline');
+            });
+            
+            if (!existingPipelineScript) {
+                const script = document.createElement('script');
+                script.async = true;
+                script.dataset.componentName = 'Pipeline';
+                const scriptSrc = CRITICAL_COMPONENT_SCRIPTS.Pipeline;
+                const normalisedSrc = scriptSrc.startsWith('/') || scriptSrc.startsWith('http')
+                    ? scriptSrc
+                    : `/${scriptSrc.replace(/^\.\//, '')}`;
+                script.src = `${normalisedSrc}${normalisedSrc.includes('?') ? '&' : '?'}preload=${Date.now()}`;
+                document.body.appendChild(script);
+            }
+        }
+        
+        // Preload ClientNewsFeed component if not already available
+        if (!window.ClientNewsFeed) {
+            // Check if script already exists
+            const existingNewsScript = Array.from(document.getElementsByTagName('script')).find((script) => {
+                return script.src && (script.src.includes('ClientNewsFeed.js') || script.dataset?.componentName === 'ClientNewsFeed');
+            });
+            
+            if (!existingNewsScript) {
+                const script = document.createElement('script');
+                script.async = true;
+                script.dataset.componentName = 'ClientNewsFeed';
+                script.src = `/dist/src/components/clients/ClientNewsFeed.js?preload=${Date.now()}`;
+                document.body.appendChild(script);
+            }
+        }
+    }, []); // Run once on mount
     
     // PERFORMANCE FIX: Combine ref sync effects into one to reduce re-renders
     useEffect(() => {
