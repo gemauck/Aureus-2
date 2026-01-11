@@ -2882,9 +2882,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
         }
         
-        const textColorClass = statusConfig && statusConfig.color && typeof statusConfig.color === 'string'
-            ? (statusConfig.color.split(' ').find(cls => cls && typeof cls === 'string' && cls.startsWith('text-')) || 'text-gray-900')
-            : 'text-gray-400';
+        const textColorClass = (() => {
+            if (!statusConfig || !statusConfig.color || typeof statusConfig.color !== 'string') {
+                return 'text-gray-400';
+            }
+            try {
+                const colorParts = statusConfig.color.split(' ');
+                if (!Array.isArray(colorParts)) return 'text-gray-900';
+                const textClass = colorParts.find(cls => cls && typeof cls === 'string' && cls.startsWith('text-'));
+                return textClass || 'text-gray-900';
+            } catch (e) {
+                console.warn('Error parsing statusConfig.color:', e);
+                return 'text-gray-900';
+            }
+        })();
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -2983,9 +2994,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     >
                         {(statusOptions && Array.isArray(statusOptions) ? statusOptions : []).map(option => {
                             if (!option || typeof option !== 'object') return null;
+                            const optionValue = option.value != null ? String(option.value) : '';
+                            const optionLabel = option.label != null ? String(option.label) : '';
+                            if (!optionValue) return null; // Skip if no value
                             return (
-                                <option key={option.value} value={option.value}>
-                                    {option.label}
+                                <option key={optionValue} value={optionValue}>
+                                    {optionLabel}
                                 </option>
                             );
                         })}

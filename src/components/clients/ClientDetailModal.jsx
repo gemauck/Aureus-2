@@ -1625,27 +1625,44 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     // Load opportunities from database
     const loadOpportunitiesFromDatabase = async (clientId) => {
+        console.log(`🔍 loadOpportunitiesFromDatabase CALLED for client: ${clientId}`);
+        console.log(`🔍 Checking conditions: isLoadingOpportunitiesRef=${isLoadingOpportunitiesRef.current}`);
         try {
             // Prevent duplicate requests
             if (isLoadingOpportunitiesRef.current) {
+                console.log(`⏭️ Skipping loadOpportunitiesFromDatabase - already loading`);
                 return Promise.resolve([]);
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
+                console.log(`⏭️ Skipping loadOpportunitiesFromDatabase - no token`);
                 return Promise.resolve([]);
             }
             
             isLoadingOpportunitiesRef.current = true;
+            console.log(`📡 Loading opportunities from database for client: ${clientId}`);
             const response = await window.api.getOpportunitiesByClient(clientId);
             const opportunities = response?.data?.opportunities || [];
-            
+            console.log(`✅ Loaded ${opportunities.length} opportunities from database for client: ${clientId}`);
             
             // Update formData with opportunities from database
-            setFormData(prevFormData => ({
-                ...prevFormData,
-                opportunities: opportunities
-            }));
+            console.log(`🔧 About to call setFormData with ${opportunities.length} opportunities`);
+            try {
+                setFormData(prevFormData => {
+                    const updated = {
+                        ...prevFormData,
+                        opportunities: opportunities
+                    };
+                    formDataRef.current = updated;
+                    console.log(`✅ Updated formData.opportunities:`, updated.opportunities);
+                    return updated;
+                });
+                console.log(`✅ setFormData called successfully for opportunities`);
+            } catch (error) {
+                console.error('❌ Error in setFormData for opportunities:', error);
+                throw error;
+            }
             
             return opportunities; // Return opportunities for Promise.all tracking
         } catch (error) {
