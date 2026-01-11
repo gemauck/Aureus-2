@@ -119,15 +119,23 @@ function initializePrisma() {
       }
     })
     
-    // Set statement timeout at database level (25 seconds) - do this asynchronously after connection
+    // Set statement timeout at database level (25 seconds) - do this asynchronously after first connection
     // This ensures queries timeout even if the application timeout doesn't catch them
-    global.__prisma.$connect().then(() => {
-      return global.__prisma.$executeRaw`SET statement_timeout = 25000`
-    }).then(() => {
-      console.log('✅ Database statement timeout set to 25 seconds')
-    }).catch((timeoutError) => {
-      console.warn('⚠️ Failed to set statement timeout:', timeoutError.message)
-      // Continue anyway - application-level timeout will still work
+    // Don't block initialization - let it happen on first query
+    // Use process.nextTick to ensure it runs after module initialization
+    process.nextTick(() => {
+      if (prismaGlobal) {
+        ensureConnected().then(() => {
+          if (prismaGlobal) {
+            return prismaGlobal.$executeRaw`SET statement_timeout = 25000`
+          }
+        }).then(() => {
+          console.log('✅ Database statement timeout set to 25 seconds')
+        }).catch((timeoutError) => {
+          console.warn('⚠️ Failed to set statement timeout:', timeoutError.message)
+          // Continue anyway - application-level timeout will still work
+        })
+      }
     })
     
     prismaGlobal = global.__prisma
