@@ -2184,7 +2184,7 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0">
+                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0 relative z-10">
                     <div className="flex gap-2">
                         {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button

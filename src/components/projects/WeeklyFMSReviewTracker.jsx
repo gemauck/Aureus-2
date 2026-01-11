@@ -4070,9 +4070,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             >
                                                 Document / Data
                                             </th>
-                                            {weeks.map((week, idx) => {
+                                            {(weeks && Array.isArray(weeks) ? weeks : []).map((week, idx) => {
                                                 // Group weeks by month - show month header when month changes
-                                                const prevWeek = idx > 0 ? weeks[idx - 1] : null;
+                                                const safeWeeks = weeks && Array.isArray(weeks) ? weeks : [];
+                                                const prevWeek = idx > 0 ? safeWeeks[idx - 1] : null;
                                                 const showMonthHeader = !prevWeek || prevWeek.month !== week.month;
                                                 
                                                 return (
@@ -4106,9 +4107,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {section.documents.length === 0 ? (
+                                        {(!section.documents || !Array.isArray(section.documents) || section.documents.length === 0) ? (
                                             <tr>
-                                                <td colSpan={weeks.length + 2} className="px-8 py-4 text-center text-gray-400">
+                                                <td colSpan={(weeks && Array.isArray(weeks) ? weeks.length : 0) + 2} className="px-8 py-4 text-center text-gray-400">
                                                     <p className="text-xs">No documents in this section</p>
                                                     <button
                                                         onClick={() => handleAddDocument(section.id)}
@@ -4132,7 +4133,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    {weeks.map((week) => (
+                                                    {(weeks && Array.isArray(weeks) ? weeks : []).map((week) => (
                                                         <React.Fragment key={`${document.id}-${week.key}`}>
                                                             {renderStatusCell(section, document, week.month, week.weekNumber)}
                                                         </React.Fragment>

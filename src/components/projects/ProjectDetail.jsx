@@ -1150,19 +1150,12 @@ function initializeProjectDetail() {
     useEffect(() => {
         // Load tasks if:
         // 1. Project ID changed (switching to a different project), OR
-        // 2. Route changed and we're still on the same project (navigated back), OR
-        // 3. We haven't loaded tasks yet for this project (initial load)
+        // 2. We haven't loaded tasks yet for this project (initial load)
         const projectIdChanged = project?.id !== previousProjectIdRef.current;
-        const routeChanged = routeKey !== previousRouteKeyRef.current;
         
         if (projectIdChanged) {
             previousProjectIdRef.current = project?.id;
             hasLoadedTasksRef.current = false; // Reset flag when project changes
-        }
-        
-        // Update previous routeKey after checking
-        if (routeChanged) {
-            previousRouteKeyRef.current = routeKey;
         }
         
         // Check if we're currently on the project page
@@ -1172,12 +1165,11 @@ function initializeProjectDetail() {
              window.RouteState.getRoute()?.segments?.[0] === String(project.id))
         );
         
-        // Always load from Task API first (tasks are stored in Task table, not JSON)
-        // Load if: project ID changed, haven't loaded yet (initial load), or route changed while on project page (navigated back)
-        const shouldLoad = project?.id && (
+        // Always load from Task API when on project page and haven't loaded yet
+        // This ensures tasks load on initial mount and when navigating back (component remounts or state resets)
+        const shouldLoad = project?.id && isOnProjectPage && (
             projectIdChanged || 
-            !hasLoadedTasksRef.current || // Initial load - always load tasks on first mount
-            (isOnProjectPage && routeChanged) // Route changed while on project page (navigated back)
+            !hasLoadedTasksRef.current // Always load if we haven't loaded yet for this project
         );
         
         if (shouldLoad) {
