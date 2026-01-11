@@ -1161,8 +1161,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // Wait for ALL to complete before showing count badges
                     const loadPromise = Promise.all(criticalLoadPromises)
                         .then(() => {
-                            // Small delay to ensure all state updates are processed
-                            return new Promise(resolve => setTimeout(resolve, 50));
+                            // CRITICAL: Longer delay to ensure all React state updates from setFormData are processed
+                            // React batches state updates, so we need to wait for them to complete before rendering
+                            return new Promise(resolve => setTimeout(resolve, 200));
                         })
                         .catch(error => {
                             console.error('❌ Error loading critical client data:', error);
@@ -1170,6 +1171,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             initialDataLoadedForClientIdRef.current = null;
                         })
                         .finally(() => {
+                            console.log('✅ Initial data load complete, setting isInitialLoading to false');
                             setIsInitialLoading(false);
                             initialLoadPromiseRef.current = null;
                             // DON'T clear module-level tracker after load completes - keep it until client changes
@@ -1363,24 +1365,32 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // CRITICAL FIX: Merge with existing contacts to prevent duplicates
             // The client object may already have contacts from parseClientJsonFields
-            console.log(`🔧 About to call setFormData with ${contacts.length} contacts`);
+            console.log(`🔧 About to update formData with ${contacts.length} contacts`);
+            console.log(`🔧 DEBUG: contacts array:`, contacts);
+            console.log(`🔧 DEBUG: optimisticContacts array:`, optimisticContacts);
             try {
-                setFormData(prevFormData => {
-                    console.log(`🔧 setFormData callback executing for contacts. prevFormData:`, prevFormData);
-                    // Get existing contacts from formData
-                    const existingContacts = prevFormData?.contacts || [];
-                    console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
-                    // Merge: API contacts + existing contacts + optimistic contacts
-                    const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
-                    const updated = {
-                        ...prevFormData,
-                        contacts: mergedContacts
-                    };
-                    formDataRef.current = updated;
-                    console.log(`✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
-                    console.log(`✅ Updated formData.contacts:`, updated.contacts);
-                    return updated;
-                });
+                // Get current formData from ref
+                const currentFormData = formDataRef.current || {};
+                const existingContacts = currentFormData.contacts || [];
+                console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
+                
+                // Merge: API contacts + existing contacts + optimistic contacts
+                const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
+                console.log(`🔧 Merged contacts array:`, mergedContacts);
+                
+                // Create updated formData
+                const updated = {
+                    ...currentFormData,
+                    contacts: mergedContacts
+                };
+                
+                // Update ref first
+                formDataRef.current = updated;
+                console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
+                console.log(`✅✅✅ Updated formData.contacts:`, updated.contacts);
+                
+                // Update state directly (not using callback)
+                setFormData(updated);
                 console.log(`✅ setFormData called successfully for contacts`);
             } catch (error) {
                 console.error('❌ Error in setFormData for contacts:', error);
@@ -1647,17 +1657,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log(`✅ Loaded ${opportunities.length} opportunities from database for client: ${clientId}`);
             
             // Update formData with opportunities from database
-            console.log(`🔧 About to call setFormData with ${opportunities.length} opportunities`);
+            console.log(`🔧 About to update formData with ${opportunities.length} opportunities`);
             try {
-                setFormData(prevFormData => {
-                    const updated = {
-                        ...prevFormData,
-                        opportunities: opportunities
-                    };
-                    formDataRef.current = updated;
-                    console.log(`✅ Updated formData.opportunities:`, updated.opportunities);
-                    return updated;
-                });
+                // Get current formData from ref
+                const currentFormData = formDataRef.current || {};
+                
+                // Create updated formData
+                const updated = {
+                    ...currentFormData,
+                    opportunities: opportunities
+                };
+                
+                // Update ref first
+                formDataRef.current = updated;
+                console.log(`✅ Updated formData.opportunities:`, updated.opportunities);
+                
+                // Update state directly (not using callback)
+                setFormData(updated);
                 console.log(`✅ setFormData called successfully for opportunities`);
             } catch (error) {
                 console.error('❌ Error in setFormData for opportunities:', error);
@@ -3469,8 +3485,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         const formContacts = formData.contacts || [];
                                         const optimistic = optimisticContacts || [];
                                         
+                                        console.log(`🔍 RENDERING Contacts tab: formContacts.length=${formContacts.length}, optimistic.length=${optimistic.length}, formData.contacts:`, formData.contacts);
+                                        
                                         // Use mergeUniqueById for consistent deduplication
                                         const allContacts = mergeUniqueById(formContacts, optimistic);
+                                        
+                                        console.log(`🔍 RENDERING Contacts tab: allContacts.length=${allContacts.length}, allContacts:`, allContacts);
                                         
                                         // Debug logging (remove after testing)
                                         if (allContacts.length !== formContacts.length + optimistic.length - (optimistic.filter(o => formContacts.some(f => String(f?.id) === String(o?.id))).length)) {
