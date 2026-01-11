@@ -254,3 +254,4 @@ async function testAllEndpoints() {
 }
 
 testAllEndpoints()
+

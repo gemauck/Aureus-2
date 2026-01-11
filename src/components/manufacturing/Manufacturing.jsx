@@ -398,16 +398,43 @@ try {
             window.DatabaseAPI.getPurchaseOrders()
               .then(ordersResponse => {
                 const ordersData = ordersResponse?.data?.purchaseOrders || [];
-                const processed = ordersData.map(order => ({ ...order, id: order.id }));
+                const processed = ordersData.map(order => {
+                  // Ensure items are parsed correctly
+                  const orderWithParsedItems = {
+                    ...order,
+                    id: order.id,
+                    items: typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || [])
+                  };
+                  return orderWithParsedItems;
+                });
                 setPurchaseOrders(processed);
                 localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(processed));
                 return { type: 'purchaseOrders', data: processed };
               })
               .catch(error => {
                 console.error('Error loading purchase orders:', error);
+                // Fallback to localStorage if database fails
+                const loadedOrders = JSON.parse(localStorage.getItem('manufacturing_purchase_orders') || '[]');
+                if (loadedOrders.length > 0) {
+                  const processed = loadedOrders.map(order => ({
+                    ...order,
+                    items: typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || [])
+                  }));
+                  setPurchaseOrders(processed);
+                }
                 return { type: 'purchaseOrders', error };
               })
           );
+        } else {
+          // Fallback to localStorage if DatabaseAPI not available
+          const loadedOrders = JSON.parse(localStorage.getItem('manufacturing_purchase_orders') || '[]');
+          if (loadedOrders.length > 0) {
+            const processed = loadedOrders.map(order => ({
+              ...order,
+              items: typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || [])
+            }));
+            setPurchaseOrders(processed);
+          }
         }
 
         // Stock Movements
@@ -3984,6 +4011,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   const handleSavePurchaseOrder = async () => {
     try {
+      // Validation
       if (!formData.supplierId && !formData.supplierName) {
         alert('Please select a supplier');
         return;
@@ -3994,32 +4022,33 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         return;
       }
 
-      // Calculate totals
-      const subtotal = purchaseOrderItems.reduce((sum, item) => sum + item.total, 0);
-      const tax = formData.tax || 0;
-      const total = subtotal + tax;
+      // Validate receiving location
+      if (!formData.toLocationId) {
+        alert('Please select a receiving location for the purchased items');
+        return;
+      }
 
-      // Get default warehouse location for receiving
-      const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
-      const toLocationId = formData.toLocationId || (mainWarehouse ? mainWarehouse.id : null);
+      // Calculate totals
+      const subtotal = purchaseOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
+      const tax = parseFloat(formData.tax || 0);
+      const total = subtotal + tax;
 
       const orderData = {
         supplierId: formData.supplierId || '',
         supplierName: formData.supplierName || '',
         status: 'draft', // Purchase orders start as draft and must be marked as received to update inventory
         priority: formData.priority || 'normal',
-        orderDate: formData.orderDate || new Date().toISOString(),
+        orderDate: formData.orderDate || new Date().toISOString().split('T')[0],
         expectedDate: formData.expectedDate || null,
-        toLocationId: toLocationId,
         subtotal: subtotal,
         tax: tax,
         total: total,
         items: purchaseOrderItems.map(item => ({
           sku: item.sku,
           name: item.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total,
+          quantity: parseFloat(item.quantity),
+          unitPrice: parseFloat(item.unitPrice),
+          total: parseFloat(item.total),
           supplierPartNumber: item.supplierPartNumber || ''
         })),
         notes: formData.notes || '',
@@ -4030,22 +4059,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       
       if (response?.data?.purchaseOrder) {
         const createdOrder = response.data.purchaseOrder;
-        const orderNumber = createdOrder.orderNumber || createdOrder.id;
+        // Ensure items are parsed correctly
+        const orderWithParsedItems = {
+          ...createdOrder,
+          id: createdOrder.id,
+          items: typeof createdOrder.items === 'string' ? JSON.parse(createdOrder.items || '[]') : (createdOrder.items || [])
+        };
 
-        const updatedOrders = [...purchaseOrders, { ...createdOrder, id: createdOrder.id }];
+        const updatedOrders = [...purchaseOrders, orderWithParsedItems];
         setPurchaseOrders(updatedOrders);
         localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
         alert('Purchase order created successfully! Mark it as "received" to record stock movements and update inventory.');
+        
+        setShowModal(false);
+        setFormData({});
+        setPurchaseOrderItems([]);
       } else {
+        console.warn('⚠️ Purchase order response incomplete:', response);
         alert('Purchase order created but response data incomplete. Please refresh to verify.');
       }
-
-      setShowModal(false);
-      setFormData({});
-      setPurchaseOrderItems([]);
     } catch (error) {
       console.error('❌ Error saving purchase order:', error);
-      alert(`Failed to save purchase order: ${error.message}`);
+      const errorMessage = error?.message || 'Unknown error occurred';
+      alert(`Failed to save purchase order: ${errorMessage}`);
     }
   };
 
@@ -4382,10 +4418,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   const handleSaveSupplier = async () => {
     try {
+      // Validation
+      if (!formData.name || formData.name.trim() === '') {
+        alert('Supplier name is required');
+        return;
+      }
+
       const isEditingSupplier = modalType === 'edit_supplier' && selectedItem;
       const supplierData = {
         code: formData.code || '',
-        name: formData.name,
+        name: formData.name.trim(),
         contactPerson: formData.contactPerson || '',
         email: formData.email || '',
         phone: formData.phone || '',
@@ -6752,16 +6794,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Order Date</p>
-                      <p className="text-sm text-gray-900">{selectedItem.orderDate || '-'}</p>
+                      <p className="text-sm text-gray-900">{selectedItem.orderDate ? (selectedItem.orderDate.split('T')[0] || selectedItem.orderDate) : '-'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Expected Date</p>
-                      <p className="text-sm text-gray-900">{selectedItem.expectedDate || '-'}</p>
+                      <p className="text-sm text-gray-900">{selectedItem.expectedDate ? (selectedItem.expectedDate.split('T')[0] || selectedItem.expectedDate) : '-'}</p>
                     </div>
                     {selectedItem.receivedDate && (
                       <div>
                         <p className="text-xs text-gray-500">Received Date</p>
-                        <p className="text-sm text-green-600">{selectedItem.receivedDate}</p>
+                        <p className="text-sm text-green-600">{selectedItem.receivedDate.split('T')[0] || selectedItem.receivedDate}</p>
                       </div>
                     )}
                     <div>
@@ -6845,10 +6887,54 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </div>
               )}
             </div>
-            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+            <div className="p-4 border-t border-gray-200 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {selectedItem && selectedItem.status !== 'received' && (
+                  <button
+                    onClick={async () => {
+                      if (confirm('Mark this purchase order as received? This will record stock movements and update inventory.')) {
+                        try {
+                          const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, {
+                            status: 'received'
+                          });
+                          if (response?.data?.purchaseOrder) {
+                            const updatedOrder = response.data.purchaseOrder;
+                            const updatedOrders = purchaseOrders.map(order => 
+                              order.id === selectedItem.id ? updatedOrder : order
+                            );
+                            setPurchaseOrders(updatedOrders);
+                            localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+                            setSelectedItem(updatedOrder);
+                            
+                            // Refresh inventory to show updated stock levels
+                            try {
+                              const invResponse = await safeCallAPI('getInventory');
+                              if (invResponse?.data?.inventory) {
+                                setInventory(invResponse.data.inventory);
+                                localStorage.setItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
+                              }
+                            } catch (invError) {
+                              console.warn('⚠️ Failed to refresh inventory:', invError);
+                            }
+                            
+                            alert('Purchase order marked as received! Stock movements recorded and inventory updated.');
+                          }
+                        } catch (error) {
+                          console.error('❌ Error updating purchase order status:', error);
+                          alert(`Failed to mark order as received: ${error.message}`);
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <i className="fas fa-check mr-1"></i>
+                    Mark as Received
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); }}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Close
               </button>
@@ -7888,37 +7974,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Purchase Orders</h3>
-            <div className="flex items-center gap-2">
-              {/* Debug button - remove after testing */}
-              <button
-                onClick={() => {
-                  alert('Button click works! Function type: ' + typeof openAddPurchaseOrderModal);
-                }}
-                className="px-2 py-1 text-xs bg-yellow-500 text-white rounded"
-                title="Test button"
-              >
-                TEST
-              </button>
-              <button
-                onClick={() => {
-                  try {
-                    if (typeof openAddPurchaseOrderModal === 'function') {
-                      openAddPurchaseOrderModal();
-                    } else {
-                      console.error('❌ openAddPurchaseOrderModal is not a function!');
-                      alert('Error: Purchase order function not available. Please refresh the page.');
-                    }
-                  } catch (error) {
-                    console.error('❌ Error opening purchase order modal:', error);
-                    alert('Error opening purchase order form: ' + error.message);
-                  }
-                }}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-              >
-                <i className="fas fa-plus text-xs"></i>
-                New Purchase Order
-              </button>
-            </div>
+            <button
+              onClick={openAddPurchaseOrderModal}
+              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+            >
+              <i className="fas fa-plus text-xs"></i>
+              New Purchase Order
+            </button>
           </div>
         </div>
 
@@ -7930,10 +7992,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <p className="text-sm font-medium text-gray-700 mb-2">No purchase orders found</p>
               <p className="text-xs text-gray-500 mb-4">Create your first purchase order to get started</p>
                         <button
-                          onClick={() => {
-                            openAddPurchaseOrderModal();
-                          }}
-                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
+                          onClick={openAddPurchaseOrderModal}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto transition-colors"
                         >
                           <i className="fas fa-plus text-xs"></i>
                           Create Purchase Order
@@ -8038,10 +8098,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <p className="text-sm font-medium text-gray-700 mb-2">No purchase orders found</p>
                         <p className="text-xs text-gray-500 mb-4">Create your first purchase order to get started</p>
                         <button
-                          onClick={() => {
-                            openAddPurchaseOrderModal();
-                          }}
-                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                          onClick={openAddPurchaseOrderModal}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
                         >
                           <i className="fas fa-plus text-xs"></i>
                           Create Purchase Order

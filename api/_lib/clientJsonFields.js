@@ -13,6 +13,12 @@ const DEFAULT_BILLING_TERMS = {
 // Phase 3: Triple-read - Normalized tables first, then JSONB, then String fallback
 export function parseClientJsonFields(client) {
   try {
+    // Safety check: return empty object if client is null/undefined
+    if (!client || typeof client !== 'object') {
+      console.warn('⚠️ parseClientJsonFields: client is null/undefined/invalid:', client)
+      return client || {}
+    }
+    
     const parsed = { ...client }
     
     // Phase 3: Contacts - Use normalized table first, fallback to JSON
@@ -220,16 +226,16 @@ export function parseClientJsonFields(client) {
       
       if (hasNamedServices) {
         // Use normalized table - services have full details
-        parsed.services = client.clientServices.map(service => ({
-          id: service.id,
-          name: service.name,
-          description: service.description || '',
-          price: service.price || 0,
-          status: service.status || 'Active',
-          startDate: service.startDate ? new Date(service.startDate).toISOString() : null,
-          endDate: service.endDate ? new Date(service.endDate).toISOString() : null,
-          notes: service.notes || ''
-        }))
+      parsed.services = client.clientServices.map(service => ({
+        id: service.id,
+        name: service.name,
+        description: service.description || '',
+        price: service.price || 0,
+        status: service.status || 'Active',
+        startDate: service.startDate ? new Date(service.startDate).toISOString() : null,
+        endDate: service.endDate ? new Date(service.endDate).toISOString() : null,
+        notes: service.notes || ''
+      }))
       } else {
         // Normalized services exist but have no names - these are likely orphaned records
         // Fall back to JSON field which has the actual service strings

@@ -645,9 +645,37 @@ app.all('/api/opportunities/client/:clientId', async (req, res, next) => {
 app.all('/api/contacts/client/:clientId/:contactId?', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'contacts.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
-    return handler(req, res)
+    if (!handler) {
+      console.error('❌ Contacts handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
+    console.error('❌ Contacts API error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      stack: e.stack?.substring(0, 500)
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -976,13 +1004,29 @@ app.all('/api/clients/groups', async (req, res, next) => {
       console.error('❌ Groups handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
-    console.error('❌ Groups API error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
+    console.error('❌ Groups API error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      stack: e.stack?.substring(0, 500)
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
         timestamp: new Date().toISOString()
       })
     }
@@ -1001,13 +1045,30 @@ app.all('/api/clients/groups/:groupId/members', async (req, res, next) => {
     }
     // Attach groupId to req.params for the handler
     req.params = req.params || {}
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
-    console.error('❌ Groups API error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
+    console.error('❌ Groups API error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      stack: e.stack?.substring(0, 500)
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
         timestamp: new Date().toISOString()
       })
     }
@@ -1026,13 +1087,30 @@ app.all('/api/clients/groups/:groupId', async (req, res, next) => {
     }
     // Attach groupId to req.params for the handler
     req.params = req.params || {}
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
-    console.error('❌ Groups API error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
+    console.error('❌ Groups API error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      stack: e.stack?.substring(0, 500)
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
         timestamp: new Date().toISOString()
       })
     }
@@ -1050,13 +1128,30 @@ app.all('/api/clients/:id/groups/:groupId?', async (req, res, next) => {
     }
     // Attach client ID and groupId to req.params for the handler
     req.params = req.params || {}
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
-    console.error('❌ Groups API error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
+    console.error('❌ Groups API error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      stack: e.stack?.substring(0, 500)
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
         timestamp: new Date().toISOString()
       })
     }
@@ -1177,10 +1272,55 @@ app.all('/api/clients/:id', async (req, res, next) => {
       method: req.method,
       params: req.params
     })
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for jobcards endpoints (GET, POST /api/jobcards)
+// IMPORTANT: This must come BEFORE the catch-all route
+app.all('/api/jobcards/:id?', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'jobcards.js'))
+    if (!handler) {
+      console.error('❌ Jobcards handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Jobcards API error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      stack: e.stack?.substring(0, 500)
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      const isDbError = e.code === 'P1001' || e.code === 'P1002' || e.code === 'P1008' || 
+                       e.code === 'P1017' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED' ||
+                       e.code === 'ENOTFOUND' || e.name === 'PrismaClientInitializationError' ||
+                       e.message?.includes("Can't reach database server")
+      
+      return res.status(isDbError ? 503 : 500).json({ 
+        error: isDbError ? 'Database connection error' : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
         timestamp: new Date().toISOString()
       })
     }

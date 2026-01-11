@@ -801,6 +801,7 @@ async function handler(req, res) {
     return badRequest(res, 'Method not allowed')
 
   } catch (error) {
+    // Enhanced error logging with full context
     console.error('❌ [LEADS ID] Unhandled error in leads [id] API:', error)
     console.error('❌ [LEADS ID] Error stack:', error.stack)
     console.error('❌ [LEADS ID] Error details:', {
@@ -810,13 +811,42 @@ async function handler(req, res) {
       meta: error.meta,
       url: req.url,
       method: req.method,
-      id: req.params?.id
+      id: req.params?.id,
+      query: req.query,
+      headers: {
+        authorization: req.headers.authorization ? 'Bearer ***' : undefined,
+        host: req.headers.host,
+        'user-agent': req.headers['user-agent']
+      }
     })
+    
+    // Log to stderr for better visibility in production logs
+    console.error('❌ [LEADS ID] FULL ERROR CONTEXT:', JSON.stringify({
+      timestamp: new Date().toISOString(),
+      error: {
+        message: error.message,
+        code: error.code,
+        name: error.name,
+        meta: error.meta,
+        stack: error.stack
+      },
+      request: {
+        method: req.method,
+        url: req.url,
+        id: req.params?.id
+      }
+    }, null, 2))
     
     // Provide detailed error information
     const errorDetails = error.meta 
       ? `Unhandled error: ${error.name || 'Error'} (${error.code || 'UNKNOWN'}), Message: ${error.message || 'Unknown error'}, Meta: ${JSON.stringify(error.meta)}`
       : `Unhandled error: ${error.name || 'Error'} (${error.code || 'UNKNOWN'}), Message: ${error.message || 'Unknown error'}`
+    
+    // Check if response was already sent
+    if (res.headersSent || res.writableEnded) {
+      console.error('❌ [LEADS ID] Cannot send error response - already sent')
+      return
+    }
     
     return serverError(res, 'Internal server error', errorDetails)
   }

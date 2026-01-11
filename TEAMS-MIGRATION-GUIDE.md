@@ -187,3 +187,4 @@ If you encounter issues during migration:
 4. **Normalize checklist items** - Create TeamChecklistItem table
 5. **Add team soft-delete** - Use `deletedAt` instead of `isActive`
 
+

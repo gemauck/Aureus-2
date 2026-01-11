@@ -159,6 +159,87 @@ const RateLimitManager = {
   }
 }
 
+// Global Request Deduplication Manager
+// Prevents duplicate API calls across the entire application
+const RequestDeduplicator = {
+  _pendingRequests: new Map(), // Map<requestKey, Promise>
+  _requestTimestamps: new Map(), // Map<requestKey, timestamp> - track when requests were made
+  
+  /**
+   * Get a unique request key from endpoint and parameters
+   */
+  getRequestKey(endpoint, params = {}) {
+    const sortedParams = Object.keys(params)
+      .sort()
+      .map(key => `${key}=${JSON.stringify(params[key])}`)
+      .join('&');
+    return `${endpoint}${sortedParams ? `?${sortedParams}` : ''}`;
+  },
+  
+  /**
+   * Deduplicate a request - if the same request is already in flight, return the existing promise
+   * @param {string} requestKey - Unique key for this request
+   * @param {Function} requestFn - Function that makes the API call
+   * @param {number} dedupWindow - Time window in ms to consider requests as duplicates (default: 1000ms)
+   * @returns {Promise} - Either the existing promise or a new one
+   */
+  async deduplicate(requestKey, requestFn, dedupWindow = 1000) {
+    // Check if there's already a pending request
+    if (this._pendingRequests.has(requestKey)) {
+      const existingPromise = this._pendingRequests.get(requestKey);
+      // If the request was made recently (within dedupWindow), return the existing promise
+      const requestTime = this._requestTimestamps.get(requestKey) || 0;
+      const timeSinceRequest = Date.now() - requestTime;
+      
+      if (timeSinceRequest < dedupWindow) {
+        return existingPromise;
+      }
+      // If the request is old, clean it up and make a new one
+      this._pendingRequests.delete(requestKey);
+      this._requestTimestamps.delete(requestKey);
+    }
+    
+    // Create a new request
+    const requestPromise = requestFn()
+      .then(result => {
+        // Clean up after request completes
+        this._pendingRequests.delete(requestKey);
+        this._requestTimestamps.delete(requestKey);
+        return result;
+      })
+      .catch(error => {
+        // Clean up on error too
+        this._pendingRequests.delete(requestKey);
+        this._requestTimestamps.delete(requestKey);
+        throw error;
+      });
+    
+    // Store the promise and timestamp
+    this._pendingRequests.set(requestKey, requestPromise);
+    this._requestTimestamps.set(requestKey, Date.now());
+    
+    return requestPromise;
+  },
+  
+  /**
+   * Clear all pending requests (useful for cleanup or testing)
+   */
+  clear() {
+    this._pendingRequests.clear();
+    this._requestTimestamps.clear();
+  },
+  
+  /**
+   * Check if a request is currently pending
+   */
+  isPending(requestKey) {
+    return this._pendingRequests.has(requestKey);
+  }
+};
+
+// Expose RequestDeduplicator globally
+window.RequestDeduplicator = RequestDeduplicator;
+
 async function request(path, options = {}) {
   // Use throttling for all requests to prevent bursts
   return RateLimitManager.throttleRequest(async () => {

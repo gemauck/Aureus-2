@@ -1,4 +1,5 @@
 import { prisma } from './_lib/prisma.js'
+import { withHttp } from './_lib/withHttp.js'
 
 // Helper to safely parse JSON
 function parseJson(str, defaultValue) {
@@ -12,25 +13,36 @@ function parseJson(str, defaultValue) {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     console.log('🧪 Finding and migrating Contact 22...')
     
-    // Step 1: Search for Contact 22 in clients table (contactsJsonb or contacts fields)
-    const clients = await prisma.client.findMany({
+    // Step 1: Search for Contact 22 in clients table (optimized with limits to prevent timeout)
+    let contact22Found = null
+    let clientWithContact22 = null
+    let searchedCount = 0
+    
+    // First, try searching clients with contacts string field containing '22' (faster query)
+    const clientsWithContacts = await prisma.client.findMany({
+      where: {
+        OR: [
+          { contacts: { contains: '22' } },
+          { contacts: { contains: 'Contact' } }
+        ]
+      },
       select: {
         id: true,
         name: true,
         contactsJsonb: true,
         contacts: true
-      }
+      },
+      take: 200 // Limit to prevent timeout
     })
     
-    let contact22Found = null
-    let clientWithContact22 = null
+    searchedCount += clientsWithContacts.length
     
-    // Search through all clients for Contact 22
-    for (const client of clients) {
+    // Search through these clients first
+    for (const client of clientsWithContacts) {
       let contacts = []
       
       // Try JSONB first, then String
@@ -53,13 +65,49 @@ export default async function handler(req, res) {
       }
     }
     
+    // If not found, search through all clients (with a reasonable limit)
+    if (!contact22Found) {
+      const allClients = await prisma.client.findMany({
+        select: {
+          id: true,
+          name: true,
+          contactsJsonb: true,
+          contacts: true
+        },
+        take: 500 // Limit to 500 clients max to prevent timeout
+      })
+      
+      searchedCount += allClients.length
+      
+      for (const client of allClients) {
+        let contacts = []
+        
+        if (client.contactsJsonb && Array.isArray(client.contactsJsonb)) {
+          contacts = client.contactsJsonb
+        } else if (client.contacts) {
+          contacts = parseJson(client.contacts, [])
+        }
+        
+        contact22Found = contacts.find(c => {
+          const name = c?.name || ''
+          return name.includes('22') || name === 'Contact 22' || 
+                 name.toLowerCase().includes('contact 22')
+        })
+        
+        if (contact22Found) {
+          clientWithContact22 = client
+          break
+        }
+      }
+    }
+    
     if (!contact22Found) {
       return res.status(200).json({
         message: 'Contact 22 not found in clients table',
         timestamp: new Date().toISOString(),
         method: req.method,
         url: req.url,
-        searchedClients: clients.length,
+        searchedClients: searchedCount,
         working: true
       })
     }
@@ -68,9 +116,11 @@ export default async function handler(req, res) {
     const existingContact = await prisma.clientContact.findFirst({
       where: {
         clientId: clientWithContact22.id,
-        OR: [
+        OR: contact22Found.id ? [
           { name: { contains: '22', mode: 'insensitive' } },
-          { id: contact22Found.id || '' }
+          { id: contact22Found.id }
+        ] : [
+          { name: { contains: '22', mode: 'insensitive' } }
         ]
       }
     })
@@ -152,3 +202,5 @@ export default async function handler(req, res) {
     })
   }
 }
+
+export default withHttp(handler)

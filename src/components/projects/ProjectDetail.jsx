@@ -1031,10 +1031,13 @@ function initializeProjectDetail() {
     }, [project]);
     
     // Initialize taskLists with project-specific data
+    // CRITICAL: If project.taskLists is empty array, use default list (id: 1) to ensure tasks can be displayed
     const [taskLists, setTaskLists] = useState(
-        project.taskLists || [
-            { id: 1, name: 'To Do', color: 'blue', description: '' }
-        ]
+        (project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0) 
+            ? project.taskLists 
+            : [
+                { id: 1, name: 'To Do', color: 'blue', description: '' }
+            ]
     );
 
     // Initialize tasks with project-specific data
