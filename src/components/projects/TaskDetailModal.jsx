@@ -1279,7 +1279,7 @@ const TaskDetailModal = ({
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto" style={{ padding: '0.5rem' }}>
             <div className="min-h-full flex items-start sm:items-center justify-center py-2 sm:py-4">
-                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl overflow-y-auto">
+                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl">
                 {/* Header */}
                 <div className="border-b border-gray-200 px-3 sm:px-4 py-3 bg-white flex-shrink-0">
                     <div className="flex items-start justify-between">
@@ -1327,7 +1327,7 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 bg-gray-50 min-h-0">
+                <div className="flex-1 bg-gray-50 min-h-0 overflow-y-auto">
                     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 lg:px-6">
                             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4 sm:gap-6">
                                 {/* Left Side - Main Content */}
@@ -2184,8 +2184,8 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-between items-center bg-white flex-shrink-0">
-                    <div>
+                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0">
+                    <div className="flex gap-2">
                         {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button
                                 onClick={() => {
@@ -2209,8 +2209,6 @@ const TaskDetailModal = ({
                                 Delete Task
                             </button>
                         )}
-                    </div>
-                    <div className="flex gap-2">
                         <button
                             onClick={onClose}
                             className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
