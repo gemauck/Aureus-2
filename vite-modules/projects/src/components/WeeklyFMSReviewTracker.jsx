@@ -2468,7 +2468,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < weeks.length * 2; i++) sectionRow.push('');
+                for (let i = 0; i < (weeks || []).length * 2; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 section.documents.forEach(document => {
@@ -2498,7 +2498,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             
             const colWidths = [{ wch: 40 }];
-            for (let i = 0; i < weeks.length; i++) {
+            for (let i = 0; i < (weeks || []).length; i++) {
                 colWidths.push({ wch: 18 }, { wch: 50 });
             }
             ws['!cols'] = colWidths;
@@ -3896,9 +3896,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             >
                                                 Document / Data
                                             </th>
-                                            {weeks.map((week, idx) => {
+                                            {(weeks || []).map((week, idx) => {
                                                 // Group weeks by month - show month header when month changes
-                                                const prevWeek = idx > 0 ? weeks[idx - 1] : null;
+                                                const prevWeek = idx > 0 && weeks ? weeks[idx - 1] : null;
                                                 const showMonthHeader = !prevWeek || prevWeek.month !== week.month;
                                                 
                                                 return (
@@ -3934,7 +3934,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {(!section.documents || section.documents.length === 0) ? (
                                             <tr>
-                                                <td colSpan={weeks.length + 2} className="px-8 py-4 text-center text-gray-400">
+                                                <td colSpan={(weeks || []).length + 2} className="px-8 py-4 text-center text-gray-400">
                                                     <p className="text-xs">No documents in this section</p>
                                                     <button
                                                         onClick={() => handleAddDocument(section.id)}
@@ -3958,7 +3958,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    {weeks.map((week) => (
+                                                    {(weeks || []).map((week) => (
                                                         <React.Fragment key={`${document.id}-${week.key}`}>
                                                             {renderStatusCell(section, document, week.month, week.weekNumber)}
                                                         </React.Fragment>

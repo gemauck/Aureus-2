@@ -1076,8 +1076,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Load data from database if we should load AND form hasn't been edited
             if (shouldLoadFromDatabase && shouldDoInitialLoad) {
                 console.log('✅ Starting initial data load for client:', currentClientId);
+                console.log(`📊 Initial load state: criticalLoadPromises will be created, hasUserEditedForm=${hasUserEditedForm.current}`);
                 // CRITICAL: Set ref and module-level tracker IMMEDIATELY to prevent duplicate loads
-                initialDataLoadedForClientIdRef.current = currentClientId;
+                // BUT: Don't set initialDataLoadedForClientIdRef yet - wait until after load completes
+                // Setting it now would cause loadContactsFromDatabase to skip on initial load
                 
                 // Cancel any existing pending timeouts for this client
                 pendingTimeoutsRef.current.forEach(timeoutId => {
@@ -1091,7 +1093,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const criticalLoadPromises = []; // Loads that affect count badges (sites, contacts, opportunities, job cards)
                 
                 // Always load opportunities immediately (affects count badge)
+                console.log(`🚀 About to call loadOpportunitiesFromDatabase for client: ${client.id}`);
                 const opportunitiesPromise = loadOpportunitiesFromDatabase(client.id);
+                console.log(`🚀 loadOpportunitiesFromDatabase returned promise:`, opportunitiesPromise);
                 loadPromises.push(opportunitiesPromise);
                 criticalLoadPromises.push(opportunitiesPromise);
                 
@@ -1328,6 +1332,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Load contacts from database
     const loadContactsFromDatabase = async (clientId) => {
         console.log(`🔍 loadContactsFromDatabase CALLED for client: ${clientId}`);
+        console.log(`🔍 Checking conditions: isLoadingContactsRef=${isLoadingContactsRef.current}, hasUserEditedForm=${hasUserEditedForm.current}`);
         try {
             // Prevent duplicate requests
             if (isLoadingContactsRef.current) {
@@ -1336,8 +1341,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
             
             // Skip loading if form has been edited to preserve optimistic updates
-            if (hasUserEditedForm.current) {
-                console.log(`⏭️ Skipping loadContactsFromDatabase - form has been edited (hasUserEditedForm.current: ${hasUserEditedForm.current})`);
+            // CRITICAL: For initial load, we should NOT skip even if form was edited
+            // This is because we want to ensure we have the latest data from database
+            // Only skip if this is NOT an initial load scenario
+            if (hasUserEditedForm.current && initialDataLoadedForClientIdRef.current === clientId) {
+                console.log(`⏭️ Skipping loadContactsFromDatabase - form has been edited AND initial load already completed`);
                 return Promise.resolve([]);
             }
             

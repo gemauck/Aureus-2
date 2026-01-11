@@ -1177,11 +1177,13 @@ function initializeProjectDetail() {
         // Always load from Task API when:
         // - Project ID changed, OR
         // - Haven't loaded yet (initial load), OR  
-        // - Route changed and we're back on the project page (navigated back)
+        // - Route changed and we're back on the project page (navigated back), OR
+        // - We're on the project page and routeKey is set (initial mount with project in URL)
         const shouldLoad = project?.id && (
             projectIdChanged || 
             !hasLoadedTasksRef.current || // Initial load - always load if we haven't loaded yet
-            (isOnProjectPage && routeChanged) // Route changed and we're on project page (navigated back)
+            (isOnProjectPage && routeChanged) || // Route changed and we're on project page (navigated back)
+            (isOnProjectPage && routeKey && previousRouteKeyRef.current === '' && !hasLoadedTasksRef.current) // Initial mount with project in URL
         );
         
         if (shouldLoad) {
