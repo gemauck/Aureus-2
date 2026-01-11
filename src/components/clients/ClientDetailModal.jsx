@@ -1265,12 +1265,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // DO NOT update contacts or sites - those are managed separately via their own API endpoints
                     // Updating them here would cause duplicates since they're already loaded from normalized tables
                     setFormData(prevFormData => {
-                        // CRITICAL FIX: Preserve existing contacts and sites, but only if they exist
-                        // If contacts/sites are empty but being loaded, preserve the empty array
-                        // This prevents overwriting contacts/sites that are being loaded separately
-                        // However, if contacts/sites are already loaded, preserve them
+                        // CRITICAL FIX: Preserve existing contacts, sites, and opportunities, but only if they exist
+                        // If contacts/sites/opportunities are empty but being loaded, preserve the empty array
+                        // This prevents overwriting contacts/sites/opportunities that are being loaded separately
+                        // However, if contacts/sites/opportunities are already loaded, preserve them
                         const existingContacts = prevFormData?.contacts || [];
                         const existingSites = prevFormData?.sites || [];
+                        const existingOpportunities = prevFormData?.opportunities || [];
                         
                         // Merge new data with existing to ensure no loss
                         const mergedComments = mergeUniqueById(parsedClient.comments || [], prevFormData?.comments || []);
@@ -1301,9 +1302,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             contracts: mergedContracts,
                             proposals: mergedProposals,
                             services: mergedServices,
-                            // Explicitly preserve contacts and sites - NEVER update these here
+                            // Explicitly preserve contacts, sites, and opportunities - NEVER update these here
                             contacts: existingContacts,
-                            sites: existingSites
+                            sites: existingSites,
+                            opportunities: existingOpportunities
                         };
                         formDataRef.current = updated;
                         return updated;
