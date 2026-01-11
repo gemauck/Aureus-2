@@ -191,45 +191,67 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     
     // Parse documentSections safely (legacy flat array support)
+    // Normalize sections to ensure they have required structure
+    const normalizeSectionStructure = (sections) => {
+        if (!Array.isArray(sections)) return [];
+        return sections.map(section => {
+            if (!section || typeof section !== 'object') return section;
+            return {
+                ...section,
+                documents: Array.isArray(section.documents) ? section.documents : [],
+                collectionStatus: section.collectionStatus || {},
+                comments: section.comments || {}
+            };
+        });
+    };
+
     const parseSections = (data) => {
         if (!data) return [];
-        if (Array.isArray(data)) return data;
+        let parsed = null;
         
-        try {
-            if (typeof data === 'string') {
-                let cleaned = data.trim();
-                if (!cleaned) return [];
-                
-                let attempts = 0;
-                while (attempts < 10) {
-                    try {
-                        const parsed = JSON.parse(cleaned);
-                        if (Array.isArray(parsed)) return parsed;
-                        if (typeof parsed === 'string') {
-                            cleaned = parsed;
-                            attempts++;
-                            continue;
-                        }
-                        return [];
-                    } catch (parseError) {
-                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                            cleaned = cleaned.slice(1, -1);
-                        }
-                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-                        attempts++;
-                        if (attempts >= 10) {
-                            console.warn('Failed to parse documentSections after', attempts, 'attempts');
+        if (Array.isArray(data)) {
+            parsed = data;
+        } else {
+            try {
+                if (typeof data === 'string') {
+                    let cleaned = data.trim();
+                    if (!cleaned) return [];
+                    
+                    let attempts = 0;
+                    while (attempts < 10) {
+                        try {
+                            const parsedAttempt = JSON.parse(cleaned);
+                            if (Array.isArray(parsedAttempt)) {
+                                parsed = parsedAttempt;
+                                break;
+                            }
+                            if (typeof parsedAttempt === 'string') {
+                                cleaned = parsedAttempt;
+                                attempts++;
+                                continue;
+                            }
                             return [];
+                        } catch (parseError) {
+                            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                                cleaned = cleaned.slice(1, -1);
+                            }
+                            cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                            attempts++;
+                            if (attempts >= 10) {
+                                console.warn('Failed to parse documentSections after', attempts, 'attempts');
+                                return [];
+                            }
                         }
                     }
                 }
+            } catch (e) {
+                console.warn('Failed to parse documentSections:', e);
                 return [];
             }
-        } catch (e) {
-            console.warn('Failed to parse documentSections:', e);
-            return [];
         }
-        return [];
+        
+        // Normalize the parsed sections to ensure structure
+        return normalizeSectionStructure(parsed || []);
     };
 
     // Snapshot serializer for any documentSections shape (array or year map)
@@ -244,9 +266,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
     const cloneSectionsArray = (sections) => {
         try {
-            return JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
+            const cloned = JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
+            return normalizeSectionStructure(cloned);
         } catch {
-            return Array.isArray(sections) ? [...sections] : [];
+            const cloned = Array.isArray(sections) ? [...sections] : [];
+            return normalizeSectionStructure(cloned);
         }
     };
 
@@ -321,7 +345,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // This ensures that edits (adding sections, documents, comments, etc.)
     // are scoped to a single year instead of affecting every year.
     const sections = React.useMemo(
-        () => sectionsByYear[selectedYear] || [],
+        () => normalizeSectionStructure(sectionsByYear[selectedYear] || []),
         [sectionsByYear, selectedYear]
     );
 
@@ -1883,11 +1907,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         setSections(prev => prev.map(section => {
             if (section.id === editingSectionId) {
+                const documents = section.documents || [];
                 if (editingDocument) {
                     // Update existing document
                     return {
                         ...section,
-                        documents: section.documents.map(doc => 
+                        documents: documents.map(doc => 
                             doc.id === editingDocument.id 
                                 ? { ...doc, ...documentData }
                                 : doc
@@ -1903,7 +1928,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     };
                     return {
                         ...section,
-                        documents: [...section.documents, newDocument]
+                        documents: [...documents, newDocument]
                     };
                 }
             }
@@ -1936,7 +1961,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        const document = section.documents.find(d => String(d.id) === normalizedDocumentId);
+        const document = (section.documents || []).find(d => String(d.id) === normalizedDocumentId);
         if (!document) {
             console.error('❌ Document not found for deletion. Document ID:', documentId, 'Section:', section.name);
             alert(`Error: Document not found. Cannot delete.`);
@@ -1956,7 +1981,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const yearSections = prev[selectedYear] || [];
             const updatedSections = yearSections.map(section => {
                 if (String(section.id) === normalizedSectionId) {
-                    const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
+                    const filteredDocuments = (section.documents || []).filter(doc => String(doc.id) !== normalizedDocumentId);
                     return {
                         ...section,
                         documents: filteredDocuments
@@ -3907,7 +3932,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {section.documents.length === 0 ? (
+                                        {(!section.documents || section.documents.length === 0) ? (
                                             <tr>
                                                 <td colSpan={weeks.length + 2} className="px-8 py-4 text-center text-gray-400">
                                                     <p className="text-xs">No documents in this section</p>
@@ -3920,7 +3945,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document) => (
+                                            (section.documents || []).map((document) => (
                                                 <tr key={document.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"

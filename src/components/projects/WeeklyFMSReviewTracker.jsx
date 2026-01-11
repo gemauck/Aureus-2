@@ -200,46 +200,68 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Generate weeks for the selected year (must be after selectedYear is declared)
     const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     
+    // Normalize sections to ensure they have required structure
+    const normalizeSectionStructure = (sections) => {
+        if (!Array.isArray(sections)) return [];
+        return sections.map(section => {
+            if (!section || typeof section !== 'object') return section;
+            return {
+                ...section,
+                documents: Array.isArray(section.documents) ? section.documents : [],
+                collectionStatus: section.collectionStatus || {},
+                comments: section.comments || {}
+            };
+        });
+    };
+
     // Parse documentSections safely (legacy flat array support)
     const parseSections = (data) => {
         if (!data) return [];
-        if (Array.isArray(data)) return data;
+        let parsed = null;
         
-        try {
-            if (typeof data === 'string') {
-                let cleaned = data.trim();
-                if (!cleaned) return [];
-                
-                let attempts = 0;
-                while (attempts < 10) {
-                    try {
-                        const parsed = JSON.parse(cleaned);
-                        if (Array.isArray(parsed)) return parsed;
-                        if (typeof parsed === 'string') {
-                            cleaned = parsed;
-                            attempts++;
-                            continue;
-                        }
-                        return [];
-                    } catch (parseError) {
-                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                            cleaned = cleaned.slice(1, -1);
-                        }
-                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-                        attempts++;
-                        if (attempts >= 10) {
-                            console.warn('Failed to parse documentSections after', attempts, 'attempts');
+        if (Array.isArray(data)) {
+            parsed = data;
+        } else {
+            try {
+                if (typeof data === 'string') {
+                    let cleaned = data.trim();
+                    if (!cleaned) return [];
+                    
+                    let attempts = 0;
+                    while (attempts < 10) {
+                        try {
+                            const parsedAttempt = JSON.parse(cleaned);
+                            if (Array.isArray(parsedAttempt)) {
+                                parsed = parsedAttempt;
+                                break;
+                            }
+                            if (typeof parsedAttempt === 'string') {
+                                cleaned = parsedAttempt;
+                                attempts++;
+                                continue;
+                            }
                             return [];
+                        } catch (parseError) {
+                            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                                cleaned = cleaned.slice(1, -1);
+                            }
+                            cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                            attempts++;
+                            if (attempts >= 10) {
+                                console.warn('Failed to parse documentSections after', attempts, 'attempts');
+                                return [];
+                            }
                         }
                     }
                 }
+            } catch (e) {
+                console.warn('Failed to parse documentSections:', e);
                 return [];
             }
-        } catch (e) {
-            console.warn('Failed to parse documentSections:', e);
-            return [];
         }
-        return [];
+        
+        // Normalize the parsed sections to ensure structure
+        return normalizeSectionStructure(parsed || []);
     };
 
     // Snapshot serializer for any documentSections shape (array or year map)
@@ -254,9 +276,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
     const cloneSectionsArray = (sections) => {
         try {
-            return JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
+            const cloned = JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
+            return normalizeSectionStructure(cloned);
         } catch {
-            return Array.isArray(sections) ? [...sections] : [];
+            const cloned = Array.isArray(sections) ? [...sections] : [];
+            return normalizeSectionStructure(cloned);
         }
     };
 
@@ -331,7 +355,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // This ensures that edits (adding sections, documents, comments, etc.)
     // are scoped to a single year instead of affecting every year.
     const sections = React.useMemo(
-        () => sectionsByYear[selectedYear] || [],
+        () => normalizeSectionStructure(sectionsByYear[selectedYear] || []),
         [sectionsByYear, selectedYear]
     );
 
@@ -1374,7 +1398,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     ];
     
     const getStatusConfig = (status) => {
-        return statusOptions.find(opt => opt.value === status) || statusOptions[0];
+        const safeStatusOptions = statusOptions && Array.isArray(statusOptions) ? statusOptions : [];
+        return safeStatusOptions.find(opt => opt && opt.value === status) || (safeStatusOptions[0] || null);
     };
     
     // ============================================================
@@ -1762,11 +1787,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         setSections(prev => prev.map(section => {
             if (section.id === editingSectionId) {
+                const documents = section.documents || [];
                 if (editingDocument) {
                     // Update existing document
                     return {
                         ...section,
-                        documents: section.documents.map(doc => 
+                        documents: documents.map(doc => 
                             doc.id === editingDocument.id 
                                 ? { ...doc, ...documentData }
                                 : doc
@@ -1782,7 +1808,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     };
                     return {
                         ...section,
-                        documents: [...section.documents, newDocument]
+                        documents: [...documents, newDocument]
                     };
                 }
             }
@@ -1815,7 +1841,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        const document = section.documents.find(d => String(d.id) === normalizedDocumentId);
+        const document = (section.documents || []).find(d => String(d.id) === normalizedDocumentId);
         if (!document) {
             console.error('❌ Document not found for deletion. Document ID:', documentId, 'Section:', section.name);
             alert(`Error: Document not found. Cannot delete.`);
@@ -1835,7 +1861,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const yearSections = prev[selectedYear] || [];
             const updatedSections = yearSections.map(section => {
                 if (String(section.id) === normalizedSectionId) {
-                    const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
+                    const filteredDocuments = (section.documents || []).filter(doc => String(doc.id) !== normalizedDocumentId);
                     return {
                         ...section,
                         documents: filteredDocuments
@@ -1960,7 +1986,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             return {
                 ...section,
-                documents: section.documents.map(doc => {
+                documents: (section.documents || []).map(doc => {
                     // Check if this document needs updating for any month
                     const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
                     if (docUpdates.length === 0) {
@@ -2030,7 +2056,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             if (section.id === sectionId) {
                 return {
                     ...section,
-                    documents: section.documents.map(doc => {
+                    documents: (section.documents || []).map(doc => {
                         if (doc.id === documentId) {
                             const existingComments = getCommentsForYear(doc.comments, month, weekNumber, selectedYear);
                             return {
@@ -2218,7 +2244,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             if (section.id === sectionId) {
                 return {
                     ...section,
-                    documents: section.documents.map(doc => {
+                    documents: (section.documents || []).map(doc => {
                         if (doc.id === documentId) {
                             const updatedComments = existingComments.filter(c => c.id !== commentId);
                             return {
@@ -2830,6 +2856,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const renderStatusCell = (section, document, month, weekNumber) => {
+        // Safety checks: ensure section and document exist
+        if (!section || !document) {
+            return <td className="px-2 py-1 text-xs border-l border-gray-100"></td>;
+        }
+        
         const status = getDocumentStatus(document, month, weekNumber);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(document, month, weekNumber);
@@ -2851,8 +2882,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
         }
         
-        const textColorClass = statusConfig && statusConfig.color 
-            ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
+        const textColorClass = statusConfig && statusConfig.color && typeof statusConfig.color === 'string'
+            ? (statusConfig.color.split(' ').find(cls => cls && typeof cls === 'string' && cls.startsWith('text-')) || 'text-gray-900')
             : 'text-gray-400';
         
         const handleCellClick = (e) => {
@@ -2950,11 +2981,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
-                        {statusOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
+                        {(statusOptions && Array.isArray(statusOptions) ? statusOptions : []).map(option => {
+                            if (!option || typeof option !== 'object') return null;
+                            return (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            );
+                        })}
                     </select>
                     
                     <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
@@ -3661,9 +3695,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
                 
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
-                const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const document = section?.documents?.find(d => String(d.id) === String(rawDocumentId));
                 const commentsRaw = document ? getDocumentComments(document, month, weekNumber) : [];
                 const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
+                const safeCommentsLength = comments.length;
                 
                 return (
                     <div 
@@ -3705,11 +3740,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 />
                             </>
                         )}
-                        {comments.length > 0 && (
+                        {safeCommentsLength > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                    {comments.map((comment, idx) => (
+                                    {comments.map((comment, idx) => {
+                                        if (!comment || typeof comment !== 'object') return null;
+                                        return (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
@@ -3765,7 +3802,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -3982,15 +4020,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-medium text-gray-600">Status:</span>
-                    {statusOptions.map((option, idx) => (
-                        <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-1">
-                                <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
-                                <span className="text-[10px] text-gray-600">{option.label}</span>
-                            </div>
-                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
-                        </React.Fragment>
-                    ))}
+                    {(statusOptions && Array.isArray(statusOptions) ? statusOptions : []).map((option, idx) => {
+                        const safeStatusOptions = statusOptions && Array.isArray(statusOptions) ? statusOptions : [];
+                        return (
+                            <React.Fragment key={option.value}>
+                                <div className="flex items-center gap-1">
+                                    <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
+                                    <span className="text-[10px] text-gray-600">{option.label}</span>
+                                </div>
+                                {idx < safeStatusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                            </React.Fragment>
+                        );
+                    })}
                 </div>
             </div>
             
@@ -4008,7 +4049,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         </button>
                     </div>
                 ) : (
-                    sections.map((section, sectionIndex) => (
+                    (sections && Array.isArray(sections) ? sections : []).map((section, sectionIndex) => {
+                        // Safety check: ensure section exists
+                        if (!section) return null;
+                        return (
                         <div
                             key={section.id}
                             className="bg-white rounded-lg border border-gray-200 overflow-hidden"
@@ -4107,20 +4151,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {(!section.documents || !Array.isArray(section.documents) || section.documents.length === 0) ? (
+                                        {(!section || !section.documents || !Array.isArray(section.documents) || section.documents.length === 0) ? (
                                             <tr>
                                                 <td colSpan={(weeks && Array.isArray(weeks) ? weeks.length : 0) + 2} className="px-8 py-4 text-center text-gray-400">
                                                     <p className="text-xs">No documents in this section</p>
-                                                    <button
-                                                        onClick={() => handleAddDocument(section.id)}
-                                                        className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                                    >
-                                                        <i className="fas fa-plus mr-1"></i>Add Document
-                                                    </button>
+                                                    {section && (
+                                                        <button
+                                                            onClick={() => handleAddDocument(section.id)}
+                                                            className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                                        >
+                                                            <i className="fas fa-plus mr-1"></i>Add Document
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document) => (
+                                            (section.documents || []).map((document) => (
                                                 <tr key={document.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
@@ -4133,11 +4179,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    {(weeks && Array.isArray(weeks) ? weeks : []).map((week) => (
-                                                        <React.Fragment key={`${document.id}-${week.key}`}>
-                                                            {renderStatusCell(section, document, week.month, week.weekNumber)}
-                                                        </React.Fragment>
-                                                    ))}
+                                                    {(weeks && Array.isArray(weeks) ? weeks : []).map((week) => {
+                                                        if (!week || typeof week !== 'object') return null;
+                                                        return (
+                                                            <React.Fragment key={`${document.id}-${week.key}`}>
+                                                                {renderStatusCell(section, document, week.month, week.weekNumber)}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
                                                     <td className="px-2.5 py-1.5 border-l border-gray-200">
                                                         <div className="flex items-center gap-1">
                                                             <button
@@ -4162,7 +4211,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </table>
                             </div>
                         </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
             

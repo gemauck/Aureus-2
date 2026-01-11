@@ -822,8 +822,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return sites; // Return sites array directly
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
-            isLoadingSitesRef.current = false;
             return []; // Return empty array on error
+        } finally {
+            isLoadingSitesRef.current = false;
         }
     }, [client?.id, optimisticSites]);
     
@@ -1324,19 +1325,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     // Load contacts from database
     const loadContactsFromDatabase = async (clientId) => {
+        console.log(`🔍 loadContactsFromDatabase CALLED for client: ${clientId}`);
         try {
             // Prevent duplicate requests
             if (isLoadingContactsRef.current) {
+                console.log(`⏭️ Skipping loadContactsFromDatabase - already loading`);
                 return Promise.resolve([]);
             }
             
             // Skip loading if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
+                console.log(`⏭️ Skipping loadContactsFromDatabase - form has been edited (hasUserEditedForm.current: ${hasUserEditedForm.current})`);
                 return Promise.resolve([]);
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
+                console.log(`⏭️ Skipping loadContactsFromDatabase - no token`);
                 return Promise.resolve([]);
             }
             
@@ -1349,18 +1354,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // CRITICAL FIX: Merge with existing contacts to prevent duplicates
             // The client object may already have contacts from parseClientJsonFields
             console.log(`🔧 About to call setFormData with ${contacts.length} contacts`);
-            setFormData(prevFormData => {
-                // Get existing contacts from formData
-                const existingContacts = prevFormData?.contacts || [];
-                // Merge: API contacts + existing contacts + optimistic contacts
-                const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
-                const updated = {
-                    ...prevFormData,
-                    contacts: mergedContacts
-                };
-                formDataRef.current = updated;
-                return updated;
-            });
+            try {
+                setFormData(prevFormData => {
+                    console.log(`🔧 setFormData callback executing for contacts. prevFormData:`, prevFormData);
+                    // Get existing contacts from formData
+                    const existingContacts = prevFormData?.contacts || [];
+                    console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
+                    // Merge: API contacts + existing contacts + optimistic contacts
+                    const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
+                    const updated = {
+                        ...prevFormData,
+                        contacts: mergedContacts
+                    };
+                    formDataRef.current = updated;
+                    console.log(`✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
+                    console.log(`✅ Updated formData.contacts:`, updated.contacts);
+                    return updated;
+                });
+                console.log(`✅ setFormData called successfully for contacts`);
+            } catch (error) {
+                console.error('❌ Error in setFormData for contacts:', error);
+                throw error;
+            }
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));

@@ -1165,11 +1165,14 @@ function initializeProjectDetail() {
              window.RouteState.getRoute()?.segments?.[0] === String(project.id))
         );
         
-        // Always load from Task API when on project page and haven't loaded yet
-        // This ensures tasks load on initial mount and when navigating back (component remounts or state resets)
-        const shouldLoad = project?.id && isOnProjectPage && (
+        // Always load from Task API when we have a project ID and haven't loaded yet
+        // For initial load, be more lenient - load if we have project ID (even if isOnProjectPage check fails)
+        // For subsequent loads (navigating back), ensure we're on the project page
+        const isInitialLoad = !hasLoadedTasksRef.current;
+        const shouldLoad = project?.id && (
             projectIdChanged || 
-            !hasLoadedTasksRef.current // Always load if we haven't loaded yet for this project
+            (isInitialLoad && project?.id) || // Initial load: just need project ID
+            (isOnProjectPage && !isInitialLoad) // Subsequent loads: need to be on project page
         );
         
         if (shouldLoad) {
