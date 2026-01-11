@@ -1094,43 +1094,103 @@ function initializeProjectDetail() {
     // Sync tasks when project prop changes (e.g., after reload or navigation)
     // Use a ref to track previous project ID to prevent infinite loops
     const previousProjectIdRef = useRef(project?.id);
+    // Track URL/route to detect navigation back to the same project
+    const [routeKey, setRouteKey] = useState(() => {
+        // Initialize with current URL to detect changes
+        if (typeof window !== 'undefined' && window.location) {
+            return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        }
+        return '';
+    });
+    
+    // Listen for route/URL changes to detect navigation back
     useEffect(() => {
-        // Only sync if project ID changed (switching to a different project)
-        if (project?.id !== previousProjectIdRef.current) {
-            previousProjectIdRef.current = project?.id;
-            
-            // Always load from Task API first (tasks are stored in Task table, not JSON)
-            if (project?.id) {
-                loadTasksFromAPI(project.id).then(apiTasks => {
-                    // Always use API tasks, even if empty array (empty means no tasks, not an error)
-                    if (apiTasks !== null) {
-                        setTasks(apiTasks);
-                        tasksRef.current = apiTasks;
-                        console.log('✅ ProjectDetail: Tasks loaded from Task API:', apiTasks.length);
-                    } else {
-                        // API returned null (error case), use tasksList from project prop as last resort
-                        // NOTE: tasksList comes from API and is populated from Task table, so this should be safe
-                        const fallbackTasks = project.tasksList || project.tasks || [];
-                        setTasks(fallbackTasks);
-                        tasksRef.current = fallbackTasks;
-                        console.warn('⚠️ ProjectDetail: Task API failed, using tasksList from project prop:', fallbackTasks.length);
+        const updateRouteKey = () => {
+            if (typeof window !== 'undefined' && window.location) {
+                const newRouteKey = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                setRouteKey(prev => {
+                    if (prev !== newRouteKey) {
+                        console.log('🔄 ProjectDetail: Route changed, will reload tasks if on same project');
+                        return newRouteKey;
                     }
-                }).catch(error => {
-                    console.error('❌ ProjectDetail: Error loading tasks from API:', error);
-                    // Fallback to tasksList from project prop (should come from Task table via API)
+                    return prev;
+                });
+            }
+        };
+        
+        // Listen for route changes
+        if (window.RouteState && typeof window.RouteState.subscribe === 'function') {
+            const unsubscribe = window.RouteState.subscribe(() => {
+                updateRouteKey();
+            });
+            return unsubscribe;
+        }
+        
+        // Fallback: listen for hashchange and popstate
+        window.addEventListener('hashchange', updateRouteKey);
+        window.addEventListener('popstate', updateRouteKey);
+        
+        return () => {
+            window.removeEventListener('hashchange', updateRouteKey);
+            window.removeEventListener('popstate', updateRouteKey);
+        };
+    }, []);
+    
+    useEffect(() => {
+        // Load tasks if:
+        // 1. Project ID changed (switching to a different project), OR
+        // 2. Route changed and we're still on the same project (navigated back)
+        const projectIdChanged = project?.id !== previousProjectIdRef.current;
+        
+        if (projectIdChanged) {
+            previousProjectIdRef.current = project?.id;
+        }
+        
+        // Check if we're currently on the project page (navigated back)
+        const isOnProjectPage = project?.id && (
+            window.location?.pathname?.includes(`/projects/${project.id}`) ||
+            (window.RouteState?.getRoute?.()?.page === 'projects' && 
+             window.RouteState.getRoute()?.segments?.[0] === String(project.id))
+        );
+        
+        // Always load from Task API first (tasks are stored in Task table, not JSON)
+        // Reload if project ID changed OR if route changed and we're on the project page
+        if (project?.id && (projectIdChanged || (isOnProjectPage && routeKey))) {
+            console.log('🔄 ProjectDetail: Loading tasks', { 
+                projectId: project.id, 
+                reason: projectIdChanged ? 'project changed' : 'navigated back to project',
+                routeKey 
+            });
+            
+            loadTasksFromAPI(project.id).then(apiTasks => {
+                // Always use API tasks, even if empty array (empty means no tasks, not an error)
+                if (apiTasks !== null) {
+                    setTasks(apiTasks);
+                    tasksRef.current = apiTasks;
+                    console.log('✅ ProjectDetail: Tasks loaded from Task API:', apiTasks.length);
+                } else {
+                    // API returned null (error case), use tasksList from project prop as last resort
+                    // NOTE: tasksList comes from API and is populated from Task table, so this should be safe
                     const fallbackTasks = project.tasksList || project.tasks || [];
                     setTasks(fallbackTasks);
                     tasksRef.current = fallbackTasks;
-                    console.warn('⚠️ ProjectDetail: Using tasksList from project prop as fallback:', fallbackTasks.length);
-                });
-            } else {
-                // No project ID, use tasksList from project prop
+                    console.warn('⚠️ ProjectDetail: Task API failed, using tasksList from project prop:', fallbackTasks.length);
+                }
+            }).catch(error => {
+                console.error('❌ ProjectDetail: Error loading tasks from API:', error);
+                // Fallback to tasksList from project prop (should come from Task table via API)
                 const fallbackTasks = project.tasksList || project.tasks || [];
                 setTasks(fallbackTasks);
                 tasksRef.current = fallbackTasks;
-            }
+                console.warn('⚠️ ProjectDetail: Using tasksList from project prop as fallback:', fallbackTasks.length);
+            });
+        } else if (!project?.id) {
+            // No project ID, use tasksList from project prop
+            const fallbackTasks = project?.tasksList || project?.tasks || [];
+            setTasks(fallbackTasks);
+            tasksRef.current = fallbackTasks;
         }
-    }, [project?.id, loadTasksFromAPI]); // Include loadTasksFromAPI in deps
+    }, [project?.id, loadTasksFromAPI, routeKey]); // Include routeKey to detect navigation back
     
     // CRITICAL: Initialize default taskLists when project loads with empty taskLists
     // This ensures default lists are shown even if project.taskLists is an empty array from the database

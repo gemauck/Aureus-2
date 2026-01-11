@@ -798,6 +798,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         sitesLoadedForClientIdRef.current = String(clientId);
                         
                         // CRITICAL FIX: Merge with existing sites to prevent duplicates
+                        console.log(`🔧 About to call setFormData with ${sites.length} sites`);
                         setFormData(prevFormData => {
                             const existingSites = prevFormData?.sites || [];
                             const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
