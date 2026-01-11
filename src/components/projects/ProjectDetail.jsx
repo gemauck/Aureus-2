@@ -4398,23 +4398,9 @@ function initializeProjectDetail() {
                             throw new Error('Task creation failed: No task ID returned from API');
                         }
                         
-                        // Reload tasks from server after creation to ensure consistency
-                        if (project?.id && window.DatabaseAPI?.makeRequest) {
-                            try {
-                                const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
-                                    method: 'GET'
-                                });
-                                const fetchedTasks = tasksResponse?.data?.tasks || [];
-                                if (Array.isArray(fetchedTasks)) {
-                                    console.log('✅ Refreshed tasks from server after creation. Task count:', fetchedTasks.length);
-                                    setTasks(fetchedTasks);
-                                    tasksRef.current = fetchedTasks;
-                                }
-                            } catch (refreshError) {
-                                console.warn('⚠️ Failed to refresh tasks after creation, using local state:', refreshError);
-                                // Continue with local state update - creation should still work
-                            }
-                        }
+                        // Don't reload from server immediately - we already have the correct task data from the API response
+                        // Reloading immediately can cause the task to disappear if the server hasn't indexed it yet
+                        // The local state update above already has the correct task with the real ID from the database
                     } else {
                         // Update existing task
                         const response = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskToSave.id)}`, {
