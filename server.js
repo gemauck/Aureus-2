@@ -925,6 +925,44 @@ app.all('/api/clients', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for individual lead operations (GET, PATCH, DELETE /api/leads/:id)
+// IMPORTANT: This must come BEFORE /api/leads route so Express matches it first
+app.all('/api/leads/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leads', '[id].js'))
+    if (!handler) {
+      console.error('❌ Leads [id] handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    // Attach lead ID to req.params for the handler
+    req.params = req.params || {}
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in leads [id] handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    console.error('❌ Error details:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      leadId: req.params?.id
+    })
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for leads list and create operations (GET, POST /api/leads)
 app.all('/api/leads', async (req, res, next) => {
   try {

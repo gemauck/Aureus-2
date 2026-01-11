@@ -2130,6 +2130,9 @@ function initializeProjectDetail() {
     const skipNextSaveRef = useRef(false);
     const saveTimeoutRef = useRef(null);
     
+    // Ref to prevent duplicate task deletions (tracks task ID currently being deleted)
+    const deletingTaskIdRef = useRef(null);
+    
     // Document process dropdown
     const [showDocumentProcessDropdown, setShowDocumentProcessDropdown] = useState(false);
     
@@ -4496,97 +4499,107 @@ function initializeProjectDetail() {
             return;
         }
         
-        if (confirm('Delete this task and all its subtasks?')) {
-            let deleteSuccessful = false;
-            try {
-                // NEW: Delete via Task API first (cascades to subtasks)
-                if (window.DatabaseAPI?.makeRequest) {
-                    const deleteUrl = `/tasks?id=${encodeURIComponent(String(taskId))}`;
-                    console.log('🗑️ Deleting task via Task API:', {
+        // Prevent duplicate deletions of the same task
+        const taskIdString = String(taskId);
+        if (deletingTaskIdRef.current === taskIdString) {
+            console.warn('⚠️ Task deletion already in progress, ignoring duplicate call:', taskIdString);
+            return;
+        }
+        
+        // Set deletion guard immediately to prevent duplicate calls
+        // Note: Confirm dialog is shown in TaskDetailModal, not here
+        deletingTaskIdRef.current = taskIdString;
+        
+        let deleteSuccessful = false;
+        try {
+            // NEW: Delete via Task API first (cascades to subtasks)
+            if (window.DatabaseAPI?.makeRequest) {
+                const deleteUrl = `/tasks?id=${encodeURIComponent(String(taskId))}`;
+                console.log('🗑️ Deleting task via Task API:', {
+                    taskId: taskId,
+                    url: deleteUrl
+                });
+                
+                try {
+                    const deleteResponse = await window.DatabaseAPI.makeRequest(deleteUrl, {
+                        method: 'DELETE'
+                    });
+                    console.log('✅ Task deleted via Task API:', {
                         taskId: taskId,
-                        url: deleteUrl
+                        response: deleteResponse
+                    });
+                    deleteSuccessful = true;
+                } catch (deleteError) {
+                    console.error('❌ Task deletion error:', {
+                        taskId: taskId,
+                        error: deleteError,
+                        errorMessage: deleteError?.message,
+                        errorStatus: deleteError?.status,
+                        errorResponse: deleteError?.response
                     });
                     
-                    try {
-                        const deleteResponse = await window.DatabaseAPI.makeRequest(deleteUrl, {
-                            method: 'DELETE'
-                        });
-                        console.log('✅ Task deleted via Task API:', {
-                            taskId: taskId,
-                            response: deleteResponse
-                        });
-                        deleteSuccessful = true;
-                    } catch (deleteError) {
-                        console.error('❌ Task deletion error:', {
-                            taskId: taskId,
-                            error: deleteError,
-                            errorMessage: deleteError?.message,
-                            errorStatus: deleteError?.status,
-                            errorResponse: deleteError?.response
-                        });
-                        
-                        // Handle 404 gracefully - task might already be deleted
-                        const errorStatus = deleteError?.status || 
-                                          (deleteError?.message?.includes('404') || 
-                                           deleteError?.message?.includes('not found') || 
-                                           deleteError?.message?.includes('Task not found') ? 404 : null);
-                        if (errorStatus === 404) {
-                            console.warn('⚠️ Task not found (may have already been deleted):', taskId);
-                            deleteSuccessful = true; // Treat as success since task is gone
-                            // Continue with local state cleanup even if task was already deleted
-                        } else {
-                            // Re-throw other errors to be caught by outer catch
-                            throw deleteError;
-                        }
-                    }
-                } else {
-                    throw new Error('Task API not available - DatabaseAPI.makeRequest is not defined');
-                }
-                
-                // Filter out the task and all its subtasks from local state
-                const updatedTasks = tasks.filter(t => t.id !== taskId);
-                
-                // Update local state and ref
-                setTasks(updatedTasks);
-                tasksRef.current = updatedTasks;
-                
-                // Set flag to skip the useEffect save to prevent race condition
-                skipNextSaveRef.current = true;
-                
-                // Only refresh tasks from server if deletion was successful
-                if (deleteSuccessful && project?.id && window.DatabaseAPI?.makeRequest) {
-                    try {
-                        const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
-                            method: 'GET'
-                        });
-                        const fetchedTasks = tasksResponse?.data?.tasks || [];
-                        if (Array.isArray(fetchedTasks)) {
-                            console.log('✅ Refreshed tasks from server after deletion. Task count:', fetchedTasks.length);
-                            setTasks(fetchedTasks);
-                            tasksRef.current = fetchedTasks;
-                        }
-                    } catch (refreshError) {
-                        // Handle 500 errors gracefully - don't throw, just log
-                        const errorStatus = refreshError?.status || (refreshError?.message?.includes('500') || refreshError?.message?.includes('Internal Server Error') ? 500 : null);
-                        if (errorStatus === 500) {
-                            console.warn('⚠️ Server error refreshing tasks after deletion (may be temporary), using local state:', refreshError.message);
-                            // Continue with local state - task was already deleted from local state above
-                        } else {
-                            console.warn('⚠️ Failed to refresh tasks after deletion, using local state:', refreshError);
-                            // Continue with local state update - deletion should still work
-                        }
-                        // Don't throw - we've already updated local state, so UI is correct
+                    // Handle 404 gracefully - task might already be deleted
+                    const errorStatus = deleteError?.status || 
+                                      (deleteError?.message?.includes('404') || 
+                                       deleteError?.message?.includes('not found') || 
+                                       deleteError?.message?.includes('Task not found') ? 404 : null);
+                    if (errorStatus === 404) {
+                        console.warn('⚠️ Task not found (may have already been deleted):', taskId);
+                        deleteSuccessful = true; // Treat as success since task is gone
+                        // Continue with local state cleanup even if task was already deleted
+                    } else {
+                        // Re-throw other errors to be caught by outer catch
+                        throw deleteError;
                     }
                 }
-                
-                // tasksList JSON write removed - task deletion handled by Task API above
-                console.log('✅ Task deleted successfully');
-                
-                // Close task modal if the deleted task is currently being viewed
-                if (viewingTask?.id === taskId) {
-                    handleCloseTaskModal();
+            } else {
+                throw new Error('Task API not available - DatabaseAPI.makeRequest is not defined');
+            }
+            
+            // Filter out the task and all its subtasks from local state
+            const updatedTasks = tasks.filter(t => t.id !== taskId);
+            
+            // Update local state and ref
+            setTasks(updatedTasks);
+            tasksRef.current = updatedTasks;
+            
+            // Set flag to skip the useEffect save to prevent race condition
+            skipNextSaveRef.current = true;
+            
+            // Only refresh tasks from server if deletion was successful
+            if (deleteSuccessful && project?.id && window.DatabaseAPI?.makeRequest) {
+                try {
+                    const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
+                        method: 'GET'
+                    });
+                    const fetchedTasks = tasksResponse?.data?.tasks || [];
+                    if (Array.isArray(fetchedTasks)) {
+                        console.log('✅ Refreshed tasks from server after deletion. Task count:', fetchedTasks.length);
+                        setTasks(fetchedTasks);
+                        tasksRef.current = fetchedTasks;
+                    }
+                } catch (refreshError) {
+                    // Handle 500 errors gracefully - don't throw, just log
+                    const errorStatus = refreshError?.status || (refreshError?.message?.includes('500') || refreshError?.message?.includes('Internal Server Error') ? 500 : null);
+                    if (errorStatus === 500) {
+                        console.warn('⚠️ Server error refreshing tasks after deletion (may be temporary), using local state:', refreshError.message);
+                        // Continue with local state - task was already deleted from local state above
+                    } else {
+                        console.warn('⚠️ Failed to refresh tasks after deletion, using local state:', refreshError);
+                        // Continue with local state update - deletion should still work
+                    }
+                    // Don't throw - we've already updated local state, so UI is correct
                 }
-            } catch (taskApiError) {
+            }
+            
+            // tasksList JSON write removed - task deletion handled by Task API above
+            console.log('✅ Task deleted successfully');
+            
+            // Close task modal if the deleted task is currently being viewed
+            if (viewingTask?.id === taskId) {
+                handleCloseTaskModal();
+            }
+        } catch (taskApiError) {
                 console.error('❌ Failed to delete task via Task API:', {
                     taskId: taskId,
                     error: taskApiError,
@@ -4618,12 +4631,15 @@ function initializeProjectDetail() {
                     console.error('Task deletion error details:', taskApiError);
                     // Don't re-throw to avoid unhandled promise rejection - error has been handled via alert
                 }
-            } finally {
-                // Reset flag after a delay to allow any pending useEffect to complete
-                setTimeout(() => {
-                    skipNextSaveRef.current = false;
-                }, 500);
+        } finally {
+            // Always clear the deletion guard, even if there was an error
+            if (deletingTaskIdRef.current === taskIdString) {
+                deletingTaskIdRef.current = null;
             }
+            // Reset flag after a delay to allow any pending useEffect to complete
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 500);
         }
     };
 
