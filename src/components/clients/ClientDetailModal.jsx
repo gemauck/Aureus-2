@@ -1376,7 +1376,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log(`🔧 DEBUG: optimisticContacts array:`, optimisticContacts);
             
             // Use functional update pattern (like sites) to ensure React detects the change
+            console.log(`🔧🔧🔧 BEFORE setFormData callback - contacts.length=${contacts.length}`);
             setFormData(prevFormData => {
+                console.log(`🔧🔧🔧 INSIDE setFormData callback - CALLBACK EXECUTING!`);
                 const currentFormData = prevFormData || {};
                 const existingContacts = currentFormData.contacts || [];
                 console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
@@ -1395,9 +1397,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 formDataRef.current = updated;
                 console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
                 console.log(`✅✅✅ Updated formData.contacts:`, updated.contacts);
+                console.log(`🔧🔧🔧 RETURNING updated formData from callback`);
                 return updated;
             });
-            console.log(`✅ setFormData called with updated contacts`);
+            console.log(`✅ setFormData called with updated contacts - AFTER callback`);
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
