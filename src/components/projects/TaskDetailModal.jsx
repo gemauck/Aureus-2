@@ -82,7 +82,6 @@ const TaskDetailModal = ({
     const leftContentRef = useRef(null);
     const refreshIntervalRef = useRef(null);
     const lastCommentAddTimeRef = useRef(null); // Track when comment was added to prevent refresh race condition
-    const deletingTaskIdRef = useRef(null); // Prevent duplicate task deletions
     
     // NEW: Load comments from TaskComment table API
     const loadCommentsFromAPI = async () => {
@@ -1280,7 +1279,7 @@ const TaskDetailModal = ({
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto" style={{ padding: '0.5rem' }}>
             <div className="min-h-full flex items-start sm:items-center justify-center py-2 sm:py-4">
-                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl overflow-hidden">
+                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl">
                 {/* Header */}
                 <div className="border-b border-gray-200 px-3 sm:px-4 py-3 bg-white flex-shrink-0">
                     <div className="flex items-start justify-between">
@@ -2185,56 +2184,22 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0 z-10 w-full">
+                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0">
                     <div className="flex gap-2">
                         {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button
-                                onClick={async () => {
+                                onClick={() => {
                                     if (isSubtask) {
                                         // Delete subtask
                                         if (confirm('Delete this subtask?')) {
-                                            try {
-                                                if (onDeleteSubtask) {
-                                                    await Promise.resolve(onDeleteSubtask(parentTask.id, task.id));
-                                                }
-                                                onClose();
-                                            } catch (error) {
-                                                console.error('❌ Error deleting subtask:', error);
-                                                // Error already handled by parent component
-                                            }
+                                            onDeleteSubtask(parentTask.id, task.id);
+                                            onClose();
                                         }
                                     } else {
                                         // Delete regular task
-                                        const taskId = task?.id;
-                                        if (!taskId) {
-                                            console.error('❌ Cannot delete task: task ID is missing');
-                                            return;
-                                        }
-                                        
-                                        // Prevent duplicate deletions
-                                        if (deletingTaskIdRef.current === String(taskId)) {
-                                            console.warn('⚠️ Task deletion already in progress, ignoring duplicate call');
-                                            return;
-                                        }
-                                        
                                         if (confirm('Delete this task and all its subtasks?')) {
-                                            deletingTaskIdRef.current = String(taskId);
-                                            try {
-                                                if (onDeleteTask) {
-                                                    // Await the delete operation to ensure it completes
-                                                    await onDeleteTask(taskId);
-                                                }
-                                                onClose();
-                                            } catch (error) {
-                                                console.error('❌ Error deleting task:', error);
-                                                // Error already handled by parent component, but don't close modal on error
-                                                // Allow user to retry if deletion failed
-                                            } finally {
-                                                // Clear the deletion guard after operation completes
-                                                if (deletingTaskIdRef.current === String(taskId)) {
-                                                    deletingTaskIdRef.current = null;
-                                                }
-                                            }
+                                            onDeleteTask(task.id);
+                                            onClose();
                                         }
                                     }
                                 }}
