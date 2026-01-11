@@ -3704,8 +3704,26 @@ function initializeProjectDetail() {
 
     const handleUpdateTaskFromDetail = async (updatedTaskData, options = {}) => {
         const { closeModal = true } = options; // Default to closing modal unless explicitly set to false
-        const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
-                                                    !tasks.some(t => (t.subtasks || []).find(st => st.id === updatedTaskData.id)));
+        
+        // Check if this is a new task by looking for it in existing tasks
+        // A task is new if:
+        // 1. It has no ID (very rare, but possible), OR
+        // 2. It has an ID but doesn't exist in the tasks array (or in any subtasks)
+        // Note: Temporary IDs from Date.now() are fine - they won't match existing tasks
+        const existingTask = tasks.find(t => t.id === updatedTaskData.id);
+        const existingSubtask = tasks.find(t => 
+            Array.isArray(t.subtasks) && t.subtasks.find(st => st.id === updatedTaskData.id)
+        );
+        const isNewTask = !updatedTaskData.id || (!existingTask && !existingSubtask);
+        
+        console.log('🔍 Task update check:', {
+            taskId: updatedTaskData.id,
+            hasId: !!updatedTaskData.id,
+            foundInTasks: !!existingTask,
+            foundInSubtasks: !!existingSubtask,
+            isNewTask: isNewTask,
+            isSubtask: !!viewingTaskParent
+        });
         
         // Get current user info
         const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
@@ -3877,10 +3895,13 @@ function initializeProjectDetail() {
         let updatedTasks;
         
         if (isNewTask) {
+            // Use the ID from updatedTaskData if it exists (set by handleSave), otherwise generate one
+            const tempTaskId = updatedTaskData.id || Date.now();
+            
             if (viewingTaskParent) {
                 const newSubtask = {
                     ...updatedTaskData,
-                    id: Date.now(),
+                    id: tempTaskId,
                     isSubtask: true,
                     subtasks: [],
                     status: updatedTaskData.status || 'To Do'
@@ -3897,7 +3918,7 @@ function initializeProjectDetail() {
             } else {
                 const newTask = {
                     ...updatedTaskData,
-                    id: Date.now(),
+                    id: tempTaskId,
                     subtasks: [],
                     status: updatedTaskData.status || 'To Do'
                 };
@@ -4098,11 +4119,28 @@ function initializeProjectDetail() {
 
                     if (isNewTask) {
                         // Create new task
+                        console.log('📤 Creating task via Task API:', {
+                            projectId: taskPayload.projectId,
+                            title: taskPayload.title,
+                            listId: taskPayload.listId,
+                            status: taskPayload.status,
+                            isSubtask: isSubtask,
+                            parentTaskId: taskPayload.parentTaskId
+                        });
+                        
                         const response = await window.DatabaseAPI.makeRequest('/tasks', {
                             method: 'POST',
                             body: JSON.stringify(taskPayload)
                         });
-                        const savedTask = response?.data?.task || response?.task;
+                        
+                        console.log('📥 Task API response:', {
+                            status: response?.status,
+                            hasData: !!response?.data,
+                            hasTask: !!response?.data?.task,
+                            taskId: response?.data?.task?.id
+                        });
+                        
+                        const savedTask = response?.data?.task || response?.task || response?.data;
                         if (savedTask?.id) {
                             console.log('✅ Task created via Task API:', savedTask.id, isSubtask ? '(subtask)' : '(top-level)');
                             // Replace temporary task (with Date.now() ID) with saved task (with real ID) in local state
@@ -4119,7 +4157,7 @@ function initializeProjectDetail() {
                                 customFields: savedTask.customFields || {}
                             };
                             
-                            const tempTaskId = taskToSave.id; // This is the temporary Date.now() ID
+                            const tempTaskId = taskToSave.id; // This is the temporary ID from updatedTaskData
                             
                             if (isSubtask && viewingTaskParent) {
                                 // Handle subtask: update within parent task's subtasks array
@@ -4178,8 +4216,12 @@ function initializeProjectDetail() {
                                 }
                             }
                         } else {
-                            console.error('❌ Task creation failed: No task ID returned from API');
-                            throw new Error('Task creation failed: No task ID returned');
+                            console.error('❌ Task creation failed: No task ID returned from API', {
+                                response: response,
+                                responseData: response?.data,
+                                responseTask: response?.task
+                            });
+                            throw new Error('Task creation failed: No task ID returned from API');
                         }
                         
                         // Reload tasks from server after creation to ensure consistency
@@ -4208,7 +4250,15 @@ function initializeProjectDetail() {
                         console.log('✅ Task updated via Task API:', taskToSave.id);
                     }
                 } catch (taskApiError) {
-                    console.error('❌ Failed to save task via Task API:', taskApiError);
+                    console.error('❌ Failed to save task via Task API:', {
+                        error: taskApiError,
+                        errorMessage: taskApiError?.message,
+                        errorStatus: taskApiError?.status,
+                        errorResponse: taskApiError?.response,
+                        taskData: taskPayload,
+                        isNewTask: isNewTask,
+                        taskId: taskToSave?.id
+                    });
                     // No fallback - Task API is the only method now
                     throw taskApiError; // Re-throw to let caller handle the error
                 }
@@ -4228,17 +4278,30 @@ function initializeProjectDetail() {
                 commentIds: verifyTask?.comments?.map(c => c.id).filter(Boolean) || []
             });
         } catch (error) {
-            console.error('❌ Failed to save task update:', error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
+            console.error('❌ Failed to save task update:', {
+                error: error,
+                errorMessage: error?.message,
+                errorStatus: error?.status,
+                errorStack: error?.stack,
                 updatedTasksCount: updatedTasks.length,
                 taskId: updatedTaskData.id,
-                commentsCount: updatedTaskData.comments?.length || 0
+                commentsCount: updatedTaskData.comments?.length || 0,
+                isNewTask: isNewTask,
+                taskTitle: updatedTaskData.title
             });
+            
+            // Revert local state changes if task creation failed
+            if (isNewTask) {
+                console.log('🔄 Reverting local state changes due to creation failure');
+                setTasks(tasks); // Restore original tasks array
+                tasksRef.current = tasks;
+            }
+            
             // Show user-friendly error message
-            alert('Failed to save task changes. Please try again or refresh the page.');
-            // Don't block UI - the debounced save will retry
+            const errorMsg = error?.message || 'Unknown error';
+            const statusMsg = error?.status ? ` (Status: ${error.status})` : '';
+            alert(`Failed to ${isNewTask ? 'create' : 'save'} task: ${errorMsg}${statusMsg}. Please try again or refresh the page.`);
+            // Don't block UI - user can try again
         } finally {
             // Reset flag after a delay to allow any pending useEffect to complete
             setTimeout(() => {
@@ -4256,20 +4319,46 @@ function initializeProjectDetail() {
     };
 
     const handleDeleteTask = async (taskId) => {
+        if (!taskId) {
+            console.error('❌ Cannot delete task: taskId is missing');
+            alert('Cannot delete task: Missing task ID');
+            return;
+        }
+        
         if (confirm('Delete this task and all its subtasks?')) {
             let deleteSuccessful = false;
             try {
                 // NEW: Delete via Task API first (cascades to subtasks)
                 if (window.DatabaseAPI?.makeRequest) {
+                    const deleteUrl = `/tasks?id=${encodeURIComponent(String(taskId))}`;
+                    console.log('🗑️ Deleting task via Task API:', {
+                        taskId: taskId,
+                        url: deleteUrl
+                    });
+                    
                     try {
-                        await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
+                        const deleteResponse = await window.DatabaseAPI.makeRequest(deleteUrl, {
                             method: 'DELETE'
                         });
-                        console.log('✅ Task deleted via Task API:', taskId);
+                        console.log('✅ Task deleted via Task API:', {
+                            taskId: taskId,
+                            response: deleteResponse
+                        });
                         deleteSuccessful = true;
                     } catch (deleteError) {
+                        console.error('❌ Task deletion error:', {
+                            taskId: taskId,
+                            error: deleteError,
+                            errorMessage: deleteError?.message,
+                            errorStatus: deleteError?.status,
+                            errorResponse: deleteError?.response
+                        });
+                        
                         // Handle 404 gracefully - task might already be deleted
-                        const errorStatus = deleteError?.status || (deleteError?.message?.includes('404') || deleteError?.message?.includes('not found') || deleteError?.message?.includes('Task not found') ? 404 : null);
+                        const errorStatus = deleteError?.status || 
+                                          (deleteError?.message?.includes('404') || 
+                                           deleteError?.message?.includes('not found') || 
+                                           deleteError?.message?.includes('Task not found') ? 404 : null);
                         if (errorStatus === 404) {
                             console.warn('⚠️ Task not found (may have already been deleted):', taskId);
                             deleteSuccessful = true; // Treat as success since task is gone
@@ -4280,7 +4369,7 @@ function initializeProjectDetail() {
                         }
                     }
                 } else {
-                    throw new Error('Task API not available');
+                    throw new Error('Task API not available - DatabaseAPI.makeRequest is not defined');
                 }
                 
                 // Filter out the task and all its subtasks from local state
@@ -4327,9 +4416,19 @@ function initializeProjectDetail() {
                     handleCloseTaskModal();
                 }
             } catch (taskApiError) {
-                console.error('❌ Failed to delete task via Task API:', taskApiError);
+                console.error('❌ Failed to delete task via Task API:', {
+                    taskId: taskId,
+                    error: taskApiError,
+                    errorMessage: taskApiError?.message,
+                    errorStatus: taskApiError?.status,
+                    errorStack: taskApiError?.stack
+                });
+                
                 // Check if it's a 404 (task not found) - handle more gracefully
-                const errorStatus = taskApiError?.status || (taskApiError?.message?.includes('404') || taskApiError?.message?.includes('not found') || taskApiError?.message?.includes('Task not found') ? 404 : null);
+                const errorStatus = taskApiError?.status || 
+                                  (taskApiError?.message?.includes('404') || 
+                                   taskApiError?.message?.includes('not found') || 
+                                   taskApiError?.message?.includes('Task not found') ? 404 : null);
                 if (errorStatus === 404) {
                     // Task not found - might already be deleted, so just update local state
                     const updatedTasks = tasks.filter(t => t.id !== taskId);
@@ -4343,7 +4442,8 @@ function initializeProjectDetail() {
                     console.log('⚠️ Task was not found (may have already been deleted). Local state updated.');
                 } else {
                     // For other errors, show alert but don't update state
-                    alert('Failed to delete task. Please try again.');
+                    const errorMsg = taskApiError?.message || 'Unknown error';
+                    alert(`Failed to delete task: ${errorMsg}. Please try again or refresh the page.`);
                     console.error('Task deletion error details:', taskApiError);
                     // Don't re-throw to avoid unhandled promise rejection - error has been handled via alert
                 }
