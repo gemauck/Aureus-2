@@ -91,8 +91,8 @@ const TaskDetailModal = ({
             const taskId = String(task.id);
             const projectId = String(project.id);
             const url = '/task-comments?taskId=' + encodeURIComponent(taskId) + '&projectId=' + encodeURIComponent(projectId);
-            const response = await window.DatabaseAPI.makeRequest(url);
-            const data = await response.json();
+            // CRITICAL: DatabaseAPI.makeRequest already returns parsed JSON, don't call .json()
+            const data = await window.DatabaseAPI.makeRequest(url);
             
             if (data.comments && Array.isArray(data.comments)) {
                 // Transform API comments to match expected format
@@ -906,7 +906,8 @@ const TaskDetailModal = ({
             try {
                 const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
                 
-                const commentResponse = await window.DatabaseAPI.makeRequest('/task-comments', {
+                // CRITICAL: DatabaseAPI.makeRequest already returns parsed JSON, don't call .json()
+                const commentData = await window.DatabaseAPI.makeRequest('/task-comments', {
                     method: 'POST',
                     body: JSON.stringify({
                         taskId: taskToAutoSave.id,
@@ -917,8 +918,6 @@ const TaskDetailModal = ({
                         userName: comment.userName || comment.authorEmail || currentUser.email
                     })
                 });
-                
-                const commentData = await commentResponse.json();
                 
                 if (commentData.comment) {
                     // Update local comment with the saved comment from API (includes generated ID)
