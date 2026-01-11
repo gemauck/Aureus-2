@@ -119,6 +119,17 @@ function initializePrisma() {
       }
     })
     
+    // Set statement timeout at database level (25 seconds) - do this asynchronously after connection
+    // This ensures queries timeout even if the application timeout doesn't catch them
+    global.__prisma.$connect().then(() => {
+      return global.__prisma.$executeRaw`SET statement_timeout = 25000`
+    }).then(() => {
+      console.log('✅ Database statement timeout set to 25 seconds')
+    }).catch((timeoutError) => {
+      console.warn('⚠️ Failed to set statement timeout:', timeoutError.message)
+      // Continue anyway - application-level timeout will still work
+    })
+    
     prismaGlobal = global.__prisma
     return prismaGlobal
   } catch (error) {
@@ -201,8 +212,20 @@ if (prismaGlobal) {
   })
 }
 
+// Helper to add query timeout
+async function withTimeout(operation, timeoutMs = 20000, operationName = 'database operation') {
+  return Promise.race([
+    operation(),
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Query timeout after ${timeoutMs}ms: ${operationName}`))
+      }, timeoutMs)
+    })
+  ])
+}
+
 // Helper to retry database operations
-async function withRetry(operation, operationName = 'database operation') {
+async function withRetry(operation, operationName = 'database operation', timeoutMs = 20000) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       // Ensure connection before operation
@@ -210,12 +233,14 @@ async function withRetry(operation, operationName = 'database operation') {
         await ensureConnected()
       }
       
-      return await operation()
+      // Wrap operation with timeout
+      return await withTimeout(operation, timeoutMs, operationName)
     } catch (error) {
-      // Check if it's a connection error
+      // Check if it's a connection error or timeout
       const isConnectionError = 
         error.message?.includes("Can't reach database server") ||
         error.message?.includes("connection") ||
+        error.message?.includes("Query timeout") ||
         error.code === 'P1001' || // Prisma connection error
         error.code === 'P1002' || // Prisma timeout error
         error.code === 'P1008' || // Prisma operations timeout
@@ -224,7 +249,7 @@ async function withRetry(operation, operationName = 'database operation') {
         error.code === 'ENOTFOUND'
 
       if (isConnectionError) {
-        console.warn(`⚠️ Connection error on ${operationName} (attempt ${attempt}/${MAX_RETRIES}):`, error.message)
+        console.warn(`⚠️ Connection/timeout error on ${operationName} (attempt ${attempt}/${MAX_RETRIES}):`, error.message)
         
         // Mark as disconnected
         isConnected = false
@@ -286,9 +311,12 @@ const prismaProxy = new Proxy({}, {
                modelProp === 'updateMany' ||
                modelProp === 'deleteMany')) {
             return function(...args) {
+              // Use longer timeout for findMany operations (they can take longer)
+              const timeoutMs = modelProp === 'findMany' ? 25000 : 20000
               return withRetry(
                 () => modelValue.apply(modelTarget, args),
-                `${prop}.${modelProp}`
+                `${prop}.${modelProp}`,
+                timeoutMs
               )
             }
           }
