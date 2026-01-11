@@ -1280,7 +1280,7 @@ const TaskDetailModal = ({
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto" style={{ padding: '0.5rem' }}>
             <div className="min-h-full flex items-start sm:items-center justify-center py-2 sm:py-4">
-                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl overflow-hidden h-full sm:h-auto">
+                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl overflow-hidden">
                 {/* Header */}
                 <div className="border-b border-gray-200 px-3 sm:px-4 py-3 bg-white flex-shrink-0">
                     <div className="flex items-start justify-between">
@@ -2185,7 +2185,7 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0 z-10 w-full mt-auto">
+                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0 z-10 w-full">
                     <div className="flex gap-2">
                         {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button
