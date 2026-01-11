@@ -3134,8 +3134,9 @@ function initializeProjectDetail() {
         return taskLists
             .filter(list => taskFilters.list === 'all' || String(list.id) === taskFilters.list)
             .map(list => {
+                // CRITICAL: Use String() comparison to handle type mismatch (number vs string)
                 const tasksForList = tasks
-                    .filter(task => task.listId === list.id)
+                    .filter(task => String(task.listId) === String(list.id))
                     .map(task => {
                         const taskMatches = matchesTaskFilters(task, list.id);
                         const matchingSubtasks = (task.subtasks || []).filter(subtask => matchesTaskFilters(subtask, list.id));

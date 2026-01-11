@@ -1029,8 +1029,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
             
             // CRITICAL FIX: Check if we've already loaded initial data for this client (AFTER reset)
+            // Also check module-level tracker to catch loads that completed but ref wasn't set yet
             // This prevents duplicate loads while still allowing initial load when needed
-            const hasLoadedInitialData = initialDataLoadedForClientIdRef.current === currentClientId;
+            const hasLoadedInitialData = initialDataLoadedForClientIdRef.current === currentClientId || clientInitialLoadTracker.has(currentClientId);
             
             // Only load from database if:
             // 1. Client ID changed (switching to different client), OR
