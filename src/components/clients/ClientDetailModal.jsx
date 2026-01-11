@@ -170,6 +170,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Only render full content once all initial data loads are complete
     const [isInitialLoading, setIsInitialLoading] = useState(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
+    const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
@@ -774,11 +775,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Use deduplicator if available, otherwise use local ref check
             if (window.RequestDeduplicator) {
-                await window.RequestDeduplicator.deduplicate(requestKey, async () => {
+                const result = await window.RequestDeduplicator.deduplicate(requestKey, async () => {
                     // Prevent duplicate requests with local ref as additional safeguard
                     if (isLoadingSitesRef.current) {
                         console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
-                        return null;
+                        return [];
                     }
                     
                     isLoadingSitesRef.current = true;
@@ -814,19 +815,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             return filtered;
                         });
                         
-                        return { sites };
+                        return sites; // Return sites array directly
                     } catch (apiError) {
                         // If it's a 500 error, log but don't throw - sites might already be in client object
                         if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
                             console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
                             sitesLoadedForClientIdRef.current = String(clientId);
-                            return null;
+                            return []; // Return empty array instead of null
                         }
                         throw apiError;
                     } finally {
                         isLoadingSitesRef.current = false;
                     }
                 }, 2000); // 2 second deduplication window
+                
+                return result || []; // Return sites array or empty array
             } else {
                 // Fallback to original logic if RequestDeduplicator is not available
                 if (isLoadingSitesRef.current) {
@@ -863,11 +866,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         }
                         return filtered;
                     });
+                    
+                    return sites; // Return sites array for Promise.all tracking
                 } catch (apiError) {
                     if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
                         console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
                         sitesLoadedForClientIdRef.current = String(clientId);
-                        return;
+                        return []; // Return empty array on error
                     }
                     throw apiError;
                 } finally {
@@ -877,6 +882,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
             isLoadingSitesRef.current = false;
+            return []; // Return empty array on error
         }
     }, [client?.id, optimisticSites]);
     
@@ -949,18 +955,42 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     });
 
     useEffect(() => {
+        // ALWAYS log to verify useEffect is running - THIS SHOULD ALWAYS APPEAR
+        console.log('🔍🔍🔍 ClientDetailModal useEffect RUNNING - ALWAYS LOGS', { 
+            hasClient: !!client, 
+            clientId: client?.id,
+            clientName: client?.name,
+            clientType: typeof client,
+            clientKeys: client ? Object.keys(client).slice(0, 5) : null,
+            lastSavedClientId: lastSavedClientId.current,
+            initialDataLoadedForClientId: initialDataLoadedForClientIdRef.current,
+            timestamp: new Date().toISOString()
+        });
+        
+        if (!client || !client.id) {
+            console.log('⏭️ ClientDetailModal useEffect SKIPPED - no client or client.id', {
+                client: client,
+                clientId: client?.id,
+                willSetLoadingFalse: true
+            });
+            setIsInitialLoading(false);
+            return;
+        }
+        
         if (client?.id) {
             const currentClientId = String(client.id);
             const clientIdChanged = currentClientId !== lastSavedClientId.current;
             
-            // Prevent re-running if we've already processed this exact client ID in this render cycle
-            // This prevents excessive re-renders when the component re-renders with the same client
-            if (lastProcessedClientRef.current === currentClientId && !clientIdChanged) {
-                return; // Already processed this client, skip
-            }
+            console.log('🔍 ClientDetailModal state check (before reset):', {
+                currentClientId,
+                lastSavedClientId: lastSavedClientId.current,
+                clientIdChanged,
+                initialDataLoadedForClientId: initialDataLoadedForClientIdRef.current
+            });
             
             // Update lastSavedClientId if client changed
             if (clientIdChanged) {
+                console.log('🔄 Client ID changed, resetting state');
                 lastSavedClientId.current = currentClientId;
                 lastProcessedClientRef.current = currentClientId;
                 // Reset edit flag when switching clients
@@ -970,13 +1000,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setOptimisticSites([]);
                 // Reset sites loaded flag when client changes
                 sitesLoadedForClientIdRef.current = null;
-            } else {
-                // Mark as processed even if client ID didn't change (to prevent duplicate processing)
-                lastProcessedClientRef.current = currentClientId;
+                // Reset initial data loaded flag when client changes - need to load again for new client
+                initialDataLoadedForClientIdRef.current = null;
             }
             
-            // Only load from database if client ID changed (new client) or form hasn't been edited
-            const shouldLoadFromDatabase = clientIdChanged || !hasUserEditedForm.current;
+            // CRITICAL FIX: Check if we've already loaded initial data for this client (AFTER reset)
+            // This prevents duplicate loads while still allowing initial load when needed
+            const hasLoadedInitialData = initialDataLoadedForClientIdRef.current === currentClientId;
+            
+            // Only load from database if:
+            // 1. Client ID changed (switching to different client), OR
+            // 2. Form hasn't been edited AND we haven't loaded initial data yet
+            // This ensures data always loads on first open, but doesn't reload unnecessarily
+            const shouldLoadFromDatabase = clientIdChanged || (!hasUserEditedForm.current && !hasLoadedInitialData);
             
             // Parse all JSON strings from API response
             // CRITICAL FIX: Prioritize normalized table data over JSON fields to prevent duplicates
@@ -1056,10 +1092,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const hasContactsInClient = parsedClient.contacts && Array.isArray(parsedClient.contacts) && parsedClient.contacts.length > 0;
             const hasSitesInClient = parsedClient.sites && Array.isArray(parsedClient.sites) && parsedClient.sites.length > 0;
             
-            // Load data from database ONLY if client changed or form hasn't been edited
-            // AND only if data is missing from the client object
-            // AND only if we haven't already processed this client ID (prevents duplicate processing)
-            if (shouldLoadFromDatabase && clientIdChanged) {
+            // Load data if:
+            // 1. Client ID changed (switching to different client), OR
+            // 2. We haven't done initial load for this client yet (first time opening)
+            // This ensures data always loads immediately when opening a client
+            // Note: hasLoadedInitialData is already declared above
+            const shouldDoInitialLoad = clientIdChanged || !hasLoadedInitialData;
+            
+            // DEBUG: Log loading conditions
+            console.log('🔍 ClientDetailModal loading check:', {
+                currentClientId,
+                clientIdChanged,
+                hasUserEditedForm: hasUserEditedForm.current,
+                hasLoadedInitialData,
+                shouldLoadFromDatabase,
+                shouldDoInitialLoad,
+                willLoad: shouldLoadFromDatabase && shouldDoInitialLoad
+            });
+            
+            // Load data from database if we should load AND form hasn't been edited
+            if (shouldLoadFromDatabase && shouldDoInitialLoad) {
+                console.log('✅ Starting initial data load for client:', currentClientId);
+                // Mark that we're doing initial load for this client
+                initialDataLoadedForClientIdRef.current = currentClientId;
                 
                 // Cancel any existing pending timeouts for this client
                 pendingTimeoutsRef.current.forEach(timeoutId => {
@@ -1330,8 +1385,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
+            
+            return contacts; // Return contacts for Promise.all tracking
         } catch (error) {
             console.error('❌ Error loading contacts from database:', error);
+            return []; // Return empty array on error
         } finally {
             isLoadingContactsRef.current = false;
         }
@@ -1584,9 +1642,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 ...prevFormData,
                 opportunities: opportunities
             }));
+            
+            return opportunities; // Return opportunities for Promise.all tracking
         } catch (error) {
             console.error('❌ Error loading opportunities from database:', error);
             // Don't show error to user, just log it
+            return []; // Return empty array on error
         } finally {
             isLoadingOpportunitiesRef.current = false;
         }

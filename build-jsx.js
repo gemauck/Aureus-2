@@ -219,6 +219,14 @@ async function buildJSX() {
             /window\.BUILD_VERSION\s*=\s*['"][^'"]*['"]/,
             `window.BUILD_VERSION = '${versionInfo.version}'`
         );
+        // Replace core-bundle.js version parameter for cache busting
+        // Match patterns like: /dist/core-bundle.js?v=20260111-25ed885 or /dist/core-bundle.js?v=1768113388877
+        const versionPattern = versionInfo.version;
+        // More flexible regex to match any version format (numbers, dashes, etc.)
+        indexHtml = indexHtml.replace(
+            /\/dist\/core-bundle\.js\?v=[^\s"']+/g,
+            `/dist/core-bundle.js?v=${versionPattern}`
+        );
         fs.writeFileSync(indexHtmlPath, indexHtml);
         console.log(`🔄 Updated index.html with build version: ${versionInfo.version}`);
     }
