@@ -49,7 +49,10 @@ const TaskDetailModal = ({
         return initialComments;
     });
     const [attachments, setAttachments] = useState(task?.attachments || []);
-    const [checklist, setChecklist] = useState(task?.checklist || []);
+    // CRITICAL: Ensure checklist is always an array
+    const [checklist, setChecklist] = useState(() => {
+        return Array.isArray(task?.checklist) ? task.checklist : [];
+    });
     
     // Initialize subscribers from task if it exists
     useEffect(() => {
@@ -460,8 +463,9 @@ const TaskDetailModal = ({
             // Sync checklist
             if (Array.isArray(task.checklist)) {
                 setChecklist(task.checklist);
-            } else if (task.checklist === undefined || task.checklist === null) {
-                setChecklist([]);
+            } else {
+                // CRITICAL: Ensure checklist is always an array
+                setChecklist(Array.isArray(task.checklist) ? task.checklist : []);
             }
             
             // Sync tags - ensure it's always an array
@@ -1155,7 +1159,9 @@ const TaskDetailModal = ({
     };
 
     const handleToggleChecklistItem = (itemId) => {
-        const updatedChecklist = checklist.map(item =>
+        // CRITICAL: Ensure checklist is an array before using map
+        const checklistArray = Array.isArray(checklist) ? checklist : [];
+        const updatedChecklist = checklistArray.map(item =>
             item.id === itemId ? { ...item, completed: !item.completed } : item
         );
         setChecklist(updatedChecklist);
@@ -1188,7 +1194,9 @@ const TaskDetailModal = ({
     };
 
     const handleDeleteChecklistItem = (itemId) => {
-        const updatedChecklist = checklist.filter(item => item.id !== itemId);
+        // CRITICAL: Ensure checklist is an array before using filter
+        const checklistArray = Array.isArray(checklist) ? checklist : [];
+        const updatedChecklist = checklistArray.filter(item => item.id !== itemId);
         setChecklist(updatedChecklist);
         
         // CRITICAL: Auto-save checklist deletion immediately
@@ -1348,7 +1356,7 @@ const TaskDetailModal = ({
                                 }`}
                             >
                                 <i className="fas fa-check-square mr-1.5"></i>
-                                Checklist ({checklist.filter(i => i.completed).length}/{checklist.length})
+                                Checklist ({Array.isArray(checklist) ? checklist.filter(i => i.completed).length : 0}/{Array.isArray(checklist) ? checklist.length : 0})
                             </button>
                             <button
                                 onClick={async () => {
@@ -1621,7 +1629,7 @@ const TaskDetailModal = ({
                         {activeTab === 'checklist' && (
                             <div className="space-y-3">
                                 {/* Progress Bar */}
-                                {checklist.length > 0 && (
+                                {Array.isArray(checklist) && checklist.length > 0 && (
                                     <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                                         <div className="flex justify-between items-center mb-1.5">
                                             <span className="text-xs font-medium text-gray-700">Progress</span>
@@ -1656,7 +1664,7 @@ const TaskDetailModal = ({
 
                                 {/* Checklist Items */}
                                 <div className="space-y-1.5">
-                                    {checklist.length === 0 ? (
+                                    {!Array.isArray(checklist) || checklist.length === 0 ? (
                                         <div className="text-center py-6 text-gray-500">
                                             <i className="fas fa-check-square text-3xl mb-1.5"></i>
                                             <p className="text-sm">No checklist items yet</p>

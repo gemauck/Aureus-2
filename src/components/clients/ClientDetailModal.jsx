@@ -1227,10 +1227,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         .finally(() => {
                             setIsInitialLoading(false);
                             initialLoadPromiseRef.current = null;
-                            // Clear module-level tracker after load completes
-                            if (clientInitialLoadTracker.get(currentClientId) === loadPromise) {
-                                clientInitialLoadTracker.delete(currentClientId);
-                            }
+                            // DON'T clear module-level tracker after load completes - keep it until client changes
+                            // This prevents duplicate loads if useEffect runs again after completion
+                            // The tracker will be cleared when client ID changes (checked in guard)
                             // Ensure ref is set to prevent duplicate loads
                             if (initialDataLoadedForClientIdRef.current !== currentClientId) {
                                 initialDataLoadedForClientIdRef.current = currentClientId;
