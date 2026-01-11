@@ -1115,6 +1115,13 @@ function initializeProjectDetail() {
                 setRouteKey(prev => {
                     if (prev !== newRouteKey) {
                         console.log('🔄 ProjectDetail: Route changed, will reload tasks if on same project');
+                        // Reset hasLoadedTasksRef when route changes away from project page
+                        // This ensures tasks reload when navigating back
+                        const isProjectPage = window.location?.pathname?.includes(`/projects/${project?.id}`);
+                        if (!isProjectPage && hasLoadedTasksRef.current) {
+                            console.log('🔄 ProjectDetail: Navigated away from project, resetting hasLoadedTasksRef');
+                            hasLoadedTasksRef.current = false;
+                        }
                         return newRouteKey;
                     }
                     return prev;
@@ -1138,7 +1145,7 @@ function initializeProjectDetail() {
             window.removeEventListener('hashchange', updateRouteKey);
             window.removeEventListener('popstate', updateRouteKey);
         };
-    }, []);
+    }, [project?.id]);
     
     useEffect(() => {
         // Load tasks if:

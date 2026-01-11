@@ -1340,7 +1340,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const getCommentsForYear = (comments, month, weekNumber, year = selectedYear) => {
         if (!comments) return [];
         const weekKey = getWeekKey(month, weekNumber, year);
-        return comments[weekKey] || [];
+        const result = comments[weekKey];
+        // Ensure we always return an array
+        return Array.isArray(result) ? result : [];
     };
     
     // Set status for a specific week in the selected year only
@@ -2327,7 +2329,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
                         row.push(statusLabel || '');
                         
-                        const comments = getCommentsForYear(document.comments, week.month, week.weekNumber, selectedYear);
+                        const commentsRaw = getCommentsForYear(document.comments, week.month, week.weekNumber, selectedYear);
+                        const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
                         const commentsText = comments.map(c => {
                             const date = new Date(c.date).toLocaleString('en-ZA', {
                                 year: 'numeric', month: 'short', day: '2-digit',
@@ -2830,7 +2833,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const status = getDocumentStatus(document, month, weekNumber);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(document, month, weekNumber);
-        const hasComments = comments.length > 0;
+        // Safety check: ensure comments is always an array
+        const safeComments = Array.isArray(comments) ? comments : [];
+        const hasComments = safeComments.length > 0;
         const cellKey = `${section.id}-${document.id}-${month}-Week${weekNumber}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
@@ -3014,13 +3019,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                             }}
                             className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
-                            title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
+                            title={hasComments ? `${safeComments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
                             <i className="fas fa-comment text-base"></i>
                             {hasComments && (
                                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                                    {comments.length}
+                                    {safeComments.length}
                                 </span>
                             )}
                         </button>
@@ -3657,7 +3662,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-                const comments = document ? getDocumentComments(document, month, weekNumber) : [];
+                const commentsRaw = document ? getDocumentComments(document, month, weekNumber) : [];
+                const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
                 
                 return (
                     <div 

@@ -773,123 +773,53 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return Promise.resolve([]);
         }
         
-        // Use global request deduplication to prevent duplicate API calls
-        const requestKey = window.RequestDeduplicator?.getRequestKey(`/api/sites/client/${clientId}`, { clientId });
+        // Prevent duplicate requests with local ref check
+        if (isLoadingSitesRef.current) {
+            console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
+            return Promise.resolve([]);
+        }
+        
+        isLoadingSitesRef.current = true;
+        console.log(`📡 Loading sites from database for client: ${clientId}`);
         
         try {
-            // Use deduplicator if available, otherwise use local ref check
-            if (window.RequestDeduplicator) {
-                const result = await window.RequestDeduplicator.deduplicate(requestKey, async () => {
-                    // Prevent duplicate requests with local ref as additional safeguard
-                    if (isLoadingSitesRef.current) {
-                        console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
-                        return [];
-                    }
-                    
-                    isLoadingSitesRef.current = true;
-                    console.log(`📡 Loading sites from database for client: ${clientId}`);
-                    
-                    try {
-                        const response = await window.api.getSites(clientId);
-                        const sites = response?.data?.sites || [];
-                        console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
-                        
-                        // Mark as loaded for this client to prevent infinite loop
-                        sitesLoadedForClientIdRef.current = String(clientId);
-                        
-                        // CRITICAL FIX: Merge with existing sites to prevent duplicates
-                        console.log(`🔧 About to call setFormData with ${sites.length} sites`);
-                        try {
-                            setFormData(prevFormData => {
-                                const existingSites = prevFormData?.sites || [];
-                                const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
-                                const updated = {
-                                    ...prevFormData,
-                                    sites: mergedSites
-                                };
-                                formDataRef.current = updated;
-                                console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
-                                return updated;
-                            });
-                            console.log(`✅ setFormData called successfully for sites`);
-                        } catch (error) {
-                            console.error('❌ Error in setFormData for sites:', error);
-                            throw error;
-                        }
-
-                        // Remove optimistic sites that now exist in database
-                        setOptimisticSites(prev => {
-                            const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
-                            if (filtered.length !== prev.length) {
-                                console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
-                            }
-                            return filtered;
-                        });
-                        
-                        return sites; // Return sites array directly
-                    } catch (apiError) {
-                        // If it's a 500 error, log but don't throw - sites might already be in client object
-                        if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
-                            console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
-                            sitesLoadedForClientIdRef.current = String(clientId);
-                            return []; // Return empty array instead of null
-                        }
-                        throw apiError;
-                    } finally {
-                        isLoadingSitesRef.current = false;
-                    }
-                }, 2000); // 2 second deduplication window
-                
-                return result || []; // Return sites array or empty array
-            } else {
-                // Fallback to original logic if RequestDeduplicator is not available
-                if (isLoadingSitesRef.current) {
-                    console.log('⏭️ Skipping loadSitesFromDatabase - already loading');
-                    return Promise.resolve([]);
-                }
-                
-                isLoadingSitesRef.current = true;
-                console.log(`📡 Loading sites from database for client: ${clientId}`);
-                
-                try {
-                    const response = await window.api.getSites(clientId);
-                    const sites = response?.data?.sites || [];
-                    console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
-                    
-                    sitesLoadedForClientIdRef.current = String(clientId);
-                    
-                    setFormData(prevFormData => {
-                        const existingSites = prevFormData?.sites || [];
-                        const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
-                        const updated = {
-                            ...prevFormData,
-                            sites: mergedSites
-                        };
-                        formDataRef.current = updated;
-                        console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
-                        return updated;
-                    });
-
-                    setOptimisticSites(prev => {
-                        const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
-                        if (filtered.length !== prev.length) {
-                            console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
-                        }
-                        return filtered;
-                    });
-                    
-                    return sites; // Return sites array for Promise.all tracking
-                } catch (apiError) {
-                    if (apiError?.message?.includes('500') || apiError?.message?.includes('Failed to get sites')) {
-                        console.warn('⚠️ Sites API returned 500 error, but sites may already be loaded from client object');
-                        sitesLoadedForClientIdRef.current = String(clientId);
-                        return []; // Return empty array on error
-                    }
-                    throw apiError;
-                } finally {
-                    isLoadingSitesRef.current = false;
-                }
+            const response = await window.api.getSites(clientId);
+            const sites = response?.data?.sites || [];
+            console.log(`✅ Loaded ${sites.length} sites from database for client: ${clientId}`);
+            
+            // Mark as loaded for this client to prevent infinite loop
+            sitesLoadedForClientIdRef.current = String(clientId);
+            
+            // CRITICAL FIX: Merge with existing sites to prevent duplicates
+            console.log(`🔧 About to call setFormData with ${sites.length} sites`);
+            try {
+                setFormData(prevFormData => {
+                    const existingSites = prevFormData?.sites || [];
+                    const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
+                    const updated = {
+                        ...prevFormData,
+                        sites: mergedSites
+                    };
+                    formDataRef.current = updated;
+                    console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
+                    return updated;
+                });
+                console.log(`✅ setFormData called successfully for sites`);
+            } catch (error) {
+                console.error('❌ Error in setFormData for sites:', error);
+                throw error;
             }
+
+            // Remove optimistic sites that now exist in database
+            setOptimisticSites(prev => {
+                const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
+                if (filtered.length !== prev.length) {
+                    console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
+                }
+                return filtered;
+            });
+            
+            return sites; // Return sites array directly
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
             isLoadingSitesRef.current = false;
