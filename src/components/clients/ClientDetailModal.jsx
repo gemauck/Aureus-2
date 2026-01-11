@@ -1121,7 +1121,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // ALWAYS load contacts immediately on initial load to ensure we have the latest data
                 // Even if client object has contacts, we still load from DB to get the most up-to-date count
                 // This prevents the count from changing when clicking the tab
+                console.log(`🚀 About to call loadContactsFromDatabase for client: ${client.id}`);
                 const contactPromise = loadContactsFromDatabase(client.id);
+                console.log(`🚀 loadContactsFromDatabase returned promise:`, contactPromise);
                 loadPromises.push(contactPromise);
                 criticalLoadPromises.push(contactPromise);
                 

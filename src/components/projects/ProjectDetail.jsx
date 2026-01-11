@@ -1114,11 +1114,13 @@ function initializeProjectDetail() {
                 const newRouteKey = `${window.location.pathname}${window.location.search}${window.location.hash}`;
                 setRouteKey(prev => {
                     if (prev !== newRouteKey) {
-                        console.log('🔄 ProjectDetail: Route changed, will reload tasks if on same project');
-                        // Reset hasLoadedTasksRef when route changes away from project page
-                        // This ensures tasks reload when navigating back
-                        const isProjectPage = window.location?.pathname?.includes(`/projects/${project?.id}`);
-                        if (!isProjectPage && hasLoadedTasksRef.current) {
+                        console.log('🔄 ProjectDetail: Route changed', { from: prev, to: newRouteKey });
+                        // Check if we navigated away from the project page
+                        const isProjectPage = project?.id && window.location?.pathname?.includes(`/projects/${project.id}`);
+                        const wasProjectPage = project?.id && prev?.includes(`/projects/${project.id}`);
+                        
+                        // If we navigated away from project page, reset hasLoadedTasksRef so tasks reload when we come back
+                        if (wasProjectPage && !isProjectPage && hasLoadedTasksRef.current) {
                             console.log('🔄 ProjectDetail: Navigated away from project, resetting hasLoadedTasksRef');
                             hasLoadedTasksRef.current = false;
                         }
@@ -1150,12 +1152,19 @@ function initializeProjectDetail() {
     useEffect(() => {
         // Load tasks if:
         // 1. Project ID changed (switching to a different project), OR
-        // 2. We haven't loaded tasks yet for this project (initial load)
+        // 2. We haven't loaded tasks yet for this project (initial load), OR
+        // 3. Route changed and we're back on the project page (navigated back)
         const projectIdChanged = project?.id !== previousProjectIdRef.current;
+        const routeChanged = routeKey !== previousRouteKeyRef.current;
         
         if (projectIdChanged) {
             previousProjectIdRef.current = project?.id;
             hasLoadedTasksRef.current = false; // Reset flag when project changes
+        }
+        
+        // Update previous routeKey after checking
+        if (routeChanged) {
+            previousRouteKeyRef.current = routeKey;
         }
         
         // Check if we're currently on the project page
@@ -1165,14 +1174,14 @@ function initializeProjectDetail() {
              window.RouteState.getRoute()?.segments?.[0] === String(project.id))
         );
         
-        // Always load from Task API when we have a project ID and haven't loaded yet
-        // For initial load, be more lenient - load if we have project ID (even if isOnProjectPage check fails)
-        // For subsequent loads (navigating back), ensure we're on the project page
-        const isInitialLoad = !hasLoadedTasksRef.current;
+        // Always load from Task API when:
+        // - Project ID changed, OR
+        // - Haven't loaded yet (initial load), OR  
+        // - Route changed and we're back on the project page (navigated back)
         const shouldLoad = project?.id && (
             projectIdChanged || 
-            (isInitialLoad && project?.id) || // Initial load: just need project ID
-            (isOnProjectPage && !isInitialLoad) // Subsequent loads: need to be on project page
+            !hasLoadedTasksRef.current || // Initial load - always load if we haven't loaded yet
+            (isOnProjectPage && routeChanged) // Route changed and we're on project page (navigated back)
         );
         
         if (shouldLoad) {

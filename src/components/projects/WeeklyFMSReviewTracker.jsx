@@ -4021,12 +4021,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-medium text-gray-600">Status:</span>
                     {(statusOptions && Array.isArray(statusOptions) ? statusOptions : []).map((option, idx) => {
+                        if (!option || typeof option !== 'object') return null;
                         const safeStatusOptions = statusOptions && Array.isArray(statusOptions) ? statusOptions : [];
                         return (
-                            <React.Fragment key={option.value}>
+                            <React.Fragment key={option.value || idx}>
                                 <div className="flex items-center gap-1">
-                                    <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
-                                    <span className="text-[10px] text-gray-600">{option.label}</span>
+                                    <div className={`w-3 h-3 rounded ${option.cellColor || ''}`}></div>
+                                    <span className="text-[10px] text-gray-600">{option.label || ''}</span>
                                 </div>
                                 {idx < safeStatusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
                             </React.Fragment>
