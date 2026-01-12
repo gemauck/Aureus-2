@@ -515,19 +515,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     })
                 };
                 
-                // Merge: Use loaded data from API, fallback to client prop data
-                // CRITICAL: Only update if API returned more data than what's already in formData
-                // This prevents unnecessary re-renders and ensures tabs render immediately
+                // CRITICAL: Always use API data when available (it's the most up-to-date)
+                // Only fallback to existing formData if API returned empty and we have existing data
+                // This ensures tabs always show the latest data immediately
                 const currentFormData = formDataRef.current || {};
                 const existingContacts = currentFormData.contacts || [];
                 const existingSites = currentFormData.sites || [];
                 const existingOpportunities = currentFormData.opportunities || [];
                 
-                // Only use API data if it has more items than what we already have
-                // This ensures we don't overwrite existing data with empty arrays
-                const finalContacts = contacts.length > existingContacts.length ? contacts : (existingContacts.length > 0 ? existingContacts : (parsedClient.contacts || []));
-                const finalSites = sites.length > existingSites.length ? sites : (existingSites.length > 0 ? existingSites : (parsedClient.sites || []));
-                const finalOpportunities = opportunities.length > existingOpportunities.length ? opportunities : (existingOpportunities.length > 0 ? existingOpportunities : (parsedClient.opportunities || []));
+                // Prioritize API data - it's always more up-to-date
+                // Only use existing data if API returned empty and we have existing data
+                const finalContacts = contacts.length > 0 ? contacts : (existingContacts.length > 0 ? existingContacts : (parsedClient.contacts || []));
+                const finalSites = sites.length > 0 ? sites : (existingSites.length > 0 ? existingSites : (parsedClient.sites || []));
+                const finalOpportunities = opportunities.length > 0 ? opportunities : (existingOpportunities.length > 0 ? existingOpportunities : (parsedClient.opportunities || []));
                 
                 const mergedData = {
                     ...parsedClient,
@@ -536,28 +536,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     opportunities: finalOpportunities
                 };
                 
-                // CRITICAL: Only update formData if data actually changed to prevent unnecessary re-renders
-                // Use React.startTransition to make updates non-blocking for better UX
-                const hasChanges = 
-                    JSON.stringify(finalContacts) !== JSON.stringify(existingContacts) ||
-                    JSON.stringify(finalSites) !== JSON.stringify(existingSites) ||
-                    JSON.stringify(finalOpportunities) !== JSON.stringify(existingOpportunities);
-                
-                if (hasChanges) {
-                    // Use startTransition if available to make update non-blocking
-                    if (typeof React.startTransition === 'function') {
-                        React.startTransition(() => {
-                            setFormData(mergedData);
-                            formDataRef.current = mergedData;
-                        });
-                    } else {
-                        setFormData(mergedData);
-                        formDataRef.current = mergedData;
-                    }
-                } else {
-                    // Still update ref even if no changes to ensure it's in sync
-                    formDataRef.current = mergedData;
-                }
+                // CRITICAL: Always update formData immediately when API data arrives
+                // This ensures tabs have data available immediately when user switches tabs
+                // No conditional checks - just update immediately
+                setFormData(mergedData);
+                formDataRef.current = mergedData;
                 
                 // Mark as loaded
                 initialDataLoadedForClientIdRef.current = clientId;
@@ -571,11 +554,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
         
-        // CRITICAL: Load data immediately without any deferral
+        // CRITICAL: Load ALL data immediately when client modal opens
+        // This ensures all tabs have data available immediately when user switches tabs
         // formData is already initialized with client prop data, so tabs render immediately
-        // API data will update formData when it arrives, enhancing what's already shown
-        // No need for startTransition here - the async function already runs in background
-        // The state updates inside loadAllData use startTransition for non-blocking updates
+        // API data will update formData immediately when it arrives (no transition delay)
         loadAllData();
         
         // eslint-disable-next-line react-hooks/exhaustive-deps
