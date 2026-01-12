@@ -1241,11 +1241,6 @@ async function handler(req, res) {
           // Don't block update if duplicate check fails
         }
         
-        // Build notes with additional fields that don't exist in schema (if provided)
-        let notes = body.notes || '';
-        if (body.source && !notes.includes('Source:')) notes += `\nSource: ${body.source}`;
-        if (body.stage && !notes.includes('Stage:')) notes += `\nStage: ${body.stage}`;
-        
         // Build updateData - only include fields that are actually provided in body
         const updateData = {
           type: 'lead' // Always preserve lead type to prevent conversion to client
@@ -1265,11 +1260,9 @@ async function handler(req, res) {
         if (body.address !== undefined) updateData.address = body.address
         if (body.website !== undefined) updateData.website = body.website
         // Always include notes if provided (even if empty string) to allow clearing notes
+        // CRITICAL: Only use body.notes directly - don't build from source/stage as that overwrites user notes
         if (body.notes !== undefined) {
-          updateData.notes = body.notes !== null && body.notes !== undefined ? String(body.notes) : ''
-        } else if (notes) {
-          // Fallback to notes built from source/stage if body.notes not provided
-          updateData.notes = String(notes || '')
+          updateData.notes = body.notes !== null ? String(body.notes) : ''
         }
       
       // Phase 2: Add JSON fields with dual-write (both String and JSONB)
