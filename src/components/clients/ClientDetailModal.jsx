@@ -2772,41 +2772,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 } mr-1 sm:mr-2`}></i>
                                 <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
                                 <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab.charAt(0).toUpperCase()}</span>
-                                {tab === 'contacts' && !isInitialLoading && formData.contacts?.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
-                                        {formData.contacts.length}
-                                    </span>
-                                )}
-                                {tab === 'sites' && !isInitialLoading && formData.sites?.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
-                                        {formData.sites.length}
-                                    </span>
-                                )}
-                                {tab === 'opportunities' && !isInitialLoading && formData.opportunities?.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-xs">
-                                        {formData.opportunities.length}
-                                    </span>
-                                )}
-                                {tab === 'projects' && !isInitialLoading && clientProjects.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
-                                        {clientProjects.length}
-                                    </span>
-                                )}
-                                {tab === 'service-maintenance' && !loadingJobCards && jobCards.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
-                                        {jobCards.length}
-                                    </span>
-                                )}
-                                {tab === 'calendar' && !isInitialLoading && upcomingFollowUps.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs">
-                                        {upcomingFollowUps.length}
-                                    </span>
-                                )}
-                                {tab === 'contracts' && !isInitialLoading && formData.contracts?.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
-                                        {formData.contracts.length}
-                                    </span>
-                                )}
                             </button>
                         ))}
                     </div>
