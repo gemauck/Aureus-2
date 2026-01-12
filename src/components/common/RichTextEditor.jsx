@@ -424,11 +424,16 @@ const RichTextEditor = ({
             }, 150); // Small delay to ensure blur event completes and cursor position is stable
         };
         
-        // Update domValueRef before input to prevent MutationObserver false positives
+        // Set typing flag BEFORE input to prevent React from interfering during character insertion
         // DO NOT save cursor position here - it's saved AFTER input in handleInput
         // Saving here causes backwards typing because we restore to position before typing
         const handleBeforeInput = () => {
             if (isFocusedRef.current) {
+                // CRITICAL: Set typing flag BEFORE character is inserted to block React updates
+                isUserTypingRef.current = true;
+                lastUserInputTimeRef.current = Date.now();
+                ignorePropUpdatesRef.current = true;
+                
                 // Update domValueRef BEFORE user types to prevent MutationObserver false positives
                 domValueRef.current = editor.innerHTML || '';
                 // DO NOT save cursor position here - wait for handleInput after browser processes input
