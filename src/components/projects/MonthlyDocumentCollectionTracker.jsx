@@ -304,8 +304,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     const loadFromDatabase = useCallback(async () => {
         if (!project?.id) {
-            setIsLoading(false);
-            return;
+                setIsLoading(false);
+                return;
         }
         
         // Ensure API is available
@@ -315,6 +315,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!apiRef.current) {
             console.warn('DocumentCollectionAPI not available yet, will retry');
+            // Don't set loading to true if API isn't available - keep current state
             // Set a timeout to prevent infinite loading
             setTimeout(() => {
                 if (!apiRef.current) {
@@ -322,10 +323,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     setError('Document Collection API not available. Please refresh the page.');
                 }
             }, 2000);
-            return;
+                return;
         }
         
-        setIsLoading(true);
+        // Only set loading to true if we're actually going to make an API call
+        // and we're not already loading (to prevent resetting loading state on multiple calls)
+        setIsLoading(prev => prev ? prev : true);
         setError(null);
         
         try {
@@ -384,8 +387,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     loadFromDatabase();
                 }, 500);
                 return () => clearTimeout(retryTimer);
-            }
-        } else {
+                        }
+                    } else {
             // No project ID, set loading to false
             setIsLoading(false);
         }
@@ -1217,33 +1220,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Update state directly - React will handle re-renders
         setSectionsByYear(prev => {
             const currentYearSections = prev[selectedYear] || [];
-            const updated = currentYearSections.map(section => {
-                const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
+        const updated = currentYearSections.map(section => {
+            const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
                 if (sectionUpdates.length === 0) return section;
-                
-                return {
-                    ...section,
-                    documents: section.documents.map(doc => {
-                        const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
-                        if (docUpdates.length === 0) return doc;
-                        
-                        let updatedStatus = doc.collectionStatus || {};
-                        docUpdates.forEach(cell => {
-                            updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
-                        });
-                        
-                        return {
-                            ...doc,
-                            collectionStatus: updatedStatus
-                        };
-                    })
-                };
-            });
             
             return {
-                ...prev,
-                [selectedYear]: updated
+                ...section,
+                documents: section.documents.map(doc => {
+                    const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
+                        if (docUpdates.length === 0) return doc;
+                    
+                    let updatedStatus = doc.collectionStatus || {};
+                    docUpdates.forEach(cell => {
+                        updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
+                    });
+                    
+                    return {
+                        ...doc,
+                        collectionStatus: updatedStatus
+                    };
+                })
             };
+        });
+        
+            return {
+                ...prev,
+            [selectedYear]: updated
+        };
         });
         
         // Clear selection after applying status to multiple cells
@@ -1272,21 +1275,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const currentYearSections = prev[selectedYear] || [];
             const updated = currentYearSections.map(section => {
                 if (String(section.id) === String(sectionId)) {
-                    return {
-                        ...section,
-                        documents: section.documents.map(doc => {
+                return {
+                    ...section,
+                    documents: section.documents.map(doc => {
                             if (String(doc.id) === String(documentId)) {
-                                const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
-                                return {
-                                    ...doc,
-                                    comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
-                                };
-                            }
-                            return doc;
-                        })
-                    };
-                }
-                return section;
+                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                            return {
+                                ...doc,
+                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
+                            };
+                        }
+                        return doc;
+                    })
+                };
+            }
+            return section;
             });
             
             return {
