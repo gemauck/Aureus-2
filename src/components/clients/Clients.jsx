@@ -3905,8 +3905,20 @@ const Clients = React.memo(() => {
                 
                 if (token && window.api?.updateLead) {
                     try {
+                        // CRITICAL: Ensure notes are explicitly included and not undefined
+                        // Read from formDataRef if available (from ClientDetailModal's onBlur)
+                        const notesToSave = updatedLead.notes !== undefined && updatedLead.notes !== null 
+                            ? String(updatedLead.notes) 
+                            : (leadFormData.notes !== undefined && leadFormData.notes !== null 
+                                ? String(leadFormData.notes) 
+                                : (selectedLead.notes || ''));
                         
-                        const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
+                        const leadDataToSend = {
+                            ...updatedLead,
+                            notes: notesToSave // Ensure notes is always a string, never undefined
+                        };
+                        
+                        const apiResponse = await window.api.updateLead(leadDataToSend.id, leadDataToSend);
                         
                         // Clear all caches to ensure updates appear immediately
                         if (window.ClientCache?.clearCache) {
@@ -3943,6 +3955,13 @@ const Clients = React.memo(() => {
                             ...savedLead,
                             stage: savedLead.stage || updatedLead.stage || 'Awareness', // Ensure stage is preserved
                             status: savedLead.status || updatedLead.status || 'active', // Ensure status is preserved
+                            // CRITICAL: Preserve notes from what we just sent (leadDataToSend) or API response
+                            // Always ensure notes is a string, never undefined
+                            notes: (leadDataToSend.notes !== undefined && leadDataToSend.notes !== null) 
+                                ? String(leadDataToSend.notes) 
+                                : (savedLead.notes !== undefined && savedLead.notes !== null 
+                                    ? String(savedLead.notes) 
+                                    : ''),
                             contacts: safeParseJSON(savedLead.contacts, []),
                             followUps: safeParseJSON(savedLead.followUps, []),
                             projectIds: safeParseJSON(savedLead.projectIds, []),
@@ -4005,6 +4024,12 @@ const Clients = React.memo(() => {
                                     };
                                     const parsedLead = {
                                         ...freshLead,
+                                        // CRITICAL: Preserve notes from database - always ensure it's a string
+                                        notes: freshLead.notes !== undefined && freshLead.notes !== null 
+                                            ? String(freshLead.notes) 
+                                            : (leadDataToSend?.notes !== undefined && leadDataToSend.notes !== null 
+                                                ? String(leadDataToSend.notes) 
+                                                : (updatedLead.notes || '')),
                                         contacts: parseField(freshLead.contacts, []),
                                         followUps: parseField(freshLead.followUps, []),
                                         comments: parseField(freshLead.comments, []),
