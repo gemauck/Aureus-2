@@ -417,14 +417,14 @@ const RichTextEditor = ({
             }, 150); // Small delay to ensure blur event completes and cursor position is stable
         };
         
-        // Save cursor position before any potential DOM changes
+        // Update domValueRef before input to prevent MutationObserver false positives
+        // DO NOT save cursor position here - it's saved AFTER input in handleInput
+        // Saving here causes backwards typing because we restore to position before typing
         const handleBeforeInput = () => {
             if (isFocusedRef.current) {
                 // Update domValueRef BEFORE user types to prevent MutationObserver false positives
                 domValueRef.current = editor.innerHTML || '';
-                savedPosition = saveCursorPosition();
-                // Also save to ref so handleInput can access it
-                savedCursorPositionRef.current = savedPosition;
+                // DO NOT save cursor position here - wait for handleInput after browser processes input
             }
         };
         
