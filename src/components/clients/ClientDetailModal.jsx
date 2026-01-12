@@ -9,7 +9,11 @@ const { useState, useEffect, useRef, useCallback } = React;
 // This persists even if the component remounts
 const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient }) => {
+    // entityType: 'client' or 'lead' - determines terminology and behavior
+    const isLead = entityType === 'lead';
+    const entityLabel = isLead ? 'Lead' : 'Client';
+    const entityLabelLower = isLead ? 'lead' : 'client';
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
     const mergeUniqueById = (items = [], extras = []) => {
@@ -76,7 +80,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             })
         } : {
             name: '',
-            type: 'client',
+            type: entityType, // Use entityType ('client' or 'lead')
             industry: '',
             status: 'active',
             stage: 'Awareness',
@@ -446,6 +450,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
     
+    // Reload job cards when Service & Maintenance tab is opened
+    useEffect(() => {
+        if (activeTab === 'service-maintenance' && client?.id) {
+            // Force reload by resetting the ref, then load
+            const originalLoadedClientId = lastLoadedClientIdRef.current;
+            lastLoadedClientIdRef.current = null;
+            loadJobCards().finally(() => {
+                // If loadJobCards didn't set the ref (e.g., error), restore original
+                if (lastLoadedClientIdRef.current === null) {
+                    lastLoadedClientIdRef.current = originalLoadedClientId;
+                }
+            });
+        }
+    }, [activeTab, client?.id, loadJobCards]);
+
     // Load persisted tab on mount or when client changes (after initialTab has been set)
     useEffect(() => {
         if (client?.id) {
@@ -674,9 +693,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         if (response.ok) {
                             data = await response.json();
                             const allJobCards = data.jobCards || data.data?.jobCards || [];
-                            let matchingJobCards = allJobCards.filter(jc => 
-                                jc.clientId && String(jc.clientId).trim() === clientId.trim()
-                            );
+                            console.log(`🔍 Checking ${allJobCards.length} job cards for clientId: ${clientId}`);
+                            let matchingJobCards = allJobCards.filter(jc => {
+                                // Check multiple possible field names for client ID
+                                const jcClientId = jc.clientId || jc.client?.id;
+                                const matches = jcClientId && String(jcClientId).trim() === clientId.trim();
+                                if (jcClientId && !matches) {
+                                    console.log(`⚠️ Job card ${jc.id} has clientId "${jcClientId}" (type: ${typeof jcClientId}), expected "${clientId}"`);
+                                }
+                                return matches;
+                            });
+                            console.log(`✅ Found ${matchingJobCards.length} matching job cards for clientId: ${clientId}`);
                             
                             if (matchingJobCards.length > 0) {
                                 setJobCards(matchingJobCards);
@@ -744,9 +771,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     if (response.ok) {
                         data = await response.json();
                         const allJobCards = data.jobCards || data.data?.jobCards || [];
-                        let matchingJobCards = allJobCards.filter(jc => 
-                            jc.clientId && String(jc.clientId).trim() === clientId.trim()
-                        );
+                        console.log(`🔍 Checking ${allJobCards.length} job cards for clientId: ${clientId}`);
+                        let matchingJobCards = allJobCards.filter(jc => {
+                            // Check multiple possible field names for client ID
+                            const jcClientId = jc.clientId || jc.client?.id || jc.clientId;
+                            const matches = jcClientId && String(jcClientId).trim() === clientId.trim();
+                            if (jcClientId && !matches) {
+                                console.log(`⚠️ Job card ${jc.id} has clientId "${jcClientId}" (type: ${typeof jcClientId}), expected "${clientId}"`);
+                            }
+                            return matches;
+                        });
+                        console.log(`✅ Found ${matchingJobCards.length} matching job cards for clientId: ${clientId}`);
                         
                         if (matchingJobCards.length > 0) {
                             setJobCards(matchingJobCards);
@@ -2665,7 +2700,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             )}
                             <div className="min-w-0 flex-1">
                                 <h2 className={`text-lg sm:text-xl font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                    {client ? formData.name : 'Add New Client'}
+                                    {client ? formData.name : `Add New ${entityLabel}`}
                                 </h2>
                                 {client && (
                                     <p className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-0.5 truncate`}>
@@ -3359,7 +3394,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     </div>
                                 </div>
 
-                                {/* Delete Client Section */}
+                                {/* Delete {entityLabel} Section */}
                                 {client && onDelete && (
                                     <div className="pt-6 mt-6 border-t border-gray-200 dark:border-gray-700">
                                         <div className="flex items-center justify-between">
@@ -3368,13 +3403,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     Danger Zone
                                                 </h3>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                    Once you delete a client, there is no going back. Please be certain.
+                                                    Once you delete a {entityLabelLower}, there is no going back. Please be certain.
                                                 </p>
                                             </div>
                                             <button 
                                                 type="button" 
                                                 onClick={() => {
-                                                    if (confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
+                                                    if (confirm(`Are you sure you want to delete this ${entityLabelLower}? This action cannot be undone.`)) {
                                                         onDelete(client.id);
                                                         onClose();
                                                     }
@@ -3382,7 +3417,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2"
                                             >
                                                 <i className="fas fa-trash"></i>
-                                                Delete Client
+                                                Delete {entityLabel}
                                             </button>
                                         </div>
                                     </div>
@@ -5044,7 +5079,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
                         {/* Footer Actions */}
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-                            <div></div>
+                            <div>
+                                {/* Convert to Client button - only show for leads */}
+                                {isLead && onConvertToClient && client && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => {
+                                            if (onConvertToClient) {
+                                                onConvertToClient(client);
+                                            }
+                                        }}
+                                        className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
+                                    >
+                                        <i className="fas fa-exchange-alt"></i>
+                                        Convert to Client
+                                    </button>
+                                )}
+                            </div>
                             <div className="flex gap-3">
                                 <button 
                                     type="button" 
@@ -5058,7 +5109,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
                                 >
                                     <i className="fas fa-save mr-1.5"></i>
-                                    {client ? 'Update Client' : 'Add Client'}
+                                    {client ? `Update ${entityLabel}` : `Add ${entityLabel}`}
                                 </button>
                             </div>
                         </div>

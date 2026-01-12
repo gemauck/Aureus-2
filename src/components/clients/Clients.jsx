@@ -48,7 +48,7 @@ const safeStorage = {
 // Map of critical modal bundles to ensure they can be recovered if the initial script tag failed to load
 const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
-    LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=add-external-agent-1733020800000',
+    // LeadDetailModal removed - now using unified ClientDetailModal with entityType='lead'
     OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
     Pipeline: './dist/src/components/clients/Pipeline.js?v=remove-kanban-1764388650'
 };
@@ -7862,7 +7862,8 @@ const Clients = React.memo(() => {
 
     // Full-page Lead Detail View
     const LeadDetailView = () => {
-        const LeadDetailModalComponent = useEnsureGlobalComponent('LeadDetailModal');
+        // Use ClientDetailModal for leads too - unified UI
+        const ClientDetailModalComponent = useEnsureGlobalComponent('ClientDetailModal');
         // Prefer the ref (updated immediately on click) and fall back to leads state lookup
         const selectedLead = selectedLeadRef.current ||
             (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null);
@@ -7914,18 +7915,19 @@ const Clients = React.memo(() => {
                 </div>
             </div>
 
-            {/* Full-page lead detail content */}
+            {/* Full-page lead detail content - using unified ClientDetailModal */}
             <div className="p-6">
-                {LeadDetailModalComponent ? (
-                    <LeadDetailModalComponent
+                {ClientDetailModalComponent ? (
+                    <ClientDetailModalComponent
                         key={editingLeadId || 'new-lead'}
-                        leadId={editingLeadId}
-                        initialLead={selectedLead}
+                        client={selectedLead} // Use 'client' prop (ClientDetailModal handles both)
+                        entityType="lead" // Tell modal it's a lead
                         onSave={handleSaveLead}
                         onClose={handleLeadModalClose}
                         onDelete={handleDeleteLead}
-                        onConvertToClient={convertLeadToClient}
+                        onConvertToClient={convertLeadToClient} // Keep this for lead-to-client conversion
                         allProjects={projects}
+                        onNavigateToProject={handleNavigateToProject}
                         isFullPage={true}
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}

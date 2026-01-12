@@ -77,7 +77,47 @@ const TaskDetailModal = ({
     const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const commentTextareaRef = useRef(null);
+    const titleInputRef = useRef(null);
+    const descriptionTextareaRef = useRef(null);
     const mentionSuggestionsRef = useRef(null);
+    
+    // Helper function to preserve cursor position when updating text fields
+    const updateFieldWithCursorPreservation = (element, newValue, setter) => {
+        if (!element) return;
+        
+        // Save current cursor position BEFORE state update
+        const cursorPos = element.selectionStart;
+        const selectionEnd = element.selectionEnd;
+        
+        // Update state
+        setter(newValue);
+        
+        // Restore cursor position immediately and after React re-render
+        // Multiple attempts ensure it works even with async state updates
+        const restoreCursor = () => {
+            if (element && document.activeElement === element) {
+                const newCursorPos = Math.min(Math.max(cursorPos, 0), newValue.length);
+                const newSelectionEnd = Math.min(Math.max(selectionEnd, 0), newValue.length);
+                try {
+                    element.setSelectionRange(newCursorPos, newSelectionEnd);
+                } catch (e) {
+                    // Ignore errors if element is not in a valid state
+                }
+            }
+        };
+        
+        // Try immediately (for synchronous updates)
+        restoreCursor();
+        
+        // Try after a microtask (for async state updates)
+        Promise.resolve().then(restoreCursor);
+        
+        // Try after animation frame (for DOM updates)
+        requestAnimationFrame(restoreCursor);
+        
+        // Final fallback after a short delay
+        setTimeout(restoreCursor, 0);
+    };
     const commentsContainerRef = useRef(null);
     const leftContentRef = useRef(null);
     const refreshIntervalRef = useRef(null);
@@ -1360,9 +1400,17 @@ const TaskDetailModal = ({
                             )}
                             <div className="flex items-center gap-2 mb-1.5">
                                 <input
+                                    ref={titleInputRef}
                                     type="text"
                                     value={editedTask.title}
-                                    onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
+                                    onChange={(e) => {
+                                        const newValue = e.target.value;
+                                        updateFieldWithCursorPreservation(
+                                            e.target,
+                                            newValue,
+                                            (value) => setEditedTask({...editedTask, title: value})
+                                        );
+                                    }}
                                     className="text-lg font-semibold text-gray-800 w-full border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-primary-500 outline-none px-2 -mx-2"
                                     placeholder={isCreating ? "Enter task title..." : "Task title..."}
                                     autoFocus={isCreating}
@@ -1490,8 +1538,16 @@ const TaskDetailModal = ({
                                         Description
                                     </label>
                                     <textarea
+                                        ref={descriptionTextareaRef}
                                         value={editedTask.description || ''}
-                                        onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
+                                        onChange={(e) => {
+                                            const newValue = e.target.value;
+                                            updateFieldWithCursorPreservation(
+                                                e.target,
+                                                newValue,
+                                                (value) => setEditedTask({...editedTask, description: value})
+                                            );
+                                        }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg min-h-[120px] focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         placeholder="Add a detailed description..."
                                     ></textarea>
@@ -1511,13 +1567,20 @@ const TaskDetailModal = ({
                                                         <input
                                                             type="text"
                                                             value={editedTask.customFields?.[field.name] || ''}
-                                                            onChange={(e) => setEditedTask({
-                                                                ...editedTask,
-                                                                customFields: {
-                                                                    ...editedTask.customFields,
-                                                                    [field.name]: e.target.value
-                                                                }
-                                                            })}
+                                                            onChange={(e) => {
+                                                                const newValue = e.target.value;
+                                                                updateFieldWithCursorPreservation(
+                                                                    e.target,
+                                                                    newValue,
+                                                                    (value) => setEditedTask({
+                                                                        ...editedTask,
+                                                                        customFields: {
+                                                                            ...editedTask.customFields,
+                                                                            [field.name]: value
+                                                                        }
+                                                                    })
+                                                                );
+                                                            }}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                                         />
                                                     )}
@@ -2222,7 +2285,14 @@ const TaskDetailModal = ({
                                                 <input
                                                     type="text"
                                                     value={editedTask.blockedBy}
-                                                    onChange={(e) => setEditedTask({...editedTask, blockedBy: e.target.value})}
+                                                    onChange={(e) => {
+                                                        const newValue = e.target.value;
+                                                        updateFieldWithCursorPreservation(
+                                                            e.target,
+                                                            newValue,
+                                                            (value) => setEditedTask({...editedTask, blockedBy: value})
+                                                        );
+                                                    }}
                                                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
                                                     placeholder="What's slowing this down?"
                                                 />
