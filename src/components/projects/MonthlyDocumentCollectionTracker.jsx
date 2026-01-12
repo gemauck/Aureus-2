@@ -303,7 +303,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // SIMPLIFIED DATA LOADING - Single source of truth: Database
     // ============================================================
     const loadFromDatabase = useCallback(async () => {
-        if (!project?.id || !apiRef.current || isSaving) return;
+        if (!project?.id) return;
+        
+        // Ensure API is available
+        if (!apiRef.current) {
+            apiRef.current = window.DocumentCollectionAPI || null;
+        }
+        
+        if (!apiRef.current) {
+            console.warn('DocumentCollectionAPI not available yet, will retry');
+            return;
+        }
         
         setIsLoading(true);
         setError(null);
@@ -318,11 +328,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, isSaving]);
+    }, [project?.id]);
     
     // Simplified refresh - just reload from database
     const refreshFromDatabase = useCallback(async () => {
-        if (!project?.id || !apiRef.current || isSaving) return;
+        if (!project?.id || isSaving) return;
         await loadFromDatabase();
     }, [project?.id, isSaving, loadFromDatabase]);
     
@@ -331,9 +341,27 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     useEffect(() => {
         if (project?.id) {
+            // Try to load immediately
             loadFromDatabase();
+            
+            // If API not available, retry after a short delay
+            if (!apiRef.current && window.DocumentCollectionAPI) {
+                const retryTimer = setTimeout(() => {
+                    apiRef.current = window.DocumentCollectionAPI;
+                    loadFromDatabase();
+                }, 500);
+                return () => clearTimeout(retryTimer);
+            }
         }
     }, [project?.id, loadFromDatabase]);
+    
+    // Retry loading when API becomes available
+    useEffect(() => {
+        if (project?.id && !apiRef.current && window.DocumentCollectionAPI && isLoading) {
+            apiRef.current = window.DocumentCollectionAPI;
+            loadFromDatabase();
+        }
+    }, [project?.id, isLoading, loadFromDatabase]);
     
     // ============================================================
     // POLLING - Simple: Refresh every 30 seconds if not saving
@@ -1558,14 +1586,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
             // Don't clear if clicking on a status cell or its parent td
-            const currentSelectedCells = selectedCellsRef.current;
-            if (currentSelectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
+            if (selectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
                 const clickedTd = event.target.closest('td');
                 // Only clear if not clicking on a td that contains a status select
                 if (!clickedTd || !clickedTd.querySelector('select[data-section-id]')) {
-                    const newSet = new Set();
-                    setSelectedCells(newSet);
-                    selectedCellsRef.current = newSet;
+                    setSelectedCells(new Set());
                 }
             }
         };
@@ -1870,8 +1895,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             // Ensure state is saved on blur
                             const newStatus = e.target.value;
                             if (newStatus !== status) {
-                                const currentSelectedCells = selectedCellsRef.current;
-                                const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
+                                const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
                                 handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                             }
                         }}
