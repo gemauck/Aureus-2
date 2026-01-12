@@ -46,6 +46,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Only use refs for things that don't trigger re-renders (timeouts, API refs)
     const saveTimeoutRef = useRef(null);
     const apiRef = useRef(window.DocumentCollectionAPI || null);
+    const hasLoadedRef = useRef(false);
     
     // React state for all UI and data (triggers re-renders)
     const [isSaving, setIsSaving] = useState(false);
@@ -400,7 +401,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     }
                 }, 500);
                 return () => clearTimeout(retryTimer);
-            } else {
+                    } else {
                 // No API available, set loading to false after timeout
                 const timeout = setTimeout(() => {
                     if (!hasLoadedRef.current) {
