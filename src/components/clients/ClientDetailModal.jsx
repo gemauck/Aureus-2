@@ -285,124 +285,111 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [client?.id]);
     
-    // Once modal is open, formData is completely user-controlled - no automatic syncing from props
-    // This matches Manufacturing.jsx which has NO useEffect watching selectedItem prop
+    // CLEAN SOLUTION: Single useEffect to load all data when client.id changes
+    // This replaces the complex competing sync logic with a simple, predictable flow
     useEffect(() => {
-        // CRITICAL: If client is null (new client), NEVER sync formData from prop
-        // User is creating a new client - formData should be completely user-controlled
+        // If no client, reset formData to empty
         if (!client) {
             setIsInitialLoading(false);
             return;
         }
         
-        const currentClientId = client?.id || null;
-        const previousClientId = lastProcessedClientRef.current?.id || null;
-        
-        // Skip if same client (by ID) - no need to sync
-        if (currentClientId === previousClientId && client === lastProcessedClientRef.current) {
+        const clientId = client?.id;
+        if (!clientId) {
+            setIsInitialLoading(false);
             return;
         }
         
-        // CRITICAL: If user has started typing or edited fields, NEVER update formData from prop
-        if (userHasStartedTypingRef.current || userEditedFieldsRef.current.size > 0) {
-            lastProcessedClientRef.current = client;
+        // Skip if we've already loaded data for this client (unless user hasn't edited)
+        // This prevents reloading when component re-renders
+        if (initialDataLoadedForClientIdRef.current === clientId && !hasUserEditedForm.current) {
             return;
         }
         
-        // CRITICAL: Block if user is currently editing or saving
-        if (isEditingRef.current || isAutoSavingRef.current || hasUserEditedForm.current) {
-            lastProcessedClientRef.current = client;
+        // Skip if user is currently editing - don't overwrite their changes
+        if (hasUserEditedForm.current || isEditingRef.current || isAutoSavingRef.current) {
             return;
         }
         
-        // Check if formData has user-entered content OR loaded data from database
-        const currentFormData = formDataRef.current || {};
-        const formDataHasContent = Boolean(
-            (currentFormData.name && currentFormData.name.trim()) ||
-            (currentFormData.notes && currentFormData.notes.trim()) ||
-            (currentFormData.industry && currentFormData.industry.trim()) ||
-            (currentFormData.address && currentFormData.address.trim()) ||
-            (currentFormData.website && currentFormData.website.trim()) ||
-            // CRITICAL: Also check for loaded contacts/sites/opportunities to prevent overwriting
-            (currentFormData.contacts && currentFormData.contacts.length > 0) ||
-            (currentFormData.sites && currentFormData.sites.length > 0) ||
-            (currentFormData.opportunities && currentFormData.opportunities.length > 0)
-        );
+        // Mark that we're loading
+        setIsInitialLoading(true);
         
-        // Block if formData has content (user has entered something)
-        if (formDataHasContent) {
-            lastProcessedClientRef.current = client;
-            return;
-        }
+        // Load all data in parallel
+        const loadAllData = async () => {
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    console.log('⏭️ Skipping data load - no token');
+                    setIsInitialLoading(false);
+                    return;
+                }
+                
+                console.log(`📡 Loading all data for client: ${clientId}`);
+                
+                // Load contacts, sites, and opportunities in parallel
+                const [contactsResponse, sitesResponse, opportunitiesResponse] = await Promise.all([
+                    window.api.getContacts(clientId).catch(() => ({ data: { contacts: [] } })),
+                    window.api.getSites(clientId).catch(() => ({ data: { sites: [] } })),
+                    window.api.getOpportunitiesByClient(clientId).catch(() => ({ data: { opportunities: [] } }))
+                ]);
+                
+                const contacts = contactsResponse?.data?.contacts || [];
+                const sites = sitesResponse?.data?.sites || [];
+                const opportunities = opportunitiesResponse?.data?.opportunities || [];
+                
+                console.log(`✅ Loaded data: ${contacts.length} contacts, ${sites.length} sites, ${opportunities.length} opportunities`);
+                
+                // Parse client data (handle JSON strings)
+                const parsedClient = {
+                    ...client,
+                    contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+                    sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+                    opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+                    followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+                    projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+                    comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+                    contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+                    activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+                    services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
+                    billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    })
+                };
+                
+                // Merge: Use loaded data from API, fallback to client prop data
+                const mergedData = {
+                    ...parsedClient,
+                    contacts: contacts.length > 0 ? contacts : (parsedClient.contacts || []),
+                    sites: sites.length > 0 ? sites : (parsedClient.sites || []),
+                    opportunities: opportunities.length > 0 ? opportunities : (parsedClient.opportunities || [])
+                };
+                
+                // Update formData ONCE with all loaded data
+                setFormData(mergedData);
+                formDataRef.current = mergedData;
+                
+                // Mark as loaded
+                initialDataLoadedForClientIdRef.current = clientId;
+                lastProcessedClientRef.current = client;
+                
+                console.log(`✅✅✅ Data loaded and formData updated: ${mergedData.contacts.length} contacts, ${mergedData.sites.length} sites, ${mergedData.opportunities.length} opportunities`);
+                
+            } catch (error) {
+                console.error('❌ Error loading client data:', error);
+            } finally {
+                setIsInitialLoading(false);
+            }
+        };
         
-        // CRITICAL: If same client ID (and not first time), NEVER sync - user might be typing
-        // Only sync when switching to a completely different client (different ID)
-        const isDifferentClient = currentClientId !== previousClientId && currentClientId !== null && previousClientId !== null;
-        const isFirstTimeOpening = client && previousClientId === null && lastProcessedClientRef.current === null;
+        loadAllData();
         
-        // CRITICAL: If same client ID (and not first time opening), NEVER sync even if form is empty (might be mid-edit)
-        if (currentClientId === previousClientId && currentClientId !== null && !isFirstTimeOpening) {
-            lastProcessedClientRef.current = client;
-            return;
-        }
-        
-        // Only sync when:
-        // 1. Switching to a different client (different ID) AND form is empty, OR
-        // 2. Opening a client for the first time (client exists but previousClientId is null)
-        // This matches Manufacturing pattern: only set formData when opening a new item
-        if (client && (isDifferentClient || isFirstTimeOpening) && !formDataHasContent) {
-            const currentFormData = formDataRef.current || {};
-            
-            // CRITICAL FIX: Preserve contacts/sites/opportunities that were loaded from database
-            // Don't overwrite them with empty arrays from client prop
-            const parsedClient = {
-                ...client,
-                contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
-                followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
-                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
-                comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
-                contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
-                sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
-                opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-                activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
-                billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
-                    paymentTerms: 'Net 30',
-                    billingFrequency: 'Monthly',
-                    currency: 'ZAR',
-                    retainerAmount: 0,
-                    taxExempt: false,
-                    notes: ''
-                })
-            };
-            
-            // CRITICAL: Merge with existing formData to preserve loaded contacts/sites/opportunities
-            // Only use client prop data if current formData doesn't have these arrays populated
-            const mergedFormData = {
-                ...parsedClient,
-                // Preserve loaded data - only use client prop if current formData is empty
-                contacts: (currentFormData.contacts && currentFormData.contacts.length > 0) 
-                    ? currentFormData.contacts 
-                    : (parsedClient.contacts || []),
-                sites: (currentFormData.sites && currentFormData.sites.length > 0) 
-                    ? currentFormData.sites 
-                    : (parsedClient.sites || []),
-                opportunities: (currentFormData.opportunities && currentFormData.opportunities.length > 0) 
-                    ? currentFormData.opportunities 
-                    : (parsedClient.opportunities || [])
-            };
-            
-            console.log(`🔄 Syncing formData from client prop - preserving loaded data:`, {
-                contacts: { fromDB: currentFormData.contacts?.length || 0, fromProp: parsedClient.contacts?.length || 0, final: mergedFormData.contacts?.length || 0 },
-                sites: { fromDB: currentFormData.sites?.length || 0, fromProp: parsedClient.sites?.length || 0, final: mergedFormData.sites?.length || 0 },
-                opportunities: { fromDB: currentFormData.opportunities?.length || 0, fromProp: parsedClient.opportunities?.length || 0, final: mergedFormData.opportunities?.length || 0 }
-            });
-            
-            setFormData(mergedFormData);
-        }
-        
-        lastProcessedClientRef.current = client;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client?.id]); // Only watch client.id, not entire client object - matches Manufacturing pattern
+    }, [client?.id]); // Only reload when client.id changes
     
     // Track previous client ID to detect when a new client gets an ID after save
     const previousClientIdRef = useRef(client?.id || null);
@@ -947,29 +934,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     });
 
     useEffect(() => {
-        // ALWAYS log to verify useEffect is running - THIS SHOULD ALWAYS APPEAR
-        console.log('🔍🔍🔍 ClientDetailModal useEffect RUNNING - ALWAYS LOGS', { 
-            hasClient: !!client, 
-            clientId: client?.id,
-            clientName: client?.name,
-            clientType: typeof client,
-            clientKeys: client ? Object.keys(client).slice(0, 5) : null,
-            lastSavedClientId: lastSavedClientId.current,
-            initialDataLoadedForClientId: initialDataLoadedForClientIdRef.current,
-            timestamp: new Date().toISOString()
-        });
-        
-        if (!client || !client.id) {
-            console.log('⏭️ ClientDetailModal useEffect SKIPPED - no client or client.id', {
-                client: client,
-                clientId: client?.id,
-                willSetLoadingFalse: true
-            });
-            setIsInitialLoading(false);
-            return;
-        }
-        
-        if (client?.id) {
+        // OLD COMPLEX LOGIC REMOVED - replaced with clean solution above
+        // This useEffect is now empty and will be removed
+        if (false && client?.id) {
             const currentClientId = String(client.id);
             const clientIdChanged = currentClientId !== lastSavedClientId.current;
             
@@ -1483,37 +1450,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return updated;
             });
             console.log(`✅ setFormData called with updated contacts - AFTER call`);
-            console.log(`🔍 IMMEDIATELY AFTER setFormData - formDataRef.current.contacts.length:`, formDataRef.current?.contacts?.length || 0);
-            
-            // CRITICAL: Force React to process the state update by scheduling a microtask
-            // This ensures the useEffect that syncs formDataRef fires and the component re-renders
-            Promise.resolve().then(() => {
-                // After React processes the state update, verify it worked
-                // Use setTimeout to give React more time to process the update
-                setTimeout(() => {
-                    const currentFormData = formDataRef.current || {};
-                    if (currentFormData.contacts && currentFormData.contacts.length > 0) {
-                        console.log(`✅✅✅ State update confirmed - formData.contacts.length: ${currentFormData.contacts.length}`);
-                    } else {
-                        console.warn(`⚠️⚠️⚠️ State update NOT detected - formData.contacts.length: ${currentFormData.contacts?.length || 0}`);
-                        // CRITICAL FIX: Force update by creating a completely new object with a different reference
-                        // Use a counter or timestamp to ensure React detects the change
-                        setFormData(prev => {
-                            // Always return a new object to force React to detect the change
-                            const newContacts = [...mergedContacts];
-                            const newFormData = {
-                                ...prev,
-                                contacts: newContacts,
-                                _lastUpdated: Date.now(),
-                                _forceUpdate: Math.random() // Random value to force change detection
-                            };
-                            formDataRef.current = newFormData;
-                            console.log(`🔄🔄🔄 FORCING state update - contacts.length: ${newFormData.contacts.length}`);
-                            return newFormData;
-                        });
-                    }
-                }, 100); // Give React 100ms to process the update
-            });
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));

@@ -245,7 +245,9 @@ const LeadDetailModal = ({
                             sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
                             thumbnail: lead.thumbnail || '',
                             externalAgentId: leadExternalAgentId,
-                            firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate)
+                            firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate),
+                            // CRITICAL: Explicitly preserve notes from the loaded lead to prevent loss
+                            notes: lead.notes !== undefined && lead.notes !== null ? String(lead.notes) : (prev?.notes || '')
                         };
                         console.log('🔄 Updated formData for new lead:', { leadId: currentLeadId, externalAgentId: leadExternalAgentId });
                         return parsedLead;
