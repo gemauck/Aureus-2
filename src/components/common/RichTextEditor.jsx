@@ -312,15 +312,22 @@ const RichTextEditor = ({
                 // Set up MutationObserver to detect DOM changes and restore cursor
                 if (!mutationObserver) {
                     mutationObserver = new MutationObserver((mutations) => {
-                        // CRITICAL: If user is typing and React updated the DOM externally (like from auto-save),
+                        // CRITICAL: NEVER restore cursor during active typing - this causes backwards typing
+                        // Only restore AFTER typing has stopped (like from auto-save)
+                        if (isUserTypingRef.current) {
+                            // User is actively typing - DO NOT restore cursor, let browser handle it
+                            return;
+                        }
+                        
+                        // CRITICAL: If user was typing and React updated the DOM externally (like from auto-save),
                         // restore the cursor position to where it was after typing
                         if (isFocusedRef.current && savedCursorPositionRef.current) {
                             const timeSinceLastInput = Date.now() - (lastUserInputTimeRef.current || 0);
                             const currentHtml = editor.innerHTML || '';
                             
-                            // Don't restore during very recent input (within 50ms) - browser is still processing
-                            // This prevents interference with backspace, delete, paste, etc.
-                            if (timeSinceLastInput < 50) return;
+                            // Don't restore during very recent input (within 200ms) - browser is still processing
+                            // This prevents interference with typing, backspace, delete, paste, etc.
+                            if (timeSinceLastInput < 200) return;
                             
                             // Only restore if HTML changed externally (not from user input)
                             // AND typing happened recently (within last 3 seconds - covers auto-save delays)
