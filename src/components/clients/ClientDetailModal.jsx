@@ -1484,6 +1484,31 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             });
             console.log(`✅ setFormData called with updated contacts - AFTER call`);
             console.log(`🔍 IMMEDIATELY AFTER setFormData - formDataRef.current.contacts.length:`, formDataRef.current?.contacts?.length || 0);
+            
+            // CRITICAL: Force React to process the state update by scheduling a microtask
+            // This ensures the useEffect that syncs formDataRef fires and the component re-renders
+            Promise.resolve().then(() => {
+                // After React processes the state update, verify it worked
+                const currentFormData = formDataRef.current || {};
+                if (currentFormData.contacts && currentFormData.contacts.length > 0) {
+                    console.log(`✅✅✅ State update confirmed - formData.contacts.length: ${currentFormData.contacts.length}`);
+                } else {
+                    console.warn(`⚠️⚠️⚠️ State update NOT detected - formData.contacts.length: ${currentFormData.contacts?.length || 0}`);
+                    // Force a re-render by updating formData again with the same value
+                    // This ensures React definitely processes the update
+                    setFormData(prev => {
+                        if (prev.contacts && prev.contacts.length > 0) {
+                            return prev; // Already updated
+                        }
+                        // If still empty, force update with the loaded contacts
+                        return {
+                            ...prev,
+                            contacts: [...mergedContacts],
+                            _lastUpdated: Date.now()
+                        };
+                    });
+                }
+            });
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
