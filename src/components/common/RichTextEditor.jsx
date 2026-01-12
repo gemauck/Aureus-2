@@ -434,8 +434,12 @@ const RichTextEditor = ({
                 lastUserInputTimeRef.current = Date.now();
                 ignorePropUpdatesRef.current = true;
                 
-                // Update domValueRef BEFORE user types to prevent MutationObserver false positives
-                domValueRef.current = editor.innerHTML || '';
+                // CRITICAL: Freeze the current value to prevent React from updating DOM during typing
+                const currentHtml = editor.innerHTML || '';
+                domValueRef.current = currentHtml;
+                frozenValueRef.current = currentHtml;
+                lastSetValueFromUserRef.current = currentHtml;
+                
                 // DO NOT save cursor position here - wait for handleInput after browser processes input
             }
         };
