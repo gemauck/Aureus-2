@@ -4119,6 +4119,8 @@ const Clients = React.memo(() => {
                     id: Date.now().toString(), // Generate local ID
                     type: 'lead', // Ensure it's marked as a lead
                     lastContact: new Date().toISOString().split('T')[0],
+                    // CRITICAL: Explicitly include notes to ensure they're saved (like clients do)
+                    notes: leadFormData.notes !== undefined && leadFormData.notes !== null ? String(leadFormData.notes) : '',
                     // Explicitly include externalAgentId to ensure it's saved (even if null)
                     externalAgentId: leadFormData.externalAgentId !== undefined ? (leadFormData.externalAgentId || null) : null,
                     // CRITICAL: Explicitly include contacts to ensure they're saved when creating a new lead
