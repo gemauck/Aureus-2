@@ -211,10 +211,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // CRITICAL: Sync formDataRef with formData so guards can check current values
     useEffect(() => {
         formDataRef.current = formData;
-        // DEBUG: Log when formData.contacts changes to verify React is detecting the change
-        if (formData.contacts && formData.contacts.length > 0) {
-            console.log(`🔄 formData.contacts changed - length: ${formData.contacts.length}, contacts:`, formData.contacts);
-        }
+        // Removed excessive logging - only log on actual meaningful changes
     }, [formData]);
     
     // Cleanup editing timeout on unmount
@@ -318,8 +315,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
+        // Skip if already loading for this client
+        if (isLoadingClientRef.current && initialDataLoadedForClientIdRef.current === clientId) {
+            return;
+        }
+        
         // Mark that we're loading
         setIsInitialLoading(true);
+        isLoadingClientRef.current = true;
         
         // Load all data in parallel
         const loadAllData = async () => {
@@ -331,8 +334,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
                 
-                console.log(`📡 Loading all data for client: ${clientId}`);
-                
                 // Load contacts, sites, and opportunities in parallel
                 const [contactsResponse, sitesResponse, opportunitiesResponse] = await Promise.all([
                     window.api.getContacts(clientId).catch(() => ({ data: { contacts: [] } })),
@@ -343,8 +344,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const contacts = contactsResponse?.data?.contacts || [];
                 const sites = sitesResponse?.data?.sites || [];
                 const opportunities = opportunitiesResponse?.data?.opportunities || [];
-                
-                console.log(`✅ Loaded data: ${contacts.length} contacts, ${sites.length} sites, ${opportunities.length} opportunities`);
                 
                 // Parse client data (handle JSON strings)
                 const parsedClient = {
@@ -384,12 +383,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 initialDataLoadedForClientIdRef.current = clientId;
                 lastProcessedClientRef.current = client;
                 
-                console.log(`✅✅✅ Data loaded and formData updated: ${mergedData.contacts.length} contacts, ${mergedData.sites.length} sites, ${mergedData.opportunities.length} opportunities`);
-                
             } catch (error) {
                 console.error('❌ Error loading client data:', error);
             } finally {
                 setIsInitialLoading(false);
+                isLoadingClientRef.current = false;
             }
         };
         
@@ -461,11 +459,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const isLoadingJobCardsRef = useRef(false);
     const lastLoadedClientIdRef = useRef(null);
     const lastLoadedClientNameRef = useRef(null);
+    const jobCardsRef = useRef([]); // Ref to track current jobCards without causing re-renders
     
     // Load job cards for this client - MUST be defined before useEffect hooks that use it
     const loadJobCards = useCallback(async () => {
         if (!client?.id) {
             setJobCards([]);
+            jobCardsRef.current = [];
             lastLoadedClientIdRef.current = null;
             lastLoadedClientNameRef.current = null;
             return Promise.resolve([]);
@@ -476,15 +476,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // Prevent duplicate calls: if already loading, return empty array (will be handled by deduplicator)
         if (isLoadingJobCardsRef.current) {
-            return [];
+            return jobCardsRef.current || [];
         }
         
         // Only check clientId, not name - name changes shouldn't trigger reload
         // If lastLoadedClientIdRef is null, it means we're doing an initial load - always proceed
         // Otherwise, if same client already loaded, skip
         if (lastLoadedClientIdRef.current === clientId && lastLoadedClientIdRef.current !== null) {
-            // Same client already loaded, return existing job cards from state
-            return jobCards || [];
+            // Same client already loaded, return existing job cards from ref
+            return jobCardsRef.current || [];
         }
         
         const token = window.storage?.getToken?.();
@@ -519,11 +519,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             data = await response.json();
                             const jobCards = data.jobCards || data.data?.jobCards || [];
                             if (jobCards.length > 0) {
-                                // Only log if this is the first time loading for this client
-                                if (lastLoadedClientIdRef.current !== clientId) {
-                                    console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
-                                }
                                 setJobCards(jobCards);
+                                jobCardsRef.current = jobCards; // Update ref
                                 lastLoadedClientIdRef.current = clientId;
                                 lastLoadedClientNameRef.current = clientName;
                                 setLoadingJobCards(false);
@@ -557,8 +554,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             
                             if (matchingJobCards.length > 0) {
                                 setJobCards(matchingJobCards);
+                                jobCardsRef.current = matchingJobCards; // Update ref
                             } else {
                                 setJobCards([]);
+                                jobCardsRef.current = []; // Update ref
                             }
                             
                             lastLoadedClientIdRef.current = clientId;
@@ -568,11 +567,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             const errorText = await response.text().catch(() => 'Unknown error');
                             console.error('❌ Failed to load job cards:', response.status, errorText);
                             setJobCards([]);
+                            jobCardsRef.current = []; // Update ref
                             throw new Error(`Failed to load job cards: ${response.status} ${errorText}`);
                         }
                     } catch (error) {
                         console.error('Error loading job cards:', error);
                         setJobCards([]);
+                        jobCardsRef.current = []; // Update ref
                         throw error;
                     } finally {
                         setLoadingJobCards(false);
@@ -599,6 +600,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         const jobCards = data.jobCards || data.data?.jobCards || [];
                         if (jobCards.length > 0) {
                             setJobCards(jobCards);
+                            jobCardsRef.current = jobCards; // Update ref
                             lastLoadedClientIdRef.current = clientId;
                             lastLoadedClientNameRef.current = clientName;
                             setLoadingJobCards(false);
@@ -608,6 +610,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     }
                     
                     setJobCards([]);
+                    jobCardsRef.current = []; // Update ref
                     lastLoadedClientIdRef.current = clientId;
                     lastLoadedClientNameRef.current = clientName;
                     setLoadingJobCards(false);
@@ -616,6 +619,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 } catch (error) {
                     console.error('Error loading job cards:', error);
                     setJobCards([]);
+                    jobCardsRef.current = []; // Update ref
                     setLoadingJobCards(false);
                     isLoadingJobCardsRef.current = false;
                     throw error;
@@ -625,9 +629,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Error already handled in the inner try-catch
             setLoadingJobCards(false);
             isLoadingJobCardsRef.current = false;
-            return [];
+            return jobCardsRef.current || [];
         }
-    }, [client?.id, jobCards]); // Include jobCards in deps so we can return it
+    }, [client?.id]); // FIXED: Removed jobCards from deps to prevent infinite loop
     
     // Reload job cards when Service & Maintenance tab is opened
     useEffect(() => {
@@ -2947,7 +2951,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1.5">Stage</label>
                                             <select 
-                                                value={formData.stage || 'Awareness'}
+                                                value={formData.stage || 'Potential'}
                                                 onFocus={() => {
                                                     isEditingRef.current = true;
                                                     userHasStartedTypingRef.current = true;
@@ -2974,10 +2978,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 }}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             >
-                                                <option value="Awareness">Awareness</option>
-                                                <option value="Interest">Interest</option>
-                                                <option value="Desire">Desire</option>
-                                                <option value="Action">Action</option>
+                                                <option value="Potential">Potential</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
+                                                <option value="On Hold">On Hold</option>
+                                                <option value="Disinterested">Disinterested</option>
+                                                <option value="Proposal">Proposal</option>
+                                                <option value="Tender">Tender</option>
                                             </select>
                                         </div>
                                     )}

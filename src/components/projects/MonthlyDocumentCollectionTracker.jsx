@@ -194,7 +194,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const normalizationCache = useRef(new Map());
     
     const normalizeSectionsByYear = (rawValue, fallbackYear) => {
+        // Handle empty objects - if it's an empty object, return empty object (don't treat as no data)
         if (!rawValue) return {};
+        if (typeof rawValue === 'object' && !Array.isArray(rawValue) && Object.keys(rawValue).length === 0) {
+            return {}; // Empty object is valid - means no sections for any year
+        }
 
         // PERFORMANCE: Use cache for identical inputs (common when re-rendering)
         const cacheKey = `${typeof rawValue === 'string' ? rawValue.substring(0, 100) : JSON.stringify(rawValue).substring(0, 100)}_${fallbackYear || 'default'}`;

@@ -351,6 +351,14 @@ async function handler(req, res) {
         try {
           // Convert documentSections from table to JSON format
           documentSectionsJson = await documentSectionsToJson(id);
+          console.log('📊 GET /api/projects/[id]: documentSectionsToJson result:', {
+            projectId: id,
+            hasData: !!documentSectionsJson,
+            isObject: typeof documentSectionsJson === 'object',
+            keys: documentSectionsJson ? Object.keys(documentSectionsJson) : [],
+            yearCount: documentSectionsJson ? Object.keys(documentSectionsJson).length : 0
+          });
+          
           // If no table data, fallback to JSON field if it exists
           if (!documentSectionsJson && project.documentSections) {
             try {
@@ -359,13 +367,19 @@ async function handler(req, res) {
               } else {
                 documentSectionsJson = project.documentSections;
               }
+              console.log('📊 GET /api/projects/[id]: Using JSON field fallback for documentSections');
             } catch (e) {
               console.warn('⚠️ Failed to parse documentSections JSON field:', e.message);
               documentSectionsJson = {};
             }
           }
+          
+          // Ensure we always return an object (not null)
+          if (!documentSectionsJson) {
+            documentSectionsJson = {};
+          }
         } catch (e) {
-          console.warn('⚠️ Failed to convert documentSections from table:', e.message);
+          console.error('❌ Failed to convert documentSections from table:', e);
           // Fallback to JSON field
           if (project.documentSections) {
             try {
@@ -375,14 +389,25 @@ async function handler(req, res) {
                 documentSectionsJson = project.documentSections;
               }
             } catch (parseError) {
+              console.error('❌ Failed to parse documentSections JSON field:', parseError);
               documentSectionsJson = {};
             }
+          } else {
+            documentSectionsJson = {};
           }
         }
         
         try {
           // Convert weeklyFMSReviewSections from table to JSON format
           weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id);
+          console.log('📊 GET /api/projects/[id]: weeklyFMSReviewSectionsToJson result:', {
+            projectId: id,
+            hasData: !!weeklyFMSReviewSectionsJson,
+            isObject: typeof weeklyFMSReviewSectionsJson === 'object',
+            keys: weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson) : [],
+            yearCount: weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson).length : 0
+          });
+          
           // If no table data, fallback to JSON field if it exists
           if (!weeklyFMSReviewSectionsJson && project.weeklyFMSReviewSections) {
             try {
@@ -391,13 +416,19 @@ async function handler(req, res) {
               } else {
                 weeklyFMSReviewSectionsJson = project.weeklyFMSReviewSections;
               }
+              console.log('📊 GET /api/projects/[id]: Using JSON field fallback for weeklyFMSReviewSections');
             } catch (e) {
               console.warn('⚠️ Failed to parse weeklyFMSReviewSections JSON field:', e.message);
               weeklyFMSReviewSectionsJson = {};
             }
           }
+          
+          // Ensure we always return an object (not null)
+          if (!weeklyFMSReviewSectionsJson) {
+            weeklyFMSReviewSectionsJson = {};
+          }
         } catch (e) {
-          console.warn('⚠️ Failed to convert weeklyFMSReviewSections from table:', e.message);
+          console.error('❌ Failed to convert weeklyFMSReviewSections from table:', e);
           // Fallback to JSON field
           if (project.weeklyFMSReviewSections) {
             try {
@@ -407,8 +438,11 @@ async function handler(req, res) {
                 weeklyFMSReviewSectionsJson = project.weeklyFMSReviewSections;
               }
             } catch (parseError) {
+              console.error('❌ Failed to parse weeklyFMSReviewSections JSON field:', parseError);
               weeklyFMSReviewSectionsJson = {};
             }
+          } else {
+            weeklyFMSReviewSectionsJson = {};
           }
         }
         
@@ -680,8 +714,15 @@ async function handler(req, res) {
         // Pass the original body value (could be string or object) - save functions handle both
         if (body.documentSections !== undefined && body.documentSections !== null) {
           try {
+            console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', {
+              projectId: id,
+              type: typeof body.documentSections,
+              isString: typeof body.documentSections === 'string',
+              length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A'
+            });
             // Pass the original body value - saveDocumentSectionsToTable handles string parsing
             await saveDocumentSectionsToTable(id, body.documentSections)
+            console.log('✅ PUT /api/projects/[id]: Successfully saved documentSections to table');
           } catch (tableError) {
             console.error('❌ Error saving documentSections to table:', tableError)
             // Don't fail the entire request, but log the error
@@ -690,8 +731,15 @@ async function handler(req, res) {
         
         if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
           try {
+            console.log('💾 PUT /api/projects/[id]: Saving weeklyFMSReviewSections to table', {
+              projectId: id,
+              type: typeof body.weeklyFMSReviewSections,
+              isString: typeof body.weeklyFMSReviewSections === 'string',
+              length: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 'N/A'
+            });
             // Pass the original body value - saveWeeklyFMSReviewSectionsToTable handles string parsing
             await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
+            console.log('✅ PUT /api/projects/[id]: Successfully saved weeklyFMSReviewSections to table');
           } catch (tableError) {
             console.error('❌ Error saving weeklyFMSReviewSections to table:', tableError)
             // Don't fail the entire request, but log the error
