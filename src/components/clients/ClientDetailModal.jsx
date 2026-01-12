@@ -2507,7 +2507,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleDeleteOpportunity = async (opportunityId) => {
         const opportunity = formData.opportunities.find(o => o.id === opportunityId);
-        if (confirm('Delete this opportunity?')) {
+        if (!opportunity) {
+            alert('❌ Opportunity not found in local data. It may have already been deleted.');
+            return;
+        }
+        
+        if (confirm(`Delete opportunity "${opportunity.name || opportunityId}"?`)) {
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) {
@@ -2520,23 +2525,49 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
                 
+                console.log(`🗑️ Deleting opportunity: ${opportunityId}`);
+                
+                // Call API to delete from database
                 await window.api.deleteOpportunity(opportunityId);
                 
-                // Update local opportunities array
-                const updatedFormData = {
-                    ...formData,
-                    opportunities: formData.opportunities.filter(o => o.id !== opportunityId)
-                };
-                setFormData(updatedFormData);
+                console.log(`✅ Opportunity ${opportunityId} deleted from database`);
+                
+                // CRITICAL: Reload opportunities from database to ensure UI matches database state
+                // This prevents stale data and handles cases where the opportunity was already deleted
+                if (client?.id) {
+                    console.log(`🔄 Reloading opportunities after deletion for client: ${client.id}`);
+                    await loadOpportunitiesFromDatabase(client.id);
+                } else {
+                    // Fallback: Update local state if client ID not available
+                    const updatedFormData = {
+                        ...formData,
+                        opportunities: formData.opportunities.filter(o => o.id !== opportunityId)
+                    };
+                    setFormData(updatedFormData);
+                }
                 
                 // Log activity and auto-save (activity log will be saved automatically)
-                logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`, null, true, updatedFormData);
+                const currentFormData = formDataRef.current || formData;
+                logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`, null, true, currentFormData);
                 
                 alert('✅ Opportunity deleted from database successfully!');
                 
             } catch (error) {
                 console.error('❌ Error deleting opportunity:', error);
-                alert('❌ Error deleting opportunity from database: ' + error.message);
+                
+                // Check if error is 404 (opportunity not found)
+                const isNotFound = error.status === 404 || error.message?.includes('404') || error.message?.includes('not found');
+                
+                if (isNotFound) {
+                    // Opportunity not found in database - reload opportunities to sync UI
+                    console.log(`⚠️ Opportunity ${opportunityId} not found in database. Reloading opportunities to sync UI.`);
+                    if (client?.id) {
+                        await loadOpportunitiesFromDatabase(client.id);
+                    }
+                    alert('⚠️ Opportunity not found in database. It may have already been deleted. Refreshing list...');
+                } else {
+                    alert('❌ Error deleting opportunity from database: ' + error.message);
+                }
             }
         }
     };
