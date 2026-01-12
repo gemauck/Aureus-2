@@ -663,10 +663,9 @@ async function handler(req, res) {
         // - comments → ProjectComment table (via /api/project-comments)
         // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
         // These fields are no longer stored in Project table - use dedicated APIs instead
-        tasksList: '[]', // Legacy - deprecated, use Task table
-        taskLists: '[]', // Legacy - deprecated, use ProjectTaskList table
-        customFieldDefinitions: '[]', // Legacy - deprecated, use ProjectCustomFieldDefinition table
-        team: '[]', // Legacy - deprecated, use ProjectTeamMember table
+        tasksList: '[]', // Legacy - deprecated, use Task table (only field that exists in schema)
+        // NOTE: taskLists, customFieldDefinitions, team, documents, comments, activityLog
+        // are NOT in the Project schema - do not include them here
         type: body.type || 'Monthly Review',
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
@@ -707,45 +706,38 @@ async function handler(req, res) {
           await saveWeeklyFMSReviewSectionsToTable(project.id, body.weeklyFMSReviewSections)
         }
 
-        // Load project with related table data
-        const projectWithTables = await prisma.project.findUnique({
-          where: { id: project.id },
-          include: {
-            documentSectionsTable: {
-              include: {
-                documents: {
-                  include: {
-                    statuses: true,
-                    comments: true
-                  },
-                  orderBy: { order: 'asc' }
-                }
-              },
-              orderBy: [{ year: 'desc' }, { order: 'asc' }]
-            },
-            weeklyFMSReviewSectionsTable: {
-              include: {
-                items: {
-                  include: {
-                    statuses: true,
-                    comments: true
-                  },
-                  orderBy: { order: 'asc' }
-                }
-              },
-              orderBy: [{ year: 'desc' }, { order: 'asc' }]
-            }
+        // Convert table data to JSON format that frontend expects
+        let documentSectionsJson = null;
+        let weeklyFMSReviewSectionsJson = null;
+        
+        try {
+          documentSectionsJson = await documentSectionsToJson(project.id);
+          // If no table data, use empty object
+          if (!documentSectionsJson) {
+            documentSectionsJson = {};
           }
-        });
+        } catch (e) {
+          console.warn('⚠️ Failed to convert documentSections from table:', e.message);
+          documentSectionsJson = {};
+        }
+        
+        try {
+          weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(project.id);
+          // If no table data, use empty object
+          if (!weeklyFMSReviewSectionsJson) {
+            weeklyFMSReviewSectionsJson = {};
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to convert weeklyFMSReviewSections from table:', e.message);
+          weeklyFMSReviewSectionsJson = {};
+        }
 
         // Transform to match expected frontend format
         const transformedProject = {
-          ...projectWithTables,
-          documentSections: projectWithTables.documentSectionsTable || [],
-          weeklyFMSReviewSections: projectWithTables.weeklyFMSReviewSectionsTable || []
+          ...project,
+          documentSections: documentSectionsJson,
+          weeklyFMSReviewSections: weeklyFMSReviewSectionsJson
         };
-        delete transformedProject.documentSectionsTable;
-        delete transformedProject.weeklyFMSReviewSectionsTable;
 
         return created(res, { project: transformedProject })
       } catch (dbError) {
@@ -753,8 +745,18 @@ async function handler(req, res) {
         console.error('❌ Error details:', {
           message: dbError.message,
           code: dbError.code,
-          meta: dbError.meta
+          meta: dbError.meta,
+          stack: dbError.stack?.substring(0, 500),
+          projectDataKeys: Object.keys(projectData),
+          projectData: JSON.stringify(projectData, null, 2).substring(0, 1000)
         })
+        
+        // Check if it's a connection error using utility
+        if (isConnectionError(dbError)) {
+          console.error('🔌 Database connection issue detected - server may be unreachable')
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
         return serverError(res, 'Failed to create project', dbError.message)
       }
     }
@@ -1072,4 +1074,5 @@ async function handler(req, res) {
   }
 }
 
+export { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson }
 export default withHttp(withLogging(authRequired(handler)))
