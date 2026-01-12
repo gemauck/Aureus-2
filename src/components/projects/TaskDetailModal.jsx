@@ -767,8 +767,32 @@ const TaskDetailModal = ({
 
     // Handle comment text change and detect @ mentions
     const handleCommentChange = (e) => {
-        const text = e.target.value;
-        const cursorPos = e.target.selectionStart;
+        const textarea = e.target;
+        const text = textarea.value;
+        const oldText = newComment;
+        
+        // Capture cursor position immediately from the native DOM element
+        // This is critical - we need the position BEFORE React resets it
+        let cursorPos = textarea.selectionStart;
+        let selectionEnd = textarea.selectionEnd;
+        
+        // If cursor position seems wrong (e.g., at 0 when text was inserted), try to calculate it
+        // This handles the case where React has already reset the cursor
+        if (cursorPos === 0 && text.length > oldText.length) {
+            // Likely React reset the cursor - calculate where it should be
+            // The difference in length tells us how many characters were inserted
+            const insertedLength = text.length - oldText.length;
+            // If we're inserting at the end (which is the normal case), cursor should be at the end
+            if (oldText.length === 0 || text.startsWith(oldText)) {
+                // Text was appended, cursor should be at the end
+                cursorPos = text.length;
+                selectionEnd = text.length;
+            } else {
+                // Text was inserted somewhere else, try to find where
+                cursorPos = Math.min(insertedLength, text.length);
+                selectionEnd = cursorPos;
+            }
+        }
         
         // Find @ symbol before cursor
         const textBeforeCursor = text.substring(0, cursorPos);
@@ -797,15 +821,30 @@ const TaskDetailModal = ({
             setShowMentionSuggestions(false);
         }
         
+        // Update state
         setNewComment(text);
         
         // Preserve cursor position after state update
-        setTimeout(() => {
-            if (commentTextareaRef.current) {
-                const newCursorPos = Math.min(cursorPos, text.length);
-                commentTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        // Use multiple strategies to ensure cursor is restored
+        const restoreCursor = () => {
+            if (commentTextareaRef.current && commentTextareaRef.current.value === text) {
+                // Ensure cursor position is within valid range
+                const newCursorPos = Math.min(Math.max(cursorPos, 0), text.length);
+                const newSelectionEnd = Math.min(Math.max(selectionEnd, 0), text.length);
+                commentTextareaRef.current.setSelectionRange(newCursorPos, newSelectionEnd);
             }
-        }, 0);
+        };
+        
+        // Try immediately with queueMicrotask
+        queueMicrotask(restoreCursor);
+        
+        // Also use requestAnimationFrame as backup
+        requestAnimationFrame(() => {
+            requestAnimationFrame(restoreCursor);
+        });
+        
+        // Final fallback with setTimeout
+        setTimeout(restoreCursor, 0);
     };
 
     const handleAddComment = async () => {
