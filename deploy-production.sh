@@ -107,6 +107,12 @@ git reset --hard HEAD || true
 git pull origin main || git pull origin master
 echo "✅ Code updated"
 
+# Ensure fix-nginx-caching.sh is executable
+if [ -f "fix-nginx-caching.sh" ]; then
+    chmod +x fix-nginx-caching.sh
+    echo "✅ fix-nginx-caching.sh is executable"
+fi
+
 # Update cache versions on server too
 echo "🔄 Updating cache versions on server..."
 node scripts/update-cache-versions.js || echo "⚠️  Cache version update skipped"
@@ -260,6 +266,16 @@ if [ -d /var/cache/nginx ]; then
     rm -rf /var/cache/nginx/* || echo "⚠️  Nginx cache clear skipped"
     echo "✅ Nginx cache cleared"
 fi
+
+# CRITICAL: Fix nginx caching configuration to ensure latest code is served
+echo "🔧 Ensuring nginx cache headers are correct..."
+if [ -f "/var/www/abcotronics-erp/fix-nginx-caching.sh" ]; then
+    bash /var/www/abcotronics-erp/fix-nginx-caching.sh || echo "⚠️  Nginx cache fix skipped (script may need to be run manually)"
+else
+    echo "⚠️  fix-nginx-caching.sh not found - nginx may still be caching files"
+    echo "   Run fix-nginx-caching.sh manually on the server to fix caching"
+fi
+
 # Reload nginx to ensure fresh config
 systemctl reload nginx || echo "⚠️  Nginx reload skipped"
 
