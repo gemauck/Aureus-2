@@ -1395,6 +1395,8 @@ const Clients = React.memo(() => {
             if (route?.page !== 'clients') return;
             
             // If no segments, ensure we're showing a valid list view
+            // CRITICAL: Don't reset detail views if they were opened programmatically (via handleOpenClient/handleOpenLead)
+            // Only reset if the viewMode is invalid or if we're navigating away from a detail view via URL
             if (!route.segments || route.segments.length === 0) {
                 const validListViews = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'];
                 const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
@@ -1405,12 +1407,16 @@ const Clients = React.memo(() => {
                     setViewMode('clients');
                     selectedClientRef.current = null;
                     selectedLeadRef.current = null;
-                } else if (validDetailViews.includes(viewMode)) {
-                    // Clear detail view when URL has no segments
-                    setViewMode('clients');
-                    selectedClientRef.current = null;
-                    selectedLeadRef.current = null;
                 }
+                // REMOVED: Don't automatically clear detail views when URL has no segments
+                // This allows modals to stay open when opened programmatically (via handleOpenClient)
+                // Detail views will only close when explicitly closed by the user or when navigating to a different route
+                // else if (validDetailViews.includes(viewMode)) {
+                //     // Clear detail view when URL has no segments
+                //     setViewMode('clients');
+                //     selectedClientRef.current = null;
+                //     selectedLeadRef.current = null;
+                // }
                 return;
             }
             
