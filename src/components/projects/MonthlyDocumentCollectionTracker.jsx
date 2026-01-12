@@ -363,44 +363,67 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // INITIAL LOAD - Simple: Load from database on mount
     // ============================================================
     useEffect(() => {
+        // Reset hasLoaded when project ID changes
+        if (project?.id) {
+            hasLoadedRef.current = false;
+        }
+    }, [project?.id]);
+    
+    useEffect(() => {
         console.log('🔵 MonthlyDocumentCollectionTracker: Initial load effect', { 
             hasProject: !!project?.id, 
             projectId: project?.id,
             hasAPI: !!apiRef.current,
-            hasWindowAPI: !!window.DocumentCollectionAPI
+            hasWindowAPI: !!window.DocumentCollectionAPI,
+            hasLoaded: hasLoadedRef.current
         });
         
-        if (project?.id) {
+        // Only load if we haven't loaded yet for this project
+        if (project?.id && !hasLoadedRef.current) {
             // Ensure API is set
             if (!apiRef.current && window.DocumentCollectionAPI) {
                 apiRef.current = window.DocumentCollectionAPI;
             }
             
-            // Try to load immediately
-            loadFromDatabase();
-            
-            // If API not available, retry after a short delay
-            if (!apiRef.current && window.DocumentCollectionAPI) {
+            // Try to load immediately if API is available
+            if (apiRef.current) {
+                hasLoadedRef.current = true;
+                loadFromDatabase();
+            } else if (window.DocumentCollectionAPI) {
+                // API not available yet, retry after a short delay
                 const retryTimer = setTimeout(() => {
-                    console.log('🔄 MonthlyDocumentCollectionTracker: Retrying load after API check');
-                    apiRef.current = window.DocumentCollectionAPI;
-                    loadFromDatabase();
+                    if (!hasLoadedRef.current && window.DocumentCollectionAPI) {
+                        console.log('🔄 MonthlyDocumentCollectionTracker: Retrying load after API check');
+                        apiRef.current = window.DocumentCollectionAPI;
+                        hasLoadedRef.current = true;
+                        loadFromDatabase();
+                    }
                 }, 500);
                 return () => clearTimeout(retryTimer);
-                        }
-                    } else {
+            } else {
+                // No API available, set loading to false after timeout
+                const timeout = setTimeout(() => {
+                    if (!hasLoadedRef.current) {
+                        setIsLoading(false);
+                        setError('Document Collection API not available. Please refresh the page.');
+                    }
+                }, 2000);
+                return () => clearTimeout(timeout);
+            }
+        } else if (!project?.id) {
             // No project ID, set loading to false
             setIsLoading(false);
         }
-    }, [project?.id, loadFromDatabase]);
+    }, [project?.id]);
     
-    // Retry loading when API becomes available
+    // Retry loading when API becomes available (only if we haven't loaded yet)
     useEffect(() => {
-        if (project?.id && !apiRef.current && window.DocumentCollectionAPI) {
+        if (project?.id && !hasLoadedRef.current && !apiRef.current && window.DocumentCollectionAPI) {
             apiRef.current = window.DocumentCollectionAPI;
+            hasLoadedRef.current = true;
             loadFromDatabase();
         }
-    }, [project?.id, loadFromDatabase]);
+    }, [project?.id]);
     
     // ============================================================
     // POLLING - Simple: Refresh every 30 seconds if not saving
