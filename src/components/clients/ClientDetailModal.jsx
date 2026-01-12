@@ -3447,7 +3447,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     )}
                                 </div>
 
-                                {/* Services - service level tags */}
+                                {/* Services - service level tags - Hidden for leads */}
+                                {!isLead && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Services</label>
                                     <div className="flex flex-wrap gap-2">
@@ -3495,6 +3496,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         })}
                                     </div>
                                 </div>
+                                )}
 
                                 {/* Delete {entityLabel} Section */}
                                 {client && onDelete && (
