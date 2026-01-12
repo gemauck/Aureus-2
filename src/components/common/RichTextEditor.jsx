@@ -26,9 +26,7 @@ const RichTextEditor = ({
     const savedCursorPositionRef = useRef(null); // { start: number, end: number }
     const isUserTypingRef = useRef(false); // Track if user is actively typing
     const lastUserInputTimeRef = useRef(0); // Track last user input time
-    const lastSetValueFromUserRef = useRef(null); // Track last value set from user input
     const isFocusedRef = useRef(false); // Track focus state reliably with events
-    const frozenValueRef = useRef(null); // Freeze value prop when editor is focused to prevent prop changes
     const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
     const lastSyncedValueRef = useRef(value || ''); // Track last value we synced from props
 
@@ -298,10 +296,7 @@ const RichTextEditor = ({
             if (e.target === editor || editor.contains(e.target)) {
                 isFocusedRef.current = true;
                 isUserTypingRef.current = false; // Reset typing flag on focus
-                // Freeze the current DOM value - this becomes the source of truth
                 domValueRef.current = editor.innerHTML || '';
-                frozenValueRef.current = domValueRef.current;
-                // Completely ignore prop updates while focused
                 ignorePropUpdatesRef.current = true;
                 
                 // Save current cursor position
@@ -312,75 +307,27 @@ const RichTextEditor = ({
                 // Set up MutationObserver to detect DOM changes and restore cursor
                 if (!mutationObserver) {
                     mutationObserver = new MutationObserver((mutations) => {
-                        // CRITICAL: NEVER restore cursor during active typing - this causes backwards typing
-                        // Only restore AFTER typing has stopped (like from auto-save)
+                        // Simple: Only restore cursor after auto-save when user is NOT typing
                         if (isUserTypingRef.current) {
-                            // User is actively typing - DO NOT restore cursor, let browser handle it
+                            // User is typing - do nothing, let browser handle it
                             return;
                         }
                         
-                        // CRITICAL: If user was typing and React updated the DOM externally (like from auto-save),
-                        // restore the cursor position to where it was after typing
-                        if (isFocusedRef.current && savedCursorPositionRef.current) {
-                            const timeSinceLastInput = Date.now() - (lastUserInputTimeRef.current || 0);
-                            const currentHtml = editor.innerHTML || '';
-                            
-                            // Don't restore during very recent input (within 200ms) - browser is still processing
-                            // This prevents interference with typing, backspace, delete, paste, etc.
-                            if (timeSinceLastInput < 200) return;
-                            
-                            // Only restore if HTML changed externally (not from user input)
-                            // AND typing happened recently (within last 3 seconds - covers auto-save delays)
-                            if (timeSinceLastInput < 3000 && currentHtml !== domValueRef.current) {
-                                isRestoring = true;
-                                // Restore cursor position immediately and aggressively
-                                // This is the ONLY place we restore cursor - we trust the browser during typing
-                                restoreCursorPosition(savedCursorPositionRef.current);
-                                queueMicrotask(() => restoreCursorPosition(savedCursorPositionRef.current));
-                                requestAnimationFrame(() => {
-                                    restoreCursorPosition(savedCursorPositionRef.current);
-                                    requestAnimationFrame(() => restoreCursorPosition(savedCursorPositionRef.current));
-                                });
-                                setTimeout(() => {
-                                    restoreCursorPosition(savedCursorPositionRef.current);
-                                    domValueRef.current = currentHtml;
-                                    isRestoring = false;
-                                }, 0);
-                                setTimeout(() => restoreCursorPosition(savedCursorPositionRef.current), 10);
-                                setTimeout(() => restoreCursorPosition(savedCursorPositionRef.current), 50);
-                                setTimeout(() => restoreCursorPosition(savedCursorPositionRef.current), 100);
-                                return;
-                            }
-                        }
-                        
-                        // Don't restore during active typing - this causes backwards typing
-                        if (!isFocusedRef.current || isRestoring || isUserTypingRef.current) return;
-                        
-                        // Also ignore if typing happened very recently (within last 100ms)
+                        // Only restore if user hasn't typed for 2+ seconds (auto-save scenario)
                         const timeSinceLastInput = Date.now() - (lastUserInputTimeRef.current || 0);
-                        if (timeSinceLastInput < 100) return;
-                        
-                        // Check if innerHTML actually changed (not just user typing)
-                        let externalChange = false;
-                        const currentHtml = editor.innerHTML || '';
-                        
-                        // Only restore if HTML changed externally (not from user input)
-                        // User input changes are handled by handleInput, which doesn't trigger mutations we care about
-                        if (currentHtml !== domValueRef.current && savedCursorPositionRef.current) {
-                            externalChange = true;
+                        if (timeSinceLastInput < 2000) {
+                            // Too recent - might still be processing
+                            return;
                         }
                         
-                        // If external change detected, restore cursor position
-                        if (externalChange) {
-                            isRestoring = true;
-                            requestAnimationFrame(() => {
+                        // Restore cursor only if React updated the DOM (auto-save)
+                        if (isFocusedRef.current && savedCursorPositionRef.current) {
+                            const currentHtml = editor.innerHTML || '';
+                            if (currentHtml !== domValueRef.current) {
+                                // React updated DOM - restore cursor
                                 restoreCursorPosition(savedCursorPositionRef.current);
-                                // Update saved position after restoration
-                                savedCursorPositionRef.current = saveCursorPosition();
-                                // Update domValueRef to current to prevent false positives
-                                domValueRef.current = editor.innerHTML || '';
-                                isRestoring = false;
-                            });
+                                domValueRef.current = currentHtml;
+                            }
                         }
                     });
                     
@@ -416,31 +363,19 @@ const RichTextEditor = ({
                     setHtml(finalHtml);
                     // Update last synced value so we can detect actual changes
                     lastSyncedValueRef.current = finalHtml;
-                    // Unfreeze value when blurring - allow prop updates again
-                    frozenValueRef.current = null;
                     // Allow prop updates again
                     ignorePropUpdatesRef.current = false;
                 }
             }, 150); // Small delay to ensure blur event completes and cursor position is stable
         };
         
-        // Set typing flag BEFORE input to prevent React from interfering during character insertion
-        // DO NOT save cursor position here - it's saved AFTER input in handleInput
-        // Saving here causes backwards typing because we restore to position before typing
+        // Simple: just mark that user is typing - block React updates
         const handleBeforeInput = () => {
             if (isFocusedRef.current) {
-                // CRITICAL: Set typing flag BEFORE character is inserted to block React updates
                 isUserTypingRef.current = true;
                 lastUserInputTimeRef.current = Date.now();
                 ignorePropUpdatesRef.current = true;
-                
-                // CRITICAL: Freeze the current value to prevent React from updating DOM during typing
-                const currentHtml = editor.innerHTML || '';
-                domValueRef.current = currentHtml;
-                frozenValueRef.current = currentHtml;
-                lastSetValueFromUserRef.current = currentHtml;
-                
-                // DO NOT save cursor position here - wait for handleInput after browser processes input
+                domValueRef.current = editor.innerHTML || '';
             }
         };
         
@@ -698,22 +633,18 @@ const RichTextEditor = ({
             return;
         }
         
-        // CRITICAL FIX: Multiple checks for focus state - be EXTREMELY defensive
-        // Check if editor or any child element is focused
+        // Simple: If editor is focused or user is typing, don't update from props
+        // Let the browser handle everything naturally
         const activeEl = document.activeElement;
         const editorEl = editorRef.current;
-        const isDirectlyFocused = activeEl === editorEl;
-        const isChildFocused = activeEl && editorEl && editorEl.contains(activeEl);
-        const isCurrentlyFocused = isFocusedRef.current || isDirectlyFocused || isChildFocused;
+        const isCurrentlyFocused = isFocusedRef.current || 
+                                   activeEl === editorEl || 
+                                   (activeEl && editorEl && editorEl.contains(activeEl));
         const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
-        const recentlyTyped = isUserTypingRef.current && timeSinceLastInput < 3000;
+        const recentlyTyped = isUserTypingRef.current && timeSinceLastInput < 2000;
         
-        // If editor is focused OR user is actively typing, NEVER update innerHTML from props
-        // This is the ABSOLUTE KEY to preventing cursor jumps. When focused, the editor
-        // is "uncontrolled" and the DOM content is the source of truth.
-        if (isCurrentlyFocused || recentlyTyped || frozenValueRef.current !== null) {
-            // Editor is focused or user just typed - COMPLETELY IGNORE prop updates
-            // Don't touch innerHTML, don't sync state, don't do anything
+        if (isCurrentlyFocused || recentlyTyped) {
+            // User is interacting - don't touch the DOM, let browser handle it
             return;
         }
         
@@ -737,78 +668,43 @@ const RichTextEditor = ({
     const handleInput = () => {
         if (!editorRef.current) return;
         
-        // Mark that user is typing and editor is focused - CRITICAL for cursor preservation
+        // Simple: just update refs and call onChange - let browser handle cursor
         isFocusedRef.current = true;
         isUserTypingRef.current = true;
         lastUserInputTimeRef.current = Date.now();
-        ignorePropUpdatesRef.current = true; // Block ALL prop updates during typing
+        ignorePropUpdatesRef.current = true;
         
-        // Get the current HTML from the editor (this is the ONLY source of truth when user is typing)
         const newHtml = editorRef.current.innerHTML;
+        domValueRef.current = newHtml;
         
-        // CRITICAL: Save cursor position FIRST (synchronously) - the browser has already placed it correctly
-        // This must happen BEFORE updating domValueRef so MutationObserver uses the correct position
-        // This handles typing, backspace, delete, paste, etc. - browser always places cursor correctly
+        // Save cursor position for restoration after auto-save (only when NOT typing)
         savedCursorPositionRef.current = saveCursorPosition();
         
-        // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
-        // This must happen synchronously before any other async operations
-        domValueRef.current = newHtml;
-        lastSetValueFromUserRef.current = newHtml;
-        frozenValueRef.current = newHtml;
-        
-        // Save cursor position again in async callbacks to ensure we capture final position
-        // (in case browser does any async processing, though it shouldn't be necessary)
-        queueMicrotask(() => {
-            if (editorRef.current && isFocusedRef.current) {
-                savedCursorPositionRef.current = saveCursorPosition();
-            }
-        });
-        setTimeout(() => {
-            if (editorRef.current && isFocusedRef.current) {
-                savedCursorPositionRef.current = saveCursorPosition();
-            }
-        }, 0);
-        
-        // CRITICAL: DO NOT call setHtml here - this causes a re-render which can reset cursor
-        // The DOM already has the correct content, and we'll sync state on blur
-        // DO NOT touch the cursor - the browser has already placed it correctly
-        
-        // Debounce onChange to prevent too many state updates in parent
-        // Clear existing timeout
+        // Debounced onChange
         const onChangeTimeoutKey = `richTextEditorOnChange_${editorRef.current.id || 'default'}`;
         if (window[onChangeTimeoutKey]) {
             clearTimeout(window[onChangeTimeoutKey]);
         }
         
-        // Call onChange after a short delay (but still call it for auto-save)
-        // This updates parent state. The MutationObserver will handle cursor restoration if React updates the DOM
         window[onChangeTimeoutKey] = setTimeout(() => {
             if (onChange) {
                 onChange(newHtml);
             }
-            // Save cursor position again after onChange - React might update DOM after this
-            // MutationObserver will restore it if React does update
-            if (editorRef.current && isFocusedRef.current) {
-                savedCursorPositionRef.current = saveCursorPosition();
-            }
             window[onChangeTimeoutKey] = null;
-        }, 150); // Small delay to batch rapid typing and reduce parent re-renders
+        }, 200);
         
-        // Keep typing flag and ignore flag active for longer
+        // Clear typing flag after 2 seconds of no typing
         const timeoutKey = `richTextEditorTypingTimeout_${editorRef.current.id || 'default'}`;
         if (window[timeoutKey]) {
             clearTimeout(window[timeoutKey]);
         }
-        // Set new timeout - keep flags active for 3 seconds after last input
         window[timeoutKey] = setTimeout(() => {
             isUserTypingRef.current = false;
-            // Only clear ignore flag if editor is not focused
             if (!isFocusedRef.current) {
                 ignorePropUpdatesRef.current = false;
             }
             window[timeoutKey] = null;
-        }, 3000);
+        }, 2000);
     };
 
     const handleCommand = (command, value = null) => {
