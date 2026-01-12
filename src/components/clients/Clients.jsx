@@ -1240,14 +1240,16 @@ const Clients = React.memo(() => {
         isFormOpenRef.current = true;
         setViewMode('client-detail');
         
-        // Update URL to reflect the selected client
-        if (window.RouteState && client?.id) {
-            window.RouteState.setPageSubpath('clients', [String(client.id)], {
-                replace: false,
-                preserveSearch: false,
-                preserveHash: false
-            });
-        }
+        // CRITICAL: Don't update URL with client ID - this can cause RouteState to misinterpret it as a project ID
+        // The client modal is rendered via viewMode='client-detail', not via URL routing
+        // Only update URL if explicitly needed, and use a prefix to avoid conflicts
+        // if (window.RouteState && client?.id) {
+        //     window.RouteState.setPageSubpath('clients', ['client', String(client.id)], {
+        //         replace: false,
+        //         preserveSearch: false,
+        //         preserveHash: false
+        //     });
+        // }
     }, [stopSync]);
 
     const handleOpenLead = useCallback((lead, options = {}) => {
