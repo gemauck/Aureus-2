@@ -188,3 +188,4 @@ If you encounter issues during migration:
 5. **Add team soft-delete** - Use `deletedAt` instead of `isActive`
 
 
+

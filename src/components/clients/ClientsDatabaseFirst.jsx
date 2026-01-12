@@ -253,13 +253,29 @@ const ClientsDatabaseFirst = () => {
                 
                 await window.api.updateLead(updatedLead.id, updatedLead);
                 
-                const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                setLeads(updatedLeads);
+                // CRITICAL: Reload leads from database to ensure UI shows persisted data
+                await loadLeads();
                 
                 // Only update selectedLead if not staying in edit mode
                 // This prevents the modal from re-rendering and resetting formData
                 if (!stayInEditMode) {
-                    setSelectedLead(updatedLead);
+                    // Find the updated lead from the reloaded list
+                    const reloadedLeads = await window.DatabaseAPI.getLeads();
+                    const parsedLeads = (reloadedLeads?.data?.leads || []).map(lead => ({
+                        ...lead,
+                        contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                        followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                        projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                        comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                        activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                        sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
+                        contracts: typeof lead.contracts === 'string' ? JSON.parse(lead.contracts || '[]') : (lead.contracts || []),
+                        billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+                    }));
+                    const updatedLeadFromDB = parsedLeads.find(l => l.id === selectedLead.id);
+                    if (updatedLeadFromDB) {
+                        setSelectedLead(updatedLeadFromDB);
+                    }
                 }
                 
             } else {
@@ -285,8 +301,10 @@ const ClientsDatabaseFirst = () => {
                 
                 // Use the lead returned from the API with proper database ID
                 const savedLead = createdLead?.data?.lead || createdLead?.lead || createdLead;
-                const updatedLeads = [...leads, savedLead];
-                setLeads(updatedLeads);
+                
+                // CRITICAL: Reload leads from database to ensure UI shows persisted data
+                // This ensures the lead appears in the UI even if the API response was incomplete
+                await loadLeads();
                 
                 // Redirect to main view
                 setViewMode('leads');

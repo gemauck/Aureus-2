@@ -122,3 +122,4 @@ To prevent this issue in the future:
 3. Test with `curl -I` to check headers
 4. Monitor browser console for stale code warnings
 
+

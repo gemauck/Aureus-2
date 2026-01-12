@@ -189,16 +189,22 @@ const ClientsMobileOptimized = () => {
                 const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                 const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                 
-                // Use the updated lead from API
+                // CRITICAL: Reload leads from database to ensure UI shows persisted data
+                await loadLeads();
+                
+                // Use the updated lead from API if available, otherwise use the updated lead
                 if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
-                    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
-                    setLeads(updatedLeads);
                     setSelectedLead(updatedLeadFromAPI);
                 } else {
-                    // Fallback to local update if API doesn't return the lead
-                    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                    setLeads(updatedLeads);
-                    setSelectedLead(updatedLead);
+                    // Fallback: find the updated lead from the reloaded list
+                    const reloadedLeads = await window.api.getLeads();
+                    const leadsData = reloadedLeads?.data?.leads || reloadedLeads?.leads || [];
+                    const reloadedLead = leadsData.find(l => l.id === selectedLead.id);
+                    if (reloadedLead) {
+                        setSelectedLead(reloadedLead);
+                    } else {
+                        setSelectedLead(updatedLead);
+                    }
                 }
             } else {
                 // Create new lead - don't include ID, let database generate it
@@ -222,9 +228,9 @@ const ClientsMobileOptimized = () => {
                 const apiResponse = await window.api.createLead(newLeadData);
                 const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                 
-                // Use the saved lead from database (with proper ID)
-                const updatedLeads = [...leads, savedLead];
-                setLeads(updatedLeads);
+                // CRITICAL: Reload leads from database to ensure UI shows persisted data
+                // This ensures the lead appears in the UI even if the API response was incomplete
+                await loadLeads();
                 
                 // For new leads, redirect to main leads view
                 setViewMode('leads');

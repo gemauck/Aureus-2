@@ -4098,6 +4098,8 @@ const Clients = React.memo(() => {
                     lastContact: new Date().toISOString().split('T')[0],
                     // Explicitly include externalAgentId to ensure it's saved (even if null)
                     externalAgentId: leadFormData.externalAgentId !== undefined ? (leadFormData.externalAgentId || null) : null,
+                    // CRITICAL: Explicitly include contacts to ensure they're saved when creating a new lead
+                    contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : [],
                     activityLog: [{
                         id: Date.now(),
                         type: 'Lead Created',
@@ -4311,11 +4313,26 @@ const Clients = React.memo(() => {
                 if (!stayInEditMode) {
                     setViewMode('leads');
                     selectedLeadRef.current = null; // Clear selected lead ref
+                    setSelectedLead(null); // Clear selected lead state
                     setCurrentLeadTab('overview');
                     // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after save
                     handlePauseSync(false);
                     if (window.LiveDataSync && window.LiveDataSync.start) {
                         window.LiveDataSync.start();
+                    }
+                    
+                    // Navigate back to leads list if we're on the new lead page
+                    if (window.location.pathname.includes('/leads/new')) {
+                        if (window.RouteState && window.RouteState.navigate) {
+                            window.RouteState.navigate({
+                                path: '/clients',
+                                query: { view: 'leads' }
+                            });
+                        } else {
+                            // Fallback: use window.location
+                            window.history.pushState({}, '', '/clients?view=leads');
+                            window.dispatchEvent(new PopStateEvent('popstate'));
+                        }
                     }
                     
                     // Force a refresh to ensure API data is loaded (if authenticated)

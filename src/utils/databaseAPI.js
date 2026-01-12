@@ -1128,6 +1128,9 @@ const DatabaseAPI = {
             method: 'POST',
             body: JSON.stringify(leadData)
         });
+        // CRITICAL: Clear cache after creation to ensure fresh data on next fetch
+        this.clearCache('/leads');
+        this.clearCache('/clients'); // Leads are in clients table too
         return response;
     },
 

@@ -311,14 +311,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        // Check if formData has user-entered content
+        // Check if formData has user-entered content OR loaded data from database
         const currentFormData = formDataRef.current || {};
         const formDataHasContent = Boolean(
             (currentFormData.name && currentFormData.name.trim()) ||
             (currentFormData.notes && currentFormData.notes.trim()) ||
             (currentFormData.industry && currentFormData.industry.trim()) ||
             (currentFormData.address && currentFormData.address.trim()) ||
-            (currentFormData.website && currentFormData.website.trim())
+            (currentFormData.website && currentFormData.website.trim()) ||
+            // CRITICAL: Also check for loaded contacts/sites/opportunities to prevent overwriting
+            (currentFormData.contacts && currentFormData.contacts.length > 0) ||
+            (currentFormData.sites && currentFormData.sites.length > 0) ||
+            (currentFormData.opportunities && currentFormData.opportunities.length > 0)
         );
         
         // Block if formData has content (user has entered something)
@@ -343,6 +347,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // 2. Opening a client for the first time (client exists but previousClientId is null)
         // This matches Manufacturing pattern: only set formData when opening a new item
         if (client && (isDifferentClient || isFirstTimeOpening) && !formDataHasContent) {
+            const currentFormData = formDataRef.current || {};
+            
+            // CRITICAL FIX: Preserve contacts/sites/opportunities that were loaded from database
+            // Don't overwrite them with empty arrays from client prop
             const parsedClient = {
                 ...client,
                 contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
@@ -363,7 +371,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 })
             };
             
-            setFormData(parsedClient);
+            // CRITICAL: Merge with existing formData to preserve loaded contacts/sites/opportunities
+            // Only use client prop data if current formData doesn't have these arrays populated
+            const mergedFormData = {
+                ...parsedClient,
+                // Preserve loaded data - only use client prop if current formData is empty
+                contacts: (currentFormData.contacts && currentFormData.contacts.length > 0) 
+                    ? currentFormData.contacts 
+                    : (parsedClient.contacts || []),
+                sites: (currentFormData.sites && currentFormData.sites.length > 0) 
+                    ? currentFormData.sites 
+                    : (parsedClient.sites || []),
+                opportunities: (currentFormData.opportunities && currentFormData.opportunities.length > 0) 
+                    ? currentFormData.opportunities 
+                    : (parsedClient.opportunities || [])
+            };
+            
+            console.log(`🔄 Syncing formData from client prop - preserving loaded data:`, {
+                contacts: { fromDB: currentFormData.contacts?.length || 0, fromProp: parsedClient.contacts?.length || 0, final: mergedFormData.contacts?.length || 0 },
+                sites: { fromDB: currentFormData.sites?.length || 0, fromProp: parsedClient.sites?.length || 0, final: mergedFormData.sites?.length || 0 },
+                opportunities: { fromDB: currentFormData.opportunities?.length || 0, fromProp: parsedClient.opportunities?.length || 0, final: mergedFormData.opportunities?.length || 0 }
+            });
+            
+            setFormData(mergedFormData);
         }
         
         lastProcessedClientRef.current = client;
