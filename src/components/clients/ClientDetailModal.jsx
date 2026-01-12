@@ -1489,25 +1489,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // This ensures the useEffect that syncs formDataRef fires and the component re-renders
             Promise.resolve().then(() => {
                 // After React processes the state update, verify it worked
-                const currentFormData = formDataRef.current || {};
-                if (currentFormData.contacts && currentFormData.contacts.length > 0) {
-                    console.log(`✅✅✅ State update confirmed - formData.contacts.length: ${currentFormData.contacts.length}`);
-                } else {
-                    console.warn(`⚠️⚠️⚠️ State update NOT detected - formData.contacts.length: ${currentFormData.contacts?.length || 0}`);
-                    // Force a re-render by updating formData again with the same value
-                    // This ensures React definitely processes the update
-                    setFormData(prev => {
-                        if (prev.contacts && prev.contacts.length > 0) {
-                            return prev; // Already updated
-                        }
-                        // If still empty, force update with the loaded contacts
-                        return {
-                            ...prev,
-                            contacts: [...mergedContacts],
-                            _lastUpdated: Date.now()
-                        };
-                    });
-                }
+                // Use setTimeout to give React more time to process the update
+                setTimeout(() => {
+                    const currentFormData = formDataRef.current || {};
+                    if (currentFormData.contacts && currentFormData.contacts.length > 0) {
+                        console.log(`✅✅✅ State update confirmed - formData.contacts.length: ${currentFormData.contacts.length}`);
+                    } else {
+                        console.warn(`⚠️⚠️⚠️ State update NOT detected - formData.contacts.length: ${currentFormData.contacts?.length || 0}`);
+                        // CRITICAL FIX: Force update by creating a completely new object with a different reference
+                        // Use a counter or timestamp to ensure React detects the change
+                        setFormData(prev => {
+                            // Always return a new object to force React to detect the change
+                            const newContacts = [...mergedContacts];
+                            const newFormData = {
+                                ...prev,
+                                contacts: newContacts,
+                                _lastUpdated: Date.now(),
+                                _forceUpdate: Math.random() // Random value to force change detection
+                            };
+                            formDataRef.current = newFormData;
+                            console.log(`🔄🔄🔄 FORCING state update - contacts.length: ${newFormData.contacts.length}`);
+                            return newFormData;
+                        });
+                    }
+                }, 100); // Give React 100ms to process the update
             });
 
             // Remove optimistic contacts that now exist in database

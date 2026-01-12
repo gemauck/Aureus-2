@@ -1264,8 +1264,12 @@ async function handler(req, res) {
         }
         if (body.address !== undefined) updateData.address = body.address
         if (body.website !== undefined) updateData.website = body.website
-        if (body.notes !== undefined || notes) {
-          updateData.notes = notes || (body.notes !== undefined ? String(body.notes || '') : undefined)
+        // Always include notes if provided (even if empty string) to allow clearing notes
+        if (body.notes !== undefined) {
+          updateData.notes = body.notes !== null && body.notes !== undefined ? String(body.notes) : ''
+        } else if (notes) {
+          // Fallback to notes built from source/stage if body.notes not provided
+          updateData.notes = String(notes || '')
         }
       
       // Phase 2: Add JSON fields with dual-write (both String and JSONB)

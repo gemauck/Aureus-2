@@ -312,7 +312,10 @@ async function handler(req, res) {
       }
       if (body.address !== undefined) updateData.address = body.address
       if (body.website !== undefined) updateData.website = body.website
-      if (body.notes !== undefined) updateData.notes = String(body.notes || '')
+      // Always include notes if provided (even if empty string) to allow clearing notes
+      if (body.notes !== undefined) {
+        updateData.notes = body.notes !== null && body.notes !== undefined ? String(body.notes) : ''
+      }
       
       // External agent - include even if null (to allow clearing)
       if (body.externalAgentId !== undefined) {
