@@ -4342,6 +4342,9 @@ const Clients = React.memo(() => {
 
     const handleDeleteClient = async (clientId) => {
         try {
+            // CRITICAL: Save original clients array BEFORE filtering for error recovery
+            const originalClients = [...clients];
+            
             // Optimistically update UI first for smooth removal
             const updatedClients = clients.filter(c => c.id !== clientId);
             
@@ -4377,10 +4380,10 @@ const Clients = React.memo(() => {
                         }
                     }, 1500); // 1.5 second delay to prevent shimmer from LiveDataSync refresh
                 } catch (error) {
-                    // On error, restore the client and show error
+                    // On error, restore the client from original array and show error
                     const restoreState = () => {
-                        setClients(clients);
-                        safeStorage.setClients(clients);
+                        setClients(originalClients);
+                        safeStorage.setClients(originalClients);
                     };
                     
                     if (typeof startTransition === 'function') {
@@ -4389,7 +4392,9 @@ const Clients = React.memo(() => {
                         restoreState();
                     }
                     
-                    alert('Failed to delete client: ' + (error.message || 'Unknown error'));
+                    const errorMessage = error?.message || error?.error || 'Unknown error';
+                    console.error('❌ Failed to delete client:', error);
+                    alert('Failed to delete client: ' + errorMessage);
                     
                     // Resume LiveDataSync on error
                     if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
