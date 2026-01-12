@@ -315,10 +315,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!apiRef.current) {
             console.warn('DocumentCollectionAPI not available yet, will retry');
-            // Don't set loading to false here - let the retry mechanism handle it
-            // But set a timeout to prevent infinite loading
+            // Set a timeout to prevent infinite loading
             setTimeout(() => {
-                if (!apiRef.current && isLoading) {
+                if (!apiRef.current) {
                     setIsLoading(false);
                     setError('Document Collection API not available. Please refresh the page.');
                 }
@@ -349,7 +348,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             console.log('✅ MonthlyDocumentCollectionTracker: Setting isLoading to false');
             setIsLoading(false);
         }
-    }, [project?.id, isLoading]);
+    }, [project?.id]);
     
     // Simplified refresh - just reload from database
     const refreshFromDatabase = useCallback(async () => {
