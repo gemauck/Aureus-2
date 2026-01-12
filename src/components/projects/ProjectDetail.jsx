@@ -4542,41 +4542,18 @@ function initializeProjectDetail() {
                 throw new Error('Task API not available - DatabaseAPI.makeRequest is not defined');
             }
             
-            // Filter out the task and all its subtasks from local state
-            const updatedTasks = tasks.filter(t => t.id !== taskId);
-            
-            // Update local state and ref
-            setTasks(updatedTasks);
-            tasksRef.current = updatedTasks;
+            // Filter out the task and all its subtasks from local state using functional update to avoid stale closure
+            setTasks(prevTasks => {
+                const updatedTasks = prevTasks.filter(t => t.id !== taskId);
+                tasksRef.current = updatedTasks; // Update ref with same data
+                return updatedTasks;
+            });
             
             // Set flag to skip the useEffect save to prevent race condition
             skipNextSaveRef.current = true;
             
-            // Only refresh tasks from server if deletion was successful
-            if (deleteSuccessful && project?.id && window.DatabaseAPI?.makeRequest) {
-                try {
-                    const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
-                        method: 'GET'
-                    });
-                    const fetchedTasks = tasksResponse?.data?.tasks || [];
-                    if (Array.isArray(fetchedTasks)) {
-                        console.log('✅ Refreshed tasks from server after deletion. Task count:', fetchedTasks.length);
-                        setTasks(fetchedTasks);
-                        tasksRef.current = fetchedTasks;
-                    }
-                } catch (refreshError) {
-                    // Handle 500 errors gracefully - don't throw, just log
-                    const errorStatus = refreshError?.status || (refreshError?.message?.includes('500') || refreshError?.message?.includes('Internal Server Error') ? 500 : null);
-                    if (errorStatus === 500) {
-                        console.warn('⚠️ Server error refreshing tasks after deletion (may be temporary), using local state:', refreshError.message);
-                        // Continue with local state - task was already deleted from local state above
-                    } else {
-                        console.warn('⚠️ Failed to refresh tasks after deletion, using local state:', refreshError);
-                        // Continue with local state update - deletion should still work
-                    }
-                    // Don't throw - we've already updated local state, so UI is correct
-                }
-            }
+            // Don't reload from server immediately - we already updated local state correctly
+            // Reloading immediately can cause the task to reappear if the server hasn't processed the deletion yet
             
             // tasksList JSON write removed - task deletion handled by Task API above
             console.log('✅ Task deleted successfully');
