@@ -381,9 +381,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
-            if (forceSaveTimeoutRef.current) {
-                clearTimeout(forceSaveTimeoutRef.current);
-            }
         };
     }, [sectionsByYear, isLoading, project?.id]);
     
@@ -1139,102 +1136,59 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
-        // Track when the last change was made to prevent refresh from overwriting rapid changes
-        lastChangeTimestampRef.current = Date.now();
-        
-        // Clear any existing force save timeout
-        if (forceSaveTimeoutRef.current) {
-            clearTimeout(forceSaveTimeoutRef.current);
-        }
-        
-        // Schedule a forced save after 2 seconds of inactivity
-        // This ensures rapid consecutive changes are saved even if debounce keeps resetting
-        forceSaveTimeoutRef.current = setTimeout(() => {
-            const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-            // Only force save if no changes in last 2 seconds (user stopped making changes)
-            if (timeSinceLastChange >= 2000) {
-                const currentSnapshot = serializeSections(sectionsRef.current);
-                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-                if (hasUnsavedChanges && !isSavingRef.current) {
-                    console.log('💾 Force saving after rapid changes stopped');
-                    saveToDatabase();
-                }
-            }
-        }, 2000);
-        
-        // CRITICAL: For rapid changes, always start from the latest ref value to prevent losing updates
-        // This ensures that if multiple status changes happen in quick succession, each one builds on the latest state
-        const latestSectionsByYear = sectionsRef.current || {};
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        
-        // Always use ref to get the latest selectedCells value (avoids stale closure)
-        const currentSelectedCells = selectedCellsRef.current;
+        // Get current selected cells from state
+        const currentSelectedCells = selectedCells;
         
         // If applying to selected cells, get all selected cell keys
         let cellsToUpdate = [];
         if (applyToSelected && currentSelectedCells.size > 0) {
-            // Parse all selected cell keys
             cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
                 const [secId, docId, mon] = cellKey.split('-');
                 return { sectionId: secId, documentId: docId, month: mon };
             });
         } else {
-            // Just update the single cell
             cellsToUpdate = [{ sectionId, documentId, month }];
         }
         
-        // Update the sections for the current year
-        const updated = currentYearSections.map(section => {
-            // Check if this section has any documents that need updating
-            const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
-            if (sectionUpdates.length === 0) {
-                return section;
-            }
+        // Update state directly - React will handle re-renders
+        setSectionsByYear(prev => {
+            const currentYearSections = prev[selectedYear] || [];
+            const updated = currentYearSections.map(section => {
+                const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
+                if (sectionUpdates.length === 0) return section;
+                
+                return {
+                    ...section,
+                    documents: section.documents.map(doc => {
+                        const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
+                        if (docUpdates.length === 0) return doc;
+                        
+                        let updatedStatus = doc.collectionStatus || {};
+                        docUpdates.forEach(cell => {
+                            updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
+                        });
+                        
+                        return {
+                            ...doc,
+                            collectionStatus: updatedStatus
+                        };
+                    })
+                };
+            });
             
             return {
-                ...section,
-                documents: section.documents.map(doc => {
-                    // Check if this document needs updating for any month
-                    const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
-                    if (docUpdates.length === 0) {
-                        return doc;
-                    }
-                    
-                    // Apply status to all matching months for this document
-                    let updatedStatus = doc.collectionStatus || {};
-                    docUpdates.forEach(cell => {
-                        updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
-                    });
-                    
-                    return {
-                        ...doc,
-                        collectionStatus: updatedStatus
-                    };
-                })
+                ...prev,
+                [selectedYear]: updated
             };
         });
         
-        const updatedSectionsByYear = {
-            ...latestSectionsByYear,
-            [selectedYear]: updated
-        };
-        
-        // Update ref IMMEDIATELY before state update to prevent race conditions
-        // This ensures auto-save always has the latest data, even during rapid changes
-        sectionsRef.current = updatedSectionsByYear;
-        
-        // Now update state (this will trigger auto-save, but ref already has the latest data)
-        setSectionsByYear(updatedSectionsByYear);
-        
         // Clear selection after applying status to multiple cells
-        // Use setTimeout to ensure React has updated the UI first
         if (applyToSelected && currentSelectedCells.size > 0) {
             setTimeout(() => {
                 setSelectedCells(new Set());
-                selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear]);
+    }, [selectedYear, selectedCells]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
