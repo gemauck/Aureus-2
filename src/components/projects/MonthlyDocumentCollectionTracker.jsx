@@ -41,6 +41,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const workingMonths = getWorkingMonths();
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
+    const lastSaveTimestampRef = useRef(0); // Track when we last saved to prevent immediate reload
     const previousProjectIdRef = useRef(project?.id);
     const hasLoadedInitialDataRef = useRef(false);
     const lastLoadTimestampRef = useRef(0);
@@ -368,6 +369,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const loadFromProjectProp = useCallback(() => {
         if (!project?.id) return;
         
+        // CRITICAL: Don't reload if we're currently saving - this prevents overwriting unsaved changes
+        if (isSavingRef.current) {
+            console.log('⏸️ Skipping load from prop: save in progress');
+            return;
+        }
+        
+        // CRITICAL: Don't reload if we just saved (within last 3 seconds) - prevents race condition
+        // where parent refetches project and prop updates with stale data right after save
+        const timeSinceLastSave = Date.now() - (lastSaveTimestampRef.current || 0);
+        if (timeSinceLastSave < 3000) {
+            console.log(`⏸️ Skipping load from prop: save completed ${timeSinceLastSave}ms ago (too recent)`);
+            return;
+        }
+        
+        // CRITICAL: Check if we have unsaved changes - don't overwrite them with potentially stale prop data
+        const currentSnapshot = serializeSections(sectionsRef.current);
+        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+        if (hasUnsavedChanges) {
+            console.log('⏸️ Skipping load from prop: unsaved changes detected');
+            // Still allow loading if prop data is significantly different (might be from another user)
+            // But only if current data is empty or very small
+            const currentDataSize = currentSnapshot.length;
+            if (currentDataSize > 100) { // If we have substantial data, don't overwrite
+                return;
+            }
+        }
+        
         // OPTIMIZATION: Check if we already have data loaded for this project
         // This prevents unnecessary reloading on remount (e.g., second navigation)
         const existingData = sectionsRef.current || {};
@@ -398,6 +426,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 (propSnapshot === existingSnapshot || 
                  existingSnapshot.length > 0 && propSnapshot.length > 0)) {
                 // Data already loaded and matches, just ensure loading state is false
+                setIsLoading(false);
+                return;
+            }
+            
+            // CRITICAL: If current data is newer/more complete than prop, don't overwrite
+            // This prevents stale prop data from overwriting fresh saves
+            if (existingSnapshot.length > propSnapshot.length && existingSnapshot.length > 100) {
+                console.log('⏸️ Skipping load from prop: current data is more complete');
                 setIsLoading(false);
                 return;
             }
@@ -929,6 +965,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             lastSavedSnapshotRef.current = serialized;
+            lastSaveTimestampRef.current = Date.now(); // Mark when save completed to prevent immediate reload
             
             // Persist a snapshot locally so navigation issues cannot lose user data
             const snapshotKey = getSnapshotKey(project.id);

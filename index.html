@@ -24,8 +24,8 @@
     
     <!-- Tailwind CSS - Production Build (Critical - load immediately) -->
     <!-- CACHE BUST: 20260109-remove-triangle -->
-    <link rel="preload" href="/dist/styles.css?v=20260112-10c4fb7" as="style">
-    <link rel="stylesheet" href="/dist/styles.css?v=20260112-10c4fb7">
+    <link rel="preload" href="/dist/styles.css?v=20260112-a748875" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20260112-a748875">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -80,14 +80,14 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1768227305977'; // Updated by build process
+        window.BUILD_VERSION = '1768228171574'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
     <!-- VERSION: 20251215-remove-simple-v2 - Update this when deploying new changes -->
     <script>
         (function() {
-            var APP_VERSION = '20260112-10c4fb7';
+            var APP_VERSION = '20260112-a748875';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -314,19 +314,19 @@
     </script>
     
     <!-- Mobile Responsive CSS - Defer non-critical CSS -->
-    <link rel="preload" href="/mobile-responsive.css?v=20260112-10c4fb7" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260112-10c4fb7"></noscript>
+    <link rel="preload" href="/mobile-responsive.css?v=20260112-a748875" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260112-a748875"></noscript>
     
     <!-- Mobile Helper JavaScript - Dynamic mobile enhancements -->
-    <script defer src="/mobile-helper.js?v=20260112-10c4fb7"></script>
+    <script defer src="/mobile-helper.js?v=20260112-a748875"></script>
     
     <!-- Dark Mode Fixes CSS - Defer -->
-    <link rel="preload" href="/dark-mode-fixes.css?v=20260112-10c4fb7" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260112-10c4fb7"></noscript>
+    <link rel="preload" href="/dark-mode-fixes.css?v=20260112-a748875" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260112-a748875"></noscript>
     
     <!-- Public Job Card Mobile Overrides - Defer -->
-    <link rel="preload" href="/job-card-public-mobile.css?v=20260112-10c4fb7" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260112-10c4fb7"></noscript>
+    <link rel="preload" href="/job-card-public-mobile.css?v=20260112-a748875" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260112-a748875"></noscript>
     
     <!-- Font Awesome - Defer non-critical CSS -->
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -1055,8 +1055,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1768227305977" as="script">
-    <script defer src="/dist/core-bundle.js?v=1768227305977"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1768228171574" as="script">
+    <script defer src="/dist/core-bundle.js?v=1768228171574"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1190,7 +1190,7 @@
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 // CACHE BUST VERSION: bump when deploying new Vite projects bundle
-                const VITE_PROJECTS_VERSION = '20260112-10c4fb7' + Date.now();
+                const VITE_PROJECTS_VERSION = '20260112-a748875' + Date.now();
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -1395,8 +1395,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260108-deep-link-fix-v1 -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=20260112-10c4fb7" as="script">
-    <script defer src="/lazy-load-components.js?v=20260112-10c4fb7"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=20260112-a748875" as="script">
+    <script defer src="/lazy-load-components.js?v=20260112-a748875"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

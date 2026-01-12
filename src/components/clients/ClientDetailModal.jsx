@@ -437,18 +437,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
         
-        // CRITICAL: Load data in background without blocking UI
-        // Use requestIdleCallback if available, otherwise setTimeout with 0 delay
-        // This ensures tabs render immediately with client prop data while API loads in background
-        if (typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(() => {
+        // CRITICAL: Load data immediately but use startTransition for non-blocking updates
+        // This ensures data starts loading right away while UI remains responsive
+        // The formData is already initialized with client prop data, so tabs render immediately
+        // API data will update formData when it arrives, enhancing what's already shown
+        if (typeof React.startTransition === 'function') {
+            React.startTransition(() => {
                 loadAllData();
-            }, { timeout: 100 }); // Max 100ms delay
+            });
         } else {
-            // Fallback: use setTimeout with minimal delay to allow UI to render first
-            setTimeout(() => {
-                loadAllData();
-            }, 0);
+            // Fallback: load immediately without transition
+            loadAllData();
         }
         
         // eslint-disable-next-line react-hooks/exhaustive-deps

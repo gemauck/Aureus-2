@@ -66,7 +66,7 @@ async function checkProjectJSONField() {
             console.log(`   📊 Sections: ${totalSections}`);
             console.log(`   📄 Documents: ${totalDocuments}`);
             
-            // Show preview
+            // Show preview with statuses and comments
             if (years.length > 0) {
               const firstYear = years[0];
               const firstYearSections = parsed[firstYear] || [];
@@ -74,6 +74,48 @@ async function checkProjectJSONField() {
                 console.log(`\n   Preview (${firstYear}):`);
                 firstYearSections.slice(0, 3).forEach((section, idx) => {
                   console.log(`      ${idx + 1}. "${section.name}" (${(section.documents || []).length} documents)`);
+                  
+                  // Check documents for statuses and comments
+                  const documents = section.documents || [];
+                  documents.forEach((doc, docIdx) => {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    let hasStatus = false;
+                    let hasComment = false;
+                    
+                    months.forEach((month, monthIdx) => {
+                      const monthKey = month.toLowerCase();
+                      if (doc.statuses && doc.statuses[monthKey]) {
+                        hasStatus = true;
+                      }
+                      if (doc.comments && doc.comments[monthKey] && doc.comments[monthKey].length > 0) {
+                        hasComment = true;
+                      }
+                    });
+                    
+                    if (hasStatus || hasComment) {
+                      console.log(`         └─ Document "${doc.name}":`);
+                      if (hasStatus) {
+                        const statusMonths = [];
+                        months.forEach((month, monthIdx) => {
+                          const monthKey = month.toLowerCase();
+                          if (doc.statuses && doc.statuses[monthKey]) {
+                            statusMonths.push(`${month}=${doc.statuses[monthKey]}`);
+                          }
+                        });
+                        console.log(`            Statuses: ${statusMonths.join(', ')}`);
+                      }
+                      if (hasComment) {
+                        const commentCounts = [];
+                        months.forEach((month, monthIdx) => {
+                          const monthKey = month.toLowerCase();
+                          if (doc.comments && doc.comments[monthKey] && doc.comments[monthKey].length > 0) {
+                            commentCounts.push(`${month}=${doc.comments[monthKey].length}`);
+                          }
+                        });
+                        console.log(`            Comments: ${commentCounts.join(', ')}`);
+                      }
+                    }
+                  });
                 });
               }
             }
