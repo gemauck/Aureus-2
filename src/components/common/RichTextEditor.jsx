@@ -674,13 +674,26 @@ const RichTextEditor = ({
         const newHtml = editorRef.current.innerHTML;
         const oldHtml = domValueRef.current || '';
         
+        // Get text content for more accurate first keystroke detection
+        // Need to get old text from the old HTML, not current editor (which already has new content)
+        const oldText = oldHtml ? (() => {
+            // Create a temporary element to extract text from old HTML
+            const temp = document.createElement('div');
+            temp.innerHTML = oldHtml;
+            return temp.textContent || temp.innerText || '';
+        })() : '';
+        const newText = editorRef.current.textContent || '';
+        
         // CRITICAL: Save cursor position IMMEDIATELY before any async operations
         // This is especially important for the first keystroke
         const savedCursorPos = saveCursorPosition();
         
         // Check if this is the first keystroke (empty to first character)
-        const isFirstKeystroke = (!oldHtml || oldHtml.trim() === '' || oldHtml === '<br>' || oldHtml === '<p><br></p>') && 
-                                  newHtml && newHtml.trim() !== '' && newHtml !== '<br>' && newHtml !== '<p><br></p>';
+        // Use text content for more accurate detection (HTML can have formatting)
+        const isEmpty = !oldText || oldText.trim() === '';
+        const hasNewContent = newText && newText.trim() !== '';
+        // Consider it first keystroke if went from empty to 1-2 characters (allows for some HTML formatting)
+        const isFirstKeystroke = isEmpty && hasNewContent && newText.length <= 2;
         
         // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
         // This must happen synchronously before any other async operations
@@ -693,33 +706,61 @@ const RichTextEditor = ({
         // isInternalUpdateRef.current = true; // Not needed if we don't call setHtml
         // setHtml(newHtml); // REMOVED - prevents re-renders during typing
         
-        // Function to restore cursor position aggressively
+        // Function to restore cursor position aggressively - especially for first keystroke
         const restoreCursor = () => {
             if (!editorRef.current || !isFocusedRef.current) return;
             
-            // For first keystroke, ensure cursor is at the end of the content
-            if (isFirstKeystroke) {
-                try {
-                    const selection = window.getSelection();
-                    if (selection && editorRef.current) {
-                        // Move cursor to end of content
-                        const range = document.createRange();
-                        range.selectNodeContents(editorRef.current);
-                        range.collapse(false); // false = collapse to end
-                        selection.removeAllRanges();
-                        selection.addRange(range);
-                    }
-                } catch (e) {
-                    // Fallback: try to restore saved position
-                    if (savedCursorPos) {
-                        restoreCursorPosition(savedCursorPos);
-                    }
+            try {
+                const selection = window.getSelection();
+                if (!selection || !editorRef.current) return;
+                
+                // For first keystroke, ALWAYS force cursor to end of content
+                if (isFirstKeystroke) {
+                    // Move cursor to end of content - this is CRITICAL for first keystroke
+                    const range = document.createRange();
+                    range.selectNodeContents(editorRef.current);
+                    range.collapse(false); // false = collapse to end
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                } else if (savedCursorPos) {
+                    // For subsequent keystrokes, restore the saved position
+                    restoreCursorPosition(savedCursorPos);
                 }
-            } else if (savedCursorPos) {
-                // For subsequent keystrokes, restore the saved position
-                restoreCursorPosition(savedCursorPos);
+            } catch (e) {
+                // Fallback: try to restore saved position
+                if (savedCursorPos) {
+                    restoreCursorPosition(savedCursorPos);
+                }
             }
         };
+        
+        // CRITICAL: For first keystroke, restore cursor IMMEDIATELY and SYNCHRONOUSLY
+        // Don't wait for any async operations - React might reset cursor before they complete
+        if (isFirstKeystroke) {
+            // Immediate synchronous restoration
+            restoreCursor();
+            
+            // Also restore aggressively with multiple strategies
+            queueMicrotask(restoreCursor);
+            requestAnimationFrame(() => {
+                restoreCursor();
+                requestAnimationFrame(restoreCursor);
+            });
+            setTimeout(restoreCursor, 0);
+            setTimeout(restoreCursor, 1);
+            setTimeout(restoreCursor, 5);
+            setTimeout(restoreCursor, 10);
+            setTimeout(restoreCursor, 20);
+            setTimeout(restoreCursor, 50);
+        } else if (savedCursorPos) {
+            // For subsequent keystrokes, restore immediately but less aggressively
+            restoreCursor();
+            queueMicrotask(restoreCursor);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(restoreCursor);
+            });
+            setTimeout(restoreCursor, 0);
+        }
         
         // Debounce onChange to prevent too many state updates in parent
         // Clear existing timeout
@@ -735,10 +776,11 @@ const RichTextEditor = ({
                 onChange(newHtml);
             }
             
-            // CRITICAL: Restore cursor position after onChange might have triggered re-render
-            // Use multiple strategies to ensure cursor is restored
+            // CRITICAL: Restore cursor position again after onChange might have triggered re-render
+            // This is a backup in case the immediate restoration didn't work
             if (isFirstKeystroke) {
-                // For first keystroke, be extra aggressive
+                // For first keystroke, be extra aggressive even after onChange
+                restoreCursor();
                 queueMicrotask(restoreCursor);
                 requestAnimationFrame(() => {
                     restoreCursor();
@@ -747,23 +789,13 @@ const RichTextEditor = ({
                 setTimeout(restoreCursor, 0);
                 setTimeout(restoreCursor, 10);
                 setTimeout(restoreCursor, 50);
-            } else {
+            } else if (savedCursorPos) {
                 // Normal restoration for subsequent keystrokes
-                queueMicrotask(restoreCursor);
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(restoreCursor);
-                });
-                setTimeout(restoreCursor, 0);
+                restoreCursor();
             }
             
             window[onChangeTimeoutKey] = null;
         }, 150); // Small delay to batch rapid typing and reduce parent re-renders
-        
-        // Also restore cursor immediately (before onChange delay) to handle fast typing
-        if (isFirstKeystroke) {
-            queueMicrotask(restoreCursor);
-            requestAnimationFrame(restoreCursor);
-        }
         
         // Keep typing flag and ignore flag active for longer
         const timeoutKey = `richTextEditorTypingTimeout_${editorRef.current.id || 'default'}`;
