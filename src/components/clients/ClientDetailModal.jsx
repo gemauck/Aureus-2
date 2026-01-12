@@ -71,7 +71,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
             services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
             stage: client.stage || (isLead ? 'Awareness' : undefined),
-            aidaStatus: client.aidaStatus || (isLead ? 'Awareness' : undefined),
+            // CRITICAL: Map stage to aidaStatus for leads - database uses 'stage' but formData uses 'aidaStatus'
+            aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
             billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
                 paymentTerms: 'Net 30',
                 billingFrequency: 'Monthly',
@@ -368,6 +369,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
                     activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
                     services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
+                    // CRITICAL: Map stage to aidaStatus for leads - database uses 'stage' but formData uses 'aidaStatus'
+                    aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
                     billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
                         paymentTerms: 'Net 30',
                         billingFrequency: 'Monthly',
@@ -3073,7 +3076,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
+                                            const newStatus = e.target.value;
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
                                             userEditedFieldsRef.current.add('status'); // Track that user has edited this field
@@ -3081,7 +3085,71 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                            setFormData(prev => ({...prev, status: e.target.value}));
+                                            
+                                            // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
+                                            // This prevents LiveDataSync from overwriting during the delay
+                                            isAutoSavingRef.current = true;
+                                            if (onEditingChange) onEditingChange(false, true);
+                                            
+                                            setFormData(prev => {
+                                                const updated = {...prev, status: newStatus};
+                                                formDataRef.current = updated;
+                                                
+                                                // Auto-save immediately with the updated data
+                                                // CRITICAL: Only auto-save for existing entities, NOT for new ones that haven't been saved yet
+                                                if (client && client.id && onSave) {
+                                                    console.log('💾 Auto-saving status change:', {
+                                                        entityId: client.id,
+                                                        entityType: entityType,
+                                                        oldStatus: formDataRef.current?.status,
+                                                        newStatus: newStatus
+                                                    });
+                                                    
+                                                    // Use setTimeout to ensure state is updated
+                                                    setTimeout(async () => {
+                                                        try {
+                                                            // Get the latest formData from ref (updated by useEffect)
+                                                            const latest = {...formDataRef.current, status: newStatus};
+                                                            
+                                                            // Explicitly ensure status is included
+                                                            latest.status = newStatus;
+                                                            
+                                                            // For leads, also ensure stage is mapped from aidaStatus if needed
+                                                            if (isLead && latest.aidaStatus && !latest.stage) {
+                                                                latest.stage = latest.aidaStatus;
+                                                            }
+                                                            
+                                                            console.log('💾 Sending status to onSave:', {
+                                                                entityId: latest.id,
+                                                                status: latest.status,
+                                                                stage: latest.stage,
+                                                                aidaStatus: latest.aidaStatus
+                                                            });
+                                                            
+                                                            // Save this as the last saved state
+                                                            lastSavedDataRef.current = latest;
+                                                            
+                                                            // Save to API - ensure it's awaited
+                                                            await onSave(latest, true);
+                                                            
+                                                            console.log('✅ Status auto-save completed');
+                                                            
+                                                            // Clear the flag and notify parent after save completes
+                                                            setTimeout(() => {
+                                                                isAutoSavingRef.current = false;
+                                                                if (onEditingChange) onEditingChange(false, false);
+                                                            }, 3000);
+                                                        } catch (error) {
+                                                            console.error('❌ Error saving status:', error);
+                                                            isAutoSavingRef.current = false;
+                                                            if (onEditingChange) onEditingChange(false, false);
+                                                            alert('Failed to save status change. Please try again.');
+                                                        }
+                                                    }, 100); // Small delay to ensure state update is processed
+                                                }
+                                                
+                                                return updated;
+                                            });
                                         }}
                                             onBlur={() => {
                                                 setTimeout(() => {
@@ -3105,7 +3173,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     userHasStartedTypingRef.current = true;
                                                     if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 }}
-                                                onChange={(e) => {
+                                                onChange={async (e) => {
+                                                    const newStage = e.target.value;
                                                     isEditingRef.current = true;
                                                     hasUserEditedForm.current = true;
                                                     userEditedFieldsRef.current.add('stage');
@@ -3113,9 +3182,64 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     editingTimeoutRef.current = setTimeout(() => {
                                                         isEditingRef.current = false;
                                                     }, 5000);
+                                                    
+                                                    // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
+                                                    // This prevents LiveDataSync from overwriting during the delay
+                                                    isAutoSavingRef.current = true;
+                                                    if (onEditingChange) onEditingChange(false, true);
+                                                    
                                                     setFormData(prev => {
-                                                        const updated = {...prev, stage: e.target.value};
+                                                        const updated = {...prev, stage: newStage};
                                                         formDataRef.current = updated;
+                                                        
+                                                        // Auto-save immediately with the updated data
+                                                        // CRITICAL: Only auto-save for existing entities, NOT for new ones that haven't been saved yet
+                                                        if (client && client.id && onSave) {
+                                                            console.log('💾 Auto-saving stage change:', {
+                                                                entityId: client.id,
+                                                                entityType: entityType,
+                                                                oldStage: formDataRef.current?.stage,
+                                                                newStage: newStage
+                                                            });
+                                                            
+                                                            // Use setTimeout to ensure state is updated
+                                                            setTimeout(async () => {
+                                                                try {
+                                                                    // Get the latest formData from ref (updated by useEffect)
+                                                                    const latest = {...formDataRef.current, stage: newStage};
+                                                                    
+                                                                    // Explicitly ensure stage is included
+                                                                    latest.stage = newStage;
+                                                                    
+                                                                    console.log('💾 Sending stage to onSave:', {
+                                                                        entityId: latest.id,
+                                                                        status: latest.status,
+                                                                        stage: latest.stage,
+                                                                        aidaStatus: latest.aidaStatus
+                                                                    });
+                                                                    
+                                                                    // Save this as the last saved state
+                                                                    lastSavedDataRef.current = latest;
+                                                                    
+                                                                    // Save to API - ensure it's awaited
+                                                                    await onSave(latest, true);
+                                                                    
+                                                                    console.log('✅ Stage auto-save completed');
+                                                                    
+                                                                    // Clear the flag and notify parent after save completes
+                                                                    setTimeout(() => {
+                                                                        isAutoSavingRef.current = false;
+                                                                        if (onEditingChange) onEditingChange(false, false);
+                                                                    }, 3000);
+                                                                } catch (error) {
+                                                                    console.error('❌ Error saving stage:', error);
+                                                                    isAutoSavingRef.current = false;
+                                                                    if (onEditingChange) onEditingChange(false, false);
+                                                                    alert('Failed to save stage change. Please try again.');
+                                                                }
+                                                            }, 100); // Small delay to ensure state update is processed
+                                                        }
+                                                        
                                                         return updated;
                                                     });
                                                 }}
@@ -3146,7 +3270,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     userHasStartedTypingRef.current = true;
                                                     if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 }}
-                                                onChange={(e) => {
+                                                onChange={async (e) => {
+                                                    const newAidaStatus = e.target.value;
                                                     isEditingRef.current = true;
                                                     hasUserEditedForm.current = true;
                                                     userEditedFieldsRef.current.add('aidaStatus');
@@ -3154,9 +3279,65 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     editingTimeoutRef.current = setTimeout(() => {
                                                         isEditingRef.current = false;
                                                     }, 5000);
+                                                    
+                                                    // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
+                                                    // This prevents LiveDataSync from overwriting during the delay
+                                                    isAutoSavingRef.current = true;
+                                                    if (onEditingChange) onEditingChange(false, true);
+                                                    
                                                     setFormData(prev => {
-                                                        const updated = {...prev, aidaStatus: e.target.value};
+                                                        const updated = {...prev, aidaStatus: newAidaStatus};
                                                         formDataRef.current = updated;
+                                                        
+                                                        // Auto-save immediately with the updated data
+                                                        // CRITICAL: Only auto-save for existing entities, NOT for new ones that haven't been saved yet
+                                                        if (client && client.id && onSave) {
+                                                            console.log('💾 Auto-saving AIDA Status change:', {
+                                                                entityId: client.id,
+                                                                entityType: entityType,
+                                                                oldAidaStatus: formDataRef.current?.aidaStatus,
+                                                                newAidaStatus: newAidaStatus
+                                                            });
+                                                            
+                                                            // Use setTimeout to ensure state is updated
+                                                            setTimeout(async () => {
+                                                                try {
+                                                                    // Get the latest formData from ref (updated by useEffect)
+                                                                    const latest = {...formDataRef.current, aidaStatus: newAidaStatus};
+                                                                    
+                                                                    // CRITICAL: Map aidaStatus to stage for database
+                                                                    // The database field is 'stage', but formData uses 'aidaStatus'
+                                                                    latest.stage = newAidaStatus;
+                                                                    
+                                                                    console.log('💾 Sending AIDA Status to onSave (mapped to stage):', {
+                                                                        entityId: latest.id,
+                                                                        status: latest.status,
+                                                                        stage: latest.stage,
+                                                                        aidaStatus: latest.aidaStatus
+                                                                    });
+                                                                    
+                                                                    // Save this as the last saved state
+                                                                    lastSavedDataRef.current = latest;
+                                                                    
+                                                                    // Save to API - ensure it's awaited
+                                                                    await onSave(latest, true);
+                                                                    
+                                                                    console.log('✅ AIDA Status auto-save completed');
+                                                                    
+                                                                    // Clear the flag and notify parent after save completes
+                                                                    setTimeout(() => {
+                                                                        isAutoSavingRef.current = false;
+                                                                        if (onEditingChange) onEditingChange(false, false);
+                                                                    }, 3000);
+                                                                } catch (error) {
+                                                                    console.error('❌ Error saving AIDA Status:', error);
+                                                                    isAutoSavingRef.current = false;
+                                                                    if (onEditingChange) onEditingChange(false, false);
+                                                                    alert('Failed to save AIDA Status change. Please try again.');
+                                                                }
+                                                            }, 100); // Small delay to ensure state update is processed
+                                                        }
+                                                        
                                                         return updated;
                                                     });
                                                 }}

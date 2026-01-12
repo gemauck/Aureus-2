@@ -3911,7 +3911,8 @@ const Clients = React.memo(() => {
                     ...leadFormData,
                     // Ensure critical fields are preserved
                     status: leadFormData.status,
-                    stage: leadFormData.stage,
+                    // CRITICAL: Map aidaStatus to stage if present (ClientDetailModal uses aidaStatus, database uses stage)
+                    stage: leadFormData.stage || leadFormData.aidaStatus || selectedLead.stage,
                     // Explicitly include these fields to ensure they're saved
                     contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : (selectedLead.contacts || []),
                     followUps: Array.isArray(leadFormData.followUps) ? leadFormData.followUps : (selectedLead.followUps || []),
@@ -4053,6 +4054,8 @@ const Clients = React.memo(() => {
                                         // CRITICAL: Explicitly preserve status and stage from database
                                         status: freshLead.status || updatedLead.status || 'Potential',
                                         stage: freshLead.stage || updatedLead.stage || 'Awareness',
+                                        // CRITICAL: Map stage to aidaStatus for ClientDetailModal (uses aidaStatus in formData)
+                                        aidaStatus: freshLead.aidaStatus || freshLead.stage || updatedLead.aidaStatus || updatedLead.stage || 'Awareness',
                                         // CRITICAL: Preserve notes from database - always ensure it's a string
                                         notes: freshLead.notes !== undefined && freshLead.notes !== null 
                                             ? String(freshLead.notes) 
