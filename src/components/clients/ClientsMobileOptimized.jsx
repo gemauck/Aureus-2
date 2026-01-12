@@ -182,36 +182,56 @@ const ClientsMobileOptimized = () => {
                 throw new Error('No authentication token found. Please log in.');
             }
 
-            // Build comprehensive lead object - same pattern as handleSaveClient
-            // This ensures followUps and comments are explicitly included
+            // Build comprehensive lead object - EXACT same pattern as handleSaveClient
+            // This ensures all fields are explicitly set, matching the working client implementation
             const comprehensiveLead = {
-                id: selectedLead ? selectedLead.id : undefined, // Let DB generate for new leads
-                name: leadFormData.name || '',
-                industry: leadFormData.industry || 'Other',
-                status: leadFormData.status || 'New',
-                stage: leadFormData.stage || '',
-                type: 'lead',
-                value: leadFormData.value || 0,
-                probability: leadFormData.probability || 0,
-                lastContact: leadFormData.lastContact || new Date().toISOString().split('T')[0],
-                address: leadFormData.address || '',
-                website: leadFormData.website || '',
-                notes: leadFormData.notes || '',
-                contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : [],
-                followUps: Array.isArray(leadFormData.followUps) ? leadFormData.followUps : [],
-                projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : [],
-                comments: Array.isArray(leadFormData.comments) ? leadFormData.comments : [],
-                sites: Array.isArray(leadFormData.sites) ? leadFormData.sites : [],
-                contracts: Array.isArray(leadFormData.contracts) ? leadFormData.contracts : [],
-                proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : [],
-                activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : [],
-                externalAgentId: leadFormData.externalAgentId || null,
-                ownerId: leadFormData.ownerId || null
+                id: selectedLead ? (leadFormData.id || selectedLead.id) : undefined, // Let DB generate for new leads
+                name: leadFormData.name || selectedLead?.name || '',
+                industry: leadFormData.industry || selectedLead?.industry || 'Other',
+                status: leadFormData.status || selectedLead?.status || 'New',
+                stage: leadFormData.stage || selectedLead?.stage || '',
+                type: 'lead', // Ensure type is always 'lead'
+                value: leadFormData.value || selectedLead?.value || 0,
+                probability: leadFormData.probability || selectedLead?.probability || 0,
+                lastContact: leadFormData.lastContact || selectedLead?.lastContact || new Date().toISOString().split('T')[0],
+                address: leadFormData.address || selectedLead?.address || '',
+                website: leadFormData.website || selectedLead?.website || '',
+                notes: leadFormData.notes || selectedLead?.notes || '',
+                // CRITICAL: Explicitly set arrays - use leadFormData if provided, otherwise selectedLead, otherwise empty array
+                // This matches the exact pattern in handleSaveClient which works for clients
+                followUps: Array.isArray(leadFormData.followUps) ? leadFormData.followUps : 
+                          (Array.isArray(selectedLead?.followUps) ? selectedLead.followUps : []),
+                comments: Array.isArray(leadFormData.comments) ? leadFormData.comments : 
+                         (Array.isArray(selectedLead?.comments) ? selectedLead.comments : []),
+                contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : 
+                         (Array.isArray(selectedLead?.contacts) ? selectedLead.contacts : []),
+                projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : 
+                           (Array.isArray(selectedLead?.projectIds) ? selectedLead.projectIds : []),
+                sites: Array.isArray(leadFormData.sites) ? leadFormData.sites : 
+                      (Array.isArray(selectedLead?.sites) ? selectedLead.sites : []),
+                contracts: Array.isArray(leadFormData.contracts) ? leadFormData.contracts : 
+                          (Array.isArray(selectedLead?.contracts) ? selectedLead.contracts : []),
+                proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : 
+                          (Array.isArray(selectedLead?.proposals) ? selectedLead.proposals : []),
+                activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : 
+                            (Array.isArray(selectedLead?.activityLog) ? selectedLead.activityLog : []),
+                externalAgentId: leadFormData.externalAgentId !== undefined ? leadFormData.externalAgentId : (selectedLead?.externalAgentId || null),
+                ownerId: leadFormData.ownerId !== undefined ? leadFormData.ownerId : (selectedLead?.ownerId || null)
             };
 
             if (selectedLead) {
                 // Update existing lead
-                console.log('💾 Saving lead with followUps:', comprehensiveLead.followUps?.length || 0, 'comments:', comprehensiveLead.comments?.length || 0);
+                console.log('💾 Saving lead - Debug info:', {
+                    'leadFormData.followUps': leadFormData.followUps?.length || 0,
+                    'leadFormData.comments': leadFormData.comments?.length || 0,
+                    'selectedLead.followUps': selectedLead.followUps?.length || 0,
+                    'selectedLead.comments': selectedLead.comments?.length || 0,
+                    'comprehensiveLead.followUps': comprehensiveLead.followUps?.length || 0,
+                    'comprehensiveLead.comments': comprehensiveLead.comments?.length || 0,
+                    'leadFormData keys': Object.keys(leadFormData),
+                    'has followUps in leadFormData': 'followUps' in leadFormData,
+                    'has comments in leadFormData': 'comments' in leadFormData
+                });
                 
                 const apiResponse = await window.api.updateLead(comprehensiveLead.id, comprehensiveLead);
                 const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
