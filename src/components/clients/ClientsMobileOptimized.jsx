@@ -174,7 +174,7 @@ const ClientsMobileOptimized = () => {
         }
     };
 
-    const handleSaveLead = async (leadFormData) => {
+    const handleSaveLead = async (leadFormData, stayInEditMode = false) => {
         
         try {
             const token = window.storage?.getToken?.();
@@ -182,42 +182,107 @@ const ClientsMobileOptimized = () => {
                 throw new Error('No authentication token found. Please log in.');
             }
 
+            // Build comprehensive lead object - same pattern as handleSaveClient
+            // This ensures followUps and comments are explicitly included
+            const comprehensiveLead = {
+                id: selectedLead ? selectedLead.id : undefined, // Let DB generate for new leads
+                name: leadFormData.name || '',
+                industry: leadFormData.industry || 'Other',
+                status: leadFormData.status || 'New',
+                stage: leadFormData.stage || '',
+                type: 'lead',
+                value: leadFormData.value || 0,
+                probability: leadFormData.probability || 0,
+                lastContact: leadFormData.lastContact || new Date().toISOString().split('T')[0],
+                address: leadFormData.address || '',
+                website: leadFormData.website || '',
+                notes: leadFormData.notes || '',
+                contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : [],
+                followUps: Array.isArray(leadFormData.followUps) ? leadFormData.followUps : [],
+                projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : [],
+                comments: Array.isArray(leadFormData.comments) ? leadFormData.comments : [],
+                sites: Array.isArray(leadFormData.sites) ? leadFormData.sites : [],
+                contracts: Array.isArray(leadFormData.contracts) ? leadFormData.contracts : [],
+                proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : [],
+                activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : [],
+                externalAgentId: leadFormData.externalAgentId || null,
+                ownerId: leadFormData.ownerId || null
+            };
+
             if (selectedLead) {
                 // Update existing lead
-                const updatedLead = { ...selectedLead, ...leadFormData };
+                console.log('💾 Saving lead with followUps:', comprehensiveLead.followUps?.length || 0, 'comments:', comprehensiveLead.comments?.length || 0);
                 
-                const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
+                const apiResponse = await window.api.updateLead(comprehensiveLead.id, comprehensiveLead);
                 const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                 
                 // CRITICAL: Reload leads from database to ensure UI shows persisted data
                 await loadLeads();
                 
-                // Use the updated lead from API if available, otherwise use the updated lead
+                // Use the updated lead from API if available
                 if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
-                    setSelectedLead(updatedLeadFromAPI);
+                    // Ensure followUps and comments are properly parsed (they might be strings from DB)
+                    const parseJsonField = (field) => {
+                        if (Array.isArray(field)) return field;
+                        if (typeof field === 'string' && field.trim()) {
+                            try {
+                                return JSON.parse(field);
+                            } catch (e) {
+                                console.warn('⚠️ Failed to parse JSON field:', e);
+                                return [];
+                            }
+                        }
+                        return [];
+                    };
+                    
+                    const parsedLead = {
+                        ...updatedLeadFromAPI,
+                        followUps: parseJsonField(updatedLeadFromAPI.followUps),
+                        comments: parseJsonField(updatedLeadFromAPI.comments)
+                    };
+                    console.log('✅ Lead saved. Reloaded with followUps:', parsedLead.followUps?.length || 0, 'comments:', parsedLead.comments?.length || 0);
+                    setSelectedLead(parsedLead);
                 } else {
                     // Fallback: find the updated lead from the reloaded list
                     const reloadedLeads = await window.api.getLeads();
                     const leadsData = reloadedLeads?.data?.leads || reloadedLeads?.leads || [];
                     const reloadedLead = leadsData.find(l => l.id === selectedLead.id);
                     if (reloadedLead) {
-                        setSelectedLead(reloadedLead);
+                        // Ensure followUps and comments are properly parsed
+                        const parseJsonField = (field) => {
+                            if (Array.isArray(field)) return field;
+                            if (typeof field === 'string' && field.trim()) {
+                                try {
+                                    return JSON.parse(field);
+                                } catch (e) {
+                                    console.warn('⚠️ Failed to parse JSON field:', e);
+                                    return [];
+                                }
+                            }
+                            return [];
+                        };
+                        
+                        const parsedLead = {
+                            ...reloadedLead,
+                            followUps: parseJsonField(reloadedLead.followUps),
+                            comments: parseJsonField(reloadedLead.comments)
+                        };
+                        setSelectedLead(parsedLead);
                     } else {
-                        setSelectedLead(updatedLead);
+                        // Last resort: use the comprehensiveLead we just created
+                        setSelectedLead(comprehensiveLead);
                     }
                 }
             } else {
-                // Create new lead - don't include ID, let database generate it
-                // Get current user info
+                // Create new lead - get current user info
                 const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
                 
                 const newLeadData = {
-                    ...leadFormData,
-                    lastContact: new Date().toISOString().split('T')[0],
+                    ...comprehensiveLead,
                     activityLog: [{
                         id: Date.now(),
                         type: 'Lead Created',
-                        description: `Lead created: ${leadFormData.name}`,
+                        description: `Lead created: ${comprehensiveLead.name}`,
                         timestamp: new Date().toISOString(),
                         user: currentUser.name,
                         userId: currentUser.id,
@@ -229,7 +294,6 @@ const ClientsMobileOptimized = () => {
                 const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                 
                 // CRITICAL: Reload leads from database to ensure UI shows persisted data
-                // This ensures the lead appears in the UI even if the API response was incomplete
                 await loadLeads();
                 
                 // For new leads, redirect to main leads view
