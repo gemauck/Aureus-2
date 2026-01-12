@@ -872,7 +872,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // CRITICAL: Always reset to 'overview' when client/lead ID changes
     // This ensures that opening a different client/lead always starts on Overview tab
-    const previousClientIdRef = useRef(client?.id);
+    // previousClientIdRef already declared above at line 618
     useEffect(() => {
         const currentClientId = client?.id;
         const previousClientId = previousClientIdRef.current;
