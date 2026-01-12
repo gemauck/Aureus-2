@@ -396,7 +396,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Try to load immediately if API is available
             if (apiRef.current) {
-                hasLoadedRef.current = true;
                 loadFromDatabase();
             } else if (window.DocumentCollectionAPI) {
                 // API not available yet, retry after a short delay
@@ -404,7 +403,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     if (!hasLoadedRef.current && window.DocumentCollectionAPI) {
                         console.log('🔄 MonthlyDocumentCollectionTracker: Retrying load after API check');
                         apiRef.current = window.DocumentCollectionAPI;
-                        hasLoadedRef.current = true;
                         loadFromDatabase();
                     }
                 }, 500);
