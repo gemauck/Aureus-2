@@ -1061,8 +1061,26 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             
             // Only set formData if we should load (new client or not edited)
-            if (shouldLoadFromDatabase) {
-                setFormData(parsedClient);
+            // CRITICAL FIX: Use functional update to preserve contacts/sites/opportunities that have been loaded from database
+            // This prevents overwriting contacts that were loaded by loadContactsFromDatabase
+            // Also, only set formData if we're doing initial load (not if already loaded)
+            if (shouldLoadFromDatabase && shouldDoInitialLoad) {
+                setFormData(prevFormData => {
+                    // Preserve existing contacts, sites, and opportunities if they've been loaded from database
+                    // Only use parsedClient values if we don't have existing data loaded
+                    const existingContacts = prevFormData?.contacts || [];
+                    const existingSites = prevFormData?.sites || [];
+                    const existingOpportunities = prevFormData?.opportunities || [];
+                    
+                    // Use parsedClient data, but preserve loaded contacts/sites/opportunities if they exist
+                    // This prevents resetting contacts that were loaded by loadContactsFromDatabase
+                    return {
+                        ...parsedClient,
+                        contacts: existingContacts.length > 0 ? existingContacts : (parsedClient.contacts || []),
+                        sites: existingSites.length > 0 ? existingSites : (parsedClient.sites || []),
+                        opportunities: existingOpportunities.length > 0 ? existingOpportunities : (parsedClient.opportunities || [])
+                    };
+                });
             }
             
             // CRITICAL FIX: Don't reload contacts/sites if they're already in the client object
