@@ -70,6 +70,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
             services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
+            stage: client.stage || (isLead ? 'Awareness' : undefined),
+            aidaStatus: client.aidaStatus || (isLead ? 'Awareness' : undefined),
             billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
                 paymentTerms: 'Net 30',
                 billingFrequency: 'Monthly',
@@ -84,6 +86,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             industry: '',
             status: 'active',
             stage: 'Awareness',
+            aidaStatus: 'Awareness',
             revenue: 0,
             value: 0,
             probability: 100,
@@ -2718,7 +2721,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
                     <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service-maintenance', ...(isAdmin ? ['contracts'] : []), 'activity', 'notes'].map(tab => (
+                        {(() => {
+                            // Determine if lead has been converted to client
+                            const isConverted = !isLead || formData.type === 'client';
+                            
+                            // Base tabs
+                            const baseTabs = ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes'];
+                            
+                            // Tabs that should only show for clients or converted leads
+                            const clientOnlyTabs = [];
+                            if (isConverted) {
+                                clientOnlyTabs.push('opportunities', 'projects', 'service-maintenance');
+                                if (isAdmin) {
+                                    clientOnlyTabs.push('contracts');
+                                }
+                            }
+                            
+                            // Combine all tabs
+                            const allTabs = [...baseTabs, ...clientOnlyTabs];
+                            
+                            return allTabs;
+                        })().map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -2920,6 +2943,82 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             <option>On Hold</option>
                                         </select>
                                     </div>
+                                    {isLead && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Stage</label>
+                                            <select 
+                                                value={formData.stage || 'Awareness'}
+                                                onFocus={() => {
+                                                    isEditingRef.current = true;
+                                                    userHasStartedTypingRef.current = true;
+                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                }}
+                                                onChange={(e) => {
+                                                    isEditingRef.current = true;
+                                                    hasUserEditedForm.current = true;
+                                                    userEditedFieldsRef.current.add('stage');
+                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                    editingTimeoutRef.current = setTimeout(() => {
+                                                        isEditingRef.current = false;
+                                                    }, 5000);
+                                                    setFormData(prev => {
+                                                        const updated = {...prev, stage: e.target.value};
+                                                        formDataRef.current = updated;
+                                                        return updated;
+                                                    });
+                                                }}
+                                                onBlur={() => {
+                                                    setTimeout(() => {
+                                                        isEditingRef.current = false;
+                                                    }, 500);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            >
+                                                <option value="Awareness">Awareness</option>
+                                                <option value="Interest">Interest</option>
+                                                <option value="Desire">Desire</option>
+                                                <option value="Action">Action</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                    {isLead && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">AIDA Status</label>
+                                            <select 
+                                                value={formData.aidaStatus || 'Awareness'}
+                                                onFocus={() => {
+                                                    isEditingRef.current = true;
+                                                    userHasStartedTypingRef.current = true;
+                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                }}
+                                                onChange={(e) => {
+                                                    isEditingRef.current = true;
+                                                    hasUserEditedForm.current = true;
+                                                    userEditedFieldsRef.current.add('aidaStatus');
+                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                    editingTimeoutRef.current = setTimeout(() => {
+                                                        isEditingRef.current = false;
+                                                    }, 5000);
+                                                    setFormData(prev => {
+                                                        const updated = {...prev, aidaStatus: e.target.value};
+                                                        formDataRef.current = updated;
+                                                        return updated;
+                                                    });
+                                                }}
+                                                onBlur={() => {
+                                                    setTimeout(() => {
+                                                        isEditingRef.current = false;
+                                                    }, 500);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            >
+                                                <option value="Awareness">Awareness</option>
+                                                <option value="Interest">Interest</option>
+                                                <option value="Desire">Desire</option>
+                                                <option value="Action">Action</option>
+                                            </select>
+                                        </div>
+                                    )}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Website</label>
                                         <input 
