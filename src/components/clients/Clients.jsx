@@ -4421,52 +4421,78 @@ const Clients = React.memo(() => {
 
     const handleDeleteLead = async (leadId) => {
         try {
+            // CRITICAL: Save original leads array BEFORE filtering for error recovery
+            const originalLeads = [...leads];
             
+            // Optimistically update UI first for smooth removal
+            const normalizedLeadId = leadId !== undefined && leadId !== null ? String(leadId) : null;
+            const updatedLeads = normalizedLeadId
+                ? leads.filter(l => String(l.id) !== normalizedLeadId)
+                : leads;
+            
+            // Temporarily pause LiveDataSync to prevent conflicts
+            const wasLiveDataSyncRunning = window.LiveDataSync?.isRunning;
+            if (wasLiveDataSyncRunning && window.LiveDataSync?.stop) {
+                window.LiveDataSync.stop();
+            }
+            
+            // CRITICAL: Update state immediately (not in startTransition) so UI updates right away
+            setLeads(updatedLeads);
+            
+            // CRITICAL: Close modal immediately after optimistic update, but skip reload
+            // This ensures the UI shows the deletion immediately without reload overwriting it
+            handleLeadModalClose(true); // Pass true to skip reload
+            
+            // Delete from database in background
             const token = window.storage?.getToken?.();
-            let apiDeleteSuccess = false;
-            
             if (token && window.api?.deleteLead) {
                 try {
-                    // Delete from database
                     await window.api.deleteLead(leadId);
-                    apiDeleteSuccess = true;
-                } catch (apiError) {
-                    // Check if it's a 404 (lead already deleted)
-                    const errorMessage = apiError?.message || String(apiError);
+                    
+                    // Give a moment for the deletion to settle before resuming LiveDataSync
+                    setTimeout(() => {
+                        if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
+                            window.LiveDataSync.start();
+                        }
+                    }, 1500); // 1.5 second delay to prevent shimmer from LiveDataSync refresh
+                } catch (error) {
+                    // Check if it's a 404 (lead already deleted) - treat as success
+                    const errorMessage = error?.message || String(error);
                     const is404 = errorMessage.includes('404') || errorMessage.includes('Not found') || errorMessage.includes('not found');
                     
-                    if (is404) {
-                        apiDeleteSuccess = true; // Treat 404 as success since lead is already gone
+                    if (!is404) {
+                        // On error (except 404), restore the lead from original array immediately
+                        setLeads(originalLeads);
+                        
+                        const errorMsg = error?.message || error?.error || 'Unknown error';
+                        console.error('❌ Failed to delete lead:', error);
+                        alert('Failed to delete lead: ' + errorMsg);
+                        
+                        // Resume LiveDataSync on error
+                        if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
+                            window.LiveDataSync.start();
+                        }
+                        return;
                     } else {
-                        // For other errors, still try to remove locally but warn user
-                        alert('Failed to delete lead from server: ' + errorMessage + '. The lead will be removed from your view.');
+                        // 404 means lead was already deleted - this is fine, just resume sync
+                        if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
+                            setTimeout(() => {
+                                window.LiveDataSync.start();
+                            }, 1500);
+                        }
                     }
                 }
             } else {
-                apiDeleteSuccess = true; // No API = local only delete
-            }
-            
-            // Update local state only if deletion was successful or already deleted
-            if (apiDeleteSuccess) {
-                const normalizedLeadId = leadId !== undefined && leadId !== null ? String(leadId) : null;
-                const updatedLeads = normalizedLeadId
-                    ? leads.filter(l => String(l.id) !== normalizedLeadId)
-                    : leads;
-                setLeads(updatedLeads);
-                // leadsCount now calculated from leads.length via useMemo
-                
-                // Only refresh if we successfully deleted (not if it was already deleted)
-                // Also add a delay to prevent rate limiting
-                if (token && apiDeleteSuccess) {
+                // If no API, resume LiveDataSync after a short delay
+                if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
                     setTimeout(() => {
-                        loadLeads(true); // Force refresh to bypass API throttling
-                    }, 500); // Increased delay to prevent rate limiting
+                        window.LiveDataSync.start();
+                    }, 500);
                 }
             }
-            
         } catch (error) {
             console.error('❌ Error deleting lead:', error);
-            alert('Failed to delete lead: ' + error.message);
+            alert('Failed to delete lead: ' + (error.message || 'Unknown error'));
         }
     };
 

@@ -2797,20 +2797,70 @@ const LeadDetailModal = ({
         );
     }
 
+    // Navigation helper function
+    const navigateToPage = (page) => {
+        if (window.RouteState && window.RouteState.navigate) {
+            window.RouteState.navigate({
+                page: page,
+                segments: [],
+                search: '',
+                hash: '',
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        } else if (window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                detail: { page: page } 
+            }));
+        }
+        // Close modal when navigating away
+        if (onClose) {
+            onClose();
+        }
+    };
+
     if (isFullPage) {
         // Full-page view - no modal wrapper
         return (
             <>
             <div className="w-full h-full flex flex-col">
+                {/* Breadcrumb Navigation */}
+                <div className={`px-6 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <nav className="flex items-center space-x-2 text-sm">
+                        <button
+                            onClick={() => navigateToPage('dashboard')}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
+                        >
+                            <i className="fas fa-home mr-1"></i>
+                            Dashboard
+                        </button>
+                        <i className={`fas fa-chevron-right ${isDark ? 'text-gray-600' : 'text-gray-400'}`}></i>
+                        <button
+                            onClick={() => navigateToPage('clients')}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
+                        >
+                            Leads
+                        </button>
+                        {lead && (
+                            <>
+                                <i className={`fas fa-chevron-right ${isDark ? 'text-gray-600' : 'text-gray-400'}`}></i>
+                                <span className={`${isDark ? 'text-gray-300' : 'text-gray-900'} font-medium`}>
+                                    {formData.name}
+                                </span>
+                            </>
+                        )}
+                    </nav>
+                </div>
                 {/* Header */}
-                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                <div className={`flex justify-between items-center px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-semibold text-gray-900">
+                            <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {lead ? formData.name : 'Add New Lead'}
                             </h2>
                             {isAutoSaving && (
-                                <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <i className="fas fa-spinner fa-spin"></i>
                                     Saving...
                                 </span>
@@ -2818,19 +2868,62 @@ const LeadDetailModal = ({
                         </div>
                         {lead && (
                             <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-sm text-gray-600">{formData.industry}</span>
+                                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{formData.industry}</span>
                                 <span className={`px-2 py-0.5 text-xs rounded font-medium ${getStageColor(formData.stage)}`}>
                                     {formData.stage}
                                 </span>
                             </div>
                         )}
                     </div>
-                    <button 
-                        onClick={onClose} 
-                        className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded transition-colors"
-                    >
-                        <i className="fas fa-times text-lg"></i>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Quick Navigation Menu */}
+                        <div className="relative group">
+                            <button
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                                title="Navigate to other pages"
+                            >
+                                <i className="fas fa-compass text-lg"></i>
+                            </button>
+                            <div className={`absolute right-0 top-full mt-1 w-48 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg shadow-lg z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200`}>
+                                <div className="py-1">
+                                    <button
+                                        onClick={() => navigateToPage('dashboard')}
+                                        className={`w-full text-left px-4 py-2 text-sm ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} transition-colors`}
+                                    >
+                                        <i className="fas fa-home mr-2"></i>
+                                        Dashboard
+                                    </button>
+                                    <button
+                                        onClick={() => navigateToPage('projects')}
+                                        className={`w-full text-left px-4 py-2 text-sm ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} transition-colors`}
+                                    >
+                                        <i className="fas fa-folder-open mr-2"></i>
+                                        Projects
+                                    </button>
+                                    <button
+                                        onClick={() => navigateToPage('tasks')}
+                                        className={`w-full text-left px-4 py-2 text-sm ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} transition-colors`}
+                                    >
+                                        <i className="fas fa-tasks mr-2"></i>
+                                        Tasks
+                                    </button>
+                                    <button
+                                        onClick={() => navigateToPage('clients')}
+                                        className={`w-full text-left px-4 py-2 text-sm ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} transition-colors`}
+                                    >
+                                        <i className="fas fa-user-plus mr-2"></i>
+                                        Leads
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={onClose} 
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                        >
+                            <i className="fas fa-times text-lg"></i>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Tabs */}

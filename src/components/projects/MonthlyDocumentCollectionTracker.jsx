@@ -288,10 +288,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 ? updater(prevForYear)
                 : (updater || []);
             
-            return {
+            const updated = {
                 ...prev,
                 [selectedYear]: nextForYear
             };
+            
+            // CRITICAL: Update ref immediately to prevent race conditions with save
+            sectionsRef.current = updated;
+            
+            return updated;
         });
     };
 
@@ -1816,6 +1821,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
+        // Track when the last change was made to prevent refresh from overwriting rapid changes
+        lastChangeTimestampRef.current = Date.now();
+        
         const currentUser = getCurrentUser();
         const newCommentId = Date.now();
         const newComment = {
@@ -1827,12 +1835,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             authorId: currentUser.id
         };
         
-        setSections(prev => prev.map(section => {
-            if (section.id === sectionId) {
+        // CRITICAL: Use sectionsRef.current to get the latest state, then update both ref and state
+        const latestSectionsByYear = sectionsRef.current || {};
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) === String(sectionId)) {
                 return {
                     ...section,
                     documents: section.documents.map(doc => {
-                        if (doc.id === documentId) {
+                        if (String(doc.id) === String(documentId)) {
                             const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                             return {
                                 ...doc,
@@ -1844,7 +1856,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 };
             }
             return section;
-        }));
+        });
+        
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
+            [selectedYear]: updated
+        };
+        
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Now update state (this will trigger auto-save)
+        setSectionsByYear(updatedSectionsByYear);
         
         setQuickComment('');
 
@@ -1897,9 +1920,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const handleDeleteComment = (sectionId, documentId, month, commentId) => {
+        // Track when the last change was made to prevent refresh from overwriting rapid changes
+        lastChangeTimestampRef.current = Date.now();
+        
         const currentUser = getCurrentUser();
-        const section = sections.find(s => s.id === sectionId);
-        const document = section?.documents.find(d => d.id === documentId);
+        
+        // CRITICAL: Use sectionsRef.current to get the latest state
+        const latestSectionsByYear = sectionsRef.current || {};
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        const section = currentYearSections.find(s => String(s.id) === String(sectionId));
+        const document = section?.documents.find(d => String(d.id) === String(documentId));
         const existingComments = getCommentsForYear(document?.comments, month, selectedYear);
         const comment = existingComments.find(c => c.id === commentId);
         
@@ -1914,12 +1945,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!confirm('Delete this comment?')) return;
         
-        setSections(prev => prev.map(section => {
-            if (section.id === sectionId) {
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) === String(sectionId)) {
                 return {
                     ...section,
                     documents: section.documents.map(doc => {
-                        if (doc.id === documentId) {
+                        if (String(doc.id) === String(documentId)) {
                             const updatedComments = existingComments.filter(c => c.id !== commentId);
                             return {
                                 ...doc,
@@ -1931,7 +1962,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 };
             }
             return section;
-        }));
+        });
+        
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
+            [selectedYear]: updated
+        };
+        
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Now update state (this will trigger auto-save)
+        setSectionsByYear(updatedSectionsByYear);
     };
     
     const getDocumentStatus = (document, month) => {
