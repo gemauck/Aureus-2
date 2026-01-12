@@ -820,15 +820,8 @@ const Clients = React.memo(() => {
         if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
         return `${Math.ceil(diffDays / 365)} years ago`;
     };
-    // Initialize leadsCount from cache immediately to prevent flashing
-    const [leadsCount, setLeadsCount] = useState(() => {
-        const cachedClients = safeStorage.getClients();
-        if (cachedClients && Array.isArray(cachedClients)) {
-            const leadsOnly = cachedClients.filter(c => c.type === 'lead');
-            return leadsOnly.length;
-        }
-        return 0;
-    });
+    // Calculate leadsCount from leads.length using useMemo to prevent flickering
+    // Removed useState - now calculated directly from leads array
     const [projects, setProjects] = useState([]);
     // Just store IDs - modals fetch their own data
     const [editingClientId, setEditingClientId] = useState(null);
@@ -1666,7 +1659,7 @@ const Clients = React.memo(() => {
                             }
                             return normalizedCachedLeads;
                         });
-                        setLeadsCount(normalizedCachedLeads.length);
+                        // leadsCount now calculated from leads.length via useMemo
                     });
                 }
                 
@@ -2068,10 +2061,7 @@ const Clients = React.memo(() => {
                             }
                             return leadsOnly;
                         });
-                        setLeadsCount(prevCount => {
-                            // Only update count if it actually changed
-                            return leadsOnly.length !== prevCount ? leadsOnly.length : prevCount;
-                        });
+                        // leadsCount now calculated from leads.length via useMemo
                     });
                     // Save to localStorage (non-blocking)
                     if (window.storage?.setLeads) {
@@ -2334,10 +2324,11 @@ const Clients = React.memo(() => {
         }, 1000);
     }, []); // Empty deps - only run on mount
 
-    // Keep leadsCount in sync with leads.length
-    useEffect(() => {
-        setLeadsCount(leads.length);
-    }, [leads.length]);
+    // Calculate counts using useMemo to prevent flickering during data loads
+    // Removed useEffect that was causing flickering - now calculated directly
+    const leadsCount = useMemo(() => leads.length, [leads.length]);
+    const clientsCount = useMemo(() => clients.length, [clients.length]);
+    const groupsCount = useMemo(() => groups.length, [groups.length]);
 
     // PERFORMANCE FIX: Only clear cache if explicitly needed (e.g., user logout/login)
     // Removed automatic cache clearing on mount - this was causing slow initial loads
@@ -2828,7 +2819,7 @@ const Clients = React.memo(() => {
                     
                     const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
                     setLeads(processedLeads);
-                    setLeadsCount(processedLeads.length); // Update count when LiveDataSync updates
+                    // leadsCount now calculated from leads.length via useMemo
                     // Also update localStorage for consistency
                     if (window.storage?.setLeads) {
                         try {
@@ -2910,7 +2901,7 @@ const Clients = React.memo(() => {
                         }
                         return prevLeads;
                     });
-                    setLeadsCount(cachedLeads.length);
+                    // leadsCount now calculated from leads.length via useMemo
                 }
                 
                 const now = Date.now();
@@ -3129,7 +3120,7 @@ const Clients = React.memo(() => {
             });
                 
             setLeads(mappedLeads);
-            setLeadsCount(mappedLeads.length); // Update count badge immediately
+            // leadsCount now calculated from leads.length via useMemo
             
             // Log count update for debugging
             
@@ -4224,7 +4215,7 @@ const Clients = React.memo(() => {
                             
                             const updatedLeads = [...leads, parsedSavedLead];
                             setLeads(updatedLeads);
-                            setLeadsCount(updatedLeads.length); // Update count immediately
+                            // leadsCount now calculated from leads.length via useMemo
                             
                             // CRITICAL: If modal is still open (stayInEditMode), update selectedLead with preserved data
                             // This ensures the modal receives the lead with user input preserved, not blank values
@@ -4254,7 +4245,7 @@ const Clients = React.memo(() => {
                             // Fallback to local lead if API doesn't return proper response
                             const updatedLeads = [...leads, newLead];
                             setLeads(updatedLeads);
-                            setLeadsCount(updatedLeads.length); // Update count immediately
+                            // leadsCount now calculated from leads.length via useMemo
                             
                             // Save to localStorage even in fallback case
                             if (window.storage?.setLeads) {
@@ -4279,7 +4270,7 @@ const Clients = React.memo(() => {
                         alert(`Warning: Could not save lead to server (${errorMessage}). Saved locally only.`);
                         const updatedLeads = [...leads, newLead];
                         setLeads(updatedLeads);
-                        setLeadsCount(updatedLeads.length); // Update count immediately
+                        // leadsCount now calculated from leads.length via useMemo
                         
                         // Save to localStorage even in error fallback case
                         if (window.storage?.setLeads) {
@@ -4295,7 +4286,7 @@ const Clients = React.memo(() => {
                     // No token or API, create locally only
                     const updatedLeads = [...leads, newLead];
                     setLeads(updatedLeads);
-                    setLeadsCount(updatedLeads.length); // Update count immediately
+                    // leadsCount now calculated from leads.length via useMemo
                     
                     // Save to localStorage even without authentication
                     if (window.storage?.setLeads) {
@@ -4453,7 +4444,7 @@ const Clients = React.memo(() => {
                     ? leads.filter(l => String(l.id) !== normalizedLeadId)
                     : leads;
                 setLeads(updatedLeads);
-                setLeadsCount(updatedLeads.length); // Update count immediately
+                // leadsCount now calculated from leads.length via useMemo
                 
                 // Only refresh if we successfully deleted (not if it was already deleted)
                 // Also add a delay to prevent rate limiting
@@ -5583,7 +5574,7 @@ const Clients = React.memo(() => {
                 setClients([...clients, newClient]);
                 const normalizedLeadId = String(lead.id);
                 setLeads(prevLeads => prevLeads.filter(l => String(l.id) !== normalizedLeadId));
-                setLeadsCount(prev => Math.max(0, prev - 1));
+                // leadsCount now calculated from leads.length via useMemo
                 setViewMode('clients');
                 selectedLeadRef.current = null;
                 alert('Lead converted to client (local only - not saved to server)');
@@ -8118,7 +8109,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>
-                    <span className="hidden sm:inline">Groups ({groups.length})</span>
+                    <span className="hidden sm:inline">Groups ({groupsCount})</span>
                     <span className="sm:hidden">Groups</span>
                 </button>
                 <button
@@ -8132,7 +8123,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
-                    <span className="hidden sm:inline">Clients ({clients.length})</span>
+                    <span className="hidden sm:inline">Clients ({clientsCount})</span>
                     <span className="sm:hidden">Clients</span>
                 </button>
                 <button

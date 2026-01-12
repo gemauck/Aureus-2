@@ -1,5 +1,5 @@
 // Enhanced Mobile-Optimized Clients and Leads Component
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 
 const ClientsMobileOptimized = () => {
     const [viewMode, setViewMode] = useState('clients');
@@ -300,26 +300,30 @@ const ClientsMobileOptimized = () => {
         setSelectedLead(null);
     };
 
-    // Filter and search
-    const filteredClients = clients.filter(client => {
-        // Ensure we only show clients (not leads)
-        const isClient = client.type === 'client' || client.type === null || client.type === undefined;
-        if (!isClient) return false;
-        
-        const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            client.industry.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-        const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
-        return matchesSearch && matchesIndustry && matchesStatus;
-    });
+    // Filter and search - memoized to prevent flickering
+    const filteredClients = useMemo(() => {
+        return clients.filter(client => {
+            // Ensure we only show clients (not leads)
+            const isClient = client.type === 'client' || client.type === null || client.type === undefined;
+            if (!isClient) return false;
+            
+            const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                client.industry.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
+            const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
+            return matchesSearch && matchesIndustry && matchesStatus;
+        });
+    }, [clients, searchTerm, filterIndustry, filterStatus]);
 
-    const filteredLeads = leads.filter(lead => {
-        const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            lead.industry.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
-        const matchesStatus = filterStatus === 'All Status' || lead.status === filterStatus;
-        return matchesSearch && matchesIndustry && matchesStatus;
-    });
+    const filteredLeads = useMemo(() => {
+        return leads.filter(lead => {
+            const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                lead.industry.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
+            const matchesStatus = filterStatus === 'All Status' || lead.status === filterStatus;
+            return matchesSearch && matchesIndustry && matchesStatus;
+        });
+    }, [leads, searchTerm, filterIndustry, filterStatus]);
 
     // Load data on mount
     useEffect(() => {
