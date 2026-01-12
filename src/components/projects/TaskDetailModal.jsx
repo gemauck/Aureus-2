@@ -1301,7 +1301,28 @@ const TaskDetailModal = ({
             // Filter out failed uploads and add successful ones
             const successfulUploads = uploadedAttachments.filter(att => att !== null);
             if (successfulUploads.length > 0) {
-                setAttachments([...attachments, ...successfulUploads]);
+                const updatedAttachments = [...attachments, ...successfulUploads];
+                setAttachments(updatedAttachments);
+                
+                // CRITICAL: Auto-save attachments immediately
+                const taskToAutoSave = {
+                    ...editedTask,
+                    comments: Array.isArray(comments) ? comments : [],
+                    checklist: Array.isArray(checklist) ? checklist : [],
+                    attachments: updatedAttachments,
+                    tags: Array.isArray(tags) ? tags : [],
+                    subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                    subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+                    id: editedTask.id || task?.id || Date.now()
+                };
+
+                console.log('💾 TaskDetailModal: Auto-saving attachments immediately', {
+                    taskId: taskToAutoSave.id,
+                    attachmentsCount: taskToAutoSave.attachments.length
+                });
+
+                // Save without closing modal
+                onUpdate(taskToAutoSave, { closeModal: false });
             }
         } catch (error) {
             console.error('❌ Error during file upload:', error);
@@ -1314,9 +1335,32 @@ const TaskDetailModal = ({
     };
 
     const handleDeleteAttachment = (attachmentId) => {
-        if (confirm('Delete this attachment?')) {
-            setAttachments(attachments.filter(a => a.id !== attachmentId));
+        if (!confirm('Delete this attachment?')) {
+            return;
         }
+
+        const updatedAttachments = attachments.filter(a => a.id !== attachmentId);
+        setAttachments(updatedAttachments);
+        
+        // CRITICAL: Auto-save attachment deletion immediately
+        const taskToAutoSave = {
+            ...editedTask,
+            comments: Array.isArray(comments) ? comments : [],
+            checklist: Array.isArray(checklist) ? checklist : [],
+            attachments: updatedAttachments,
+            tags: Array.isArray(tags) ? tags : [],
+            subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+            subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+            id: editedTask.id || task?.id || Date.now()
+        };
+
+        console.log('💾 TaskDetailModal: Auto-saving attachment deletion immediately', {
+            taskId: taskToAutoSave.id,
+            attachmentsCount: taskToAutoSave.attachments.length
+        });
+
+        // Save without closing modal
+        onUpdate(taskToAutoSave, { closeModal: false });
     };
 
     const handleAddChecklistItem = () => {
