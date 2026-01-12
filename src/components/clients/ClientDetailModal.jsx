@@ -272,6 +272,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Track last processed client data to detect changes
     const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, id: null });
     
+    // Track when a save just happened to prevent immediate overwriting
+    const justSavedRef = useRef(false);
+    const saveTimestampRef = useRef(0);
+    
     // CRITICAL: Update formData when client prop changes (for followUps, notes, comments persistence)
     // This ensures data persists when navigating away and back, or on page refresh
     useEffect(() => {
@@ -287,11 +291,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
+        // CRITICAL: Don't overwrite immediately after a save (within 2 seconds)
+        // This prevents the useEffect from overwriting data that was just saved
+        const timeSinceSave = Date.now() - saveTimestampRef.current;
+        if (justSavedRef.current && timeSinceSave < 2000) {
+            console.log('⏸️ Skipping update - save just happened', { timeSinceSave });
+            return;
+        }
+        
         // Only update if client prop has changed (not just a re-render)
         const currentClientId = formDataRef.current?.id;
         if (currentClientId !== client.id) {
             // Different client - reset tracking and let the main useEffect handle it
             lastClientDataRef.current = { followUps: null, notes: null, comments: null, id: client.id };
+            justSavedRef.current = false;
             return;
         }
         
@@ -306,26 +319,47 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             ? (client.comments.trim() ? JSON.parse(client.comments) : [])
             : (Array.isArray(client.comments) ? client.comments : []);
         
-        // Compare with last processed data to avoid unnecessary updates
+        // CRITICAL: Compare with CURRENT formData, not just last processed data
+        // This prevents overwriting data that's already in formData
+        const currentFormData = formDataRef.current || {};
+        const currentFormFollowUps = currentFormData.followUps || [];
+        const currentFormNotes = currentFormData.notes || '';
+        const currentFormComments = currentFormData.comments || [];
+        
+        const currentFormFollowUpsStr = JSON.stringify(currentFormFollowUps);
+        const currentFormCommentsStr = JSON.stringify(currentFormComments);
+        const clientFollowUpsStr = JSON.stringify(clientFollowUps);
+        const clientCommentsStr = JSON.stringify(clientComments);
+        
+        // Only update if client prop data is DIFFERENT from current formData
+        const followUpsDifferent = clientFollowUpsStr !== currentFormFollowUpsStr;
+        const notesDifferent = clientNotes !== currentFormNotes;
+        const commentsDifferent = clientCommentsStr !== currentFormCommentsStr;
+        
+        // Also check against last processed data to avoid unnecessary updates
         const lastFollowUpsStr = JSON.stringify(lastClientDataRef.current.followUps);
         const lastNotes = lastClientDataRef.current.notes;
         const lastCommentsStr = JSON.stringify(lastClientDataRef.current.comments);
         
-        const currentFollowUpsStr = JSON.stringify(clientFollowUps);
-        const followUpsChanged = currentFollowUpsStr !== lastFollowUpsStr;
+        const followUpsChanged = clientFollowUpsStr !== lastFollowUpsStr;
         const notesChanged = clientNotes !== lastNotes;
-        const currentCommentsStr = JSON.stringify(clientComments);
-        const commentsChanged = currentCommentsStr !== lastCommentsStr;
+        const commentsChanged = clientCommentsStr !== lastCommentsStr;
         
-        if (followUpsChanged || notesChanged || commentsChanged) {
+        // Only update if:
+        // 1. Client prop data is different from last processed data (to avoid duplicate updates)
+        // 2. AND client prop data is different from current formData (to avoid overwriting with same data)
+        if ((followUpsChanged && followUpsDifferent) || (notesChanged && notesDifferent) || (commentsChanged && commentsDifferent)) {
             console.log('🔄 Updating formData from client prop (followUps/notes/comments):', {
                 clientId: client.id,
-                followUpsChanged,
-                notesChanged,
-                commentsChanged,
+                followUpsChanged: followUpsChanged && followUpsDifferent,
+                notesChanged: notesChanged && notesDifferent,
+                commentsChanged: commentsChanged && commentsDifferent,
                 followUpsCount: clientFollowUps.length,
                 notesLength: clientNotes.length,
-                commentsCount: clientComments.length
+                commentsCount: clientComments.length,
+                currentFormFollowUpsCount: currentFormFollowUps.length,
+                currentFormNotesLength: currentFormNotes.length,
+                currentFormCommentsCount: currentFormComments.length
             });
             
             // Update tracking ref
@@ -339,13 +373,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setFormData(prev => {
                 const updated = {
                     ...prev,
-                    ...(followUpsChanged ? { followUps: clientFollowUps } : {}),
-                    ...(notesChanged ? { notes: clientNotes } : {}),
-                    ...(commentsChanged ? { comments: clientComments } : {})
+                    ...(followUpsChanged && followUpsDifferent ? { followUps: clientFollowUps } : {}),
+                    ...(notesChanged && notesDifferent ? { notes: clientNotes } : {}),
+                    ...(commentsChanged && commentsDifferent ? { comments: clientComments } : {})
                 };
                 formDataRef.current = updated;
                 return updated;
             });
+        } else {
+            // Update tracking ref even if we don't update formData (to prevent future unnecessary updates)
+            lastClientDataRef.current = {
+                followUps: clientFollowUps,
+                notes: clientNotes,
+                comments: clientComments,
+                id: client.id
+            };
         }
     }, [client]);
     
@@ -2798,6 +2840,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             lastContact: new Date().toISOString().split('T')[0]
         };
         
+        // CRITICAL: Set flag to prevent immediate overwriting after save
+        justSavedRef.current = true;
+        saveTimestampRef.current = Date.now();
+        
         // Use onUpdate if provided (for updates that should close the modal)
         // Otherwise use onSave
         // For new clients/leads (client is null), explicitly pass stayInEditMode=false to close modal after save
@@ -2808,6 +2854,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // For existing clients/leads, default is false anyway, but make it explicit
             await onSave(clientData, false);
         }
+        
+        // Clear the flag after 3 seconds (enough time for parent to refresh and propagate)
+        setTimeout(() => {
+            justSavedRef.current = false;
+        }, 3000);
     };
 
     // Get projects that belong to this client (match by clientId or clientName)
@@ -3655,6 +3706,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 
                                                 // Save the latest data after a small delay to ensure state is updated
                                                 setTimeout(() => {
+                                                    // CRITICAL: Set flag to prevent immediate overwriting after auto-save
+                                                    justSavedRef.current = true;
+                                                    saveTimestampRef.current = Date.now();
+                                                    
                                                     onSave(latest, true).then((savedClient) => {
                                                         // Update formData with saved notes to ensure they persist
                                                         if (savedClient && savedClient.notes !== undefined) {
@@ -3681,6 +3736,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         // CRITICAL: This delay must be LONGER than the setSelectedClient delay in Clients.jsx (100ms)
                                                         setTimeout(() => {
                                                             isAutoSavingRef.current = false;
+                                                            // Clear the justSaved flag after 3 seconds (enough time for parent to refresh and propagate)
+                                                            setTimeout(() => {
+                                                                justSavedRef.current = false;
+                                                            }, 2000);
                                                         }, 1000); // Increased to 1000ms to ensure setSelectedClient delay (100ms) completes first
                                                     });
                                                 }, 200); // Increased delay to ensure state is updated
