@@ -209,6 +209,110 @@
         })();
     </script>
     
+    <!-- Build Version Check - Shows notification when new version is available -->
+    <script>
+        (function() {
+            var BUILD_VERSION_KEY = 'abcotronics_build_version';
+            var checkInterval = null;
+            var notificationShown = false;
+            
+            function showUpdateNotification() {
+                if (notificationShown) return;
+                notificationShown = true;
+                
+                // Create notification banner
+                var banner = document.createElement('div');
+                banner.id = 'build-version-notification';
+                banner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; padding: 16px 20px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
+                
+                var message = document.createElement('div');
+                message.style.cssText = 'flex: 1; font-size: 14px; font-weight: 500;';
+                message.textContent = 'A new version is available. Please refresh to get the latest updates.';
+                
+                var buttonContainer = document.createElement('div');
+                buttonContainer.style.cssText = 'display: flex; gap: 12px; align-items: center;';
+                
+                var refreshBtn = document.createElement('button');
+                refreshBtn.textContent = 'Refresh Now';
+                refreshBtn.style.cssText = 'background: white; color: #0284c7; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: all 0.2s;';
+                refreshBtn.onmouseover = function() { this.style.transform = 'scale(1.05)'; this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)'; };
+                refreshBtn.onmouseout = function() { this.style.transform = 'scale(1)'; this.style.boxShadow = 'none'; };
+                refreshBtn.onclick = function() {
+                    localStorage.setItem(BUILD_VERSION_KEY, '');
+                    window.location.reload(true);
+                };
+                
+                var dismissBtn = document.createElement('button');
+                dismissBtn.innerHTML = '✕';
+                dismissBtn.style.cssText = 'background: transparent; color: white; border: none; padding: 4px 12px; cursor: pointer; font-size: 18px; font-weight: bold; opacity: 0.8; transition: opacity 0.2s;';
+                dismissBtn.onmouseover = function() { this.style.opacity = '1'; };
+                dismissBtn.onmouseout = function() { this.style.opacity = '0.8'; };
+                dismissBtn.onclick = function() {
+                    banner.style.display = 'none';
+                    document.body.style.paddingTop = '';
+                    notificationShown = false;
+                };
+                
+                buttonContainer.appendChild(refreshBtn);
+                buttonContainer.appendChild(dismissBtn);
+                banner.appendChild(message);
+                banner.appendChild(buttonContainer);
+                document.body.appendChild(banner);
+                
+                // Add padding to body to prevent content shift
+                document.body.style.paddingTop = '60px';
+            }
+            
+            function checkBuildVersion() {
+                try {
+                    fetch('/dist/build-version.json?v=' + Date.now(), { cache: 'no-store' })
+                        .then(function(response) {
+                            if (!response.ok) return;
+                            return response.json();
+                        })
+                        .then(function(data) {
+                            if (!data || !data.version) return;
+                            
+                            var currentVersion = data.version;
+                            var storedVersion = localStorage.getItem(BUILD_VERSION_KEY);
+                            
+                            // If versions don't match and we haven't shown notification yet
+                            if (storedVersion && storedVersion !== currentVersion && !notificationShown) {
+                                showUpdateNotification();
+                            } else if (!storedVersion) {
+                                // First time - store the version
+                                localStorage.setItem(BUILD_VERSION_KEY, currentVersion);
+                            }
+                        })
+                        .catch(function(error) {
+                            // Silently fail - don't spam console
+                        });
+                } catch (e) {
+                    // Silently fail
+                }
+            }
+            
+            // Check immediately when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(checkBuildVersion, 2000); // Wait 2 seconds after page load
+                });
+            } else {
+                setTimeout(checkBuildVersion, 2000);
+            }
+            
+            // Check every 60 seconds
+            checkInterval = setInterval(checkBuildVersion, 60000);
+            
+            // Clean up on page unload
+            window.addEventListener('beforeunload', function() {
+                if (checkInterval) {
+                    clearInterval(checkInterval);
+                }
+            });
+        })();
+    </script>
+    
     <!-- Mobile Responsive CSS - Defer non-critical CSS -->
     <link rel="preload" href="/mobile-responsive.css?v=20260112-045c567" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260112-045c567"></noscript>
