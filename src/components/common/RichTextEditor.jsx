@@ -318,6 +318,10 @@ const RichTextEditor = ({
                             const timeSinceLastInput = Date.now() - (lastUserInputTimeRef.current || 0);
                             const currentHtml = editor.innerHTML || '';
                             
+                            // Don't restore during very recent input (within 50ms) - browser is still processing
+                            // This prevents interference with backspace, delete, paste, etc.
+                            if (timeSinceLastInput < 50) return;
+                            
                             // Only restore if HTML changed externally (not from user input)
                             // AND typing happened recently (within last 3 seconds - covers auto-save delays)
                             if (timeSinceLastInput < 3000 && currentHtml !== domValueRef.current) {
@@ -726,15 +730,19 @@ const RichTextEditor = ({
         // Get the current HTML from the editor (this is the ONLY source of truth when user is typing)
         const newHtml = editorRef.current.innerHTML;
         
+        // CRITICAL: Save cursor position FIRST (synchronously) - the browser has already placed it correctly
+        // This must happen BEFORE updating domValueRef so MutationObserver uses the correct position
+        // This handles typing, backspace, delete, paste, etc. - browser always places cursor correctly
+        savedCursorPositionRef.current = saveCursorPosition();
+        
         // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
         // This must happen synchronously before any other async operations
         domValueRef.current = newHtml;
         lastSetValueFromUserRef.current = newHtml;
         frozenValueRef.current = newHtml;
         
-        // CRITICAL: Save cursor position - the browser has already placed it correctly (right after typed character)
-        // Save it multiple times to ensure we capture the final position even if browser does async processing
-        savedCursorPositionRef.current = saveCursorPosition();
+        // Save cursor position again in async callbacks to ensure we capture final position
+        // (in case browser does any async processing, though it shouldn't be necessary)
         queueMicrotask(() => {
             if (editorRef.current && isFocusedRef.current) {
                 savedCursorPositionRef.current = saveCursorPosition();
