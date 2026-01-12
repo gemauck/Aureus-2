@@ -361,18 +361,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // INITIAL LOAD - Simple: Load from database on mount
     // ============================================================
     useEffect(() => {
+        console.log('🔵 MonthlyDocumentCollectionTracker: Initial load effect', { 
+            hasProject: !!project?.id, 
+            projectId: project?.id,
+            hasAPI: !!apiRef.current,
+            hasWindowAPI: !!window.DocumentCollectionAPI
+        });
+        
         if (project?.id) {
+            // Ensure API is set
+            if (!apiRef.current && window.DocumentCollectionAPI) {
+                apiRef.current = window.DocumentCollectionAPI;
+            }
+            
             // Try to load immediately
             loadFromDatabase();
             
             // If API not available, retry after a short delay
             if (!apiRef.current && window.DocumentCollectionAPI) {
                 const retryTimer = setTimeout(() => {
+                    console.log('🔄 MonthlyDocumentCollectionTracker: Retrying load after API check');
                     apiRef.current = window.DocumentCollectionAPI;
                     loadFromDatabase();
                 }, 500);
                 return () => clearTimeout(retryTimer);
             }
+        } else {
+            // No project ID, set loading to false
+            setIsLoading(false);
         }
     }, [project?.id, loadFromDatabase]);
     
