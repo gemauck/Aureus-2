@@ -393,11 +393,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Retry loading when API becomes available
     useEffect(() => {
-        if (project?.id && !apiRef.current && window.DocumentCollectionAPI && isLoading) {
+        if (project?.id && !apiRef.current && window.DocumentCollectionAPI) {
             apiRef.current = window.DocumentCollectionAPI;
             loadFromDatabase();
         }
-    }, [project?.id, isLoading, loadFromDatabase]);
+    }, [project?.id, loadFromDatabase]);
     
     // ============================================================
     // POLLING - Simple: Refresh every 30 seconds if not saving
