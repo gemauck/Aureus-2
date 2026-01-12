@@ -303,7 +303,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // SIMPLIFIED DATA LOADING - Single source of truth: Database
     // ============================================================
     const loadFromDatabase = useCallback(async () => {
-        if (!project?.id) return;
+        if (!project?.id) {
+            setIsLoading(false);
+            return;
+        }
         
         // Ensure API is available
         if (!apiRef.current) {
@@ -312,6 +315,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!apiRef.current) {
             console.warn('DocumentCollectionAPI not available yet, will retry');
+            // Don't set loading to false here - let the retry mechanism handle it
+            // But set a timeout to prevent infinite loading
+            setTimeout(() => {
+                if (!apiRef.current && isLoading) {
+                    setIsLoading(false);
+                    setError('Document Collection API not available. Please refresh the page.');
+                }
+            }, 2000);
             return;
         }
         
@@ -328,7 +339,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id]);
+    }, [project?.id, isLoading]);
     
     // Simplified refresh - just reload from database
     const refreshFromDatabase = useCallback(async () => {
