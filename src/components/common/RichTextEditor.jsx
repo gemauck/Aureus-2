@@ -306,6 +306,8 @@ const RichTextEditor = ({
                 
                 // Save current cursor position
                 savedPosition = saveCursorPosition();
+                // Also save to ref so handleInput can access it
+                savedCursorPositionRef.current = savedPosition;
                 
                 // Set up MutationObserver to detect DOM changes and restore cursor
                 if (!mutationObserver) {
@@ -402,6 +404,8 @@ const RichTextEditor = ({
                 // Update domValueRef BEFORE user types to prevent MutationObserver false positives
                 domValueRef.current = editor.innerHTML || '';
                 savedPosition = saveCursorPosition();
+                // Also save to ref so handleInput can access it
+                savedCursorPositionRef.current = savedPosition;
             }
         };
         
@@ -409,6 +413,8 @@ const RichTextEditor = ({
         const handleSelectionChange = () => {
             if (isFocusedRef.current && editor.contains(document.activeElement)) {
                 savedPosition = saveCursorPosition();
+                // Also save to ref so handleInput can access it
+                savedCursorPositionRef.current = savedPosition;
             }
         };
         
@@ -425,6 +431,8 @@ const RichTextEditor = ({
             isFocusedRef.current = true;
             ignorePropUpdatesRef.current = true;
             savedPosition = saveCursorPosition();
+            // Also save to ref so handleInput can access it
+            savedCursorPositionRef.current = savedPosition;
         }
         
         return () => {
@@ -699,7 +707,24 @@ const RichTextEditor = ({
         })() : '';
         const newText = editorRef.current.textContent || '';
         
+        // CRITICAL: Get current cursor position IMMEDIATELY (before React might reset it)
+        // This tells us where the cursor is AFTER the character was typed
+        const selection = window.getSelection();
+        let currentCursorPos = null;
+        if (selection && selection.rangeCount > 0 && editorRef.current) {
+            try {
+                const range = selection.getRangeAt(0);
+                const preCaretRange = range.cloneRange();
+                preCaretRange.selectNodeContents(editorRef.current);
+                preCaretRange.setEnd(range.startContainer, range.startOffset);
+                currentCursorPos = preCaretRange.toString().length;
+            } catch (e) {
+                // Fallback: try to get from saved position
+            }
+        }
+        
         // CRITICAL: Save cursor position IMMEDIATELY before any async operations
+        // This is the position AFTER typing, which we'll use to restore if needed
         const savedCursorPos = saveCursorPosition();
         
         // Check if this is the first keystroke (empty to first character)
@@ -709,6 +734,7 @@ const RichTextEditor = ({
         
         // Check if text length increased (user typed a new character) vs stayed same/decreased (editing/deleting)
         const textLengthIncreased = newText.length > oldText.length;
+        const textLengthDecreased = newText.length < oldText.length;
         
         // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
         // This must happen synchronously before any other async operations
@@ -721,7 +747,7 @@ const RichTextEditor = ({
         // isInternalUpdateRef.current = true; // Not needed if we don't call setHtml
         // setHtml(newHtml); // REMOVED - prevents re-renders during typing
         
-        // Function to FORCE cursor to end of content - only use when text was added
+        // Function to FORCE cursor to end of content
         const forceCursorToEnd = () => {
             if (!editorRef.current || !isFocusedRef.current) return;
             
@@ -740,21 +766,59 @@ const RichTextEditor = ({
             }
         };
         
-        // Function to restore saved cursor position - use when editing in middle or deleting
-        const restoreSavedCursor = () => {
-            if (!editorRef.current || !isFocusedRef.current || !savedCursorPos) return;
-            restoreCursorPosition(savedCursorPos);
+        // Function to restore cursor to a specific position
+        const restoreCursorToPosition = (position) => {
+            if (!editorRef.current || !isFocusedRef.current) return;
+            
+            try {
+                const selection = window.getSelection();
+                if (!selection || !editorRef.current) return;
+                
+                const walker = document.createTreeWalker(
+                    editorRef.current,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+                
+                let charCount = 0;
+                let targetNode = null;
+                let targetOffset = 0;
+                
+                while (walker.nextNode()) {
+                    const node = walker.currentNode;
+                    const nodeLength = node.textContent.length;
+                    if (charCount + nodeLength >= position) {
+                        targetNode = node;
+                        targetOffset = position - charCount;
+                        break;
+                    }
+                    charCount += nodeLength;
+                }
+                
+                if (targetNode) {
+                    const range = document.createRange();
+                    const offset = Math.min(targetOffset, targetNode.textContent.length);
+                    range.setStart(targetNode, offset);
+                    range.setEnd(targetNode, offset);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+            } catch (e) {
+                // Silently fail
+            }
         };
         
-        // CRITICAL: Only force cursor to end if:
-        // 1. First keystroke (empty to first character) - always force to end
-        // 2. Text length increased (user typed a new character) - force to end to prevent jumping
-        // Otherwise, restore the saved cursor position (user is editing in middle or deleting)
-        if (isFirstKeystroke || textLengthIncreased) {
-            // Text was added - force cursor to end to prevent jumping to start
+        // CRITICAL: Determine where cursor should be based on what happened
+        // 1. First keystroke: always force to end (position 1)
+        // 2. Text length increased (typing): 
+        //    - If cursor was at end before: force to end (to prevent jumping to start)
+        //    - If cursor was in middle: restore to saved position + 1 (right after typed char)
+        // 3. Text length decreased (deleting): restore saved position
+        // 4. Text length same (replacing): restore saved position
+        
+        if (isFirstKeystroke) {
+            // First keystroke - always force to end
             forceCursorToEnd();
-            
-            // Also restore aggressively with multiple strategies
             queueMicrotask(forceCursorToEnd);
             requestAnimationFrame(() => {
                 forceCursorToEnd();
@@ -766,16 +830,50 @@ const RichTextEditor = ({
             setTimeout(forceCursorToEnd, 10);
             setTimeout(forceCursorToEnd, 20);
             setTimeout(forceCursorToEnd, 50);
+        } else if (textLengthIncreased) {
+            // Text was added - check if cursor was at end BEFORE typing
+            // Use savedCursorPositionRef which was saved in handleBeforeInput
+            const cursorBeforeTyping = savedCursorPositionRef.current;
+            const wasAtEnd = cursorBeforeTyping && cursorBeforeTyping.start >= oldText.length - 1;
+            
+            if (wasAtEnd) {
+                // Was typing at end - force to end to prevent jumping to start
+                forceCursorToEnd();
+                queueMicrotask(forceCursorToEnd);
+                requestAnimationFrame(() => {
+                    forceCursorToEnd();
+                    requestAnimationFrame(forceCursorToEnd);
+                });
+                setTimeout(forceCursorToEnd, 0);
+                setTimeout(forceCursorToEnd, 1);
+                setTimeout(forceCursorToEnd, 5);
+                setTimeout(forceCursorToEnd, 10);
+                setTimeout(forceCursorToEnd, 20);
+                setTimeout(forceCursorToEnd, 50);
+            } else if (cursorBeforeTyping) {
+                // Was typing in middle - restore to saved position + 1 (right after typed char)
+                const targetPos = cursorBeforeTyping.start + 1;
+                restoreCursorToPosition(targetPos);
+                queueMicrotask(() => restoreCursorToPosition(targetPos));
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => restoreCursorToPosition(targetPos));
+                });
+                setTimeout(() => restoreCursorToPosition(targetPos), 0);
+                setTimeout(() => restoreCursorToPosition(targetPos), 10);
+                setTimeout(() => restoreCursorToPosition(targetPos), 20);
+                setTimeout(() => restoreCursorToPosition(targetPos), 50);
+            }
         } else {
-            // Text length stayed same or decreased - user is editing in middle or deleting
-            // Restore the saved cursor position to allow editing in place
-            restoreSavedCursor();
-            queueMicrotask(restoreSavedCursor);
-            requestAnimationFrame(() => {
-                requestAnimationFrame(restoreSavedCursor);
-            });
-            setTimeout(restoreSavedCursor, 0);
-            setTimeout(restoreSavedCursor, 10);
+            // Text length stayed same or decreased - restore saved position
+            if (savedCursorPos) {
+                restoreCursorPosition(savedCursorPos);
+                queueMicrotask(() => restoreCursorPosition(savedCursorPos));
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => restoreCursorPosition(savedCursorPos));
+                });
+                setTimeout(() => restoreCursorPosition(savedCursorPos), 0);
+                setTimeout(() => restoreCursorPosition(savedCursorPos), 10);
+            }
         }
         
         // Debounce onChange to prevent too many state updates in parent
