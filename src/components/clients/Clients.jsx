@@ -1238,6 +1238,7 @@ const Clients = React.memo(() => {
         selectedClientRef.current = client;
         selectedLeadRef.current = null;
         isFormOpenRef.current = true;
+        setCurrentTab('overview'); // Always default to Overview tab when opening a client
         setViewMode('client-detail');
         
         // CRITICAL: Don't update URL with client ID - this can cause RouteState to misinterpret it as a project ID
