@@ -481,20 +481,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        // Skip if we've already loaded data for this client (unless user hasn't edited)
-        // This prevents reloading when component re-renders
-        if (initialDataLoadedForClientIdRef.current === clientId && !hasUserEditedForm.current) {
-            return;
-        }
-        
-        // Skip if user is currently editing - don't overwrite their changes
-        if (hasUserEditedForm.current || isEditingRef.current || isAutoSavingRef.current) {
-            return;
-        }
-        
-        // Skip if already loading for this client
+        // CRITICAL: Always load data when client.id changes to ensure fresh data
+        // Only skip if we're currently loading the SAME client (prevent duplicate calls)
+        // Don't skip based on editing state - we want fresh data even if user is editing
         if (isLoadingClientRef.current && initialDataLoadedForClientIdRef.current === clientId) {
+            console.log('⏭️ Already loading data for this client, skipping duplicate call');
             return;
+        }
+        
+        // Reset the loaded flag when client changes to ensure we load fresh data
+        if (initialDataLoadedForClientIdRef.current !== clientId) {
+            initialDataLoadedForClientIdRef.current = null;
         }
         
         // CRITICAL: Don't set loading state - formData already has client prop data
@@ -511,8 +508,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         isLoadingClientRef.current = true;
         
-        // Load all data in parallel - non-blocking
-        // Use requestIdleCallback or setTimeout to make it truly non-blocking
+        // CRITICAL: Load all data immediately when modal opens
+        // This ensures all tabs have data available immediately when user switches tabs
+        // No deferral - start loading right away
         const loadAllData = async () => {
             try {
                 const token = window.storage?.getToken?.();
@@ -600,7 +598,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // This ensures all tabs have data available immediately when user switches tabs
         // formData is already initialized with client prop data, so tabs render immediately
         // API data will update formData immediately when it arrives (no transition delay)
-        loadAllData();
+        // Start loading immediately - don't wait for anything
+        loadAllData().catch(error => {
+            console.error('❌ Error in loadAllData:', error);
+            setIsInitialLoading(false);
+            isLoadingClientRef.current = false;
+        });
         
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client?.id]); // Only reload when client.id changes
