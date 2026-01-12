@@ -721,10 +721,38 @@ const RichTextEditor = ({
         
         // Get the current HTML from the editor (this is the ONLY source of truth when user is typing)
         const newHtml = editorRef.current.innerHTML;
+        const oldHtml = domValueRef.current || '';
         
-        // CRITICAL: Save cursor position BEFORE any async operations
-        // This will be used if React updates the DOM externally (like from auto-save)
-        savedCursorPositionRef.current = saveCursorPosition();
+        // Get text content to detect if text was added
+        const oldText = oldHtml ? (() => {
+            const temp = document.createElement('div');
+            temp.innerHTML = oldHtml;
+            return temp.textContent || temp.innerText || '';
+        })() : '';
+        const newText = editorRef.current.textContent || '';
+        const textLengthIncreased = newText.length > oldText.length;
+        
+        // CRITICAL: Calculate where cursor should be after typing
+        // If we have a saved position from beforeinput, use it to calculate target position
+        let targetCursorPosition = null;
+        if (savedCursorPositionRef.current && textLengthIncreased) {
+            // Text was added - cursor should be at saved position + 1 (right after typed char)
+            targetCursorPosition = savedCursorPositionRef.current.start + 1;
+        } else {
+            // Fallback: save current cursor position
+            const currentPos = saveCursorPosition();
+            if (currentPos) {
+                targetCursorPosition = currentPos.start;
+            }
+        }
+        
+        // Save the target cursor position for MutationObserver to restore
+        if (targetCursorPosition !== null) {
+            savedCursorPositionRef.current = {
+                start: targetCursorPosition,
+                end: targetCursorPosition
+            };
+        }
         
         // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
         // This must happen synchronously before any other async operations
