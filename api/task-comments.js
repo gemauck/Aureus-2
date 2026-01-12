@@ -201,6 +201,16 @@ export default async function handler(req, res) {
         return badRequest(res, 'Missing commentId parameter');
       }
 
+      // Check if comment exists first
+      const comment = await prisma.taskComment.findUnique({
+        where: { id: String(commentId) }
+      });
+
+      if (!comment) {
+        // Comment doesn't exist - return 404 instead of 500
+        return notFound(res, 'Comment not found');
+      }
+
       await prisma.taskComment.delete({
         where: { id: String(commentId) }
       });
