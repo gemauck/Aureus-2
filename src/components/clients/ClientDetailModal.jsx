@@ -1394,21 +1394,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // CRITICAL FIX: Get current formData from ref and update directly
             console.log(`🔧🔧🔧 BEFORE setFormData - contacts.length=${contacts.length}`);
-            const currentFormData = formDataRef.current || {};
-            const existingContacts = currentFormData.contacts || [];
-            console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
+            // Reuse currentFormData and existingContacts from earlier in the function
+            const currentFormDataForUpdate = formDataRef.current || {};
+            const existingContactsForUpdate = currentFormDataForUpdate.contacts || [];
+            console.log(`🔧 Existing contacts count: ${existingContactsForUpdate.length}, Optimistic contacts count: ${optimisticContacts.length}`);
             
                 // Merge: API contacts + existing contacts + optimistic contacts
-                const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
+                const mergedContacts = mergeUniqueById(contacts, [...existingContactsForUpdate, ...optimisticContacts]);
             console.log(`🔧 Merged contacts array:`, mergedContacts);
             
             // Create updated formData - ensure it's a completely new object reference
                 const updated = {
-                ...currentFormData,
+                ...currentFormDataForUpdate,
                 contacts: [...mergedContacts] // Create new array reference
                 };
             
-            console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
+            console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContactsForUpdate.length} existing, ${optimisticContacts.length} optimistic)`);
             console.log(`✅✅✅ Updated formData.contacts:`, mergedContacts);
             
             // CRITICAL: Use functional update to ensure React detects the change
