@@ -333,9 +333,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        // Mark as loading to prevent concurrent calls
-        hasLoadedRef.current = true;
-        
         // Only set loading to true if we're actually going to make an API call
         // and we're not already loading (to prevent resetting loading state on multiple calls)
         setIsLoading(prev => prev ? prev : true);
@@ -354,6 +351,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
             });
             setSectionsByYear(normalized);
+            // Only mark as loaded AFTER data is successfully set
+            hasLoadedRef.current = true;
         } catch (err) {
             console.error('❌ MonthlyDocumentCollectionTracker: Failed to load document sections:', err);
             setError('Failed to load data. Please refresh the page.');
