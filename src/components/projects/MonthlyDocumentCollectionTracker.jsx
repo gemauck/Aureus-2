@@ -39,18 +39,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const workingMonths = getWorkingMonths();
-    
-    // ============================================================
-    // SIMPLIFIED STATE MANAGEMENT - Best Practices
-    // ============================================================
-    // Only use refs for things that don't trigger re-renders (timeouts, API refs)
     const saveTimeoutRef = useRef(null);
+    const isSavingRef = useRef(false);
+    const lastSaveTimestampRef = useRef(0); // Track when we last saved to prevent immediate reload
+    const previousProjectIdRef = useRef(project?.id);
+    const hasLoadedInitialDataRef = useRef(false);
+    const lastLoadTimestampRef = useRef(0);
+    const sectionsRef = useRef({});
+    const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
-    const hasLoadedRef = useRef(false);
     
-    // React state for all UI and data (triggers re-renders)
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState(null);
+    // Window-level cache to persist loaded state across remounts
+    // This helps avoid unnecessary reloads when navigating back to the section
+    if (!window._documentCollectionLoadCache) {
+        window._documentCollectionLoadCache = new Map();
+    }
+    const loadCache = window._documentCollectionLoadCache;
+    const isDeletingRef = useRef(false);
+    const deletionTimestampRef = useRef(null); // Track when deletion started
+    const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
+    const deletionQueueRef = useRef([]); // Queue for consecutive deletions
+    const isProcessingDeletionQueueRef = useRef(false); // Track if we're processing the queue
+    const lastChangeTimestampRef = useRef(0); // Track when last status change was made
+    const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
+    const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
+    
+    const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -177,11 +191,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return Array.from(years).sort();
     };
 
-    // Simplified normalization - no caching needed
+    // PERFORMANCE: Memoize normalization results to avoid re-processing
+    const normalizationCache = useRef(new Map());
+    
     const normalizeSectionsByYear = (rawValue, fallbackYear) => {
+        // Handle empty objects - if it's an empty object, return empty object (don't treat as no data)
         if (!rawValue) return {};
         if (typeof rawValue === 'object' && !Array.isArray(rawValue) && Object.keys(rawValue).length === 0) {
-            return {};
+            return {}; // Empty object is valid - means no sections for any year
+        }
+
+        // PERFORMANCE: Use cache for identical inputs (common when re-rendering)
+        const cacheKey = `${typeof rawValue === 'string' ? rawValue.substring(0, 100) : JSON.stringify(rawValue).substring(0, 100)}_${fallbackYear || 'default'}`;
+        if (normalizationCache.current.has(cacheKey)) {
+            return normalizationCache.current.get(cacheKey);
         }
 
         let parsedValue = rawValue;
@@ -190,33 +213,57 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const trimmed = rawValue.trim();
             if (!trimmed) return {};
             try {
+                // OPTIMIZATION: Use faster JSON.parse for most cases
                 parsedValue = JSON.parse(trimmed);
             } catch {
+                // Only use slow parseSections if JSON.parse fails
                 parsedValue = parseSections(rawValue);
             }
         }
 
         if (parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)) {
             const result = {};
+            // OPTIMIZATION: Process in batches to avoid blocking
             const yearKeys = Object.keys(parsedValue);
             for (let i = 0; i < yearKeys.length; i++) {
                 const yearKey = yearKeys[i];
                 const value = parsedValue[yearKey];
                 result[yearKey] = Array.isArray(value) ? value : parseSections(value);
             }
+            
+            // Cache result
+            normalizationCache.current.set(cacheKey, result);
+            // Limit cache size to prevent memory issues
+            if (normalizationCache.current.size > 50) {
+                const firstKey = normalizationCache.current.keys().next().value;
+                normalizationCache.current.delete(firstKey);
+            }
+            
             return result;
         }
 
-        // LEGACY MODE: Convert flat array to year-based object
+        // LEGACY MODE:
+        // For flat sections arrays (no per‑year map yet), scope them ONLY to the
+        // active/fallback year instead of cloning across all inferred years.
+        // Cloning across inferred years caused edits in one year to appear in all years.
         const baseSections = Array.isArray(parsedValue) ? parsedValue : parseSections(parsedValue);
         const targetYear = fallbackYear || new Date().getFullYear();
         if (!targetYear) {
             return {};
         }
 
-        return {
+        const result = {
             [targetYear]: cloneSectionsArray(baseSections)
         };
+        
+        // Cache result
+        normalizationCache.current.set(cacheKey, result);
+        if (normalizationCache.current.size > 50) {
+            const firstKey = normalizationCache.current.keys().next().value;
+            normalizationCache.current.delete(firstKey);
+        }
+        
+        return result;
     };
     
     // ============================================================
@@ -225,9 +272,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Main data state - loaded from database, stored per year
     const [sectionsByYear, setSectionsByYear] = useState({});
-    const [isLoading, setIsLoading] = useState(true);
     
     // View model for the currently selected year only
+    // This ensures that edits (adding sections, documents, comments, etc.)
+    // are scoped to a single year instead of affecting every year.
     const sections = React.useMemo(
         () => sectionsByYear[selectedYear] || [],
         [sectionsByYear, selectedYear]
@@ -241,12 +289,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 ? updater(prevForYear)
                 : (updater || []);
             
-            return {
+            const updated = {
                 ...prev,
                 [selectedYear]: nextForYear
             };
+            
+            // CRITICAL: Update ref immediately to prevent race conditions with save
+            sectionsRef.current = updated;
+            
+            return updated;
         });
     };
+
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // Keep refs in sync with latest state
+    useEffect(() => {
+        sectionsRef.current = sectionsByYear;
+    }, [sectionsByYear]);
     
     useEffect(() => {
         // Always prefer singleton instance created by DocumentCollectionAPI service
@@ -294,158 +354,532 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
+    const selectedCellsRef = useRef(new Set());
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        selectedCellsRef.current = selectedCells;
+    }, [selectedCells]);
     
     // ============================================================
     // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
     // ============================================================
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
-    // ============================================================
-    // SIMPLIFIED DATA LOADING - Single source of truth: Database
-    // ============================================================
-    const loadFromDatabase = useCallback(async () => {
-        if (!project?.id) {
+    const loadFromProjectProp = useCallback(() => {
+        if (!project?.id) return;
+        
+        // CRITICAL: Don't reload if we're currently saving - this prevents overwriting unsaved changes
+        if (isSavingRef.current) {
+            console.log('⏸️ Skipping load from prop: save in progress');
+            return;
+        }
+        
+        // CRITICAL: Don't reload if we just saved (within last 3 seconds) - prevents race condition
+        // where parent refetches project and prop updates with stale data right after save
+        const timeSinceLastSave = Date.now() - (lastSaveTimestampRef.current || 0);
+        if (timeSinceLastSave < 3000) {
+            console.log(`⏸️ Skipping load from prop: save completed ${timeSinceLastSave}ms ago (too recent)`);
+            return;
+        }
+        
+        // CRITICAL: Check if we have unsaved changes - don't overwrite them with potentially stale prop data
+        const currentSnapshot = serializeSections(sectionsRef.current);
+        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+        if (hasUnsavedChanges) {
+            console.log('⏸️ Skipping load from prop: unsaved changes detected');
+            // Still allow loading if prop data is significantly different (might be from another user)
+            // But only if current data is empty or very small
+            const currentDataSize = currentSnapshot.length;
+            if (currentDataSize > 100) { // If we have substantial data, don't overwrite
+                return;
+            }
+        }
+        
+        // OPTIMIZATION: Check if we already have data loaded for this project
+        // This prevents unnecessary reloading on remount (e.g., second navigation)
+        const existingData = sectionsRef.current || {};
+        const hasExistingData = Object.keys(existingData).length > 0;
+        
+        // Check if we recently loaded data for this project (within last 10 seconds)
+        // This helps avoid reloading on remount when navigating back to the section
+        // Use window-level cache to persist across remounts
+        const cacheKey = `load_${project.id}`;
+        const cachedLoadInfo = loadCache.get(cacheKey);
+        const timeSinceLastLoad = cachedLoadInfo 
+            ? Date.now() - (cachedLoadInfo.timestamp || 0)
+            : Date.now() - (lastLoadTimestampRef.current || 0);
+        const recentlyLoaded = (cachedLoadInfo?.loaded || hasLoadedInitialDataRef.current) && timeSinceLastLoad < 10000;
+        
+        // If we have existing data and it matches the project prop, skip reloading
+        if (hasExistingData && recentlyLoaded) {
+            const existingSnapshot = serializeSections(existingData);
+            const propSnapshot = project.documentSections 
+                ? (typeof project.documentSections === 'string' 
+                    ? project.documentSections.trim() 
+                    : JSON.stringify(project.documentSections))
+                : '';
+            
+            // Quick check: if snapshots are similar, skip reload
+            // This avoids expensive re-processing on remount
+            if (propSnapshot && existingSnapshot && 
+                (propSnapshot === existingSnapshot || 
+                 existingSnapshot.length > 0 && propSnapshot.length > 0)) {
+                // Data already loaded and matches, just ensure loading state is false
                 setIsLoading(false);
                 return;
-        }
-        
-        // Prevent multiple simultaneous loads
-        if (hasLoadedRef.current) {
-            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping load - already loaded for this project');
-                            return;
-        }
-        
-        // Ensure API is available
-        if (!apiRef.current) {
-            apiRef.current = window.DocumentCollectionAPI || null;
-        }
-        
-        if (!apiRef.current) {
-            console.warn('DocumentCollectionAPI not available yet, will retry');
-            // Don't set loading to true if API isn't available - keep current state
-            // Set a timeout to prevent infinite loading
-            setTimeout(() => {
-                if (!apiRef.current) {
-                    setIsLoading(false);
-                    setError('Document Collection API not available. Please refresh the page.');
-                }
-            }, 2000);
-                return;
-        }
-        
-        // Only set loading to true if we're actually going to make an API call
-        // and we're not already loading (to prevent resetting loading state on multiple calls)
-        setIsLoading(prev => prev ? prev : true);
-        setError(null);
-        
-        try {
-            console.log('🔄 MonthlyDocumentCollectionTracker: Loading from database...', { projectId: project.id });
-            const freshProject = await apiRef.current.fetchProject(project.id);
-            console.log('✅ MonthlyDocumentCollectionTracker: Received project data', { 
-                hasDocumentSections: !!freshProject?.documentSections,
-                documentSectionsType: typeof freshProject?.documentSections
-            });
-            const normalized = normalizeSectionsByYear(freshProject?.documentSections);
-            console.log('✅ MonthlyDocumentCollectionTracker: Normalized sections', { 
-                years: Object.keys(normalized),
-                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-            });
-            setSectionsByYear(normalized);
-            // Only mark as loaded AFTER data is successfully set
-            hasLoadedRef.current = true;
-        } catch (err) {
-            console.error('❌ MonthlyDocumentCollectionTracker: Failed to load document sections:', err);
-            setError('Failed to load data. Please refresh the page.');
-            // Reset hasLoadedRef on error so we can retry
-            hasLoadedRef.current = false;
-        } finally {
-            console.log('✅ MonthlyDocumentCollectionTracker: Setting isLoading to false');
-            setIsLoading(false);
-        }
-    }, [project?.id]);
-    
-    // Simplified refresh - just reload from database
-    const refreshFromDatabase = useCallback(async () => {
-        if (!project?.id || isSaving) return;
-        await loadFromDatabase();
-    }, [project?.id, isSaving, loadFromDatabase]);
-    
-    // ============================================================
-    // INITIAL LOAD - Simple: Load from database on mount
-    // ============================================================
-    useEffect(() => {
-        // Always reset hasLoaded when project ID changes
-        hasLoadedRef.current = false;
-    }, [project?.id]);
-    
-    useEffect(() => {
-        console.log('🔵 MonthlyDocumentCollectionTracker: Initial load effect', { 
-            hasProject: !!project?.id, 
-            projectId: project?.id,
-            hasAPI: !!apiRef.current,
-            hasWindowAPI: !!window.DocumentCollectionAPI,
-            hasLoaded: hasLoadedRef.current
-        });
-        
-        // Only load if we haven't loaded yet for this project
-        if (project?.id && !hasLoadedRef.current) {
-            // Ensure API is set
-            if (!apiRef.current && window.DocumentCollectionAPI) {
-                apiRef.current = window.DocumentCollectionAPI;
             }
             
-            // Try to load immediately if API is available
-            if (apiRef.current) {
-                loadFromDatabase();
-            } else if (window.DocumentCollectionAPI) {
-                // API not available yet, retry after a short delay
-                const retryTimer = setTimeout(() => {
-                    if (!hasLoadedRef.current && window.DocumentCollectionAPI) {
-                        console.log('🔄 MonthlyDocumentCollectionTracker: Retrying load after API check');
-                        apiRef.current = window.DocumentCollectionAPI;
-                        loadFromDatabase();
-                    }
-                }, 500);
-                return () => clearTimeout(retryTimer);
-                    } else {
-                // No API available, set loading to false after timeout
-                const timeout = setTimeout(() => {
-                    if (!hasLoadedRef.current) {
-                        setIsLoading(false);
-                        setError('Document Collection API not available. Please refresh the page.');
-                    }
-                }, 2000);
-                return () => clearTimeout(timeout);
+            // CRITICAL: If current data is newer/more complete than prop, don't overwrite
+            // This prevents stale prop data from overwriting fresh saves
+            if (existingSnapshot.length > propSnapshot.length && existingSnapshot.length > 100) {
+                console.log('⏸️ Skipping load from prop: current data is more complete');
+                setIsLoading(false);
+                return;
             }
-        } else if (!project?.id) {
-            // No project ID, set loading to false
-            setIsLoading(false);
+        }
+        
+        // Also check localStorage snapshot for quick restore on remount
+        // This provides a fast path when component remounts but data was recently loaded
+        if (!hasExistingData && recentlyLoaded) {
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                    if (snapshotString && snapshotString.length > 0) {
+                        const snapshotParsed = JSON.parse(snapshotString);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                        const snapshotYears = Object.keys(snapshotMap || {});
+                        if (snapshotYears.length > 0) {
+                            // Restore from snapshot quickly without processing prop again
+                            setSectionsByYear(snapshotMap);
+                            lastSavedSnapshotRef.current = serializeSections(snapshotMap);
+                            lastLoadTimestampRef.current = Date.now();
+                            hasLoadedInitialDataRef.current = true;
+                            // Update window-level cache to persist across remounts
+                            loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
+                            setIsLoading(false);
+                            return;
+                        }
+                    }
+                } catch (snapshotError) {
+                    // Fall through to normal processing
+                }
+            }
+        }
+        
+        // OPTIMIZATION: Only show loading if we don't have data yet
+        if (!hasExistingData) {
+            setIsLoading(true);
+        }
+        
+        // PERFORMANCE: Process data asynchronously to avoid blocking UI
+        const processData = () => {
+            try {
+                const snapshotKey = getSnapshotKey(project.id);
+                
+                // Quick check: if prop has simple data, process immediately
+                const hasSimpleData = project.documentSections && 
+                    (Array.isArray(project.documentSections) || 
+                     (typeof project.documentSections === 'string' && project.documentSections.length < 1000));
+                
+                if (hasSimpleData) {
+                    // Fast path for small/simple data
+                    const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
+                    let normalized = normalizedFromProp;
+                    
+                    const yearKeys = Object.keys(normalizedFromProp || {});
+                    
+                    // Quick localStorage check for small data
+                    if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                        try {
+                            const snapshotString = window.localStorage.getItem(snapshotKey);
+                            if (snapshotString && snapshotString.length < 50000) { // Only for reasonably sized data
+                                const snapshotParsed = JSON.parse(snapshotString);
+                                const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                                const snapshotYears = Object.keys(snapshotMap || {});
+                                if (snapshotYears.length > 0) {
+                                    normalized = snapshotMap;
+                                }
+                            }
+                        } catch (snapshotError) {
+                            console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
+                        }
+                    }
+                    
+                    setSectionsByYear(normalized);
+                    lastSavedSnapshotRef.current = serializeSections(normalized);
+                    lastLoadTimestampRef.current = Date.now();
+                    hasLoadedInitialDataRef.current = true;
+                    // Update window-level cache to persist across remounts
+                    loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
+                    setIsLoading(false);
+                } else {
+                    // Slow path for large/complex data - defer to idle time
+                    const processLargeData = () => {
+                        try {
+                            const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
+                            let normalized = normalizedFromProp;
+                            
+                            const yearKeys = Object.keys(normalizedFromProp || {});
+                            
+                            // If prop has no data but we have a local snapshot, restore from snapshot
+                            if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                                try {
+                                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                                    if (snapshotString) {
+                                        const snapshotParsed = JSON.parse(snapshotString);
+                                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                                        const snapshotYears = Object.keys(snapshotMap || {});
+                                        if (snapshotYears.length > 0) {
+                                            normalized = snapshotMap;
+                                        }
+                                    }
+                                } catch (snapshotError) {
+                                    console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
+                                }
+                            }
+                            
+                            setSectionsByYear(normalized);
+                            lastSavedSnapshotRef.current = serializeSections(normalized);
+                            lastLoadTimestampRef.current = Date.now();
+                            // Update window-level cache to persist across remounts
+                            loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
+                        } catch (error) {
+                            console.error('❌ Error loading sections from prop:', error);
+                            setSectionsByYear({});
+                            lastSavedSnapshotRef.current = '{}';
+                        } finally {
+                            hasLoadedInitialDataRef.current = true;
+                            // Update window-level cache to persist across remounts
+                            loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
+                            setIsLoading(false);
+                        }
+                    };
+                    
+                    // Use requestIdleCallback for large data processing, fallback to setTimeout
+                    if (typeof requestIdleCallback !== 'undefined') {
+                        requestIdleCallback(processLargeData, { timeout: 100 });
+                    } else {
+                        setTimeout(processLargeData, 0);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error loading sections from prop:', error);
+                setSectionsByYear({});
+                lastSavedSnapshotRef.current = '{}';
+                hasLoadedInitialDataRef.current = true;
+                // Update window-level cache to persist across remounts
+                loadCache.set(cacheKey, { loaded: true, timestamp: Date.now() });
+                setIsLoading(false);
+            }
+        };
+        
+        // Start processing immediately for small data, defer for large data
+        processData();
+    }, [project?.documentSections, project?.id]);
+    
+    const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
+        if (!project?.id || !apiRef.current) return;
+        
+        // OPTIMIZATION: Skip refresh if we just loaded from props and haven't made changes
+        // This prevents unnecessary full project fetch right after initial load
+        if (!forceUpdate && hasLoadedInitialDataRef.current) {
+            const timeSinceLoad = Date.now() - (lastLoadTimestampRef.current || 0);
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            
+            // If we loaded less than 2 seconds ago and have no unsaved changes, skip refresh
+            // This allows the UI to render quickly with prop data
+            if (timeSinceLoad < 2000 && !hasUnsavedChanges) {
+                return;
+            }
+        }
+        
+        // Don't refresh if a save is in progress to avoid race conditions
+        if (isSavingRef.current && !forceUpdate) {
+            console.log('⏸️ Refresh skipped: save in progress');
+            return;
+        }
+        
+        // Don't refresh if user made changes recently (within last 15 seconds)
+        // This prevents overwriting rapid consecutive changes
+        // BUT: Allow refresh on initial load (forceUpdate) even with recent changes
+        const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+        if (!forceUpdate && timeSinceLastChange < 15000 && hasLoadedInitialDataRef.current) {
+            console.log('⏸️ Refresh skipped: recent changes detected (will not overwrite)', {
+                timeSinceLastChange: `${timeSinceLastChange}ms`
+            });
+            return;
+        }
+        
+        // Also check if there are unsaved changes - don't refresh if user is still editing
+        // This provides additional protection even if the timestamp check passes
+        const currentSnapshot = serializeSections(sectionsRef.current);
+        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+        if (!forceUpdate && hasUnsavedChanges && timeSinceLastChange < 20000) {
+            console.log('⏸️ Refresh skipped: unsaved changes detected (will not overwrite)', {
+                hasUnsavedChanges: true,
+                timeSinceLastChange: `${timeSinceLastChange}ms`
+            });
+            return;
+        }
+        
+        // Don't refresh if a delete operation just happened (give it time to save)
+        // This is critical to prevent the deletion from being overwritten by stale data
+        if (isDeletingRef.current && !forceUpdate) {
+            const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : 0;
+            // Block refreshes for at least 5 seconds after deletion starts
+            if (timeSinceDeletion < 5000) {
+                console.log(`⏸️ Refresh skipped: deletion in progress (${timeSinceDeletion}ms ago)`);
+                return;
+            }
+        }
+        
+        try {
+            const freshProject = await apiRef.current.fetchProject(project.id);
+            const snapshotKey = getSnapshotKey(project.id);
+            const normalizedFromDb = normalizeSectionsByYear(freshProject?.documentSections);
+            let normalized = normalizedFromDb;
+            const yearKeys = Object.keys(normalizedFromDb || {});
+            const currentSnapshot = serializeSections(sectionsRef.current);
+            const freshSnapshot = serializeSections(normalized);
+            
+            // If DB has no data but we have a local snapshot, treat snapshot as source of truth
+            // BUT: Don't use snapshot if it has more sections than current state (indicates deletion happened)
+            if ((!normalizedFromDb || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                try {
+                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                    if (snapshotString) {
+                        const snapshotParsed = JSON.parse(snapshotString);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
+                        const snapshotYears = Object.keys(snapshotMap || {});
+                        if (snapshotYears.length > 0) {
+                            // Check if snapshot would restore deleted sections
+                            const currentYearSections = sectionsRef.current[selectedYear] || [];
+                            const snapshotYearSections = snapshotMap[selectedYear] || [];
+                            
+                            // Only use snapshot if it doesn't have more sections than current state
+                            // This prevents restoring sections that were just deleted
+                            if (snapshotYearSections.length <= currentYearSections.length || currentYearSections.length === 0) {
+                                normalized = snapshotMap;
+                            } else {
+                                console.log('⏸️ Snapshot ignored: would restore deleted sections', {
+                                    current: currentYearSections.length,
+                                    snapshot: snapshotYearSections.length
+                                });
+                            }
+                        }
+                    }
+                } catch (snapshotError) {
+                    console.warn('⚠️ Failed to apply document collection snapshot as DB fallback:', snapshotError);
+                }
+            }
+            
+            // Update from database if data has changed
+            // Check if we have unsaved local changes
+            // CRITICAL: Use the snapshot we just computed above, not a new one
+            const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+            
+            // Double-check deletion flag before updating (defensive programming)
+            // This prevents race conditions where the flag might be checked but then cleared
+            // between the check and the state update
+            if (isDeletingRef.current && !forceUpdate) {
+                console.log('⏸️ Refresh aborted: deletion flag detected during update');
+                return;
+            }
+            
+            if (freshSnapshot !== currentSnapshot) {
+            // CRITICAL: Don't restore deleted sections
+            // If current state has fewer sections than database, a deletion likely just happened
+            const currentYearSections = sectionsRef.current[selectedYear] || [];
+            const freshYearSections = normalized[selectedYear] || [];
+            
+            // Check if any sections in the database are ones we're currently deleting
+            const currentSectionIds = new Set(currentYearSections.map(s => String(s.id)));
+            const freshSectionIds = new Set(freshYearSections.map(s => String(s.id)));
+            const sectionsToRestore = freshYearSections.filter(s => 
+                !currentSectionIds.has(String(s.id)) && 
+                deletionSectionIdsRef.current.has(String(s.id))
+            );
+            
+            // If database has sections we're deleting, don't update (deletion in progress)
+            if (sectionsToRestore.length > 0) {
+                console.log('⏸️ Refresh skipped: database contains sections being deleted', {
+                    sectionsToRestore: sectionsToRestore.map(s => ({ id: s.id, name: s.name })),
+                    deletionIds: Array.from(deletionSectionIdsRef.current)
+                });
+                return;
+            }
+            
+            // If database has more sections than current state, don't update (deletion likely in progress)
+            // CRITICAL: Also check if our snapshot matches current state (indicates deletion was saved)
+            // Note: currentSnapshot is already declared above, so we reuse it here
+            const snapshotMatchesCurrent = currentSnapshot === lastSavedSnapshotRef.current;
+            
+            if (freshYearSections.length > currentYearSections.length && currentYearSections.length > 0) {
+                const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : Infinity;
+                // Block if deletion happened recently (within last 15 seconds) OR if snapshot matches current (deletion was saved)
+                // This prevents restoring sections that were just deleted and saved
+                if (timeSinceDeletion < 15000 || snapshotMatchesCurrent) {
+                    console.log('⏸️ Refresh skipped: database has more sections than current state (deletion likely in progress or recently completed)', {
+                        current: currentYearSections.length,
+                        database: freshYearSections.length,
+                        timeSinceDeletion: `${timeSinceDeletion}ms`,
+                        snapshotMatchesCurrent: snapshotMatchesCurrent
+                    });
+                    return;
+                }
+            }
+                
+                // CRITICAL: Never update if we have unsaved local changes, regardless of snapshot matching
+                // This prevents overwriting local changes before they're saved to the database
+                // The only exception is forceUpdate, which should only be used after a successful save
+                if (hasUnsavedChanges && !forceUpdate) {
+                    console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)', {
+                        hasUnsavedChanges: true,
+                        isSaving: isSavingRef.current,
+                        currentSnapshot: currentSnapshot.substring(0, 100),
+                        lastSavedSnapshot: lastSavedSnapshotRef.current.substring(0, 100)
+                    });
+                    return;
+                }
+                
+                // Update if:
+                // 1. No unsaved local changes (safe to update), OR
+                // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
+                // 3. Force update requested (after successful save)
+                const shouldUpdate = !hasUnsavedChanges || 
+                                    (freshSnapshot === lastSavedSnapshotRef.current) || 
+                                    forceUpdate;
+                
+                if (shouldUpdate) {
+                    // Final check before updating state
+                    // CRITICAL: Filter out any sections that are in the deletion tracking set
+                    // This prevents restoring sections that were just deleted
+                    if (deletionSectionIdsRef.current.size > 0) {
+                        const filteredNormalized = { ...normalized };
+                        Object.keys(filteredNormalized).forEach(year => {
+                            filteredNormalized[year] = (filteredNormalized[year] || []).filter(section => 
+                                !deletionSectionIdsRef.current.has(String(section.id))
+                            );
+                        });
+                        normalized = filteredNormalized;
+                        // Recalculate snapshot after filtering
+                        const filteredSnapshot = serializeSections(normalized);
+                        console.log('🔍 Filtered out sections being deleted from refresh update', {
+                            deletedIds: Array.from(deletionSectionIdsRef.current),
+                            originalSnapshot: freshSnapshot.substring(0, 100),
+                            filteredSnapshot: filteredSnapshot.substring(0, 100)
+                        });
+                    }
+                    
+                    if (!isDeletingRef.current || forceUpdate) {
+                        setSectionsByYear(normalized);
+                        // Update snapshot reference to match database state (use filtered snapshot if filtering occurred)
+                        const finalSnapshot = deletionSectionIdsRef.current.size > 0 ? serializeSections(normalized) : freshSnapshot;
+                        if (finalSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
+                            lastSavedSnapshotRef.current = finalSnapshot;
+                        }
+                    } else {
+                        console.log('⏸️ State update skipped: deletion in progress');
+                    }
+                }
+            } else {
+                // Data matches, update snapshot reference if needed
+                if (hasUnsavedChanges && freshSnapshot === lastSavedSnapshotRef.current) {
+                    lastSavedSnapshotRef.current = freshSnapshot;
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error fetching fresh project data:', error);
+            // Retry once after a short delay if initial load failed
+            if (forceUpdate && !hasLoadedInitialDataRef.current) {
+                console.log('🔄 Retrying initial data fetch after error...');
+                setTimeout(() => {
+                    refreshFromDatabase(true).catch(retryError => {
+                        console.error('❌ Retry failed:', retryError);
+                        // Show user-friendly error message
+                        if (window.alert) {
+                            alert('Failed to load document collection data. Please refresh the page or try again later.');
+                        }
+                    });
+                }, 1000);
+            }
         }
     }, [project?.id]);
     
-    // Retry loading when API becomes available (only if we haven't loaded yet)
     useEffect(() => {
-        if (project?.id && !hasLoadedRef.current && !apiRef.current && window.DocumentCollectionAPI) {
-            apiRef.current = window.DocumentCollectionAPI;
-            hasLoadedRef.current = true;
-            loadFromDatabase();
+        if (!project?.id) return;
+        
+        const isNewProject = previousProjectIdRef.current !== project.id;
+        if (isNewProject) {
+            previousProjectIdRef.current = project.id;
+            hasLoadedInitialDataRef.current = false;
         }
-    }, [project?.id]);
+        
+        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+        if (isNewProject || !hasUnsavedChanges) {
+            loadFromProjectProp();
+        } else {
+        }
+        
+        // OPTIMIZATION: Only refresh from database if we don't have data from props
+        // This prevents unnecessary full project fetch on initial load
+        const hasDataFromProps = project?.documentSections && 
+            (typeof project.documentSections === 'string' ? project.documentSections.trim() : project.documentSections);
+        
+        // OPTIMIZATION: Skip database refresh if we already have data loaded and it's the same project
+        // This prevents unnecessary database fetches on remount (e.g., second navigation)
+        const hasExistingData = Object.keys(sectionsRef.current || {}).length > 0;
+        const timeSinceLastLoad = Date.now() - (lastLoadTimestampRef.current || 0);
+        const shouldSkipRefresh = hasExistingData && 
+                                 hasLoadedInitialDataRef.current && 
+                                 !isNewProject && 
+                                 timeSinceLastLoad < 5000; // Skip if loaded within last 5 seconds
+        
+        // For new projects or when we have no data, refresh immediately with forceUpdate
+        // This ensures we get data even if guards would normally block
+        if (isNewProject || (!hasDataFromProps && !shouldSkipRefresh)) {
+            refreshFromDatabase(true); // Force update on initial load
+        } else if (!shouldSkipRefresh) {
+            // Defer database refresh to allow UI to render first with prop data
+            // But use shorter timeout for faster data sync
+            const refreshTimeout = setTimeout(() => {
+                refreshFromDatabase(false); // Allow guards on subsequent refreshes
+            }, 50); // Reduced from 100ms to 50ms for faster sync
+            return () => clearTimeout(refreshTimeout);
+        }
+        // If shouldSkipRefresh is true, we skip the database refresh entirely
+        // This allows the UI to render immediately with existing data
+    }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
     
     // ============================================================
-    // POLLING - Simple: Refresh every 30 seconds if not saving
+    // POLLING - Regularly refresh from database to get updates
     // ============================================================
     useEffect(() => {
         if (!project?.id || !apiRef.current) return;
         
+        // OPTIMIZATION: Increase polling interval to 30 seconds to reduce network load
+        // Only poll if component is visible and not actively being edited
         const pollInterval = setInterval(() => {
-            if (!isSaving && document.visibilityState === 'visible') {
-                refreshFromDatabase();
+            // Skip polling if:
+            // 1. User is actively editing (recent changes)
+            // 2. A save is in progress
+            // 3. Component is not visible (document hidden)
+            const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+            const isDocumentVisible = document.visibilityState === 'visible';
+            
+            if (isSavingRef.current || timeSinceLastChange < 5000 || !isDocumentVisible) {
+                return; // Skip this poll
             }
-        }, 30000);
+            
+            refreshFromDatabase(false);
+        }, 30000); // Increased from 5 seconds to 30 seconds
         
-        return () => clearInterval(pollInterval);
-    }, [project?.id, isSaving, refreshFromDatabase]);
+        return () => {
+            clearInterval(pollInterval);
+        };
+    }, [project?.id, refreshFromDatabase]);
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -478,48 +912,139 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
+            if (forceSaveTimeoutRef.current) {
+                clearTimeout(forceSaveTimeoutRef.current);
+            }
         };
     }, [sectionsByYear, isLoading, project?.id]);
     
-    // ============================================================
-    // SIMPLIFIED SAVE - Save to database, then reload
-    // ============================================================
-    const saveToDatabase = useCallback(async () => {
-        if (!project?.id || !apiRef.current || isSaving || isLoading) return;
-        
-        setIsSaving(true);
-        setError(null);
+    async function saveToDatabase(options = {}) {
+        if (isSavingRef.current) {
+            return;
+        }
+        // Don't trigger auto-save during deletion - deletion handles its own save
+        if (isDeletingRef.current && !options.allowDuringDeletion) {
+            console.log('⏸️ Auto-save skipped: deletion in progress');
+            return;
+        }
+        if (!project?.id) {
+            console.warn('⚠️ Cannot save: No project ID');
+            return;
+        }
+        if (isLoading) {
+            return;
+        }
+
+        const payload = sectionsRef.current || {};
+        const serialized = serializeSections(payload);
+
+        // Guard against wiping data with an all‑empty payload when we never had data,
+        // but ALLOW saving an empty state when the user has explicitly deleted sections.
+        const hasAnySections = Object.values(payload || {}).some(
+            (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
+        );
+        if (!hasAnySections && serialized === lastSavedSnapshotRef.current) {
+            return;
+        }
+        if (!hasAnySections && serialized !== lastSavedSnapshotRef.current) {
+        }
+
+        isSavingRef.current = true;
         
         try {
+            
             if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                await apiRef.current.saveDocumentSections(project.id, sectionsByYear, true);
+                await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
             } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                await window.DatabaseAPI.updateProject(project.id, {
-                    documentSections: serializeSections(sectionsByYear)
-                });
+                const updatePayload = {
+                    documentSections: serializeSections(payload)
+                };
+                await window.DatabaseAPI.updateProject(project.id, updatePayload);
             } else {
                 throw new Error('No available API for saving document sections');
             }
             
-            // Reload from database after save to get server state
-            await loadFromDatabase();
-        } catch (err) {
-            console.error('Failed to save document sections:', err);
-            setError('Failed to save changes. Please try again.');
+            lastSavedSnapshotRef.current = serialized;
+            lastSaveTimestampRef.current = Date.now(); // Mark when save completed to prevent immediate reload
+            
+            // Persist a snapshot locally so navigation issues cannot lose user data
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    window.localStorage.setItem(snapshotKey, serialized);
+                } catch (storageError) {
+                    console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
+                }
+            }
+            
+            // Refresh from database after save to get any concurrent updates
+            // Use a longer delay and check if user is still making changes
+            // Clear any pending refresh
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+            
+            refreshTimeoutRef.current = setTimeout(() => {
+                // Check if there are unsaved changes or recent changes
+                const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+                const currentSnapshot = serializeSections(sectionsRef.current);
+                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+                
+                // Only refresh if:
+                // 1. No changes in last 15 seconds (longer window after save to prevent overwriting rapid changes), AND
+                // 2. No unsaved changes (everything is saved)
+                // Use false instead of true so it respects all checks in refreshFromDatabase
+                if (timeSinceLastChange > 15000 && !hasUnsavedChanges) {
+                    refreshFromDatabase(false); // Use false to respect all checks
+                } else {
+                    // User is still making changes or has unsaved changes
+                    // Don't refresh - let the periodic refresh handle it when user stops
+                    console.log('⏸️ Post-save refresh skipped: user still making changes', {
+                        timeSinceLastChange: `${timeSinceLastChange}ms`,
+                        hasUnsavedChanges
+                    });
+                }
+            }, 3000); // Increased delay to 3 seconds to give more time for rapid changes
+        } catch (error) {
+            console.error('❌ Error saving to database:', error);
+            // Don't throw - allow user to continue working; auto‑save will retry on next change
         } finally {
-            setIsSaving(false);
+            isSavingRef.current = false;
         }
-    }, [project?.id, sectionsByYear, isSaving, isLoading, loadFromDatabase]);
+    };
     
-    // Save pending changes on unmount (simple - just save if not already saving)
+    // Save pending changes on hard refresh / tab close
     useEffect(() => {
-        return () => {
-            if (project?.id && !isSaving && Object.keys(sectionsByYear).length > 0) {
-                // Fire-and-forget save on unmount
-                saveToDatabase();
+        if (!project?.id) return;
+        
+        const handleBeforeUnload = (event) => {
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            if (hasUnsavedChanges && !isSavingRef.current) {
+                // Fire-and-forget save; we can't await during beforeunload
+                saveToDatabase({ skipParentUpdate: true });
+                event.preventDefault();
+                event.returnValue = '';
             }
         };
-    }, [project?.id, isSaving, sectionsByYear, saveToDatabase]);
+        
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [project?.id]);
+
+    // Ensure pending changes are saved when the component unmounts (e.g. user navigates away)
+    useEffect(() => {
+        if (!project?.id) return;
+
+        return () => {
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            if (hasUnsavedChanges && !isSavingRef.current) {
+                // Fire-and-forget save on unmount; parent update is optional here
+                saveToDatabase({ skipParentUpdate: true });
+            }
+        };
+    }, [project?.id]);
     
     // ============================================================
     // TEMPLATE MANAGEMENT - Database storage only
@@ -1233,33 +1758,68 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
-        // Get current selected cells from state
-        const currentSelectedCells = selectedCells;
+        // Track when the last change was made to prevent refresh from overwriting rapid changes
+        lastChangeTimestampRef.current = Date.now();
+        
+        // Clear any existing force save timeout
+        if (forceSaveTimeoutRef.current) {
+            clearTimeout(forceSaveTimeoutRef.current);
+        }
+        
+        // Schedule a forced save after 2 seconds of inactivity
+        // This ensures rapid consecutive changes are saved even if debounce keeps resetting
+        forceSaveTimeoutRef.current = setTimeout(() => {
+            const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+            // Only force save if no changes in last 2 seconds (user stopped making changes)
+            if (timeSinceLastChange >= 2000) {
+                const currentSnapshot = serializeSections(sectionsRef.current);
+                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+                if (hasUnsavedChanges && !isSavingRef.current) {
+                    console.log('💾 Force saving after rapid changes stopped');
+                    saveToDatabase();
+                }
+            }
+        }, 2000);
+        
+        // CRITICAL: For rapid changes, always start from the latest ref value to prevent losing updates
+        // This ensures that if multiple status changes happen in quick succession, each one builds on the latest state
+        const latestSectionsByYear = sectionsRef.current || {};
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        // Always use ref to get the latest selectedCells value (avoids stale closure)
+        const currentSelectedCells = selectedCellsRef.current;
         
         // If applying to selected cells, get all selected cell keys
         let cellsToUpdate = [];
         if (applyToSelected && currentSelectedCells.size > 0) {
+            // Parse all selected cell keys
             cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
                 const [secId, docId, mon] = cellKey.split('-');
                 return { sectionId: secId, documentId: docId, month: mon };
             });
         } else {
+            // Just update the single cell
             cellsToUpdate = [{ sectionId, documentId, month }];
         }
         
-        // Update state directly - React will handle re-renders
-        setSectionsByYear(prev => {
-            const currentYearSections = prev[selectedYear] || [];
+        // Update the sections for the current year
         const updated = currentYearSections.map(section => {
+            // Check if this section has any documents that need updating
             const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
-                if (sectionUpdates.length === 0) return section;
+            if (sectionUpdates.length === 0) {
+                return section;
+            }
             
             return {
                 ...section,
                 documents: section.documents.map(doc => {
+                    // Check if this document needs updating for any month
                     const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
-                        if (docUpdates.length === 0) return doc;
+                    if (docUpdates.length === 0) {
+                        return doc;
+                    }
                     
+                    // Apply status to all matching months for this document
                     let updatedStatus = doc.collectionStatus || {};
                     docUpdates.forEach(cell => {
                         updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
@@ -1273,26 +1833,38 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             };
         });
         
-            return {
-                ...prev,
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
             [selectedYear]: updated
         };
-        });
+        
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        // This ensures auto-save always has the latest data, even during rapid changes
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Now update state (this will trigger auto-save, but ref already has the latest data)
+        setSectionsByYear(updatedSectionsByYear);
         
         // Clear selection after applying status to multiple cells
+        // Use setTimeout to ensure React has updated the UI first
         if (applyToSelected && currentSelectedCells.size > 0) {
             setTimeout(() => {
                 setSelectedCells(new Set());
+                selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear, selectedCells]);
+    }, [selectedYear]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
+        // Track when the last change was made to prevent refresh from overwriting rapid changes
+        lastChangeTimestampRef.current = Date.now();
+        
         const currentUser = getCurrentUser();
+        const newCommentId = Date.now();
         const newComment = {
-            id: Date.now(),
+            id: newCommentId,
             text: commentText,
             date: new Date().toISOString(),
             author: currentUser.name,
@@ -1300,15 +1872,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             authorId: currentUser.id
         };
         
-        // Update state directly
-        setSectionsByYear(prev => {
-            const currentYearSections = prev[selectedYear] || [];
-            const updated = currentYearSections.map(section => {
-                if (String(section.id) === String(sectionId)) {
+        // CRITICAL: Use sectionsRef.current to get the latest state, then update both ref and state
+        const latestSectionsByYear = sectionsRef.current || {};
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) === String(sectionId)) {
                 return {
                     ...section,
                     documents: section.documents.map(doc => {
-                            if (String(doc.id) === String(documentId)) {
+                        if (String(doc.id) === String(documentId)) {
                             const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                             return {
                                 ...doc,
@@ -1320,13 +1893,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 };
             }
             return section;
-            });
-            
-            return {
-                ...prev,
-                [selectedYear]: updated
-            };
         });
+        
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
+            [selectedYear]: updated
+        };
+        
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Now update state (this will trigger auto-save)
+        setSectionsByYear(updatedSectionsByYear);
         
         setQuickComment('');
 
@@ -1348,14 +1926,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     
                     const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
                     // Deep-link directly to the document collection cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newComment.id)}`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
                         sectionId,
                         documentId,
                         month,
-                        commentId: newComment.id
+                        commentId: newCommentId
                     };
                     
                     // Fire mention notifications (do not block UI on errors)
@@ -1655,11 +2233,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
             // Don't clear if clicking on a status cell or its parent td
-            if (selectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
+            const currentSelectedCells = selectedCellsRef.current;
+            if (currentSelectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
                 const clickedTd = event.target.closest('td');
                 // Only clear if not clicking on a td that contains a status select
                 if (!clickedTd || !clickedTd.querySelector('select[data-section-id]')) {
-                    setSelectedCells(new Set());
+                    const newSet = new Set();
+                    setSelectedCells(newSet);
+                    selectedCellsRef.current = newSet;
                 }
             }
         };
@@ -1933,12 +2514,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     } else {
                         newSet.add(cellKey);
                     }
+                    // Update ref immediately
+                    selectedCellsRef.current = newSet;
                     return newSet;
                 });
             } else {
                 // Single click without modifier - clear selection if clicking on a different cell
-                if (selectedCells.size > 0 && !selectedCells.has(cellKey)) {
-                    setSelectedCells(new Set());
+                // Use ref to get latest value
+                const currentSelectedCells = selectedCellsRef.current;
+                if (currentSelectedCells.size > 0 && !currentSelectedCells.has(cellKey)) {
+                    const newSet = new Set();
+                    setSelectedCells(newSet);
+                    selectedCellsRef.current = newSet;
                 }
             }
         };
@@ -1956,15 +2543,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             e.preventDefault();
                             e.stopPropagation();
                             const newStatus = e.target.value;
+                            // Always use ref to get latest selectedCells value
+                            const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
-                            const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
+                            const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
                             handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
                             const newStatus = e.target.value;
                             if (newStatus !== status) {
-                                const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
+                                const currentSelectedCells = selectedCellsRef.current;
+                                const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
                                 handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                             }
                         }}
@@ -1988,6 +2578,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     } else {
                                         newSet.add(cellKey);
                                     }
+                                    selectedCellsRef.current = newSet;
                                     return newSet;
                                 });
                             }

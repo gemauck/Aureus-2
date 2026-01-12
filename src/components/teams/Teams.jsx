@@ -119,16 +119,25 @@ const Teams = () => {
                 const data = await response.json();
                 if (data.data && Array.isArray(data.data.teams)) {
                     // Format teams to match expected structure
-                    const formattedTeams = data.data.teams.map(team => ({
-                        id: team.id,
-                        name: team.name,
-                        icon: team.icon || '',
-                        color: team.color || 'blue',
-                        description: team.description || '',
-                        members: team.members || 0,
-                        permissions: team.permissions || [],
-                        isActive: team.isActive !== false
-                    }));
+                    const formattedTeams = data.data.teams
+                        .map(team => ({
+                            id: team.id,
+                            name: team.name,
+                            icon: team.icon || '',
+                            color: team.color || 'blue',
+                            description: team.description || '',
+                            members: team.members || 0,
+                            permissions: team.permissions || [],
+                            isActive: team.isActive !== false
+                        }))
+                        .filter(team => {
+                            // Filter out Default Team
+                            const nameLower = (team.name || '').toLowerCase();
+                            const idLower = (team.id || '').toLowerCase();
+                            return nameLower !== 'default team' && 
+                                   idLower !== 'default' && 
+                                   idLower !== 'default-team';
+                        });
                     setTeams(formattedTeams);
                 } else {
                     console.warn('Teams: Unexpected API response format', data);

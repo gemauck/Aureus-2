@@ -8176,9 +8176,29 @@ const Clients = React.memo(() => {
                 <button
                     type="button"
                     onClick={() => {
-                        // Only log and update if viewMode is actually changing
+                        // Only update if viewMode is actually changing
                         if (viewMode !== 'groups') {
+                            // Clear selected entities and close any open modals
+                            selectedClientRef.current = null;
+                            selectedLeadRef.current = null;
+                            isFormOpenRef.current = false;
                             setViewMode('groups');
+                            // Clear URL segments to prevent route handler from reopening entities
+                            if (window.RouteState && window.RouteState.navigate) {
+                                try {
+                                    window.RouteState.navigate({
+                                        page: 'clients',
+                                        segments: [],
+                                        search: '',
+                                        hash: '',
+                                        replace: false,
+                                        preserveSearch: false,
+                                        preserveHash: false
+                                    });
+                                } catch (routeError) {
+                                    // Silently fail - URL update is non-critical
+                                }
+                            }
                         }
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
@@ -8194,7 +8214,29 @@ const Clients = React.memo(() => {
                     <span className="sm:hidden">Groups</span>
                 </button>
                 <button
-                    onClick={() => setViewMode('clients')}
+                    onClick={() => {
+                        // Clear selected entities and close any open modals
+                        selectedClientRef.current = null;
+                        selectedLeadRef.current = null;
+                        isFormOpenRef.current = false;
+                        setViewMode('clients');
+                        // Clear URL segments to prevent route handler from reopening entities
+                        if (window.RouteState && window.RouteState.navigate) {
+                            try {
+                                window.RouteState.navigate({
+                                    page: 'clients',
+                                    segments: [],
+                                    search: '',
+                                    hash: '',
+                                    replace: false,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            } catch (routeError) {
+                                // Silently fail - URL update is non-critical
+                            }
+                        }
+                    }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'clients' 
                             ? 'bg-blue-600 text-white shadow-sm' 
@@ -8208,7 +8250,29 @@ const Clients = React.memo(() => {
                     <span className="sm:hidden">Clients</span>
                 </button>
                 <button
-                    onClick={() => setViewMode('leads')}
+                    onClick={() => {
+                        // Clear selected entities and close any open modals
+                        selectedClientRef.current = null;
+                        selectedLeadRef.current = null;
+                        isFormOpenRef.current = false;
+                        setViewMode('leads');
+                        // Clear URL segments to prevent route handler from reopening entities
+                        if (window.RouteState && window.RouteState.navigate) {
+                            try {
+                                window.RouteState.navigate({
+                                    page: 'clients',
+                                    segments: [],
+                                    search: '',
+                                    hash: '',
+                                    replace: false,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            } catch (routeError) {
+                                // Silently fail - URL update is non-critical
+                            }
+                        }
+                    }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'leads' 
                             ? 'bg-blue-600 text-white shadow-sm' 
@@ -8223,7 +8287,27 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
+                        // Clear selected entities and close any open modals
+                        selectedClientRef.current = null;
+                        selectedLeadRef.current = null;
+                        isFormOpenRef.current = false;
                         setViewMode('pipeline');
+                        // Clear URL segments to prevent route handler from reopening entities
+                        if (window.RouteState && window.RouteState.navigate) {
+                            try {
+                                window.RouteState.navigate({
+                                    page: 'clients',
+                                    segments: [],
+                                    search: '',
+                                    hash: '',
+                                    replace: false,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            } catch (routeError) {
+                                // Silently fail - URL update is non-critical
+                            }
+                        }
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
@@ -8237,7 +8321,29 @@ const Clients = React.memo(() => {
                     Pipeline
                 </button>
                 <button
-                    onClick={() => setViewMode('news-feed')}
+                    onClick={() => {
+                        // Clear selected entities and close any open modals
+                        selectedClientRef.current = null;
+                        selectedLeadRef.current = null;
+                        isFormOpenRef.current = false;
+                        setViewMode('news-feed');
+                        // Clear URL segments to prevent route handler from reopening entities
+                        if (window.RouteState && window.RouteState.navigate) {
+                            try {
+                                window.RouteState.navigate({
+                                    page: 'clients',
+                                    segments: [],
+                                    search: '',
+                                    hash: '',
+                                    replace: false,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            } catch (routeError) {
+                                // Silently fail - URL update is non-critical
+                            }
+                        }
+                    }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'news-feed' 
                             ? 'bg-blue-600 text-white shadow-sm' 

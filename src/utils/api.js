@@ -492,6 +492,21 @@ async function request(path, options = {}) {
         throw new Error(gatewayErrorMessage);
       }
       
+      // Handle 404 errors gracefully for contacts and groups endpoints
+      // These are expected when a client has no contacts/groups or doesn't exist
+      if (res.status === 404) {
+        const isContactsEndpoint = path.includes('/contacts/client/');
+        const isGroupsEndpoint = path.includes('/clients/') && path.includes('/groups');
+        
+        if (isContactsEndpoint || isGroupsEndpoint) {
+          // Return empty data structure instead of throwing error
+          // This prevents noisy error logs for expected 404s
+          return isContactsEndpoint 
+            ? { data: { contacts: [] } }
+            : { data: { groupMemberships: [] } };
+        }
+      }
+      
       // For heartbeat endpoint, suppress "Invalid method" errors (they're expected if server hasn't updated)
       if (path === '/users/heartbeat' && errorMessage?.includes('Invalid method')) {
         return null; // Silently ignore heartbeat method errors
@@ -502,7 +517,7 @@ async function request(path, options = {}) {
 
     return data
   } catch (error) {
-    // Check if it's a database connection error, server error, or rate limit error - suppress logs for these
+    // Check if it's a database connection error, server error, rate limit error, or expected 404 - suppress logs for these
     const errorMessage = error?.message || String(error);
     const isDatabaseError = errorMessage.includes('Database connection failed') ||
                           errorMessage.includes('unreachable') ||
@@ -513,6 +528,10 @@ async function request(path, options = {}) {
                          errorMessage.includes('503') || 
                          errorMessage.includes('504');
     const isRateLimitError = error?.status === 429 || error?.code === 'RATE_LIMIT_EXCEEDED';
+    const isExpected404 = error?.status === 404 && (
+      path.includes('/contacts/client/') || 
+      (path.includes('/clients/') && path.includes('/groups'))
+    );
     
     // Handle rate limit errors - don't retry, just throw
     if (isRateLimitError) {
@@ -521,8 +540,8 @@ async function request(path, options = {}) {
       throw error;
     }
     
-    // Suppress error logs for server errors and database errors (they're expected when backend/DB is down)
-    if (!isDatabaseError && !isServerError) {
+    // Suppress error logs for server errors, database errors, and expected 404s (they're expected)
+    if (!isDatabaseError && !isServerError && !isExpected404) {
       console.error('❌ Fetch Error:', { path, error: error.message, stack: error.stack });
     }
     throw error;

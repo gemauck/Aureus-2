@@ -1771,13 +1771,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 // Server error - likely database issue with this client
                                 console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
                                 setClientGroupMemberships([]);
+                            } else if (membershipsResponse.status === 404) {
+                                // 404 is expected when client has no groups or doesn't exist - silently handle
+                                setClientGroupMemberships([]);
                             } else {
-                                // Other errors (404, 403, etc.)
+                                // Other errors (403, etc.)
                                 console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
                                 setClientGroupMemberships([]);
                             }
                         } catch (groupError) {
-                            console.error('❌ Error loading client groups:', groupError);
+                            // Only log non-404 errors (404s are expected and handled gracefully)
+                            const is404Error = groupError?.message?.includes('404') || 
+                                             groupError?.status === 404 ||
+                                             groupError?.message?.includes('Not found');
+                            if (!is404Error) {
+                                console.error('❌ Error loading client groups:', groupError);
+                            }
                             // Continue without group data rather than breaking the UI
                             setClientGroupMemberships([]);
                         }
@@ -1820,6 +1829,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 setClientGroupMemberships(memberships);
                             } else if (membershipsResponse.status === 500) {
                                 console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
+                                setClientGroupMemberships([]);
+                            } else if (membershipsResponse.status === 404) {
+                                // 404 is expected when client has no groups or doesn't exist - silently handle
                                 setClientGroupMemberships([]);
                             } else {
                                 console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
