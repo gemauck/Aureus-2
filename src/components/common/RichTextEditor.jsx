@@ -723,6 +723,19 @@ const RichTextEditor = ({
             }
         }
         
+        // CRITICAL: If savedCursorPositionRef is not set, try to infer it from current position
+        // If text length increased by 1, cursor was likely at currentPosition - 1 before typing
+        if (!savedCursorPositionRef.current && currentCursorPos !== null) {
+            const textLengthDiff = newText.length - oldText.length;
+            if (textLengthDiff === 1 && currentCursorPos > 0) {
+                // Infer that cursor was at currentPosition - 1 before typing
+                savedCursorPositionRef.current = {
+                    start: currentCursorPos - 1,
+                    end: currentCursorPos - 1
+                };
+            }
+        }
+        
         // CRITICAL: Save cursor position IMMEDIATELY before any async operations
         // This is the position AFTER typing, which we'll use to restore if needed
         const savedCursorPos = saveCursorPosition();
@@ -834,7 +847,17 @@ const RichTextEditor = ({
             // Text was added - check if cursor was at end BEFORE typing
             // Use savedCursorPositionRef which was saved in handleBeforeInput
             const cursorBeforeTyping = savedCursorPositionRef.current;
-            const wasAtEnd = cursorBeforeTyping && cursorBeforeTyping.start >= oldText.length - 1;
+            
+            // If we don't have a saved position, try to infer from current cursor position
+            // If current cursor is at end, user was likely typing at end
+            // If current cursor is NOT at end, user was likely typing in middle
+            let wasAtEnd = false;
+            if (cursorBeforeTyping) {
+                wasAtEnd = cursorBeforeTyping.start >= oldText.length - 1;
+            } else if (currentCursorPos !== null) {
+                // Fallback: if cursor is currently at end, assume user was typing at end
+                wasAtEnd = currentCursorPos >= newText.length - 1;
+            }
             
             if (wasAtEnd) {
                 // Was typing at end - force to end to prevent jumping to start
@@ -850,18 +873,27 @@ const RichTextEditor = ({
                 setTimeout(forceCursorToEnd, 10);
                 setTimeout(forceCursorToEnd, 20);
                 setTimeout(forceCursorToEnd, 50);
-            } else if (cursorBeforeTyping) {
+            } else {
                 // Was typing in middle - restore to saved position + 1 (right after typed char)
-                const targetPos = cursorBeforeTyping.start + 1;
-                restoreCursorToPosition(targetPos);
-                queueMicrotask(() => restoreCursorToPosition(targetPos));
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => restoreCursorToPosition(targetPos));
-                });
-                setTimeout(() => restoreCursorToPosition(targetPos), 0);
-                setTimeout(() => restoreCursorToPosition(targetPos), 10);
-                setTimeout(() => restoreCursorToPosition(targetPos), 20);
-                setTimeout(() => restoreCursorToPosition(targetPos), 50);
+                let targetPos = null;
+                if (cursorBeforeTyping) {
+                    targetPos = cursorBeforeTyping.start + 1;
+                } else if (currentCursorPos !== null && currentCursorPos < newText.length - 1) {
+                    // Fallback: use current position if it's not at end
+                    targetPos = currentCursorPos;
+                }
+                
+                if (targetPos !== null) {
+                    restoreCursorToPosition(targetPos);
+                    queueMicrotask(() => restoreCursorToPosition(targetPos));
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => restoreCursorToPosition(targetPos));
+                    });
+                    setTimeout(() => restoreCursorToPosition(targetPos), 0);
+                    setTimeout(() => restoreCursorToPosition(targetPos), 10);
+                    setTimeout(() => restoreCursorToPosition(targetPos), 20);
+                    setTimeout(() => restoreCursorToPosition(targetPos), 50);
+                }
             }
         } else {
             // Text length stayed same or decreased - restore saved position
