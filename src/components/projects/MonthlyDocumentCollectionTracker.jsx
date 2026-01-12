@@ -305,14 +305,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     const loadFromDatabase = useCallback(async () => {
         if (!project?.id) {
-            setIsLoading(false);
-            return;
+                setIsLoading(false);
+                return;
         }
         
         // Prevent multiple simultaneous loads
         if (hasLoadedRef.current) {
             console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping load - already loaded for this project');
-            return;
+                            return;
         }
         
         // Ensure API is available
@@ -330,7 +330,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     setError('Document Collection API not available. Please refresh the page.');
                 }
             }, 2000);
-            return;
+                return;
         }
         
         // Only set loading to true if we're actually going to make an API call
@@ -374,10 +374,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // INITIAL LOAD - Simple: Load from database on mount
     // ============================================================
     useEffect(() => {
-        // Reset hasLoaded when project ID changes
-        if (project?.id) {
-            hasLoadedRef.current = false;
-        }
+        // Always reset hasLoaded when project ID changes
+        hasLoadedRef.current = false;
     }, [project?.id]);
     
     useEffect(() => {
