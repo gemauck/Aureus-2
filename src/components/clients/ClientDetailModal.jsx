@@ -320,11 +320,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        // Mark that we're loading
-        setIsInitialLoading(true);
+        // CRITICAL: Don't set loading state - formData already has client prop data
+        // This ensures tabs render immediately without waiting for API calls
+        // Only mark as loading if formData is empty (new client)
+        const hasExistingData = formDataRef.current && (
+            (formDataRef.current.contacts && formDataRef.current.contacts.length > 0) ||
+            (formDataRef.current.sites && formDataRef.current.sites.length > 0) ||
+            (formDataRef.current.opportunities && formDataRef.current.opportunities.length > 0)
+        );
+        
+        if (!hasExistingData) {
+            setIsInitialLoading(true);
+        }
         isLoadingClientRef.current = true;
         
-        // Load all data in parallel
+        // Load all data in parallel - non-blocking
+        // Use requestIdleCallback or setTimeout to make it truly non-blocking
         const loadAllData = async () => {
             try {
                 const token = window.storage?.getToken?.();
@@ -368,16 +379,48 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 };
                 
                 // Merge: Use loaded data from API, fallback to client prop data
+                // CRITICAL: Only update if API returned more data than what's already in formData
+                // This prevents unnecessary re-renders and ensures tabs render immediately
+                const currentFormData = formDataRef.current || {};
+                const existingContacts = currentFormData.contacts || [];
+                const existingSites = currentFormData.sites || [];
+                const existingOpportunities = currentFormData.opportunities || [];
+                
+                // Only use API data if it has more items than what we already have
+                // This ensures we don't overwrite existing data with empty arrays
+                const finalContacts = contacts.length > existingContacts.length ? contacts : (existingContacts.length > 0 ? existingContacts : (parsedClient.contacts || []));
+                const finalSites = sites.length > existingSites.length ? sites : (existingSites.length > 0 ? existingSites : (parsedClient.sites || []));
+                const finalOpportunities = opportunities.length > existingOpportunities.length ? opportunities : (existingOpportunities.length > 0 ? existingOpportunities : (parsedClient.opportunities || []));
+                
                 const mergedData = {
                     ...parsedClient,
-                    contacts: contacts.length > 0 ? contacts : (parsedClient.contacts || []),
-                    sites: sites.length > 0 ? sites : (parsedClient.sites || []),
-                    opportunities: opportunities.length > 0 ? opportunities : (parsedClient.opportunities || [])
+                    contacts: finalContacts,
+                    sites: finalSites,
+                    opportunities: finalOpportunities
                 };
                 
-                // Update formData ONCE with all loaded data
-                setFormData(mergedData);
-                formDataRef.current = mergedData;
+                // CRITICAL: Only update formData if data actually changed to prevent unnecessary re-renders
+                // Use React.startTransition to make updates non-blocking for better UX
+                const hasChanges = 
+                    JSON.stringify(finalContacts) !== JSON.stringify(existingContacts) ||
+                    JSON.stringify(finalSites) !== JSON.stringify(existingSites) ||
+                    JSON.stringify(finalOpportunities) !== JSON.stringify(existingOpportunities);
+                
+                if (hasChanges) {
+                    // Use startTransition if available to make update non-blocking
+                    if (typeof React.startTransition === 'function') {
+                        React.startTransition(() => {
+                            setFormData(mergedData);
+                            formDataRef.current = mergedData;
+                        });
+                    } else {
+                        setFormData(mergedData);
+                        formDataRef.current = mergedData;
+                    }
+                } else {
+                    // Still update ref even if no changes to ensure it's in sync
+                    formDataRef.current = mergedData;
+                }
                 
                 // Mark as loaded
                 initialDataLoadedForClientIdRef.current = clientId;
@@ -391,7 +434,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
         
-        loadAllData();
+        // CRITICAL: Load data in background without blocking UI
+        // Use requestIdleCallback if available, otherwise setTimeout with 0 delay
+        // This ensures tabs render immediately with client prop data while API loads in background
+        if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(() => {
+                loadAllData();
+            }, { timeout: 100 }); // Max 100ms delay
+        } else {
+            // Fallback: use setTimeout with minimal delay to allow UI to render first
+            setTimeout(() => {
+                loadAllData();
+            }, 0);
+        }
         
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client?.id]); // Only reload when client.id changes
@@ -2677,6 +2732,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     // Navigation helper function
     const navigateToPage = (page) => {
+        // If navigating to clients page, reset the Clients component view first
+        if (page === 'clients') {
+            // Dispatch event to reset Clients component view
+            if (window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('resetClientsView', { 
+                    detail: { viewMode: 'clients' } 
+                }));
+            }
+        }
+        
+        // Navigate using RouteState
         if (window.RouteState && window.RouteState.navigate) {
             window.RouteState.navigate({
                 page: page,
@@ -2692,6 +2758,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 detail: { page: page } 
             }));
         }
+        
         // Close modal when navigating away
         if (onClose) {
             onClose();
@@ -2714,7 +2781,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 </button>
                                 <i className={`fas fa-chevron-right ${isDark ? 'text-gray-600' : 'text-gray-400'}`}></i>
                                 <button
-                                    onClick={() => navigateToPage('clients')}
+                                    onClick={() => {
+                                        // If on a lead detail page, switch to leads view; if on client detail, switch to clients view
+                                        const targetView = isLead ? 'leads' : 'clients';
+                                        if (window.dispatchEvent) {
+                                            window.dispatchEvent(new CustomEvent('resetClientsView', { 
+                                                detail: { viewMode: targetView } 
+                                            }));
+                                        }
+                                        if (onClose) {
+                                            onClose();
+                                        }
+                                    }}
                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                                 >
                                     {isLead ? 'Leads' : 'Clients'}
