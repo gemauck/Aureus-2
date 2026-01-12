@@ -1484,10 +1484,13 @@ const Clients = React.memo(() => {
             }
             
             if (entity && entityType) {
-                // Open the entity
+                // CRITICAL: Set tab to 'overview' BEFORE opening entity to ensure it defaults correctly
+                // This ensures the modal initializes with the correct tab, even when opened via URL routing
                 if (entityType === 'client') {
+                    setCurrentTab('overview'); // Set tab before opening
                     handleOpenClient(entity);
                 } else if (entityType === 'lead') {
+                    setCurrentLeadTab('overview'); // Set tab before opening
                     handleOpenLead(entity);
                 }
                 
