@@ -398,25 +398,83 @@ async function handler(req, res) {
           }
           
           try {
-            await prisma.clientContact.deleteMany({ where: { clientId: id } })
-            if (contactsArray.length > 0) {
-              await prisma.clientContact.createMany({
-                data: contactsArray.map(contact => ({
-                  id: contact.id || undefined,
-                  clientId: id,
-                  name: contact.name || '',
-                  email: contact.email || null,
-                  phone: contact.phone || null,
-                  mobile: contact.mobile || contact.phone || null,
-                  role: contact.role || null,
-                  title: contact.title || contact.department || null,
-                  isPrimary: !!contact.isPrimary,
-                  notes: contact.notes || ''
-                }))
-              })
+            // Get existing contacts to compare
+            const existingContacts = await prisma.clientContact.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            // Convert all IDs to strings for consistent comparison
+            const existingContactIds = new Set(existingContacts.map(c => String(c.id)))
+            const contactsToKeep = new Set()
+            
+            // Process each contact with individual create/update to handle custom IDs properly
+            for (const contact of contactsArray) {
+              // Convert contact ID to string for consistency with Prisma (which uses string IDs)
+              const contactId = contact.id ? String(contact.id) : null
+              
+              const contactData = {
+                clientId: id,
+                name: contact.name || '',
+                email: contact.email || null,
+                phone: contact.phone || null,
+                mobile: contact.mobile || contact.phone || null,
+                role: contact.role || null,
+                title: contact.title || contact.department || null,
+                isPrimary: !!contact.isPrimary,
+                notes: contact.notes || ''
+              }
+              
+              // Use individual create/update to support custom IDs (createMany doesn't support custom IDs)
+              if (contactId && existingContactIds.has(contactId)) {
+                // Update existing contact
+                await prisma.clientContact.update({
+                  where: { id: contactId },
+                  data: contactData
+                })
+                contactsToKeep.add(contactId)
+              } else if (contactId) {
+                // Create with specific ID (converted to string)
+                try {
+                  await prisma.clientContact.create({
+                    data: {
+                      id: contactId,
+                      ...contactData
+                    }
+                  })
+                  contactsToKeep.add(contactId)
+                } catch (createError) {
+                  // If ID conflict, update instead
+                  if (createError.code === 'P2002') {
+                    await prisma.clientContact.update({
+                      where: { id: contactId },
+                      data: contactData
+                    })
+                    contactsToKeep.add(contactId)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                // Create without ID (Prisma generates one)
+                const created = await prisma.clientContact.create({
+                  data: contactData
+                })
+                contactsToKeep.add(String(created.id))
+              }
             }
+            
+            // Delete contacts that are no longer in the array
+            await prisma.clientContact.deleteMany({
+              where: {
+                clientId: id,
+                NOT: {
+                  id: { in: Array.from(contactsToKeep) }
+                }
+              }
+            })
           } catch (contactSyncError) {
-            console.warn('⚠️ Failed to sync contacts to normalized table:', contactSyncError.message)
+            console.error('❌ Failed to sync contacts to normalized table:', contactSyncError)
+            // Don't throw - allow lead update to succeed even if contact sync fails
           }
         }
         

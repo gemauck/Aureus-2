@@ -204,6 +204,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // CRITICAL: Sync formDataRef with formData so guards can check current values
     useEffect(() => {
         formDataRef.current = formData;
+        // DEBUG: Log when formData.contacts changes to verify React is detecting the change
+        if (formData.contacts && formData.contacts.length > 0) {
+            console.log(`🔄 formData.contacts changed - length: ${formData.contacts.length}, contacts:`, formData.contacts);
+        }
     }, [formData]);
     
     // Cleanup editing timeout on unmount
@@ -1479,6 +1483,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return updated;
             });
             console.log(`✅ setFormData called with updated contacts - AFTER call`);
+            console.log(`🔍 IMMEDIATELY AFTER setFormData - formDataRef.current.contacts.length:`, formDataRef.current?.contacts?.length || 0);
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
