@@ -45,8 +45,33 @@ const CommentInputWithMentions = ({
     };
     
     const handleChange = (e) => {
-        const value = e.target.value;
-        const cursorPosition = e.target.selectionStart;
+        const textarea = e.target;
+        const value = textarea.value;
+        const oldValue = comment;
+        
+        // Determine the correct cursor position
+        let cursorPosition = textarea.selectionStart;
+        let selectionEnd = textarea.selectionEnd;
+        
+        // Special handling for first keystroke - ALWAYS force cursor to position 1
+        const isFirstKeystroke = oldValue.length === 0 && value.length === 1;
+        
+        if (isFirstKeystroke) {
+            // For the first character, cursor MUST be at position 1 (right after the character)
+            cursorPosition = 1;
+            selectionEnd = 1;
+        } else if (value.length > oldValue.length) {
+            // Text was added - cursor should be at the end of the new text
+            cursorPosition = value.length;
+            selectionEnd = value.length;
+        } else if (value.length < oldValue.length) {
+            // Text was deleted - keep cursor at current position or adjust if needed
+            if (cursorPosition === 0 && value.length > 0) {
+                // Likely React reset it - try to calculate based on deletion
+                cursorPosition = Math.min(value.length, oldValue.length - (oldValue.length - value.length));
+                selectionEnd = cursorPosition;
+            }
+        }
         
         setComment(value);
         
@@ -76,6 +101,43 @@ const CommentInputWithMentions = ({
             }
         } else {
             setShowSuggestions(false);
+        }
+        
+        // Force cursor position after state update
+        // Use multiple strategies to ensure cursor is restored, especially for first keystroke
+        const forceCursorPosition = () => {
+            if (textareaRef.current && textareaRef.current.value === value) {
+                // Ensure cursor position is within valid range
+                const newCursorPos = Math.min(Math.max(cursorPosition, 0), value.length);
+                const newSelectionEnd = Math.min(Math.max(selectionEnd, 0), value.length);
+                
+                // For first keystroke, be extra aggressive
+                if (isFirstKeystroke && value.length === 1) {
+                    textareaRef.current.setSelectionRange(1, 1);
+                } else {
+                    textareaRef.current.setSelectionRange(newCursorPos, newSelectionEnd);
+                }
+            }
+        };
+        
+        // For first keystroke, use more aggressive restoration
+        if (isFirstKeystroke) {
+            // Try multiple times with different timing strategies
+            queueMicrotask(forceCursorPosition);
+            requestAnimationFrame(() => {
+                forceCursorPosition();
+                requestAnimationFrame(forceCursorPosition);
+            });
+            setTimeout(forceCursorPosition, 0);
+            setTimeout(forceCursorPosition, 10);
+            setTimeout(forceCursorPosition, 50);
+        } else {
+            // Normal restoration for subsequent keystrokes
+            queueMicrotask(forceCursorPosition);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(forceCursorPosition);
+            });
+            setTimeout(forceCursorPosition, 0);
         }
     };
     

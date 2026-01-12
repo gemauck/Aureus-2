@@ -672,6 +672,15 @@ const RichTextEditor = ({
         
         // Get the current HTML from the editor (this is the ONLY source of truth when user is typing)
         const newHtml = editorRef.current.innerHTML;
+        const oldHtml = domValueRef.current || '';
+        
+        // CRITICAL: Save cursor position IMMEDIATELY before any async operations
+        // This is especially important for the first keystroke
+        const savedCursorPos = saveCursorPosition();
+        
+        // Check if this is the first keystroke (empty to first character)
+        const isFirstKeystroke = (!oldHtml || oldHtml.trim() === '' || oldHtml === '<br>' || oldHtml === '<p><br></p>') && 
+                                  newHtml && newHtml.trim() !== '' && newHtml !== '<br>' && newHtml !== '<p><br></p>';
         
         // CRITICAL: Update domValueRef IMMEDIATELY to prevent MutationObserver from thinking this is an external change
         // This must happen synchronously before any other async operations
@@ -683,6 +692,34 @@ const RichTextEditor = ({
         // The DOM already has the correct content, and we'll sync state on blur
         // isInternalUpdateRef.current = true; // Not needed if we don't call setHtml
         // setHtml(newHtml); // REMOVED - prevents re-renders during typing
+        
+        // Function to restore cursor position aggressively
+        const restoreCursor = () => {
+            if (!editorRef.current || !isFocusedRef.current) return;
+            
+            // For first keystroke, ensure cursor is at the end of the content
+            if (isFirstKeystroke) {
+                try {
+                    const selection = window.getSelection();
+                    if (selection && editorRef.current) {
+                        // Move cursor to end of content
+                        const range = document.createRange();
+                        range.selectNodeContents(editorRef.current);
+                        range.collapse(false); // false = collapse to end
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                    }
+                } catch (e) {
+                    // Fallback: try to restore saved position
+                    if (savedCursorPos) {
+                        restoreCursorPosition(savedCursorPos);
+                    }
+                }
+            } else if (savedCursorPos) {
+                // For subsequent keystrokes, restore the saved position
+                restoreCursorPosition(savedCursorPos);
+            }
+        };
         
         // Debounce onChange to prevent too many state updates in parent
         // Clear existing timeout
@@ -697,8 +734,36 @@ const RichTextEditor = ({
             if (onChange) {
                 onChange(newHtml);
             }
+            
+            // CRITICAL: Restore cursor position after onChange might have triggered re-render
+            // Use multiple strategies to ensure cursor is restored
+            if (isFirstKeystroke) {
+                // For first keystroke, be extra aggressive
+                queueMicrotask(restoreCursor);
+                requestAnimationFrame(() => {
+                    restoreCursor();
+                    requestAnimationFrame(restoreCursor);
+                });
+                setTimeout(restoreCursor, 0);
+                setTimeout(restoreCursor, 10);
+                setTimeout(restoreCursor, 50);
+            } else {
+                // Normal restoration for subsequent keystrokes
+                queueMicrotask(restoreCursor);
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(restoreCursor);
+                });
+                setTimeout(restoreCursor, 0);
+            }
+            
             window[onChangeTimeoutKey] = null;
         }, 150); // Small delay to batch rapid typing and reduce parent re-renders
+        
+        // Also restore cursor immediately (before onChange delay) to handle fast typing
+        if (isFirstKeystroke) {
+            queueMicrotask(restoreCursor);
+            requestAnimationFrame(restoreCursor);
+        }
         
         // Keep typing flag and ignore flag active for longer
         const timeoutKey = `richTextEditorTypingTimeout_${editorRef.current.id || 'default'}`;
