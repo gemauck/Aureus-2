@@ -84,6 +84,15 @@ function transformTask(task, options = {}) {
     transformed.projectId = task.projectId;
   }
 
+  // Include project information if available (for dashboard)
+  if (task.project) {
+    transformed.project = {
+      id: task.project.id,
+      name: task.project.name,
+      clientName: task.project.clientName || ''
+    };
+  }
+
   // Include comments if requested and available
   if (includeComments && task.comments) {
     transformed.comments = task.comments.map(transformComment);
@@ -313,7 +322,7 @@ async function handler(req, res) {
           return badRequest(res, 'User not authenticated');
         }
         
-        // Optimized query: use select for better performance, skip relations
+        // Optimized query: use select for better performance, include project for dashboard
         const tasks = await prisma.task.findMany({
           where: {
             assigneeId: userId,
@@ -346,6 +355,13 @@ async function handler(req, res) {
                 id: true,
                 name: true,
                 email: true
+              }
+            },
+            project: {
+              select: {
+                id: true,
+                name: true,
+                clientName: true
               }
             }
           },

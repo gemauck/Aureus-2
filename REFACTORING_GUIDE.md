@@ -181,3 +181,4 @@ useEffect(() => {
 | Normalization cache | Simple function |
 | ~3700 lines | ~500 lines (core logic) |
 
+

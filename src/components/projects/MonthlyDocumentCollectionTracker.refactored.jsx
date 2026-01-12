@@ -379,3 +379,4 @@ if (typeof window !== 'undefined') {
     window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
 }
 
+

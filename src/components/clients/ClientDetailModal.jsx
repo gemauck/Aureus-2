@@ -520,15 +520,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
                 
-                // Load contacts, sites, and opportunities in parallel
-                const [contactsResponse, sitesResponse, opportunitiesResponse] = await Promise.all([
-                    window.api.getContacts(clientId).catch(() => ({ data: { contacts: [] } })),
-                    window.api.getSites(clientId).catch(() => ({ data: { sites: [] } })),
-                    window.api.getOpportunitiesByClient(clientId).catch(() => ({ data: { opportunities: [] } }))
-                ]);
-                
+                // Load contacts, sites, and opportunities sequentially to prevent rate limiting
+                // Sequential loading allows the rate limiter to properly throttle requests
+                const contactsResponse = await window.api.getContacts(clientId).catch(() => ({ data: { contacts: [] } }));
                 const contacts = contactsResponse?.data?.contacts || [];
+                
+                // Small delay between requests to respect rate limits
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                const sitesResponse = await window.api.getSites(clientId).catch(() => ({ data: { sites: [] } }));
                 const sites = sitesResponse?.data?.sites || [];
+                
+                // Small delay between requests to respect rate limits
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                const opportunitiesResponse = await window.api.getOpportunitiesByClient(clientId).catch(() => ({ data: { opportunities: [] } }));
                 const opportunities = opportunitiesResponse?.data?.opportunities || [];
                 
                 // Parse client data (handle JSON strings)
@@ -860,30 +866,45 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [activeTab, client?.id, loadJobCards]);
 
-    // Load persisted tab on mount or when client changes (after initialTab has been set)
+    // REMOVED: Auto-restore saved tab from localStorage
+    // Clients and leads should always default to 'overview' when opened, not restore the last tab
+    // Tab selection is still saved to localStorage for other purposes, but not auto-restored on open
+    
+    // CRITICAL: Always reset to 'overview' when client/lead ID changes
+    // This ensures that opening a different client/lead always starts on Overview tab
+    const previousClientIdRef = useRef(client?.id);
     useEffect(() => {
-        if (client?.id) {
-            try {
-                const tabKey = `client-tab-${client.id}`;
-                const savedTab = localStorage.getItem(tabKey);
-                // Restore saved tab if:
-                // 1. A saved tab exists
-                // 2. initialTab is the default ('overview'), meaning no explicit tab was passed
-                if (savedTab && initialTab === 'overview') {
-                    // Use setTimeout to ensure this runs after initialTab useEffect
-                    const timer = setTimeout(() => {
-                        setActiveTab(savedTab);
-                        if (onTabChange) {
-                            onTabChange(savedTab);
-                        }
-                    }, 0);
-                    return () => clearTimeout(timer);
+        const currentClientId = client?.id;
+        const previousClientId = previousClientIdRef.current;
+        
+        // Only reset if we're switching to a different client/lead
+        if (currentClientId && currentClientId !== previousClientId) {
+            // Always default to 'overview' when opening a new client/lead
+            // Only use initialTab if it's explicitly set via URL query params (not from state persistence)
+            const shouldUseInitialTab = initialTab && initialTab !== 'overview' && 
+                                       (window.location.search?.includes('tab=') || 
+                                        window.location.hash?.includes('tab='));
+            
+            if (shouldUseInitialTab) {
+                // URL explicitly requested a tab - respect it
+                setActiveTab(initialTab);
+                if (onTabChange) {
+                    onTabChange(initialTab);
                 }
-            } catch (e) {
-                console.warn('⚠️ Failed to load tab from localStorage:', e);
+            } else {
+                // Default to 'overview' when opening a new client/lead
+                setActiveTab('overview');
+                if (onTabChange) {
+                    onTabChange('overview');
+                }
             }
+            
+            previousClientIdRef.current = currentClientId;
+        } else if (currentClientId) {
+            // Same client, just update the ref
+            previousClientIdRef.current = currentClientId;
         }
-    }, [client?.id, initialTab]); // Run when client ID or initialTab changes
+    }, [client?.id, initialTab, onTabChange]); // Run when client ID or initialTab changes
     
     // Auto-scroll to last comment when notes tab is opened
     useEffect(() => {
