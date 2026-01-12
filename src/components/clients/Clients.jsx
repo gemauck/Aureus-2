@@ -3513,7 +3513,7 @@ const Clients = React.memo(() => {
         }
     };
 
-    const handleLeadModalClose = async () => {
+    const handleLeadModalClose = async (skipReload = false) => {
         let returnToPipeline = false;
         try {
             returnToPipeline = sessionStorage.getItem('returnToPipeline') === 'true';
@@ -3534,10 +3534,14 @@ const Clients = React.memo(() => {
         selectedLeadRef.current = null;
         isFormOpenRef.current = false;
         setCurrentLeadTab('overview');
-        // Refresh data from server in background (non-blocking)
-        loadLeads(true).catch(() => {
-            // Silently fail - refresh is non-critical for modal close
-        });
+        
+        // Only refresh data if skipReload is false (to prevent overwriting optimistic updates)
+        if (!skipReload) {
+            // Refresh data from server in background (non-blocking)
+            loadLeads(true).catch(() => {
+                // Silently fail - refresh is non-critical for modal close
+            });
+        }
         startSync();
     };
     
@@ -3823,6 +3827,12 @@ const Clients = React.memo(() => {
                 handlePauseSync(false);
                 if (window.LiveDataSync && window.LiveDataSync.start) {
                     window.LiveDataSync.start();
+                }
+                
+                // CRITICAL: If this is a NEW client (not an update), close the modal and return to clients list
+                if (!selectedClient) {
+                    // Close the modal and return to clients list
+                    handleClientModalClose(true); // skipReload=true to prevent overwriting optimistic update
                 }
             }
             
@@ -4333,39 +4343,11 @@ const Clients = React.memo(() => {
                     
                 }
                 
-                // For new leads, redirect to main leads view to show the newly added lead
+                // For new leads, close the modal and return to leads list
                 // Only if not staying in edit mode
                 if (!stayInEditMode) {
-                    setViewMode('leads');
-                    selectedLeadRef.current = null; // Clear selected lead ref
-                    setSelectedLead(null); // Clear selected lead state
-                    setCurrentLeadTab('overview');
-                    // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after save
-                    handlePauseSync(false);
-                    if (window.LiveDataSync && window.LiveDataSync.start) {
-                        window.LiveDataSync.start();
-                    }
-                    
-                    // Navigate back to leads list if we're on the new lead page
-                    if (window.location.pathname.includes('/leads/new')) {
-                        if (window.RouteState && window.RouteState.navigate) {
-                            window.RouteState.navigate({
-                                path: '/clients',
-                                query: { view: 'leads' }
-                            });
-                        } else {
-                            // Fallback: use window.location
-                            window.history.pushState({}, '', '/clients?view=leads');
-                            window.dispatchEvent(new PopStateEvent('popstate'));
-                        }
-                    }
-                    
-                    // Force a refresh to ensure API data is loaded (if authenticated)
-                    if (token) {
-                        setTimeout(() => {
-                            loadLeads(true); // Force refresh to bypass API throttling
-                        }, 100);
-                    }
+                    // Close the modal and return to leads list
+                    handleLeadModalClose(true); // skipReload=true to prevent overwriting optimistic update
                 }
             }
         } catch (error) {

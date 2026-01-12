@@ -2632,11 +2632,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         };
         
         // Use onUpdate if provided (for updates that should close the modal)
-        // Otherwise use onSave (for auto-saves that stay in edit mode)
+        // Otherwise use onSave
+        // For new clients/leads (client is null), explicitly pass stayInEditMode=false to close modal after save
         if (onUpdate && client) {
             await onUpdate(clientData);
         } else {
-            await onSave(clientData);
+            // For new clients/leads, pass stayInEditMode=false to close modal after save
+            // For existing clients/leads, default is false anyway, but make it explicit
+            await onSave(clientData, false);
         }
     };
 
@@ -2726,6 +2729,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
                     <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         {(() => {
+                            // For new clients/leads (client is null), only show overview tab
+                            if (!client) {
+                                return ['overview'];
+                            }
+                            
                             // Determine if lead has been converted to client
                             const isConverted = !isLead || formData.type === 'client';
                             
@@ -3649,25 +3657,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         const formContacts = formData.contacts || [];
                                         const optimistic = optimisticContacts || [];
                                         
-                                        console.log(`🔍 RENDERING Contacts tab: formContacts.length=${formContacts.length}, optimistic.length=${optimistic.length}, formData.contacts:`, formData.contacts);
-                                        
                                         // Use mergeUniqueById for consistent deduplication
                                         const allContacts = mergeUniqueById(formContacts, optimistic);
-                                        
-                                        console.log(`🔍 RENDERING Contacts tab: allContacts.length=${allContacts.length}, allContacts:`, allContacts);
-                                        
-                                        // Debug logging (remove after testing)
-                                        if (allContacts.length !== formContacts.length + optimistic.length - (optimistic.filter(o => formContacts.some(f => String(f?.id) === String(o?.id))).length)) {
-                                            console.log('🔍 Contacts deduplication:', {
-                                                formContactsCount: formContacts.length,
-                                                optimisticCount: optimistic.length,
-                                                finalCount: allContacts.length,
-                                                formContactIds: formContacts.map(c => c?.id),
-                                                optimisticIds: optimistic.map(c => c?.id),
-                                                finalIds: allContacts.map(c => c?.id)
-                                            });
-                                        }
-                                        
 
                                         return allContacts.length === 0 ? (
                                             <div className="text-center py-8 text-gray-500 text-sm">

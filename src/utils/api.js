@@ -29,17 +29,28 @@ const RateLimitManager = {
     this._rateLimitActive = true
     // Add buffer time - retry after the specified time plus a small buffer
     const bufferSeconds = Math.min(retryAfterSeconds * 0.1, 60) // 10% buffer, max 60s
-    this._rateLimitResumeAt = Date.now() + (retryAfterSeconds + bufferSeconds) * 1000
+    const totalWaitSeconds = retryAfterSeconds + bufferSeconds
+    this._rateLimitResumeAt = Date.now() + totalWaitSeconds * 1000
     this._consecutiveRateLimitErrors += 1
     
-    const waitMinutes = Math.round((retryAfterSeconds + bufferSeconds) / 60)
-    console.warn(`🚫 Rate limit active. Waiting ${waitMinutes} minute(s) before allowing new requests...`)
+    // Display wait time in a user-friendly format (seconds if < 1 minute, minutes otherwise)
+    let waitMessage
+    if (totalWaitSeconds < 60) {
+      waitMessage = `${Math.round(totalWaitSeconds)} second(s)`
+    } else {
+      const waitMinutes = Math.round(totalWaitSeconds / 60)
+      waitMessage = `${waitMinutes} minute(s)`
+    }
+    console.warn(`🚫 Rate limit active. Waiting ${waitMessage} before allowing new requests...`)
     
     // If we've hit rate limits multiple times, extend the wait period
     if (this._consecutiveRateLimitErrors >= 3) {
       const extendedWait = retryAfterSeconds * 2 // Double the wait time
       this._rateLimitResumeAt = Date.now() + extendedWait * 1000
-      console.warn(`⚠️ Multiple rate limit errors detected. Extending wait time to ${Math.round(extendedWait / 60)} minute(s).`)
+      const extendedWaitMessage = extendedWait < 60 
+        ? `${Math.round(extendedWait)} second(s)`
+        : `${Math.round(extendedWait / 60)} minute(s)`
+      console.warn(`⚠️ Multiple rate limit errors detected. Extending wait time to ${extendedWaitMessage}.`)
     }
   },
   
@@ -57,11 +68,22 @@ const RateLimitManager = {
   },
   
   // Throttle requests to prevent bursts
-  async throttleRequest(requestFn, priority = 0) {
+  async throttleRequest(requestFn, priority = 0, requestKey = null) {
     // If rate limited, queue the request
     if (this.isRateLimited()) {
       return new Promise((resolve, reject) => {
-        this._requestQueue.push({ requestFn, resolve, reject, priority })
+        // If requestKey is provided and a duplicate request exists in queue, reuse its promise
+        if (requestKey && this._requestQueue.length > 0) {
+          const duplicateIndex = this._requestQueue.findIndex(item => item.requestKey === requestKey)
+          if (duplicateIndex !== -1) {
+            // Return the existing promise instead of adding a duplicate
+            const existingItem = this._requestQueue[duplicateIndex]
+            existingItem.resolve.then(resolve).catch(reject)
+            return
+          }
+        }
+        
+        this._requestQueue.push({ requestFn, resolve, reject, priority, requestKey })
         // Sort queue by priority (higher priority first)
         this._requestQueue.sort((a, b) => b.priority - a.priority)
       })
@@ -85,7 +107,18 @@ const RateLimitManager = {
       // If rate limited, queue the request for retry
       if (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED') {
         return new Promise((resolve, reject) => {
-          this._requestQueue.push({ requestFn, resolve, reject, priority })
+          // If requestKey is provided and a duplicate request exists in queue, reuse its promise
+          if (requestKey && this._requestQueue.length > 0) {
+            const duplicateIndex = this._requestQueue.findIndex(item => item.requestKey === requestKey)
+            if (duplicateIndex !== -1) {
+              // Return the existing promise instead of adding a duplicate
+              const existingItem = this._requestQueue[duplicateIndex]
+              existingItem.resolve.then(resolve).catch(reject)
+              return
+            }
+          }
+          
+          this._requestQueue.push({ requestFn, resolve, reject, priority, requestKey })
           this._requestQueue.sort((a, b) => b.priority - a.priority)
         })
       }
@@ -241,18 +274,25 @@ const RequestDeduplicator = {
 window.RequestDeduplicator = RequestDeduplicator;
 
 async function request(path, options = {}) {
-  // Use throttling for all requests to prevent bursts
-  return RateLimitManager.throttleRequest(async () => {
-    // Check if we're currently rate limited before making any request
-    if (RateLimitManager.isRateLimited()) {
-      const waitSeconds = RateLimitManager.getWaitTimeRemaining()
-      const waitMinutes = Math.round(waitSeconds / 60)
-      const error = new Error(`Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`)
-      error.status = 429
-      error.code = 'RATE_LIMIT_EXCEEDED'
-      error.retryAfter = waitSeconds
-      throw error
-    }
+  // Generate a unique request key for deduplication
+  const requestKey = RequestDeduplicator.getRequestKey(path, options)
+  
+  // Use deduplication first to prevent duplicate requests
+  return RequestDeduplicator.deduplicate(requestKey, async () => {
+    // Use throttling for all requests to prevent bursts
+    return RateLimitManager.throttleRequest(async () => {
+      // Check if we're currently rate limited before making any request
+      if (RateLimitManager.isRateLimited()) {
+        const waitSeconds = RateLimitManager.getWaitTimeRemaining()
+        const waitMessage = waitSeconds < 60 
+          ? `${waitSeconds} second(s)`
+          : `${Math.round(waitSeconds / 60)} minute(s)`
+        const error = new Error(`Rate limit active. Please wait ${waitMessage} before trying again.`)
+        error.status = 429
+        error.code = 'RATE_LIMIT_EXCEEDED'
+        error.retryAfter = waitSeconds
+        throw error
+      }
     
     const token = window.storage?.getToken?.()
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
@@ -487,7 +527,8 @@ async function request(path, options = {}) {
     }
     throw error;
   }
-  });
+    }, requestKey) // Pass requestKey to throttleRequest for deduplication
+  }) // Close RequestDeduplicator.deduplicate
 }
 
 // Initial load coordinator to stagger component mounts
