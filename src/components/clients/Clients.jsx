@@ -4062,8 +4062,9 @@ const Clients = React.memo(() => {
                                             : (leadDataToSend?.notes !== undefined && leadDataToSend.notes !== null 
                                                 ? String(leadDataToSend.notes) 
                                                 : (updatedLead.notes || '')),
-                                        contacts: parseField(freshLead.contacts, []),
+                                        // CRITICAL: Preserve followUps from database - use parseField to handle normalized table data
                                         followUps: parseField(freshLead.followUps, []),
+                                        contacts: parseField(freshLead.contacts, []),
                                         comments: parseField(freshLead.comments, []),
                                         proposals: parseField(freshLead.proposals, []),
                                         services: parseField(freshLead.services, [])
@@ -4074,7 +4075,10 @@ const Clients = React.memo(() => {
                                         status: parsedLead.status,
                                         stage: parsedLead.stage,
                                         freshStatus: freshLead.status,
-                                        freshStage: freshLead.stage
+                                        freshStage: freshLead.stage,
+                                        notesLength: parsedLead.notes?.length || 0,
+                                        followUpsCount: parsedLead.followUps?.length || 0,
+                                        commentsCount: parsedLead.comments?.length || 0
                                     });
                                     
                                     // Update state with fresh data from database

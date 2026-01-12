@@ -215,6 +215,86 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // Removed excessive logging - only log on actual meaningful changes
     }, [formData]);
     
+    // Track last processed client data to detect changes
+    const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, id: null });
+    
+    // CRITICAL: Update formData when client prop changes (for followUps, notes, comments persistence)
+    // This ensures data persists when navigating away and back, or on page refresh
+    useEffect(() => {
+        if (!client || !client.id) return;
+        
+        // Skip if user is currently editing or auto-saving - don't overwrite their changes
+        if (isEditingRef.current || isAutoSavingRef.current) {
+            return;
+        }
+        
+        // Skip if user has edited the form - don't overwrite their changes
+        if (hasUserEditedForm.current) {
+            return;
+        }
+        
+        // Only update if client prop has changed (not just a re-render)
+        const currentClientId = formDataRef.current?.id;
+        if (currentClientId !== client.id) {
+            // Different client - reset tracking and let the main useEffect handle it
+            lastClientDataRef.current = { followUps: null, notes: null, comments: null, id: client.id };
+            return;
+        }
+        
+        // Parse followUps, notes, and comments from client prop
+        const clientFollowUps = typeof client.followUps === 'string' 
+            ? (client.followUps.trim() ? JSON.parse(client.followUps) : [])
+            : (Array.isArray(client.followUps) ? client.followUps : []);
+        const clientNotes = client.notes !== undefined && client.notes !== null 
+            ? String(client.notes) 
+            : (formDataRef.current?.notes || '');
+        const clientComments = typeof client.comments === 'string' 
+            ? (client.comments.trim() ? JSON.parse(client.comments) : [])
+            : (Array.isArray(client.comments) ? client.comments : []);
+        
+        // Compare with last processed data to avoid unnecessary updates
+        const lastFollowUpsStr = JSON.stringify(lastClientDataRef.current.followUps);
+        const lastNotes = lastClientDataRef.current.notes;
+        const lastCommentsStr = JSON.stringify(lastClientDataRef.current.comments);
+        
+        const currentFollowUpsStr = JSON.stringify(clientFollowUps);
+        const followUpsChanged = currentFollowUpsStr !== lastFollowUpsStr;
+        const notesChanged = clientNotes !== lastNotes;
+        const currentCommentsStr = JSON.stringify(clientComments);
+        const commentsChanged = currentCommentsStr !== lastCommentsStr;
+        
+        if (followUpsChanged || notesChanged || commentsChanged) {
+            console.log('🔄 Updating formData from client prop (followUps/notes/comments):', {
+                clientId: client.id,
+                followUpsChanged,
+                notesChanged,
+                commentsChanged,
+                followUpsCount: clientFollowUps.length,
+                notesLength: clientNotes.length,
+                commentsCount: clientComments.length
+            });
+            
+            // Update tracking ref
+            lastClientDataRef.current = {
+                followUps: clientFollowUps,
+                notes: clientNotes,
+                comments: clientComments,
+                id: client.id
+            };
+            
+            setFormData(prev => {
+                const updated = {
+                    ...prev,
+                    ...(followUpsChanged ? { followUps: clientFollowUps } : {}),
+                    ...(notesChanged ? { notes: clientNotes } : {}),
+                    ...(commentsChanged ? { comments: clientComments } : {})
+                };
+                formDataRef.current = updated;
+                return updated;
+            });
+        }
+    }, [client]);
+    
     // Cleanup editing timeout on unmount
     useEffect(() => {
         return () => {
