@@ -211,16 +211,35 @@ const LeadDetailModal = ({
 
         const currentLeadId = String(lead.id);
         const isDifferentLead = lastProcessedLeadIdRef.current !== currentLeadId;
+        
+        // CRITICAL: Don't overwrite formData if we're currently auto-saving status or stage
+        // This prevents race conditions where API response comes back during auto-save
+        if (isAutoSavingRef.current && !isDifferentLead) {
+            console.log('⏸️ Skipping formData update - auto-save in progress');
+            return;
+        }
 
-        // Only update if it's a different lead (new lead loaded)
-        if (isDifferentLead) {
-            lastProcessedLeadIdRef.current = currentLeadId;
+        // Only update if it's a different lead (new lead loaded) OR if status/stage changed in the lead prop
+        // This ensures we update formData when parent refreshes lead data after save
+        const currentStatus = normalizeLifecycleStage(lead.status);
+        const currentStage = lead.stage || 'Awareness';
+        const formDataStatus = formDataRef.current?.status || formData?.status;
+        const formDataStage = formDataRef.current?.stage || formData?.stage;
+        
+        const statusChanged = currentStatus !== normalizeLifecycleStage(formDataStatus);
+        const stageChanged = currentStage !== formDataStage;
+        const shouldUpdate = isDifferentLead || (statusChanged && !userEditedFieldsRef.current.has('status')) || (stageChanged && !userEditedFieldsRef.current.has('stage'));
+
+        if (shouldUpdate) {
+            if (isDifferentLead) {
+                lastProcessedLeadIdRef.current = currentLeadId;
+            }
             
             // Parse the lead data - API already includes contacts, sites, proposals via parseClientJsonFields
             const parsedLead = {
                 ...lead,
-                stage: lead.stage || 'Awareness',
-                status: normalizeLifecycleStage(lead.status),
+                stage: currentStage,
+                status: currentStatus,
                 contacts: Array.isArray(lead.contacts) ? lead.contacts : (typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : []),
                 followUps: Array.isArray(lead.followUps) ? lead.followUps : (typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : []),
                 projectIds: Array.isArray(lead.projectIds) ? lead.projectIds : (typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : []),
@@ -239,7 +258,9 @@ const LeadDetailModal = ({
                 leadId: currentLeadId, 
                 contacts: parsedLead.contacts.length,
                 sites: parsedLead.sites.length,
-                proposals: parsedLead.proposals.length
+                proposals: parsedLead.proposals.length,
+                status: parsedLead.status,
+                stage: parsedLead.stage
             });
 
             // Update formData ONCE with all loaded data
@@ -252,7 +273,7 @@ const LeadDetailModal = ({
                 projectIds: parsedLead.projectIds || []
             };
         }
-    }, [lead?.id]); // Only depend on lead.id, not the entire lead object
+    }, [lead?.id, lead?.status, lead?.stage]); // Also depend on status and stage to detect updates
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
@@ -2799,6 +2820,17 @@ const LeadDetailModal = ({
 
     // Navigation helper function
     const navigateToPage = (page) => {
+        // If navigating to clients page, reset the Clients component view first
+        if (page === 'clients') {
+            // Dispatch event to reset Clients component view
+            if (window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('resetClientsView', { 
+                    detail: { viewMode: 'clients' } 
+                }));
+            }
+        }
+        
+        // Navigate using RouteState
         if (window.RouteState && window.RouteState.navigate) {
             window.RouteState.navigate({
                 page: page,
@@ -2814,6 +2846,7 @@ const LeadDetailModal = ({
                 detail: { page: page } 
             }));
         }
+        
         // Close modal when navigating away
         if (onClose) {
             onClose();
@@ -2837,7 +2870,17 @@ const LeadDetailModal = ({
                         </button>
                         <i className={`fas fa-chevron-right ${isDark ? 'text-gray-600' : 'text-gray-400'}`}></i>
                         <button
-                            onClick={() => navigateToPage('clients')}
+                            onClick={() => {
+                                // Switch to leads view
+                                if (window.dispatchEvent) {
+                                    window.dispatchEvent(new CustomEvent('resetClientsView', { 
+                                        detail: { viewMode: 'leads' } 
+                                    }));
+                                }
+                                if (onClose) {
+                                    onClose();
+                                }
+                            }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                         >
                             Leads
@@ -3207,6 +3250,12 @@ const LeadDetailModal = ({
                             // Auto-save immediately with the updated data
                             // CRITICAL: Only auto-save for existing leads, NOT for new leads that haven't been saved yet
                             if (lead && !isNewLeadNotSavedRef.current && onSave) {
+                                console.log('💾 Auto-saving status change:', {
+                                    leadId: lead.id,
+                                    oldStatus: formDataRef.current?.status,
+                                    newStatus: newStatus
+                                });
+                                
                                 // Use setTimeout to ensure state is updated
                                 setTimeout(async () => {
                                     try {
@@ -3216,11 +3265,19 @@ const LeadDetailModal = ({
                                         // Explicitly ensure status is included
                                         latest.status = newStatus;
                                         
+                                        console.log('💾 Sending status to onSave:', {
+                                            leadId: latest.id,
+                                            status: latest.status,
+                                            stage: latest.stage
+                                        });
+                                        
                                         // Save this as the last saved state
                                         lastSavedDataRef.current = latest;
                                         
                                         // Save to API - ensure it's awaited
                                         await onSave(latest, true);
+                                        
+                                        console.log('✅ Status auto-save completed');
                                         
                                         // Clear the flag and notify parent after save completes
                                         setTimeout(() => {
@@ -3320,6 +3377,12 @@ const LeadDetailModal = ({
                                                     // Auto-save immediately with the updated data
                                                     // CRITICAL: Only auto-save for existing leads, NOT for new leads that haven't been saved yet
                                                     if (lead && !isNewLeadNotSavedRef.current && onSave) {
+                                                        console.log('💾 Auto-saving stage change:', {
+                                                            leadId: lead.id,
+                                                            oldStage: formDataRef.current?.stage,
+                                                            newStage: newStage
+                                                        });
+                                                        
                                                         // Use setTimeout to ensure state is updated
                                                         setTimeout(async () => {
                                                             try {
@@ -3329,12 +3392,19 @@ const LeadDetailModal = ({
                                                                 // Explicitly ensure stage is included
                                                                 latest.stage = newStage;
                                                         
+                                                                console.log('💾 Sending stage to onSave:', {
+                                                                    leadId: latest.id,
+                                                                    status: latest.status,
+                                                                    stage: latest.stage
+                                                                });
+                                                        
                                                         // Save this as the last saved state
                                                         lastSavedDataRef.current = latest;
                                                         
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
                                                                 
+                                                                console.log('✅ Stage auto-save completed');
                                                         
                                             // Clear the flag and notify parent after save completes
                                                         setTimeout(() => {

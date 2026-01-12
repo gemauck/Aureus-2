@@ -1369,6 +1369,22 @@ const Clients = React.memo(() => {
         return () => window.removeEventListener('openEntityDetail', handleEntityNavigation);
     }, [clients, leads, handleOpenClient, handleOpenLead]);
     
+    // Listen for resetClientsView event to reset view when navigating from detail pages
+    useEffect(() => {
+        const handleResetView = (event) => {
+            const targetViewMode = event.detail?.viewMode || 'clients';
+            setViewMode(targetViewMode);
+            selectedClientRef.current = null;
+            selectedLeadRef.current = null;
+            setEditingClientId(null);
+            setEditingLeadId(null);
+            isFormOpenRef.current = false;
+        };
+        
+        window.addEventListener('resetClientsView', handleResetView);
+        return () => window.removeEventListener('resetClientsView', handleResetView);
+    }, []);
+    
     // Listen for route changes to reset view mode when navigating to base clients page
     useEffect(() => {
         if (!window.RouteState) return;
@@ -4034,6 +4050,9 @@ const Clients = React.memo(() => {
                                     };
                                     const parsedLead = {
                                         ...freshLead,
+                                        // CRITICAL: Explicitly preserve status and stage from database
+                                        status: freshLead.status || updatedLead.status || 'Potential',
+                                        stage: freshLead.stage || updatedLead.stage || 'Awareness',
                                         // CRITICAL: Preserve notes from database - always ensure it's a string
                                         notes: freshLead.notes !== undefined && freshLead.notes !== null 
                                             ? String(freshLead.notes) 
@@ -4046,6 +4065,14 @@ const Clients = React.memo(() => {
                                         proposals: parseField(freshLead.proposals, []),
                                         services: parseField(freshLead.services, [])
                                     };
+                                    
+                                    console.log('🔄 Refreshed lead after save:', {
+                                        id: parsedLead.id,
+                                        status: parsedLead.status,
+                                        stage: parsedLead.stage,
+                                        freshStatus: freshLead.status,
+                                        freshStage: freshLead.stage
+                                    });
                                     
                                     // Update state with fresh data from database
                                     const refreshedLeads = leads.map(l => 
