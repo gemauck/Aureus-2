@@ -450,6 +450,182 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
     
+    // Job cards state - MUST be declared before loadJobCards function
+    const [jobCards, setJobCards] = useState([]);
+    const [loadingJobCards, setLoadingJobCards] = useState(false);
+    
+    // Refs to prevent duplicate loading calls - MUST be declared before loadJobCards function
+    const isLoadingJobCardsRef = useRef(false);
+    const lastLoadedClientIdRef = useRef(null);
+    const lastLoadedClientNameRef = useRef(null);
+    
+    // Load job cards for this client - MUST be defined before useEffect hooks that use it
+    const loadJobCards = useCallback(async () => {
+        if (!client?.id) {
+            setJobCards([]);
+            lastLoadedClientIdRef.current = null;
+            lastLoadedClientNameRef.current = null;
+            return Promise.resolve([]);
+        }
+        
+        const clientId = String(client.id);
+        const clientName = client?.name || null;
+        
+        // Prevent duplicate calls: if already loading, return empty array (will be handled by deduplicator)
+        if (isLoadingJobCardsRef.current) {
+            return [];
+        }
+        
+        // Only check clientId, not name - name changes shouldn't trigger reload
+        // If lastLoadedClientIdRef is null, it means we're doing an initial load - always proceed
+        // Otherwise, if same client already loaded, skip
+        if (lastLoadedClientIdRef.current === clientId && lastLoadedClientIdRef.current !== null) {
+            // Same client already loaded, return existing job cards from state
+            return jobCards || [];
+        }
+        
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            setLoadingJobCards(false);
+            isLoadingJobCardsRef.current = false;
+            return [];
+        }
+        
+        // Use global request deduplication to prevent duplicate API calls
+        const requestKey = window.RequestDeduplicator?.getRequestKey('/api/jobcards', { clientId, pageSize: 1000 });
+        
+        try {
+            // Use deduplicator if available
+            if (window.RequestDeduplicator) {
+                await window.RequestDeduplicator.deduplicate(requestKey, async () => {
+                    isLoadingJobCardsRef.current = true;
+                    setLoadingJobCards(true);
+                    
+                    try {
+                        // First, try fetching by clientId (most reliable)
+                        let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
+                            headers: { 
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        let data = null;
+                        
+                        if (response.ok) {
+                            data = await response.json();
+                            const jobCards = data.jobCards || data.data?.jobCards || [];
+                            if (jobCards.length > 0) {
+                                // Only log if this is the first time loading for this client
+                                if (lastLoadedClientIdRef.current !== clientId) {
+                                    console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                                }
+                                setJobCards(jobCards);
+                                lastLoadedClientIdRef.current = clientId;
+                                lastLoadedClientNameRef.current = clientName;
+                                setLoadingJobCards(false);
+                                isLoadingJobCardsRef.current = false;
+                                return { jobCards };
+                            }
+                        }
+                        
+                        // Fallback: Fetch all job cards and filter by clientId ONLY (strict match)
+                        response = await fetch(`/api/jobcards?pageSize=1000`, {
+                            headers: { 
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            data = await response.json();
+                            const allJobCards = data.jobCards || data.data?.jobCards || [];
+                            console.log(`🔍 Checking ${allJobCards.length} job cards for clientId: ${clientId}`);
+                            let matchingJobCards = allJobCards.filter(jc => {
+                                // Check multiple possible field names for client ID
+                                const jcClientId = jc.clientId || jc.client?.id;
+                                const matches = jcClientId && String(jcClientId).trim() === clientId.trim();
+                                if (jcClientId && !matches) {
+                                    console.log(`⚠️ Job card ${jc.id} has clientId "${jcClientId}" (type: ${typeof jcClientId}), expected "${clientId}"`);
+                                }
+                                return matches;
+                            });
+                            console.log(`✅ Found ${matchingJobCards.length} matching job cards for clientId: ${clientId}`);
+                            
+                            if (matchingJobCards.length > 0) {
+                                setJobCards(matchingJobCards);
+                            } else {
+                                setJobCards([]);
+                            }
+                            
+                            lastLoadedClientIdRef.current = clientId;
+                            lastLoadedClientNameRef.current = clientName;
+                            return { jobCards: matchingJobCards };
+                        } else {
+                            const errorText = await response.text().catch(() => 'Unknown error');
+                            console.error('❌ Failed to load job cards:', response.status, errorText);
+                            setJobCards([]);
+                            throw new Error(`Failed to load job cards: ${response.status} ${errorText}`);
+                        }
+                    } catch (error) {
+                        console.error('Error loading job cards:', error);
+                        setJobCards([]);
+                        throw error;
+                    } finally {
+                        setLoadingJobCards(false);
+                        isLoadingJobCardsRef.current = false;
+                    }
+                }, 2000); // 2 second deduplication window
+            } else {
+                // Fallback to original logic if RequestDeduplicator is not available
+                isLoadingJobCardsRef.current = true;
+                setLoadingJobCards(true);
+                
+                try {
+                    let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    let data = null;
+                    
+                    if (response.ok) {
+                        data = await response.json();
+                        const jobCards = data.jobCards || data.data?.jobCards || [];
+                        if (jobCards.length > 0) {
+                            setJobCards(jobCards);
+                            lastLoadedClientIdRef.current = clientId;
+                            lastLoadedClientNameRef.current = clientName;
+                            setLoadingJobCards(false);
+                            isLoadingJobCardsRef.current = false;
+                            return { jobCards };
+                        }
+                    }
+                    
+                    setJobCards([]);
+                    lastLoadedClientIdRef.current = clientId;
+                    lastLoadedClientNameRef.current = clientName;
+                    setLoadingJobCards(false);
+                    isLoadingJobCardsRef.current = false;
+                    return { jobCards: [] };
+                } catch (error) {
+                    console.error('Error loading job cards:', error);
+                    setJobCards([]);
+                    setLoadingJobCards(false);
+                    isLoadingJobCardsRef.current = false;
+                    throw error;
+                }
+            }
+        } catch (error) {
+            // Error already handled in the inner try-catch
+            setLoadingJobCards(false);
+            isLoadingJobCardsRef.current = false;
+            return [];
+        }
+    }, [client?.id, jobCards]); // Include jobCards in deps so we can return it
+    
     // Reload job cards when Service & Maintenance tab is opened
     useEffect(() => {
         if (activeTab === 'service-maintenance' && client?.id) {
@@ -603,217 +779,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             gpsCoordinates: `${lat}, ${lng}`
         }));
     };
-    // Job cards state
-    const [jobCards, setJobCards] = useState([]);
-    const [loadingJobCards, setLoadingJobCards] = useState(false);
-    
-    // Refs to prevent duplicate loading calls
-    const isLoadingJobCardsRef = useRef(false);
-    const lastLoadedClientIdRef = useRef(null);
-    const lastLoadedClientNameRef = useRef(null);
-    
-    // Load job cards for this client - MUST be defined before useEffect hooks that use it
-    const loadJobCards = useCallback(async () => {
-        if (!client?.id) {
-            setJobCards([]);
-            lastLoadedClientIdRef.current = null;
-            lastLoadedClientNameRef.current = null;
-            return Promise.resolve([]);
-        }
-        
-        const clientId = String(client.id);
-        const clientName = client?.name || null;
-        
-        // Prevent duplicate calls: if already loading, return empty array (will be handled by deduplicator)
-        if (isLoadingJobCardsRef.current) {
-            return [];
-        }
-        
-        // Only check clientId, not name - name changes shouldn't trigger reload
-        // If lastLoadedClientIdRef is null, it means we're doing an initial load - always proceed
-        // Otherwise, if same client already loaded, skip
-        if (lastLoadedClientIdRef.current === clientId && lastLoadedClientIdRef.current !== null) {
-            // Same client already loaded, return existing job cards from state
-            return jobCards || [];
-        }
-        
-        const token = window.storage?.getToken?.();
-        if (!token) {
-            setLoadingJobCards(false);
-            isLoadingJobCardsRef.current = false;
-            return [];
-        }
-        
-        // Use global request deduplication to prevent duplicate API calls
-        const requestKey = window.RequestDeduplicator?.getRequestKey('/api/jobcards', { clientId, pageSize: 1000 });
-        
-        try {
-            // Use deduplicator if available
-            if (window.RequestDeduplicator) {
-                await window.RequestDeduplicator.deduplicate(requestKey, async () => {
-                    isLoadingJobCardsRef.current = true;
-                    setLoadingJobCards(true);
-                    
-                    try {
-                        // First, try fetching by clientId (most reliable)
-                        let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
-                            headers: { 
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        let data = null;
-                        
-                        if (response.ok) {
-                            data = await response.json();
-                            const jobCards = data.jobCards || data.data?.jobCards || [];
-                            if (jobCards.length > 0) {
-                                // Only log if this is the first time loading for this client
-                                if (lastLoadedClientIdRef.current !== clientId) {
-                                    console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
-                                }
-                                setJobCards(jobCards);
-                                lastLoadedClientIdRef.current = clientId;
-                                lastLoadedClientNameRef.current = clientName;
-                                setLoadingJobCards(false);
-                                isLoadingJobCardsRef.current = false;
-                                return { jobCards };
-                            }
-                        }
-                        
-                        // Fallback: Fetch all job cards and filter by clientId ONLY (strict match)
-                        response = await fetch(`/api/jobcards?pageSize=1000`, {
-                            headers: { 
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            data = await response.json();
-                            const allJobCards = data.jobCards || data.data?.jobCards || [];
-                            console.log(`🔍 Checking ${allJobCards.length} job cards for clientId: ${clientId}`);
-                            let matchingJobCards = allJobCards.filter(jc => {
-                                // Check multiple possible field names for client ID
-                                const jcClientId = jc.clientId || jc.client?.id;
-                                const matches = jcClientId && String(jcClientId).trim() === clientId.trim();
-                                if (jcClientId && !matches) {
-                                    console.log(`⚠️ Job card ${jc.id} has clientId "${jcClientId}" (type: ${typeof jcClientId}), expected "${clientId}"`);
-                                }
-                                return matches;
-                            });
-                            console.log(`✅ Found ${matchingJobCards.length} matching job cards for clientId: ${clientId}`);
-                            
-                            if (matchingJobCards.length > 0) {
-                                setJobCards(matchingJobCards);
-                            } else {
-                                setJobCards([]);
-                            }
-                            
-                            lastLoadedClientIdRef.current = clientId;
-                            lastLoadedClientNameRef.current = clientName;
-                            return { jobCards: matchingJobCards };
-                        } else {
-                            const errorText = await response.text().catch(() => 'Unknown error');
-                            console.error('❌ Failed to load job cards:', response.status, errorText);
-                            setJobCards([]);
-                            throw new Error(`Failed to load job cards: ${response.status} ${errorText}`);
-                        }
-                    } catch (error) {
-                        console.error('Error loading job cards:', error);
-                        setJobCards([]);
-                        throw error;
-                    } finally {
-                        setLoadingJobCards(false);
-                        isLoadingJobCardsRef.current = false;
-                    }
-                }, 2000); // 2 second deduplication window
-            } else {
-                // Fallback to original logic if RequestDeduplicator is not available
-                isLoadingJobCardsRef.current = true;
-                setLoadingJobCards(true);
-                
-                try {
-                    let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
-                        headers: { 
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    let data = null;
-                    
-                    if (response.ok) {
-                        data = await response.json();
-                        const jobCards = data.jobCards || data.data?.jobCards || [];
-                        if (jobCards.length > 0) {
-                            // Only log if this is the first time loading for this client
-                            if (lastLoadedClientIdRef.current !== clientId) {
-                                console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
-                            }
-                            setJobCards(jobCards);
-                            lastLoadedClientIdRef.current = clientId;
-                            lastLoadedClientNameRef.current = clientName;
-                            setLoadingJobCards(false);
-                            isLoadingJobCardsRef.current = false;
-                            return jobCards;
-                        }
-                    }
-                    
-                    response = await fetch(`/api/jobcards?pageSize=1000`, {
-                        headers: { 
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    if (response.ok) {
-                        data = await response.json();
-                        const allJobCards = data.jobCards || data.data?.jobCards || [];
-                        console.log(`🔍 Checking ${allJobCards.length} job cards for clientId: ${clientId}`);
-                        let matchingJobCards = allJobCards.filter(jc => {
-                            // Check multiple possible field names for client ID
-                            const jcClientId = jc.clientId || jc.client?.id || jc.clientId;
-                            const matches = jcClientId && String(jcClientId).trim() === clientId.trim();
-                            if (jcClientId && !matches) {
-                                console.log(`⚠️ Job card ${jc.id} has clientId "${jcClientId}" (type: ${typeof jcClientId}), expected "${clientId}"`);
-                            }
-                            return matches;
-                        });
-                        console.log(`✅ Found ${matchingJobCards.length} matching job cards for clientId: ${clientId}`);
-                        
-                        if (matchingJobCards.length > 0) {
-                            setJobCards(matchingJobCards);
-                        } else {
-                            setJobCards([]);
-                        }
-                        
-                        lastLoadedClientIdRef.current = clientId;
-                        lastLoadedClientNameRef.current = clientName;
-                        return matchingJobCards;
-                    } else {
-                        const errorText = await response.text().catch(() => 'Unknown error');
-                        console.error('❌ Failed to load job cards:', response.status, errorText);
-                        setJobCards([]);
-                        return [];
-                    }
-                } catch (error) {
-                    console.error('Error loading job cards:', error);
-                    setJobCards([]);
-                    return [];
-                } finally {
-                    setLoadingJobCards(false);
-                    isLoadingJobCardsRef.current = false;
-                }
-            }
-        } catch (error) {
-            // Error already handled in the inner try-catch
-            setLoadingJobCards(false);
-            isLoadingJobCardsRef.current = false;
-            return [];
-        }
-    }, [client?.id, jobCards]); // Include jobCards in deps so we can return it
     
     // Load sites from database
     const loadSitesFromDatabase = useCallback(async (clientId) => {
@@ -5139,3 +5104,4 @@ try {
 }
 // CONTACT FILTER: Only shows site-specific contacts - no "All Contacts" option
 // This ensures contacts are always properly linked to specific sites
+

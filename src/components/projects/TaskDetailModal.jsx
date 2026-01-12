@@ -49,6 +49,7 @@ const TaskDetailModal = ({
         return initialComments;
     });
     const [attachments, setAttachments] = useState(task?.attachments || []);
+    const [uploadingAttachments, setUploadingAttachments] = useState(false);
     // CRITICAL: Ensure checklist is always an array
     const [checklist, setChecklist] = useState(() => {
         return Array.isArray(task?.checklist) ? task.checklist : [];
@@ -1211,17 +1212,81 @@ const TaskDetailModal = ({
         }
     };
 
-    const handleFileUpload = (e) => {
+    const handleFileUpload = async (e) => {
         const files = Array.from(e.target.files);
-        const newAttachments = files.map(file => ({
-            id: Date.now() + Math.random(),
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            uploadDate: new Date().toISOString(),
-            url: URL.createObjectURL(file)
-        }));
-        setAttachments([...attachments, ...newAttachments]);
+        if (files.length === 0) return;
+        
+        setUploadingAttachments(true);
+        
+        try {
+            // Upload each file to the server
+            const uploadPromises = files.map(async (file) => {
+            try {
+                // Convert file to base64 data URL
+                const reader = new FileReader();
+                const dataUrl = await new Promise((resolve, reject) => {
+                    reader.onload = (event) => {
+                        resolve(event.target.result);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                // Upload to server
+                const token = window.storage?.getToken?.();
+                const response = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        name: file.name,
+                        dataUrl: dataUrl,
+                        folder: 'task-attachments'
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
+                    throw new Error(errorData.message || `Upload failed: ${response.statusText}`);
+                }
+                
+                const uploadData = await response.json();
+                
+                // Return attachment object with server URL
+                return {
+                    id: Date.now() + Math.random(),
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    uploadDate: new Date().toISOString(),
+                    url: uploadData.url || uploadData.data?.url, // Server URL
+                    dataUrl: dataUrl // Keep dataUrl for immediate display if needed
+                };
+            } catch (error) {
+                console.error('❌ Failed to upload file:', file.name, error);
+                alert(`Failed to upload ${file.name}: ${error.message}`);
+                return null; // Return null for failed uploads
+            }
+        });
+        
+        // Wait for all uploads to complete
+        const uploadedAttachments = await Promise.all(uploadPromises);
+        
+            // Filter out failed uploads and add successful ones
+            const successfulUploads = uploadedAttachments.filter(att => att !== null);
+            if (successfulUploads.length > 0) {
+                setAttachments([...attachments, ...successfulUploads]);
+            }
+        } catch (error) {
+            console.error('❌ Error during file upload:', error);
+            alert(`Error uploading files: ${error.message}`);
+        } finally {
+            setUploadingAttachments(false);
+            // Clear the file input so the same file can be uploaded again if needed
+            e.target.value = '';
+        }
     };
 
     const handleDeleteAttachment = (attachmentId) => {
@@ -2034,9 +2099,18 @@ const TaskDetailModal = ({
                                             onChange={handleFileUpload}
                                             className="hidden"
                                         />
-                                        <i className="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-1.5"></i>
-                                        <p className="text-sm text-gray-600">Click to upload files or drag and drop</p>
-                                        <p className="text-[10px] text-gray-500 mt-0.5">Any file type supported</p>
+                                        {uploadingAttachments ? (
+                                            <>
+                                                <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-1.5"></i>
+                                                <p className="text-sm text-gray-600">Uploading files...</p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-1.5"></i>
+                                                <p className="text-sm text-gray-600">Click to upload files or drag and drop</p>
+                                                <p className="text-[10px] text-gray-500 mt-0.5">Any file type supported</p>
+                                            </>
+                                        )}
                                     </label>
                                 </div>
 
@@ -2061,8 +2135,10 @@ const TaskDetailModal = ({
                                                 </div>
                                                 <div className="flex items-center gap-1 ml-2">
                                                     <a
-                                                        href={attachment.url}
+                                                        href={attachment.url || attachment.dataUrl}
                                                         download={attachment.name}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
                                                         className="text-primary-600 hover:text-primary-800 p-1.5"
                                                         title="Download"
                                                     >
