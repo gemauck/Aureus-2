@@ -4345,7 +4345,9 @@ const Clients = React.memo(() => {
             // CRITICAL: Save original clients array BEFORE filtering for error recovery
             const originalClients = [...clients];
             
-            // Optimistically update UI first for smooth removal
+            // Optimistically update UI first for IMMEDIATE removal
+            // CRITICAL: Use synchronous update (not startTransition) for deletion
+            // Deletion is a critical user action that should be visible immediately
             const updatedClients = clients.filter(c => c.id !== clientId);
             
             // Temporarily pause LiveDataSync to prevent conflicts
@@ -4354,17 +4356,17 @@ const Clients = React.memo(() => {
                 window.LiveDataSync.stop();
             }
             
-            // Use React's startTransition for smooth, non-blocking UI update
-            const updateState = () => {
-                setClients(updatedClients);
-                safeStorage.setClients(updatedClients);
-            };
+            // CRITICAL: Update state SYNCHRONOUSLY for immediate UI feedback
+            // Don't use startTransition here - deletion should be instant
+            setClients(updatedClients);
+            safeStorage.setClients(updatedClients);
             
-            if (typeof startTransition === 'function') {
-                startTransition(updateState);
-            } else {
-                // Fallback for older React versions
-                updateState();
+            // Force React to process the state update immediately by using flushSync if available
+            // This ensures the UI updates before the modal closes
+            if (typeof React.flushSync === 'function') {
+                React.flushSync(() => {
+                    // State already updated above, this just forces React to process it
+                });
             }
             
             // Delete from database in background
@@ -4381,16 +4383,9 @@ const Clients = React.memo(() => {
                     }, 1500); // 1.5 second delay to prevent shimmer from LiveDataSync refresh
                 } catch (error) {
                     // On error, restore the client from original array and show error
-                    const restoreState = () => {
-                        setClients(originalClients);
-                        safeStorage.setClients(originalClients);
-                    };
-                    
-                    if (typeof startTransition === 'function') {
-                        startTransition(restoreState);
-                    } else {
-                        restoreState();
-                    }
+                    // CRITICAL: Restore SYNCHRONOUSLY so user sees the error immediately
+                    setClients(originalClients);
+                    safeStorage.setClients(originalClients);
                     
                     const errorMessage = error?.message || error?.error || 'Unknown error';
                     console.error('❌ Failed to delete client:', error);
@@ -4400,7 +4395,7 @@ const Clients = React.memo(() => {
                     if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
                         window.LiveDataSync.start();
                     }
-                    return;
+                    throw error; // Re-throw so modal knows deletion failed
                 }
             } else {
                 // If no API, resume LiveDataSync after a short delay
@@ -4412,6 +4407,7 @@ const Clients = React.memo(() => {
             }
         } catch (error) {
             alert('Failed to delete client: ' + (error.message || 'Unknown error'));
+            throw error; // Re-throw so modal knows deletion failed
         }
     };
 
