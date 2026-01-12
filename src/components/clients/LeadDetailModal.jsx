@@ -2737,6 +2737,9 @@ const LeadDetailModal = ({
                 ...formData,
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
+                // CRITICAL: Explicitly include followUps and comments to ensure they're saved
+                followUps: formData.followUps || [],
+                comments: formData.comments || [],
                 // Explicitly include externalAgentId to ensure it's saved (even if null)
                 // Convert empty strings to null for consistency
                 externalAgentId: formData.externalAgentId !== undefined && formData.externalAgentId !== '' 
