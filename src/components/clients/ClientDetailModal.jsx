@@ -1090,6 +1090,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             };
             
             
+            // Load data if:
+            // 1. Client ID changed (switching to different client), OR
+            // 2. We haven't done initial load for this client yet (first time opening)
+            // This ensures data always loads immediately when opening a client
+            const shouldDoInitialLoad = clientIdChanged || !hasLoadedInitialData;
+            
             // Only set formData if we should load (new client or not edited)
             // CRITICAL FIX: Use functional update to preserve contacts/sites/opportunities that have been loaded from database
             // This prevents overwriting contacts that were loaded by loadContactsFromDatabase
@@ -1118,13 +1124,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Loading again causes duplicates
             const hasContactsInClient = parsedClient.contacts && Array.isArray(parsedClient.contacts) && parsedClient.contacts.length > 0;
             const hasSitesInClient = parsedClient.sites && Array.isArray(parsedClient.sites) && parsedClient.sites.length > 0;
-            
-            // Load data if:
-            // 1. Client ID changed (switching to different client), OR
-            // 2. We haven't done initial load for this client yet (first time opening)
-            // This ensures data always loads immediately when opening a client
-            // Note: hasLoadedInitialData is already declared above
-            const shouldDoInitialLoad = clientIdChanged || !hasLoadedInitialData;
             
             // DEBUG: Log loading conditions
             console.log('🔍 ClientDetailModal loading check:', {
