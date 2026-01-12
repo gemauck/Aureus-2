@@ -3080,7 +3080,7 @@ const LeadDetailModal = ({
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Stage</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                 <select
                     value={formData.status || 'Potential'}
                     onFocus={() => {
@@ -3089,7 +3089,7 @@ const LeadDetailModal = ({
                         notifyEditingChange(true);
                         if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                     }}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                         const newStatus = e.target.value;
                         isEditingRef.current = true;
                         userHasStartedTypingRef.current = true;
@@ -3100,9 +3100,49 @@ const LeadDetailModal = ({
                             isEditingRef.current = false;
                             notifyEditingChange(false);
                         }, 5000);
+                        
+                        // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
+                        // This prevents LiveDataSync from overwriting during the delay
+                        isAutoSavingRef.current = true;
+                        notifyEditingChange(false, true);
+                        
+                        // Update state and get the updated formData
                         setFormData(prev => {
                             const updated = { ...prev, status: newStatus };
                             formDataRef.current = updated;
+                            
+                            // Auto-save immediately with the updated data
+                            // CRITICAL: Only auto-save for existing leads, NOT for new leads that haven't been saved yet
+                            if (lead && !isNewLeadNotSavedRef.current && onSave) {
+                                // Use setTimeout to ensure state is updated
+                                setTimeout(async () => {
+                                    try {
+                                        // Get the latest formData from ref (updated by useEffect)
+                                        const latest = {...formDataRef.current, status: newStatus};
+                                        
+                                        // Explicitly ensure status is included
+                                        latest.status = newStatus;
+                                        
+                                        // Save this as the last saved state
+                                        lastSavedDataRef.current = latest;
+                                        
+                                        // Save to API - ensure it's awaited
+                                        await onSave(latest, true);
+                                        
+                                        // Clear the flag and notify parent after save completes
+                                        setTimeout(() => {
+                                            isAutoSavingRef.current = false;
+                                            notifyEditingChange(false, false);
+                                        }, 3000);
+                                    } catch (error) {
+                                        console.error('❌ Error saving status:', error);
+                                        isAutoSavingRef.current = false;
+                                        notifyEditingChange(false, false);
+                                        alert('Failed to save status change. Please try again.');
+                                    }
+                                }, 100); // Small delay to ensure state update is processed
+                            }
+                            
                             return updated;
                         });
                     }}

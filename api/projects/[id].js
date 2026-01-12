@@ -718,14 +718,21 @@ async function handler(req, res) {
               projectId: id,
               type: typeof body.documentSections,
               isString: typeof body.documentSections === 'string',
-              length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A'
+              length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
+              preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : JSON.stringify(body.documentSections).substring(0, 200)
             });
             // Pass the original body value - saveDocumentSectionsToTable handles string parsing
             await saveDocumentSectionsToTable(id, body.documentSections)
             console.log('✅ PUT /api/projects/[id]: Successfully saved documentSections to table');
           } catch (tableError) {
-            console.error('❌ Error saving documentSections to table:', tableError)
-            // Don't fail the entire request, but log the error
+            console.error('❌ CRITICAL: Error saving documentSections to table:', {
+              error: tableError.message,
+              stack: tableError.stack,
+              projectId: id,
+              dataType: typeof body.documentSections
+            });
+            // Re-throw to fail the request - table save is critical for persistence
+            throw new Error(`Failed to save documentSections to table: ${tableError.message}`);
           }
         }
         
@@ -735,14 +742,21 @@ async function handler(req, res) {
               projectId: id,
               type: typeof body.weeklyFMSReviewSections,
               isString: typeof body.weeklyFMSReviewSections === 'string',
-              length: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 'N/A'
+              length: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 'N/A',
+              preview: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.substring(0, 200) : JSON.stringify(body.weeklyFMSReviewSections).substring(0, 200)
             });
             // Pass the original body value - saveWeeklyFMSReviewSectionsToTable handles string parsing
             await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
             console.log('✅ PUT /api/projects/[id]: Successfully saved weeklyFMSReviewSections to table');
           } catch (tableError) {
-            console.error('❌ Error saving weeklyFMSReviewSections to table:', tableError)
-            // Don't fail the entire request, but log the error
+            console.error('❌ CRITICAL: Error saving weeklyFMSReviewSections to table:', {
+              error: tableError.message,
+              stack: tableError.stack,
+              projectId: id,
+              dataType: typeof body.weeklyFMSReviewSections
+            });
+            // Re-throw to fail the request - table save is critical for persistence
+            throw new Error(`Failed to save weeklyFMSReviewSections to table: ${tableError.message}`);
           }
         }
         

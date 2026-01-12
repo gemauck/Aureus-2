@@ -1857,6 +1857,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Use functional update with sectionsByYear to ensure we have the latest state
         // Also update sectionsRef immediately to prevent race conditions with auto-save
+        let updatedSectionsByYear;
         setSectionsByYear(prev => {
             const yearSections = prev[selectedYear] || [];
             const updatedSections = yearSections.map(section => {
@@ -1870,21 +1871,76 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return section;
             });
             
-            const updated = {
+            updatedSectionsByYear = {
                 ...prev,
                 [selectedYear]: updatedSections
             };
             
             // Immediately update the ref to prevent race conditions with auto-save
-            sectionsRef.current = updated;
+            sectionsRef.current = updatedSectionsByYear;
             
-            return updated;
+            return updatedSectionsByYear;
         });
         
-        // Clear the deleting flag after auto-save completes (2 seconds should be enough)
-        setTimeout(() => {
-            isDeletingRef.current = false;
-        }, 2000);
+        // CRITICAL: Explicitly save document deletion to database
+        // Clear any pending debounced save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        
+        // Save immediately after state update
+        isSavingRef.current = true;
+        setTimeout(async () => {
+            try {
+                const currentSectionsByYear = sectionsRef.current;
+                const serialized = serializeSections(currentSectionsByYear);
+                
+                // Save to localStorage immediately as backup
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, serialized);
+                        console.log('💾 Document deletion snapshot saved to localStorage');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save document deletion to localStorage:', storageError);
+                    }
+                }
+                
+                // Save to database
+                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
+                    lastSavedSnapshotRef.current = serialized;
+                    console.log('✅ Document deletion saved successfully');
+                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                    const updatePayload = {
+                        weeklyFMSReviewSections: serialized
+                    };
+                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    
+                    // Update parent component's project prop
+                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                        const updatedProject = result?.data?.project || result?.project || result?.data;
+                        if (updatedProject) {
+                            window.updateViewingProject({
+                                ...updatedProject,
+                                weeklyFMSReviewSections: serialized
+                            });
+                        }
+                    }
+                    lastSavedSnapshotRef.current = serialized;
+                    console.log('✅ Document deletion saved successfully');
+                }
+            } catch (error) {
+                console.error('❌ Error saving document deletion:', error);
+            } finally {
+                isSavingRef.current = false;
+                // Clear the deleting flag after save completes
+                setTimeout(() => {
+                    isDeletingRef.current = false;
+                }, 500);
+            }
+        }, 100);
     };
     
     // ============================================================
@@ -2019,6 +2075,62 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // Now update state (this will trigger auto-save, but ref already has the latest data)
         setSectionsByYear(updatedSectionsByYear);
         
+        // CRITICAL: Explicitly save status changes to database
+        // Clear any pending debounced save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        
+        // Save immediately after state update (debounced slightly to batch rapid changes)
+        setTimeout(async () => {
+            const currentSectionsByYear = sectionsRef.current;
+            const serialized = serializeSections(currentSectionsByYear);
+            const hasUnsavedChanges = serialized !== lastSavedSnapshotRef.current;
+            
+            if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
+                // Save to localStorage immediately as backup
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, serialized);
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save status to localStorage:', storageError);
+                    }
+                }
+                
+                // Save to database
+                isSavingRef.current = true;
+                try {
+                    if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
+                        lastSavedSnapshotRef.current = serialized;
+                    } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        const updatePayload = {
+                            weeklyFMSReviewSections: serialized
+                        };
+                        const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                        
+                        // Update parent component's project prop
+                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                            const updatedProject = result?.data?.project || result?.project || result?.data;
+                            if (updatedProject) {
+                                window.updateViewingProject({
+                                    ...updatedProject,
+                                    weeklyFMSReviewSections: serialized
+                                });
+                            }
+                        }
+                        lastSavedSnapshotRef.current = serialized;
+                    }
+                } catch (error) {
+                    console.error('❌ Error saving status:', error);
+                } finally {
+                    isSavingRef.current = false;
+                }
+            }
+        }, 500); // Small debounce to batch rapid status changes
+        
         // Restore scroll positions after state update
         setTimeout(() => {
             restoreScrollPositions();
@@ -2052,27 +2164,99 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             attachments: commentAttachments.length > 0 ? [...commentAttachments] : []
         };
         
-        setSections(prev => prev.map(section => {
-            if (section.id === sectionId) {
-                return {
-                    ...section,
-                    documents: (section.documents || []).map(doc => {
-                        if (doc.id === documentId) {
-                            const existingComments = getCommentsForYear(doc.comments, month, weekNumber, selectedYear);
-                            return {
-                                ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, weekNumber, [...existingComments, newComment], selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
-                };
-            }
-            return section;
-        }));
+        // Update state and ref immediately
+        let updatedSectionsByYear;
+        setSections(prev => {
+            const updated = prev.map(section => {
+                if (section.id === sectionId) {
+                    return {
+                        ...section,
+                        documents: (section.documents || []).map(doc => {
+                            if (doc.id === documentId) {
+                                const existingComments = getCommentsForYear(doc.comments, month, weekNumber, selectedYear);
+                                return {
+                                    ...doc,
+                                    comments: setCommentsForYear(doc.comments || {}, month, weekNumber, [...existingComments, newComment], selectedYear)
+                                };
+                            }
+                            return doc;
+                        })
+                    };
+                }
+                return section;
+            });
+            
+            // Calculate updated sectionsByYear structure
+            updatedSectionsByYear = {
+                ...sectionsByYear,
+                [selectedYear]: updated
+            };
+            
+            // Update ref immediately
+            sectionsRef.current = updatedSectionsByYear;
+            
+            return updated;
+        });
         
         setQuickComment('');
         setCommentAttachments([]); // Clear attachments after adding comment
+        
+        // CRITICAL: Explicitly save comment changes to database
+        // Clear any pending debounced save and save immediately
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        
+        // Save immediately after state update completes
+        setTimeout(async () => {
+            const currentSectionsByYear = sectionsRef.current;
+            const serialized = serializeSections(currentSectionsByYear);
+            
+            // Save to localStorage immediately as backup
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    window.localStorage.setItem(snapshotKey, serialized);
+                } catch (storageError) {
+                    console.warn('⚠️ Failed to save comment to localStorage:', storageError);
+                }
+            }
+            
+            // Save to database immediately
+            if (project?.id && !isSavingRef.current) {
+                isSavingRef.current = true;
+                try {
+                    if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
+                        lastSavedSnapshotRef.current = serialized;
+                        console.log('✅ Comment saved successfully');
+                    } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        const updatePayload = {
+                            weeklyFMSReviewSections: serialized
+                        };
+                        const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                        
+                        // Update parent component's project prop
+                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                            const updatedProject = result?.data?.project || result?.project || result?.data;
+                            if (updatedProject) {
+                                window.updateViewingProject({
+                                    ...updatedProject,
+                                    weeklyFMSReviewSections: serialized
+                                });
+                            }
+                        }
+                        lastSavedSnapshotRef.current = serialized;
+                        console.log('✅ Comment saved successfully');
+                    }
+                } catch (error) {
+                    console.error('❌ Error saving comment:', error);
+                } finally {
+                    isSavingRef.current = false;
+                }
+            }
+        }, 100);
         
         // Restore scroll positions after state update
         setTimeout(() => {

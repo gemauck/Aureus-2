@@ -190,7 +190,10 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
  * Save documentSections JSON to table structure
  */
 async function saveDocumentSectionsToTable(projectId, jsonData) {
-  if (!jsonData) return
+  if (!jsonData) {
+    console.log('⚠️ saveDocumentSectionsToTable: No jsonData provided, skipping save');
+    return;
+  }
 
   try {
     // Check if table exists (for environments that haven't migrated yet)
@@ -198,38 +201,152 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
       await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
     } catch (e) {
       // Table doesn't exist yet, skip table save (JSON will still be saved)
-      console.warn('DocumentSection table does not exist, skipping table save')
+      console.warn('⚠️ DocumentSection table does not exist, skipping table save')
       return
     }
+    
     let sections = jsonData
     if (typeof jsonData === 'string') {
-      sections = JSON.parse(jsonData)
+      try {
+        sections = JSON.parse(jsonData)
+      } catch (parseError) {
+        console.error('❌ Error parsing documentSections JSON string:', parseError);
+        throw new Error(`Invalid JSON in documentSections: ${parseError.message}`);
+      }
     }
 
+    console.log('💾 saveDocumentSectionsToTable: Starting save', {
+      projectId,
+      dataType: typeof sections,
+      isArray: Array.isArray(sections),
+      isObject: typeof sections === 'object' && !Array.isArray(sections),
+      keys: typeof sections === 'object' && !Array.isArray(sections) ? Object.keys(sections) : 'N/A',
+      arrayLength: Array.isArray(sections) ? sections.length : 'N/A'
+    });
+
     // Delete existing sections for this project
-    await prisma.documentSection.deleteMany({
+    const deletedCount = await prisma.documentSection.deleteMany({
       where: { projectId }
-    })
+    });
+    console.log(`🗑️ Deleted ${deletedCount.count} existing document sections for project ${projectId}`);
 
     if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
-      return
+      console.log('⚠️ saveDocumentSectionsToTable: Empty sections data, nothing to save');
+      return;
     }
 
     // Handle year-based structure: { "2024": [...], "2025": [...] }
     if (typeof sections === 'object' && !Array.isArray(sections)) {
+      let totalSectionsCreated = 0;
       for (const [yearStr, yearSections] of Object.entries(sections)) {
         const year = parseInt(yearStr, 10)
-        if (isNaN(year) || year < 1900 || year > 3000) continue
-        if (!Array.isArray(yearSections)) continue
+        if (isNaN(year) || year < 1900 || year > 3000) {
+          console.warn(`⚠️ Invalid year "${yearStr}", skipping`);
+          continue;
+        }
+        if (!Array.isArray(yearSections)) {
+          console.warn(`⚠️ Year ${yearStr} sections is not an array, skipping`);
+          continue;
+        }
 
         for (let i = 0; i < yearSections.length; i++) {
           const section = yearSections[i]
-          if (!section || !section.name) continue
+          if (!section || !section.name) {
+            console.warn(`⚠️ Skipping section at index ${i} in year ${yearStr}: missing name`);
+            continue;
+          }
 
+          try {
+            await prisma.documentSection.create({
+              data: {
+                projectId,
+                year,
+                name: section.name || '',
+                description: section.description || '',
+                order: i,
+                documents: {
+                  create: (section.documents || []).map((doc, docIdx) => {
+                    const statuses = []
+                    if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+                      for (const [key, status] of Object.entries(doc.collectionStatus)) {
+                        const parts = key.split('-')
+                        if (parts.length >= 2) {
+                          const year = parseInt(parts[0], 10)
+                          const month = parseInt(parts[1], 10)
+                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+                            statuses.push({
+                              year,
+                              month,
+                              status: String(status || 'pending')
+                            })
+                          }
+                        }
+                      }
+                    }
+
+                    const comments = []
+                    if (doc.comments && typeof doc.comments === 'object') {
+                      for (const [key, commentArray] of Object.entries(doc.comments)) {
+                        const parts = key.split('-')
+                        if (parts.length >= 2) {
+                          const year = parseInt(parts[0], 10)
+                          const month = parseInt(parts[1], 10)
+                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+                            const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+                            for (const comment of commentList) {
+                              if (comment && (comment.text || comment)) {
+                                comments.push({
+                                  year,
+                                  month,
+                                  text: comment.text || String(comment),
+                                  author: comment.author || comment.authorName || '',
+                                  authorId: comment.authorId || null
+                                })
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    return {
+                      name: doc.name || '',
+                      description: doc.description || '',
+                      required: doc.required || false,
+                      order: docIdx,
+                      statuses: { create: statuses },
+                      comments: { create: comments }
+                    }
+                  })
+                }
+              }
+            });
+            totalSectionsCreated++;
+          } catch (createError) {
+            console.error(`❌ Error creating document section "${section.name}" for year ${year}:`, createError);
+            throw createError; // Re-throw to be caught by outer catch
+          }
+        }
+      }
+      console.log(`✅ saveDocumentSectionsToTable: Successfully saved ${totalSectionsCreated} sections to table`);
+    } else if (Array.isArray(sections)) {
+      // Handle legacy array format - assign to current year
+      const currentYear = new Date().getFullYear();
+      console.log(`📅 Legacy array format detected, assigning to year ${currentYear}`);
+      let totalSectionsCreated = 0;
+      
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        if (!section || !section.name) {
+          console.warn(`⚠️ Skipping section at index ${i}: missing name`);
+          continue;
+        }
+
+        try {
           await prisma.documentSection.create({
             data: {
               projectId,
-              year,
+              year: currentYear,
               name: section.name || '',
               description: section.description || '',
               order: i,
@@ -289,13 +406,27 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                 })
               }
             }
-          })
+          });
+          totalSectionsCreated++;
+        } catch (createError) {
+          console.error(`❌ Error creating document section "${section.name}":`, createError);
+          throw createError;
         }
       }
+      console.log(`✅ saveDocumentSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
+    } else {
+      console.error('❌ saveDocumentSectionsToTable: Invalid data format - expected object or array, got:', typeof sections);
+      throw new Error(`Invalid sections data format: expected object or array, got ${typeof sections}`);
     }
   } catch (error) {
-    console.error('Error saving documentSections to table:', error)
-    // Don't throw - allow JSON fallback to work
+    console.error('❌ Error saving documentSections to table:', {
+      error: error.message,
+      stack: error.stack,
+      projectId,
+      jsonDataType: typeof jsonData
+    });
+    // Re-throw the error so the caller knows it failed
+    throw error;
   }
 }
 
@@ -303,7 +434,10 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
  * Save weeklyFMSReviewSections JSON to table structure
  */
 async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
-  if (!jsonData) return
+  if (!jsonData) {
+    console.log('⚠️ saveWeeklyFMSReviewSectionsToTable: No jsonData provided, skipping save');
+    return;
+  }
 
   try {
     // Check if table exists (for environments that haven't migrated yet)
@@ -311,38 +445,157 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
       await prisma.$queryRaw`SELECT 1 FROM "WeeklyFMSReviewSection" LIMIT 1`
     } catch (e) {
       // Table doesn't exist yet, skip table save (JSON will still be saved)
-      console.warn('WeeklyFMSReviewSection table does not exist, skipping table save')
+      console.warn('⚠️ WeeklyFMSReviewSection table does not exist, skipping table save')
       return
     }
+    
     let sections = jsonData
     if (typeof jsonData === 'string') {
-      sections = JSON.parse(jsonData)
+      try {
+        sections = JSON.parse(jsonData)
+      } catch (parseError) {
+        console.error('❌ Error parsing weeklyFMSReviewSections JSON string:', parseError);
+        throw new Error(`Invalid JSON in weeklyFMSReviewSections: ${parseError.message}`);
+      }
     }
 
+    console.log('💾 saveWeeklyFMSReviewSectionsToTable: Starting save', {
+      projectId,
+      dataType: typeof sections,
+      isArray: Array.isArray(sections),
+      isObject: typeof sections === 'object' && !Array.isArray(sections),
+      keys: typeof sections === 'object' && !Array.isArray(sections) ? Object.keys(sections) : 'N/A',
+      arrayLength: Array.isArray(sections) ? sections.length : 'N/A'
+    });
+
     // Delete existing sections for this project
-    await prisma.weeklyFMSReviewSection.deleteMany({
+    const deletedCount = await prisma.weeklyFMSReviewSection.deleteMany({
       where: { projectId }
-    })
+    });
+    console.log(`🗑️ Deleted ${deletedCount.count} existing weekly FMS review sections for project ${projectId}`);
 
     if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
-      return
+      console.log('⚠️ saveWeeklyFMSReviewSectionsToTable: Empty sections data, nothing to save');
+      return;
     }
 
     // Handle year-based structure: { "2024": [...], "2025": [...] }
     if (typeof sections === 'object' && !Array.isArray(sections)) {
+      let totalSectionsCreated = 0;
       for (const [yearStr, yearSections] of Object.entries(sections)) {
         const year = parseInt(yearStr, 10)
-        if (isNaN(year) || year < 1900 || year > 3000) continue
-        if (!Array.isArray(yearSections)) continue
+        if (isNaN(year) || year < 1900 || year > 3000) {
+          console.warn(`⚠️ Invalid year "${yearStr}", skipping`);
+          continue;
+        }
+        if (!Array.isArray(yearSections)) {
+          console.warn(`⚠️ Year ${yearStr} sections is not an array, skipping`);
+          continue;
+        }
 
         for (let i = 0; i < yearSections.length; i++) {
           const section = yearSections[i]
-          if (!section || !section.name) continue
+          if (!section || !section.name) {
+            console.warn(`⚠️ Skipping section at index ${i} in year ${yearStr}: missing name`);
+            continue;
+          }
 
+          try {
+            await prisma.weeklyFMSReviewSection.create({
+              data: {
+                projectId,
+                year,
+                name: section.name || '',
+                description: section.description || '',
+                order: i,
+                items: {
+                  create: (section.documents || []).map((doc, docIdx) => {
+                    const statuses = []
+                    if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+                      for (const [key, status] of Object.entries(doc.collectionStatus)) {
+                        // Parse "2024-01-W1" format
+                        const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
+                        if (match) {
+                          const year = parseInt(match[1], 10)
+                          const month = parseInt(match[2], 10)
+                          const week = parseInt(match[3], 10)
+                          if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                            statuses.push({
+                              year,
+                              month,
+                              week,
+                              status: String(status || 'pending')
+                            })
+                          }
+                        }
+                      }
+                    }
+
+                    const comments = []
+                    if (doc.comments && typeof doc.comments === 'object') {
+                      for (const [key, commentArray] of Object.entries(doc.comments)) {
+                        const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
+                        if (match) {
+                          const year = parseInt(match[1], 10)
+                          const month = parseInt(match[2], 10)
+                          const week = parseInt(match[3], 10)
+                          if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                            const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+                            for (const comment of commentList) {
+                              if (comment && (comment.text || comment)) {
+                                comments.push({
+                                  year,
+                                  month,
+                                  week,
+                                  text: comment.text || String(comment),
+                                  author: comment.author || comment.authorName || '',
+                                  authorId: comment.authorId || null
+                                })
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    return {
+                      name: doc.name || '',
+                      description: doc.description || '',
+                      required: doc.required || false,
+                      order: docIdx,
+                      statuses: { create: statuses },
+                      comments: { create: comments }
+                    }
+                  })
+                }
+              }
+            });
+            totalSectionsCreated++;
+          } catch (createError) {
+            console.error(`❌ Error creating weekly FMS review section "${section.name}" for year ${year}:`, createError);
+            throw createError;
+          }
+        }
+      }
+      console.log(`✅ saveWeeklyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections to table`);
+    } else if (Array.isArray(sections)) {
+      // Handle legacy array format - assign to current year
+      const currentYear = new Date().getFullYear();
+      console.log(`📅 Legacy array format detected, assigning to year ${currentYear}`);
+      let totalSectionsCreated = 0;
+      
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        if (!section || !section.name) {
+          console.warn(`⚠️ Skipping section at index ${i}: missing name`);
+          continue;
+        }
+
+        try {
           await prisma.weeklyFMSReviewSection.create({
             data: {
               projectId,
-              year,
+              year: currentYear,
               name: section.name || '',
               description: section.description || '',
               order: i,
@@ -407,13 +660,27 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                 })
               }
             }
-          })
+          });
+          totalSectionsCreated++;
+        } catch (createError) {
+          console.error(`❌ Error creating weekly FMS review section "${section.name}":`, createError);
+          throw createError;
         }
       }
+      console.log(`✅ saveWeeklyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
+    } else {
+      console.error('❌ saveWeeklyFMSReviewSectionsToTable: Invalid data format - expected object or array, got:', typeof sections);
+      throw new Error(`Invalid sections data format: expected object or array, got ${typeof sections}`);
     }
   } catch (error) {
-    console.error('Error saving weeklyFMSReviewSections to table:', error)
-    // Don't throw - allow JSON fallback to work
+    console.error('❌ Error saving weeklyFMSReviewSections to table:', {
+      error: error.message,
+      stack: error.stack,
+      projectId,
+      jsonDataType: typeof jsonData
+    });
+    // Re-throw the error so the caller knows it failed
+    throw error;
   }
 }
 
