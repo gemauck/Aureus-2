@@ -296,34 +296,77 @@ async function handler(req, res) {
       
       console.warn(`⚠️ DEPRECATED: PATCH /api/leads/[id] endpoint used for lead ${id}. Use /api/leads (PATCH) instead.`)
       
-      const updateData = {
-        name: body.name,
-        industry: body.industry,
-        status: body.status,
-        stage: body.stage,
-        revenue: body.revenue !== undefined ? parseFloat(body.revenue) || 0 : undefined,
-        value: body.value !== undefined ? parseFloat(body.value) || 0 : undefined,
-        probability: body.probability !== undefined ? parseInt(body.probability) || 0 : undefined,
-        lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
-        address: body.address,
-        website: body.website,
-        notes: body.notes !== undefined ? String(body.notes || '') : undefined,
-        // ⚠️ REMOVED: contacts, comments, sites, contracts, proposals, followUps, services should be managed via normalized tables
-        // Phase 6: These fields are handled separately below to sync to normalized tables
-        projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : [])) : undefined,
-        // Only activityLog and billingTerms remain as JSON (not normalized)
-        activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,
-        billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
-        externalAgentId: body.externalAgentId !== undefined ? (body.externalAgentId || null) : undefined
+      // Build updateData - only include fields that are actually provided in body
+      const updateData = {}
+      
+      // Basic fields - only include if provided in body
+      if (body.name !== undefined) updateData.name = body.name
+      if (body.industry !== undefined) updateData.industry = body.industry
+      if (body.status !== undefined) updateData.status = body.status
+      if (body.stage !== undefined) updateData.stage = body.stage
+      if (body.revenue !== undefined) updateData.revenue = parseFloat(body.revenue) || 0
+      if (body.value !== undefined) updateData.value = parseFloat(body.value) || 0
+      if (body.probability !== undefined) updateData.probability = parseInt(body.probability) || 0
+      if (body.lastContact !== undefined) {
+        updateData.lastContact = body.lastContact ? new Date(body.lastContact) : null
       }
-
-      // Remove undefined values (but keep empty strings and empty arrays as JSON strings)
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-          delete updateData[key]
+      if (body.address !== undefined) updateData.address = body.address
+      if (body.website !== undefined) updateData.website = body.website
+      if (body.notes !== undefined) updateData.notes = String(body.notes || '')
+      
+      // External agent - include even if null (to allow clearing)
+      if (body.externalAgentId !== undefined) {
+        updateData.externalAgentId = body.externalAgentId || null
+      }
+      
+      // JSON fields - only include if provided
+      if (body.projectIds !== undefined) {
+        updateData.projectIds = typeof body.projectIds === 'string' 
+          ? body.projectIds 
+          : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : [])
+      }
+      if (body.activityLog !== undefined) {
+        updateData.activityLog = typeof body.activityLog === 'string' 
+          ? body.activityLog 
+          : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])
+      }
+      if (body.billingTerms !== undefined) {
+        updateData.billingTerms = typeof body.billingTerms === 'string' 
+          ? body.billingTerms 
+          : JSON.stringify(body.billingTerms)
+      }
+      
+      // CRITICAL: Preserve lead type - always set type to 'lead' to prevent accidental conversion
+      updateData.type = 'lead'
+      
+      // Debug logging to verify updateData is constructed correctly
+      console.log(`📝 [LEADS ID] Update data for lead ${id}:`, JSON.stringify(updateData, null, 2))
+      console.log(`📝 [LEADS ID] Fields in body:`, Object.keys(body || {}))
+      
+      // Check if updateData is empty (only has type) - this would mean no fields were provided
+      if (Object.keys(updateData).length === 1 && updateData.type) {
+        console.warn(`⚠️ [LEADS ID] Update data is empty (only type field) - no fields to update for lead ${id}`)
+        // Return the existing lead without updating
+        const existing = await prisma.client.findUnique({ 
+          where: { id },
+          include: {
+            clientContacts: true,
+            clientComments: true,
+            clientSites: true,
+            clientContracts: true,
+            clientProposals: true,
+            clientFollowUps: true,
+            clientServices: true,
+            projects: { select: { id: true, name: true, status: true } },
+            externalAgent: true
+          }
+        })
+        if (!existing) {
+          return notFound(res)
         }
-      })
-
+        const parsedLead = parseClientJsonFields(existing)
+        return ok(res, { lead: parsedLead })
+      }
       
       try {
         // First verify the lead exists
@@ -340,6 +383,134 @@ async function handler(req, res) {
         // Store old name and website for RSS feed update
         const oldName = existing.name
         const oldWebsite = existing.website
+        
+        // Phase 5: Handle contacts separately to sync to normalized table
+        if (body.contacts !== undefined) {
+          let contactsArray = []
+          if (Array.isArray(body.contacts)) {
+            contactsArray = body.contacts
+          } else if (typeof body.contacts === 'string' && body.contacts.trim()) {
+            try {
+              contactsArray = JSON.parse(body.contacts)
+            } catch (e) {
+              contactsArray = []
+            }
+          }
+          
+          try {
+            await prisma.clientContact.deleteMany({ where: { clientId: id } })
+            if (contactsArray.length > 0) {
+              await prisma.clientContact.createMany({
+                data: contactsArray.map(contact => ({
+                  id: contact.id || undefined,
+                  clientId: id,
+                  name: contact.name || '',
+                  email: contact.email || null,
+                  phone: contact.phone || null,
+                  mobile: contact.mobile || contact.phone || null,
+                  role: contact.role || null,
+                  title: contact.title || contact.department || null,
+                  isPrimary: !!contact.isPrimary,
+                  notes: contact.notes || ''
+                }))
+              })
+            }
+          } catch (contactSyncError) {
+            console.warn('⚠️ Failed to sync contacts to normalized table:', contactSyncError.message)
+          }
+        }
+        
+        // Phase 5: Handle comments separately to sync to normalized table
+        if (body.comments !== undefined) {
+          let commentsArray = []
+          if (Array.isArray(body.comments)) {
+            commentsArray = body.comments
+          } else if (typeof body.comments === 'string' && body.comments.trim()) {
+            try {
+              commentsArray = JSON.parse(body.comments)
+            } catch (e) {
+              commentsArray = []
+            }
+          }
+          
+          try {
+            const userId = req.user?.sub || null
+            let authorName = ''
+            let userName = ''
+            
+            if (userId) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: userId },
+                  select: { name: true, email: true }
+                })
+                if (user) {
+                  authorName = user.name || ''
+                  userName = user.email || ''
+                }
+              } catch (userError) {
+                // User lookup failed
+              }
+            }
+            
+            const existingComments = await prisma.clientComment.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingCommentIds = new Set(existingComments.map(c => c.id))
+            const commentsToKeep = new Set()
+            
+            for (const comment of commentsArray) {
+              // Map frontend field names (createdBy/createdById/createdByEmail) to database fields (author/authorId/userName)
+              // Support both naming conventions for backward compatibility
+              const commentData = {
+                clientId: id,
+                text: comment.text || '',
+                authorId: comment.authorId || comment.createdById || userId || null,
+                author: comment.author || comment.createdBy || authorName || '',
+                userName: comment.userName || comment.createdByEmail || userName || null,
+                createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
+              }
+              
+              if (comment.id && existingCommentIds.has(comment.id)) {
+                await prisma.clientComment.update({
+                  where: { id: comment.id },
+                  data: commentData
+                })
+                commentsToKeep.add(comment.id)
+              } else if (comment.id) {
+                try {
+                  await prisma.clientComment.create({
+                    data: { id: comment.id, ...commentData }
+                  })
+                  commentsToKeep.add(comment.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientComment.update({
+                      where: { id: comment.id },
+                      data: commentData
+                    })
+                    commentsToKeep.add(comment.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientComment.create({ data: commentData })
+                commentsToKeep.add(created.id)
+              }
+            }
+            
+            await prisma.clientComment.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(commentsToKeep) } }
+              }
+            })
+          } catch (commentSyncError) {
+            console.warn('⚠️ Failed to sync comments to normalized table:', commentSyncError.message)
+          }
+        }
         
         // Phase 6: Handle normalized fields separately (sites, contracts, proposals, followUps, services)
         // Sites

@@ -1243,20 +1243,27 @@ async function handler(req, res) {
         if (body.source && !notes.includes('Source:')) notes += `\nSource: ${body.source}`;
         if (body.stage && !notes.includes('Stage:')) notes += `\nStage: ${body.stage}`;
         
+        // Build updateData - only include fields that are actually provided in body
         const updateData = {
-          name: body.name,
-          type: 'lead', // Explicitly preserve lead type to prevent conversion to client
-          industry: body.industry,
-          status: 'active', // Status is always 'active', hardcoded
-          stage: body.stage, // Stage IS in database schema
-          revenue: body.revenue !== undefined ? parseFloat(body.revenue) || 0 : undefined,
-          value: body.value !== undefined ? parseFloat(body.value) || 0 : undefined,
-          probability: body.probability !== undefined ? parseInt(body.probability) || 0 : undefined,
-          lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
-          address: body.address,
-          website: body.website,
-          notes: notes || undefined
-      }
+          type: 'lead' // Always preserve lead type to prevent conversion to client
+        }
+        
+        // Only include fields if they're explicitly provided in the body
+        if (body.name !== undefined) updateData.name = body.name
+        if (body.industry !== undefined) updateData.industry = body.industry
+        if (body.status !== undefined) updateData.status = body.status
+        if (body.stage !== undefined) updateData.stage = body.stage
+        if (body.revenue !== undefined) updateData.revenue = parseFloat(body.revenue) || 0
+        if (body.value !== undefined) updateData.value = parseFloat(body.value) || 0
+        if (body.probability !== undefined) updateData.probability = parseInt(body.probability) || 0
+        if (body.lastContact !== undefined) {
+          updateData.lastContact = body.lastContact ? new Date(body.lastContact) : null
+        }
+        if (body.address !== undefined) updateData.address = body.address
+        if (body.website !== undefined) updateData.website = body.website
+        if (body.notes !== undefined || notes) {
+          updateData.notes = notes || (body.notes !== undefined ? String(body.notes || '') : undefined)
+        }
       
       // Phase 2: Add JSON fields with dual-write (both String and JSONB)
       // Phase 5: Also sync contacts and comments to normalized tables
@@ -1473,28 +1480,43 @@ async function handler(req, res) {
       // Handle externalAgentId separately
       if (body.externalAgentId !== undefined) {
         updateData.externalAgentId = body.externalAgentId || null
-        }
-        
-        // Debug logging for externalAgentId
-        if (body.externalAgentId !== undefined) {
-          console.log('📥 Received externalAgentId in update request:', body.externalAgentId, '→', updateData.externalAgentId);
-        }
-        
-      // Remove undefined values
-        Object.keys(updateData).forEach(key => {
-          if (updateData[key] === undefined) {
-            delete updateData[key]
+      }
+      
+      // Debug logging for externalAgentId
+      if (body.externalAgentId !== undefined) {
+        console.log('📥 Received externalAgentId in update request:', body.externalAgentId, '→', updateData.externalAgentId);
+      }
+      
+      // Debug logging to verify updateData is constructed correctly
+      console.log(`📝 [LEADS] Update data for lead ${id}:`, JSON.stringify(updateData, null, 2))
+      console.log(`📝 [LEADS] Fields in body:`, Object.keys(body || {}))
+      
+      // Check if updateData is empty (only has type) - this would mean no fields were provided
+      if (Object.keys(updateData).length === 1 && updateData.type) {
+        console.warn(`⚠️ [LEADS] Update data is empty (only type field) - no fields to update for lead ${id}`)
+        // Return the existing lead without updating
+        const existing = await prisma.client.findUnique({ 
+          where: { id },
+          include: {
+            clientContacts: true,
+            clientComments: true,
+            clientSites: true,
+            clientContracts: true,
+            clientProposals: true,
+            clientFollowUps: true,
+            clientServices: true,
+            projects: { select: { id: true, name: true, status: true } },
+            externalAgent: true
           }
         })
-        
-        // Ensure externalAgentId is included even if null (to allow clearing it)
-        if (body.externalAgentId !== undefined && !('externalAgentId' in updateData)) {
-          updateData.externalAgentId = body.externalAgentId || null;
-          console.log('🔧 Added externalAgentId to updateData:', updateData.externalAgentId);
+        if (!existing) {
+          return notFound(res)
         }
+        const parsedLead = parseClientJsonFields(existing)
+        return ok(res, { lead: parsedLead })
+      }
         
-        
-        try {
+      try {
           // First verify the lead exists and is actually a lead
           const existing = await prisma.client.findUnique({ where: { id } })
           if (!existing) {
@@ -1508,13 +1530,24 @@ async function handler(req, res) {
           
           // Now update it
           const lead = await prisma.client.update({ 
-          where: { id }, 
-          data: updateData 
+            where: { id }, 
+            data: updateData,
+            include: {
+              clientContacts: true,
+              clientComments: true,
+              clientSites: true,
+              clientContracts: true,
+              clientProposals: true,
+              clientFollowUps: true,
+              clientServices: true,
+              projects: { select: { id: true, name: true, status: true } },
+              externalAgent: true
+            }
           })
           
         // CRITICAL DEBUG: Immediately re-query database to verify persistence
         const verifyLead = await prisma.client.findUnique({ where: { id } })
-        if (verifyLead.status !== updateData.status) {
+        if (updateData.status !== undefined && verifyLead.status !== updateData.status) {
           console.error('❌ CRITICAL: Database did not persist status change!')
           console.error('   Expected:', updateData.status, 'Got:', verifyLead.status)
         }
@@ -1531,7 +1564,10 @@ async function handler(req, res) {
           }
         }
         
-        return ok(res, { lead })
+        // Parse JSON fields before returning using shared utility
+        const parsedLead = parseClientJsonFields(lead)
+        
+        return ok(res, { lead: parsedLead })
         } catch (dbError) {
           console.error('❌ Database error updating lead:', dbError)
           console.error('❌ Error details:', dbError.code, dbError.meta)
