@@ -3479,8 +3479,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 type="button" 
                                                 onClick={() => {
                                                     if (confirm(`Are you sure you want to delete this ${entityLabelLower}? This action cannot be undone.`)) {
+                                                        // onDelete will handle closing the modal after optimistic update
+                                                        // Don't call onClose here - let handleDeleteClient close it to avoid reload
                                                         onDelete(client.id);
-                                                        onClose();
                                                     }
                                                 }}
                                                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2"

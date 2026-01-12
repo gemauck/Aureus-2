@@ -3464,7 +3464,7 @@ const Clients = React.memo(() => {
     
     // Leads are now database-only, no localStorage sync needed
 
-    const handleClientModalClose = async () => {
+    const handleClientModalClose = async (skipReload = false) => {
         try {
             setViewMode('clients');
             setEditingClientId(null);
@@ -3489,10 +3489,14 @@ const Clients = React.memo(() => {
                 }
             }
             
-            // Refresh data from server in background (non-blocking)
-            loadClients(true).catch(() => {
-                // Silently fail - refresh is non-critical for modal close
-            });
+            // CRITICAL: Don't reload immediately after deletion - it overwrites the optimistic update
+            // Only reload if skipReload is false (normal close, not after deletion)
+            if (!skipReload) {
+                // Refresh data from server in background (non-blocking)
+                loadClients(true).catch(() => {
+                    // Silently fail - refresh is non-critical for modal close
+                });
+            }
             
             // Start sync in background (non-blocking)
             try {
@@ -4361,6 +4365,10 @@ const Clients = React.memo(() => {
             // startTransition was causing the UI to not update until after the API call completed
             setClients(updatedClients);
             safeStorage.setClients(updatedClients);
+            
+            // CRITICAL: Close modal immediately after optimistic update, but skip reload
+            // This ensures the UI shows the deletion immediately without reload overwriting it
+            handleClientModalClose(true); // Pass true to skip reload
             
             // Delete from database in background
             const token = window.storage?.getToken?.();
