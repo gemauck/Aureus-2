@@ -150,7 +150,61 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const lastSavedClientId = useRef(client?.id);
     
     // Use ref to track latest formData for auto-save
-    const formDataRef = useRef(null);
+    // CRITICAL: Initialize formDataRef immediately with initial formData value
+    // This ensures tabs can access data immediately on first render without waiting for useEffect
+    const initialFormData = (() => {
+        const parsedClient = client ? {
+            ...client,
+            contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+            followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+            projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+            comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+            contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+            sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+            opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+            activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+            services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
+            stage: client.stage || (isLead ? 'Awareness' : undefined),
+            aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
+            billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            })
+        } : {
+            name: '',
+            type: entityType,
+            industry: '',
+            status: 'active',
+            stage: 'Awareness',
+            aidaStatus: 'Awareness',
+            revenue: 0,
+            value: 0,
+            probability: 100,
+            contacts: [],
+            followUps: [],
+            projectIds: [],
+            comments: [],
+            contracts: [],
+            sites: [],
+            opportunities: [],
+            activityLog: [],
+            services: [],
+            billingTerms: {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            }
+        };
+        return parsedClient;
+    })();
+    const formDataRef = useRef(initialFormData);
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     
@@ -517,18 +571,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
         
-        // CRITICAL: Load data immediately but use startTransition for non-blocking updates
-        // This ensures data starts loading right away while UI remains responsive
-        // The formData is already initialized with client prop data, so tabs render immediately
+        // CRITICAL: Load data immediately without any deferral
+        // formData is already initialized with client prop data, so tabs render immediately
         // API data will update formData when it arrives, enhancing what's already shown
-        if (typeof React.startTransition === 'function') {
-            React.startTransition(() => {
-                loadAllData();
-            });
-        } else {
-            // Fallback: load immediately without transition
-            loadAllData();
-        }
+        // No need for startTransition here - the async function already runs in background
+        // The state updates inside loadAllData use startTransition for non-blocking updates
+        loadAllData();
         
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client?.id]); // Only reload when client.id changes
