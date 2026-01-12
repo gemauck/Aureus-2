@@ -418,12 +418,26 @@ const RichTextEditor = ({
             }
         };
         
+        // Save cursor position on mouse down (user clicking in editor)
+        const handleMouseDown = () => {
+            if (editor.contains(document.activeElement) || editor === document.activeElement) {
+                // Small delay to ensure selection is set after click
+                setTimeout(() => {
+                    if (editor.contains(document.activeElement) || editor === document.activeElement) {
+                        savedPosition = saveCursorPosition();
+                        savedCursorPositionRef.current = savedPosition;
+                    }
+                }, 0);
+            }
+        };
+        
         // Use capture phase to catch all focus events
         editor.addEventListener('focusin', handleFocus, true);
         editor.addEventListener('focusout', handleBlur, true);
         editor.addEventListener('focus', handleFocus, true);
         editor.addEventListener('blur', handleBlur, true);
         editor.addEventListener('beforeinput', handleBeforeInput, true);
+        editor.addEventListener('mousedown', handleMouseDown, true);
         document.addEventListener('selectionchange', handleSelectionChange);
         
         // Also check current focus state
@@ -441,6 +455,7 @@ const RichTextEditor = ({
             editor.removeEventListener('focus', handleFocus, true);
             editor.removeEventListener('blur', handleBlur, true);
             editor.removeEventListener('beforeinput', handleBeforeInput, true);
+            editor.removeEventListener('mousedown', handleMouseDown, true);
             document.removeEventListener('selectionchange', handleSelectionChange);
             if (mutationObserver) {
                 mutationObserver.disconnect();
@@ -724,15 +739,26 @@ const RichTextEditor = ({
         }
         
         // CRITICAL: If savedCursorPositionRef is not set, try to infer it from current position
-        // If text length increased by 1, cursor was likely at currentPosition - 1 before typing
+        // If text length increased by 1, and cursor is NOT at the end, it was likely in the middle
+        // If cursor is at the end, we can't reliably infer - assume it was at end before typing
         if (!savedCursorPositionRef.current && currentCursorPos !== null) {
             const textLengthDiff = newText.length - oldText.length;
-            if (textLengthDiff === 1 && currentCursorPos > 0) {
-                // Infer that cursor was at currentPosition - 1 before typing
-                savedCursorPositionRef.current = {
-                    start: currentCursorPos - 1,
-                    end: currentCursorPos - 1
-                };
+            if (textLengthDiff === 1) {
+                // If cursor is at end, assume it was at end before typing
+                // If cursor is NOT at end, assume it was at currentPosition - 1 (in the middle)
+                if (currentCursorPos >= newText.length - 1) {
+                    // Cursor is at end - assume it was at end before typing
+                    savedCursorPositionRef.current = {
+                        start: oldText.length,
+                        end: oldText.length
+                    };
+                } else {
+                    // Cursor is in middle - assume it was at currentPosition - 1 before typing
+                    savedCursorPositionRef.current = {
+                        start: currentCursorPos - 1,
+                        end: currentCursorPos - 1
+                    };
+                }
             }
         }
         
