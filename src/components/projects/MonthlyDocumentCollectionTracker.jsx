@@ -1239,13 +1239,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
-        // Track when the last change was made to prevent refresh from overwriting rapid changes
-        lastChangeTimestampRef.current = Date.now();
-        
         const currentUser = getCurrentUser();
-        const newCommentId = Date.now();
         const newComment = {
-            id: newCommentId,
+            id: Date.now(),
             text: commentText,
             date: new Date().toISOString(),
             author: currentUser.name,
@@ -1253,39 +1249,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             authorId: currentUser.id
         };
         
-        // CRITICAL: Use sectionsRef.current to get the latest state, then update both ref and state
-        const latestSectionsByYear = sectionsRef.current || {};
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        
-        const updated = currentYearSections.map(section => {
-            if (String(section.id) === String(sectionId)) {
-                return {
-                    ...section,
-                    documents: section.documents.map(doc => {
-                        if (String(doc.id) === String(documentId)) {
-                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
-                            return {
-                                ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
-                };
-            }
-            return section;
+        // Update state directly
+        setSectionsByYear(prev => {
+            const currentYearSections = prev[selectedYear] || [];
+            const updated = currentYearSections.map(section => {
+                if (String(section.id) === String(sectionId)) {
+                    return {
+                        ...section,
+                        documents: section.documents.map(doc => {
+                            if (String(doc.id) === String(documentId)) {
+                                const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                                return {
+                                    ...doc,
+                                    comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
+                                };
+                            }
+                            return doc;
+                        })
+                    };
+                }
+                return section;
+            });
+            
+            return {
+                ...prev,
+                [selectedYear]: updated
+            };
         });
-        
-        const updatedSectionsByYear = {
-            ...latestSectionsByYear,
-            [selectedYear]: updated
-        };
-        
-        // Update ref IMMEDIATELY before state update to prevent race conditions
-        sectionsRef.current = updatedSectionsByYear;
-        
-        // Now update state (this will trigger auto-save)
-        setSectionsByYear(updatedSectionsByYear);
         
         setQuickComment('');
 
@@ -1307,14 +1297,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     
                     const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
                     // Deep-link directly to the document collection cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newComment.id)}`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
                         sectionId,
                         documentId,
                         month,
-                        commentId: newCommentId
+                        commentId: newComment.id
                     };
                     
                     // Fire mention notifications (do not block UI on errors)
