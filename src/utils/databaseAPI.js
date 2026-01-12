@@ -1246,6 +1246,16 @@ const DatabaseAPI = {
             method: 'PATCH',
             body: JSON.stringify(leadDataToSend)
         });
+        // CRITICAL: Clear ALL relevant caches after update to ensure fresh data on next fetch
+        // This ensures contacts and other changes appear immediately in other browsers
+        this.clearCache('/leads');
+        this.clearCache('/clients'); // Leads are in clients table too
+        // Clear cache for this specific lead (all HTTP methods)
+        const leadEndpoint = `/leads/${id}`;
+        ['GET', 'PATCH', 'PUT', 'POST'].forEach(method => {
+            this.clearEndpointCache(leadEndpoint, method);
+            this._responseCache.delete(`${method}:${leadEndpoint}`);
+        });
         return response;
     },
 

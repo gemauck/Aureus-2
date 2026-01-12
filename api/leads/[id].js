@@ -399,6 +399,7 @@ async function handler(req, res) {
               contactsArray = []
             }
           }
+          console.log(`📝 [LEADS ID] Processing ${contactsArray.length} contacts for lead ${id}`)
           
           try {
             // Get existing contacts to compare
@@ -475,8 +476,14 @@ async function handler(req, res) {
                 }
               }
             })
+            console.log(`✅ Successfully synced ${contactsArray.length} contacts to normalized table for lead ${id}`)
           } catch (contactSyncError) {
             console.error('❌ Failed to sync contacts to normalized table:', contactSyncError)
+            console.error('❌ Contact sync error details:', {
+              message: contactSyncError.message,
+              code: contactSyncError.code,
+              stack: contactSyncError.stack
+            })
             // Don't throw - allow lead update to succeed even if contact sync fails
           }
         }
@@ -998,6 +1005,12 @@ async function handler(req, res) {
         
         // Parse JSON fields before returning using shared utility
         const parsedLead = parseClientJsonFields(lead)
+        
+        // Log contacts to verify they're being returned
+        console.log(`📋 [LEADS ID] Returning lead ${id} with ${parsedLead.contacts?.length || 0} contacts`)
+        if (parsedLead.contacts && parsedLead.contacts.length > 0) {
+          console.log(`📋 [LEADS ID] Contact names:`, parsedLead.contacts.map(c => c.name).join(', '))
+        }
         
         return ok(res, { lead: parsedLead })
       } catch (dbError) {

@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson } from '../projects.js'
 
 async function handler(req, res) {
   try {
@@ -342,6 +343,75 @@ async function handler(req, res) {
           console.warn('⚠️ Failed to load project activity logs from table:', e.message);
         }
         
+        // Convert table data to JSON format that frontend expects
+        // Frontend components expect year-based objects: { "2024": [...], "2025": [...] }
+        let documentSectionsJson = null;
+        let weeklyFMSReviewSectionsJson = null;
+        
+        try {
+          // Convert documentSections from table to JSON format
+          documentSectionsJson = await documentSectionsToJson(id);
+          // If no table data, fallback to JSON field if it exists
+          if (!documentSectionsJson && project.documentSections) {
+            try {
+              if (typeof project.documentSections === 'string') {
+                documentSectionsJson = JSON.parse(project.documentSections);
+              } else {
+                documentSectionsJson = project.documentSections;
+              }
+            } catch (e) {
+              console.warn('⚠️ Failed to parse documentSections JSON field:', e.message);
+              documentSectionsJson = {};
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to convert documentSections from table:', e.message);
+          // Fallback to JSON field
+          if (project.documentSections) {
+            try {
+              if (typeof project.documentSections === 'string') {
+                documentSectionsJson = JSON.parse(project.documentSections);
+              } else {
+                documentSectionsJson = project.documentSections;
+              }
+            } catch (parseError) {
+              documentSectionsJson = {};
+            }
+          }
+        }
+        
+        try {
+          // Convert weeklyFMSReviewSections from table to JSON format
+          weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id);
+          // If no table data, fallback to JSON field if it exists
+          if (!weeklyFMSReviewSectionsJson && project.weeklyFMSReviewSections) {
+            try {
+              if (typeof project.weeklyFMSReviewSections === 'string') {
+                weeklyFMSReviewSectionsJson = JSON.parse(project.weeklyFMSReviewSections);
+              } else {
+                weeklyFMSReviewSectionsJson = project.weeklyFMSReviewSections;
+              }
+            } catch (e) {
+              console.warn('⚠️ Failed to parse weeklyFMSReviewSections JSON field:', e.message);
+              weeklyFMSReviewSectionsJson = {};
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to convert weeklyFMSReviewSections from table:', e.message);
+          // Fallback to JSON field
+          if (project.weeklyFMSReviewSections) {
+            try {
+              if (typeof project.weeklyFMSReviewSections === 'string') {
+                weeklyFMSReviewSectionsJson = JSON.parse(project.weeklyFMSReviewSections);
+              } else {
+                weeklyFMSReviewSectionsJson = project.weeklyFMSReviewSections;
+              }
+            } catch (parseError) {
+              weeklyFMSReviewSectionsJson = {};
+            }
+          }
+        }
+        
         // Transform project - use table data instead of JSON fields
         // Frontend expects these field names, so map table data to them
         const transformedProject = {
@@ -354,13 +424,9 @@ async function handler(req, res) {
           comments: projectComments, // Comments from ProjectComment table
           activityLog: projectActivityLogs, // Activity logs from ProjectActivityLog table
           team: projectTeamMembers, // Team from ProjectTeamMember table
-          // Document sections from table (preferred) or fallback to empty array
-          documentSections: (project.documentSectionsTable && project.documentSectionsTable.length > 0)
-            ? project.documentSectionsTable
-            : [],
-          weeklyFMSReviewSections: (project.weeklyFMSReviewSectionsTable && project.weeklyFMSReviewSectionsTable.length > 0)
-            ? project.weeklyFMSReviewSectionsTable
-            : []
+          // Document sections: converted from table to JSON format, or fallback to empty object
+          documentSections: documentSectionsJson || {},
+          weeklyFMSReviewSections: weeklyFMSReviewSectionsJson || {}
         };
         
         // Remove the table relation fields to avoid confusion (keep only transformed fields)
@@ -609,6 +675,28 @@ async function handler(req, res) {
           data: updateData 
         });
         
+        // CRITICAL: Save documentSections and weeklyFMSReviewSections to tables
+        // The GET endpoint reads from tables, so we must save to tables for persistence
+        // Pass the original body value (could be string or object) - save functions handle both
+        if (body.documentSections !== undefined && body.documentSections !== null) {
+          try {
+            // Pass the original body value - saveDocumentSectionsToTable handles string parsing
+            await saveDocumentSectionsToTable(id, body.documentSections)
+          } catch (tableError) {
+            console.error('❌ Error saving documentSections to table:', tableError)
+            // Don't fail the entire request, but log the error
+          }
+        }
+        
+        if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+          try {
+            // Pass the original body value - saveWeeklyFMSReviewSectionsToTable handles string parsing
+            await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
+          } catch (tableError) {
+            console.error('❌ Error saving weeklyFMSReviewSections to table:', tableError)
+            // Don't fail the entire request, but log the error
+          }
+        }
         
         return ok(res, { project })
       } catch (dbError) {

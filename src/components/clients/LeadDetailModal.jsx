@@ -191,87 +191,68 @@ const LeadDetailModal = ({
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     
-    // Initialize lastSavedDataRef when formData is ready (for initial lead)
-    // Moved here after formData declaration to avoid TDZ error
-    // Note: selectedProjectIds is declared later, so we use formData.projectIds directly
-    useEffect(() => {
-        if (lead && formData && formData.name && !lastSavedDataRef.current) {
-            // Initialize with current formData if not already set
-            lastSavedDataRef.current = {
-                ...formData,
-                notes: notesTextareaRef.current?.value || formData.notes || '',
-                projectIds: formData.projectIds || []
-            };
-        }
-    }, [lead, formData]);
+    // REMOVED: Separate lastSavedDataRef initialization useEffect
+    // This is now handled in the clean data-loading useEffect above
     
     // Track the last lead ID we processed to detect when a new lead is loaded
     const lastProcessedLeadIdRef = useRef(null);
     
-    // Update formData when lead changes (e.g., when fetched from API or when navigating to a different lead)
-    // This ensures externalAgentId and other fields are properly initialized from the lead data
-    // We only update if the lead ID has changed or if formData hasn't been initialized yet
+    // CLEAN SOLUTION: Single useEffect to load all data when lead.id changes
+    // This replaces the complex competing sync logic with a simple, predictable flow
+    // The lead object from the API already includes contacts, sites, and proposals via parseClientJsonFields
     useEffect(() => {
-        if (lead && lead.id) {
-            const currentLeadId = lead.id;
-            const isDifferentLead = lastProcessedLeadIdRef.current !== currentLeadId;
-            const leadExternalAgentId = lead.externalAgentId || (lead.externalAgent?.id || null);
-            
-            // Check if we need to update formData
-            // 1. Different lead (new lead loaded)
-            // 2. Same lead but externalAgentId is missing in formData and exists in lead
-            // 3. Not currently saving proposals (to avoid overwriting during save)
-            const needsUpdate = isDifferentLead || 
-                (formData.id === currentLeadId && 
-                 formData.externalAgentId !== leadExternalAgentId && 
-                 !isSavingProposalsRef.current);
-            
-            if (needsUpdate) {
-                setFormData(prev => {
-                    // If it's a different lead, initialize from the new lead
-                    if (isDifferentLead) {
-                        lastProcessedLeadIdRef.current = currentLeadId;
-                        const parsedLead = {
-                            ...lead,
-                            stage: lead.stage || 'Awareness',
-                            status: normalizeLifecycleStage(lead.status),
-                            contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
-                            followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
-                            projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
-                            comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
-                            activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-                            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
-                            sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
-                            thumbnail: lead.thumbnail || '',
-                            externalAgentId: leadExternalAgentId,
-                            firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate),
-                            // CRITICAL: Explicitly preserve notes from the loaded lead to prevent loss
-                            notes: lead.notes !== undefined && lead.notes !== null ? String(lead.notes) : (prev?.notes || '')
-                        };
-                        console.log('🔄 Updated formData for new lead:', { leadId: currentLeadId, externalAgentId: leadExternalAgentId });
-                        return parsedLead;
-                    } else {
-                        // Same lead, just update externalAgentId if it's different
-                        if (prev.externalAgentId !== leadExternalAgentId) {
-                            console.log('🔄 Updated externalAgentId in formData:', { 
-                                old: prev.externalAgentId, 
-                                new: leadExternalAgentId 
-                            });
-                            return {
-                                ...prev,
-                                externalAgentId: leadExternalAgentId
-                            };
-                        }
-                    }
-                    return prev;
-                });
+        if (!lead?.id) {
+            // No lead - reset formData to defaults
+            if (lead === null) {
+                lastProcessedLeadIdRef.current = null;
             }
-        } else if (!lead) {
-            // Lead was cleared, reset the ref
-            lastProcessedLeadIdRef.current = null;
+            return;
         }
-    }, [lead]);
+
+        const currentLeadId = String(lead.id);
+        const isDifferentLead = lastProcessedLeadIdRef.current !== currentLeadId;
+
+        // Only update if it's a different lead (new lead loaded)
+        if (isDifferentLead) {
+            lastProcessedLeadIdRef.current = currentLeadId;
+            
+            // Parse the lead data - API already includes contacts, sites, proposals via parseClientJsonFields
+            const parsedLead = {
+                ...lead,
+                stage: lead.stage || 'Awareness',
+                status: normalizeLifecycleStage(lead.status),
+                contacts: Array.isArray(lead.contacts) ? lead.contacts : (typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : []),
+                followUps: Array.isArray(lead.followUps) ? lead.followUps : (typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : []),
+                projectIds: Array.isArray(lead.projectIds) ? lead.projectIds : (typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : []),
+                comments: Array.isArray(lead.comments) ? lead.comments : (typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : []),
+                activityLog: Array.isArray(lead.activityLog) ? lead.activityLog : (typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : []),
+                billingTerms: typeof lead.billingTerms === 'object' && lead.billingTerms !== null ? lead.billingTerms : (typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : {}),
+                proposals: Array.isArray(lead.proposals) ? lead.proposals : (typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : []),
+                sites: Array.isArray(lead.sites) ? lead.sites : (typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : []),
+                thumbnail: lead.thumbnail || '',
+                externalAgentId: lead.externalAgentId || (lead.externalAgent?.id || null),
+                firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate),
+                notes: lead.notes !== undefined && lead.notes !== null ? String(lead.notes) : ''
+            };
+
+            console.log('✅ Loaded lead data:', { 
+                leadId: currentLeadId, 
+                contacts: parsedLead.contacts.length,
+                sites: parsedLead.sites.length,
+                proposals: parsedLead.proposals.length
+            });
+
+            // Update formData ONCE with all loaded data
+            setFormData(parsedLead);
+            
+            // Initialize lastSavedDataRef
+            lastSavedDataRef.current = {
+                ...parsedLead,
+                notes: notesTextareaRef.current?.value || parsedLead.notes || '',
+                projectIds: parsedLead.projectIds || []
+            };
+        }
+    }, [lead?.id]); // Only depend on lead.id, not the entire lead object
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
@@ -2133,12 +2114,9 @@ const LeadDetailModal = ({
         }
     };
     
-    // Load sites when formData.id changes (moved here after loadSitesFromDatabase is defined to avoid TDZ error)
-    useEffect(() => {
-        if (formData?.id && !isLoadingSitesRef.current) {
-            loadSitesFromDatabase(formData.id);
-        }
-    }, [formData?.id]);
+    // REMOVED: Automatic sites loading useEffect
+    // Sites are already included in the lead object from the API (via parseClientJsonFields)
+    // The loadSitesFromDatabase function is kept for manual refresh when needed (e.g., after adding a site)
 
     const handleAddSite = async () => {
         if (!newSite.name) {
