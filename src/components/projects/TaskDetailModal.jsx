@@ -1185,30 +1185,42 @@ const TaskDetailModal = ({
         }
     };
 
-    const handleDeleteComment = (commentId) => {
-        if (confirm('Delete this comment?')) {
-            const updatedComments = comments.filter(c => c.id !== commentId);
-            setComments(updatedComments);
-            
-            // CRITICAL: Auto-save comment deletion immediately
-            const taskToAutoSave = {
-                ...editedTask,
-                comments: updatedComments,
-                checklist: Array.isArray(checklist) ? checklist : [],
-                attachments: Array.isArray(attachments) ? attachments : [],
-                tags: Array.isArray(tags) ? tags : [],
-                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
-                subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
-                id: editedTask.id || task?.id || Date.now()
-            };
+    const handleDeleteComment = async (commentId) => {
+        if (!confirm('Delete this comment?')) {
+            return;
+        }
 
-            console.log('💾 TaskDetailModal: Auto-saving comment deletion immediately', {
-                taskId: taskToAutoSave.id,
-                commentsCount: taskToAutoSave.comments.length
+        if (!commentId) {
+            console.error('❌ TaskDetailModal: Cannot delete comment - missing commentId');
+            alert('Cannot delete comment: missing comment ID');
+            return;
+        }
+
+        try {
+            console.log('🗑️ TaskDetailModal: Deleting comment from database', {
+                commentId: commentId,
+                taskId: editedTask.id || task?.id
             });
 
-            // Save without closing modal
-            onUpdate(taskToAutoSave, { closeModal: false });
+            // Delete comment from TaskComment table via API
+            await window.DatabaseAPI.makeRequest(`/task-comments?id=${encodeURIComponent(commentId)}`, {
+                method: 'DELETE'
+            });
+
+            console.log('✅ TaskDetailModal: Comment deleted successfully', {
+                commentId: commentId
+            });
+
+            // Update local state to remove the deleted comment
+            const updatedComments = comments.filter(c => c.id !== commentId);
+            setComments(updatedComments);
+
+        } catch (error) {
+            console.error('❌ TaskDetailModal: Failed to delete comment:', {
+                commentId: commentId,
+                error: error.message
+            });
+            alert(`Failed to delete comment: ${error.message || 'Unknown error'}`);
         }
     };
 
