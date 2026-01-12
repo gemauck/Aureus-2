@@ -1216,9 +1216,21 @@ const TaskDetailModal = ({
             setComments(updatedComments);
 
         } catch (error) {
+            // If comment doesn't exist (404), just remove it from UI - it's already gone
+            if (error.status === 404 || error.message?.includes('not found') || error.message?.includes('Not found')) {
+                console.log('ℹ️ TaskDetailModal: Comment already deleted, removing from UI', {
+                    commentId: commentId
+                });
+                // Update local state to remove the comment (it's already gone from database)
+                const updatedComments = comments.filter(c => c.id !== commentId);
+                setComments(updatedComments);
+                return;
+            }
+            
             console.error('❌ TaskDetailModal: Failed to delete comment:', {
                 commentId: commentId,
-                error: error.message
+                error: error.message,
+                status: error.status
             });
             alert(`Failed to delete comment: ${error.message || 'Unknown error'}`);
         }
