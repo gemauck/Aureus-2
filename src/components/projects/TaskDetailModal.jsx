@@ -798,6 +798,14 @@ const TaskDetailModal = ({
         }
         
         setNewComment(text);
+        
+        // Preserve cursor position after state update
+        setTimeout(() => {
+            if (commentTextareaRef.current) {
+                const newCursorPos = Math.min(cursorPos, text.length);
+                commentTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+            }
+        }, 0);
     };
 
     const handleAddComment = async () => {

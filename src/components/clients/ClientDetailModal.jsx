@@ -793,31 +793,38 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         // CRITICAL FIX: Merge with existing sites to prevent duplicates
             console.log(`🔧 About to call setFormData with ${sites.length} sites`);
             try {
-                        setFormData(prevFormData => {
-                            const existingSites = prevFormData?.sites || [];
+                const currentFormData = formDataRef.current || {};
+                const existingSites = currentFormData.sites || [];
                             const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
                             const updated = {
-                                ...prevFormData,
+                    ...currentFormData,
                                 sites: mergedSites
                             };
-                            formDataRef.current = updated;
                             console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
-                            return updated;
-                        });
-                console.log(`✅ setFormData called successfully for sites`);
+                
+                // CRITICAL: Force React to detect the change by adding a timestamp
+                // Ensure sites array is a new reference
+                const updatedWithTimestamp = {
+                    ...updated,
+                    sites: [...mergedSites], // Ensure new array reference
+                    _lastUpdated: Date.now()
+                };
+                formDataRef.current = updatedWithTimestamp;
+                setFormData(updatedWithTimestamp);
+                console.log(`✅ setFormData called successfully for sites (timestamp: ${updatedWithTimestamp._lastUpdated})`);
             } catch (error) {
                 console.error('❌ Error in setFormData for sites:', error);
                 throw error;
             }
 
                         // Remove optimistic sites that now exist in database
-                        setOptimisticSites(prev => {
-                            const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
-                            if (filtered.length !== prev.length) {
-                                console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
-                            }
-                            return filtered;
-                        });
+                    setOptimisticSites(prev => {
+                        const filtered = prev.filter(opt => !sites.some(db => db.id === opt.id));
+                        if (filtered.length !== prev.length) {
+                            console.log(`✅ Removed ${prev.length - filtered.length} optimistic sites (now confirmed in DB)`);
+                        }
+                        return filtered;
+                    });
                         
             return sites; // Return sites array directly
         } catch (error) {
@@ -1375,32 +1382,57 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log(`🔧 DEBUG: contacts array:`, contacts);
             console.log(`🔧 DEBUG: optimisticContacts array:`, optimisticContacts);
             
-            // Use functional update pattern (like sites) to ensure React detects the change
-            console.log(`🔧🔧🔧 BEFORE setFormData callback - contacts.length=${contacts.length}`);
-            setFormData(prevFormData => {
-                console.log(`🔧🔧🔧 INSIDE setFormData callback - CALLBACK EXECUTING!`);
-                const currentFormData = prevFormData || {};
-                const existingContacts = currentFormData.contacts || [];
-                console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
-                
+            // CRITICAL FIX: Get current formData from ref and update directly
+            console.log(`🔧🔧🔧 BEFORE setFormData - contacts.length=${contacts.length}`);
+            const currentFormData = formDataRef.current || {};
+            const existingContacts = currentFormData.contacts || [];
+            console.log(`🔧 Existing contacts count: ${existingContacts.length}, Optimistic contacts count: ${optimisticContacts.length}`);
+            
                 // Merge: API contacts + existing contacts + optimistic contacts
                 const mergedContacts = mergeUniqueById(contacts, [...existingContacts, ...optimisticContacts]);
-                console.log(`🔧 Merged contacts array:`, mergedContacts);
-                
-                // Create updated formData - ensure it's a completely new object reference
+            console.log(`🔧 Merged contacts array:`, mergedContacts);
+            
+            // Create updated formData - ensure it's a completely new object reference
                 const updated = {
-                    ...currentFormData,
-                    contacts: [...mergedContacts] // Create new array reference
+                ...currentFormData,
+                contacts: [...mergedContacts] // Create new array reference
                 };
-                
-                // Update ref inside callback
+            
+            // Update ref first
                 formDataRef.current = updated;
-                console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
-                console.log(`✅✅✅ Updated formData.contacts:`, updated.contacts);
-                console.log(`🔧🔧🔧 RETURNING updated formData from callback`);
-                return updated;
-            });
-            console.log(`✅ setFormData called with updated contacts - AFTER callback`);
+            console.log(`✅✅✅ Merged contacts: ${mergedContacts.length} total (${contacts.length} from DB, ${existingContacts.length} existing, ${optimisticContacts.length} optimistic)`);
+            console.log(`✅✅✅ Updated formData.contacts:`, updated.contacts);
+            console.log(`✅✅✅ Updated object reference check:`, updated === formDataRef.current);
+            
+            // CRITICAL: Force React to detect the change by creating a completely new object with a timestamp
+            // This ensures React's shallow comparison detects the change
+            // Also ensure contacts array is a new reference
+            const updatedWithTimestamp = {
+                ...updated,
+                contacts: [...mergedContacts], // Ensure new array reference
+                _lastUpdated: Date.now() // Add timestamp to force React to detect change
+            };
+            
+            // Update ref with the timestamped version
+            formDataRef.current = updatedWithTimestamp;
+            
+            // Now update state with the new object - use setTimeout to ensure React processes it
+            console.log(`🔧🔧🔧 CALLING setFormData with updated object (timestamp: ${updatedWithTimestamp._lastUpdated}, contacts: ${updatedWithTimestamp.contacts.length})`);
+            setFormData(updatedWithTimestamp);
+            console.log(`✅ setFormData called with updated contacts - AFTER call`);
+            
+            // Force a re-render by updating a dummy state if needed
+            // This is a fallback to ensure React detects the change
+            setTimeout(() => {
+                if (formDataRef.current?.contacts?.length !== mergedContacts.length) {
+                    console.log(`⚠️ State mismatch detected, forcing update`);
+                    setFormData(prev => ({
+                        ...prev,
+                        contacts: [...mergedContacts],
+                        _lastUpdated: Date.now()
+                    }));
+                }
+            }, 100);
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
@@ -1664,22 +1696,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Update formData with opportunities from database
             console.log(`🔧 About to update formData with ${opportunities.length} opportunities`);
             
-            // Use functional update pattern (like sites) to ensure React detects the change
-            setFormData(prevFormData => {
-                const currentFormData = prevFormData || {};
-                
-                // Create updated formData - ensure it's a completely new object reference
-                const updated = {
-                    ...currentFormData,
-                    opportunities: [...opportunities] // Create new array reference
-                };
-                
-                // Update ref inside callback
-                formDataRef.current = updated;
-                console.log(`✅ Updated formData.opportunities:`, updated.opportunities);
-                return updated;
-            });
-            console.log(`✅ setFormData called with updated opportunities`);
+            // CRITICAL FIX: Get current formData from ref and update directly
+            const currentFormData = formDataRef.current || {};
+            const updated = {
+                ...currentFormData,
+                opportunities: [...opportunities] // Create new array reference
+            };
+            // CRITICAL: Force React to detect the change by adding a timestamp
+            // Ensure opportunities array is a new reference
+            const updatedWithTimestamp = {
+                ...updated,
+                opportunities: [...opportunities], // Ensure new array reference
+                _lastUpdated: Date.now()
+            };
+            formDataRef.current = updatedWithTimestamp;
+            console.log(`✅ Updated formData.opportunities:`, updatedWithTimestamp.opportunities);
+            setFormData(updatedWithTimestamp);
+            console.log(`✅ setFormData called with updated opportunities (timestamp: ${updatedWithTimestamp._lastUpdated})`);
             
             return opportunities; // Return opportunities for Promise.all tracking
         } catch (error) {

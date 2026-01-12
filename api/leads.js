@@ -907,12 +907,14 @@ async function handler(req, res) {
             
             // Use upsert to handle duplicates
             for (const comment of commentsToSync) {
+              // Map frontend field names (createdBy/createdById/createdByEmail) to database fields (author/authorId/userName)
+              // Support both naming conventions for backward compatibility
               const commentData = {
                 clientId: lead.id,
                 text: comment.text || '',
-                authorId: comment.authorId || userId || null,
-                author: comment.author || authorName || '',
-                userName: comment.userName || userName || null,
+                authorId: comment.authorId || comment.createdById || userId || null,
+                author: comment.author || comment.createdBy || authorName || '',
+                userName: comment.userName || comment.createdByEmail || userName || null,
                 createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
               }
               
@@ -1348,12 +1350,14 @@ async function handler(req, res) {
           
           // Process each comment with upsert to handle duplicates properly
           for (const comment of commentsArray) {
+            // Map frontend field names (createdBy/createdById/createdByEmail) to database fields (author/authorId/userName)
+            // Support both naming conventions for backward compatibility
             const commentData = {
               clientId: id,
               text: comment.text || '',
-              authorId: comment.authorId || userId || null,
-              author: comment.author || authorName || '',
-              userName: comment.userName || userName || null,
+              authorId: comment.authorId || comment.createdById || userId || null,
+              author: comment.author || comment.createdBy || authorName || '',
+              userName: comment.userName || comment.createdByEmail || userName || null,
               createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
             }
             

@@ -254,6 +254,10 @@ async function handler(req, res) {
           
           console.log(`✅ [LEADS ID] Successfully retrieved lead ${id}`)
           return ok(res, { lead: parsedLead })
+        } catch (queryError) {
+          // Handle errors from the lead query try block
+          throw queryError
+        }
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'getting lead')
         
