@@ -3477,21 +3477,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </div>
                                             <button 
                                                 type="button" 
-                                                onClick={async () => {
+                                                onClick={() => {
                                                     if (confirm(`Are you sure you want to delete this ${entityLabelLower}? This action cannot be undone.`)) {
-                                                        try {
-                                                            // Call onDelete and wait for it to complete
-                                                            // This ensures state update happens before modal closes
-                                                            await onDelete(client.id);
-                                                            // Small delay to ensure React has processed the state update
-                                                            // This ensures the list view shows the updated state when modal closes
-                                                            await new Promise(resolve => setTimeout(resolve, 100));
-                                                            // Close modal after deletion completes and state update is processed
-                                                            onClose();
-                                                        } catch (error) {
-                                                            // If deletion fails, don't close modal so user can see the error
-                                                            console.error('Deletion failed:', error);
-                                                        }
+                                                        onDelete(client.id);
+                                                        onClose();
                                                     }
                                                 }}
                                                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2"

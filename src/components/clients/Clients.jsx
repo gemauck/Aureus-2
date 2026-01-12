@@ -3727,9 +3727,12 @@ const Clients = React.memo(() => {
                             setTimeout(cb, 0);
                         };
                         
+                        // CRITICAL: Don't call loadClients immediately - it overwrites the optimistic update
+                        // Instead, just trigger a background sync after a delay to ensure other users see the update
+                        // The optimistic update above (setClients) already shows the new client in the UI
                         scheduleRefresh(async () => {
-                            await loadClients(true).catch(() => {}); // Force refresh
-                            window.LiveDataSync?.forceSync?.().catch(() => {}); // Background sync
+                            // Only sync in background - don't reload clients as it would overwrite optimistic update
+                            window.LiveDataSync?.forceSync?.().catch(() => {}); // Background sync for other users
                         });
                     }
                     
@@ -4345,9 +4348,7 @@ const Clients = React.memo(() => {
             // CRITICAL: Save original clients array BEFORE filtering for error recovery
             const originalClients = [...clients];
             
-            // Optimistically update UI first for IMMEDIATE removal
-            // CRITICAL: Use synchronous update (not startTransition) for deletion
-            // Deletion is a critical user action that should be visible immediately
+            // Optimistically update UI first for smooth removal
             const updatedClients = clients.filter(c => c.id !== clientId);
             
             // Temporarily pause LiveDataSync to prevent conflicts
@@ -4356,18 +4357,10 @@ const Clients = React.memo(() => {
                 window.LiveDataSync.stop();
             }
             
-            // CRITICAL: Update state SYNCHRONOUSLY for immediate UI feedback
-            // Don't use startTransition here - deletion should be instant
+            // CRITICAL: Update state immediately (not in startTransition) so UI updates right away
+            // startTransition was causing the UI to not update until after the API call completed
             setClients(updatedClients);
             safeStorage.setClients(updatedClients);
-            
-            // Force React to process the state update immediately by using flushSync if available
-            // This ensures the UI updates before the modal closes
-            if (typeof React.flushSync === 'function') {
-                React.flushSync(() => {
-                    // State already updated above, this just forces React to process it
-                });
-            }
             
             // Delete from database in background
             const token = window.storage?.getToken?.();
@@ -4382,8 +4375,7 @@ const Clients = React.memo(() => {
                         }
                     }, 1500); // 1.5 second delay to prevent shimmer from LiveDataSync refresh
                 } catch (error) {
-                    // On error, restore the client from original array and show error
-                    // CRITICAL: Restore SYNCHRONOUSLY so user sees the error immediately
+                    // On error, restore the client from original array immediately (not in startTransition)
                     setClients(originalClients);
                     safeStorage.setClients(originalClients);
                     
@@ -4395,7 +4387,7 @@ const Clients = React.memo(() => {
                     if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
                         window.LiveDataSync.start();
                     }
-                    throw error; // Re-throw so modal knows deletion failed
+                    return;
                 }
             } else {
                 // If no API, resume LiveDataSync after a short delay
@@ -4407,7 +4399,6 @@ const Clients = React.memo(() => {
             }
         } catch (error) {
             alert('Failed to delete client: ' + (error.message || 'Unknown error'));
-            throw error; // Re-throw so modal knows deletion failed
         }
     };
 
