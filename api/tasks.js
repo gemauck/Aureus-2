@@ -114,9 +114,10 @@ async function getAssigneeName(assigneeId) {
 
 async function handler(req, res) {
   const { method } = req;
-  const { id: taskId, projectId, lightweight } = req.query;
+  const { id: taskId, projectId, lightweight, includeComments } = req.query;
   const userId = req.user?.sub;
   const isLightweight = lightweight === 'true' || lightweight === true;
+  const shouldIncludeComments = includeComments === 'true' || includeComments === true;
 
   try {
     if (method === 'GET') {
@@ -228,47 +229,50 @@ async function handler(req, res) {
             throw dbError;
           });
 
-          // Fetch all task IDs (including subtasks) to get comments
-          const allTaskIds = [
-            ...(tasks || []).map(t => t.id),
-            ...(tasks || []).flatMap(t => ((t.subtasks || [])).map(st => st.id))
-          ];
-
-          // Fetch comments separately (since Task.comments relation doesn't exist yet)
+          // OPTIMIZATION: Only fetch comments if explicitly requested (default: skip for speed)
           const taskCommentsMap = {};
-          if (allTaskIds.length > 0) {
-            try {
-              const taskComments = await prisma.taskComment.findMany({
-                where: { taskId: { in: allTaskIds } },
-                include: {
-                  authorUser: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true
-                    }
-                  }
-                },
-                orderBy: { createdAt: 'asc' }
-              });
+          if (shouldIncludeComments) {
+            // Fetch all task IDs (including subtasks) to get comments
+            const allTaskIds = [
+              ...(tasks || []).map(t => t.id),
+              ...(tasks || []).flatMap(t => ((t.subtasks || [])).map(st => st.id))
+            ];
 
-              // Group comments by taskId
-              (taskComments || []).forEach(comment => {
-                if (!taskCommentsMap[comment.taskId]) {
-                  taskCommentsMap[comment.taskId] = [];
-                }
-                taskCommentsMap[comment.taskId].push(comment);
-              });
-            } catch (commentsError) {
-              // Log but don't fail the entire request if comments can't be fetched
-              console.warn('⚠️ Failed to fetch task comments, continuing without comments:', {
-                error: commentsError.message,
-                taskIds: allTaskIds
-              });
+            // Fetch comments separately (since Task.comments relation doesn't exist yet)
+            if (allTaskIds.length > 0) {
+              try {
+                const taskComments = await prisma.taskComment.findMany({
+                  where: { taskId: { in: allTaskIds } },
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                });
+
+                // Group comments by taskId
+                (taskComments || []).forEach(comment => {
+                  if (!taskCommentsMap[comment.taskId]) {
+                    taskCommentsMap[comment.taskId] = [];
+                  }
+                  taskCommentsMap[comment.taskId].push(comment);
+                });
+              } catch (commentsError) {
+                // Log but don't fail the entire request if comments can't be fetched
+                console.warn('⚠️ Failed to fetch task comments, continuing without comments:', {
+                  error: commentsError.message,
+                  taskIds: allTaskIds
+                });
+              }
             }
           }
 
-          // Attach comments to tasks manually
+          // Attach comments to tasks manually (empty arrays if comments not loaded)
           const tasksWithComments = (tasks || []).map(task => ({
             ...task,
             comments: taskCommentsMap[task.id] || [],
@@ -279,7 +283,9 @@ async function handler(req, res) {
           }));
 
           return ok(res, { 
-            tasks: tasksWithComments.map(task => transformTask(task)) 
+            tasks: tasksWithComments.map(task => transformTask(task, { 
+              includeComments: shouldIncludeComments 
+            })) 
           });
         } catch (queryError) {
           console.error('❌ Database query error getting tasks by projectId:', {
