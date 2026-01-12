@@ -310,7 +310,31 @@ const RichTextEditor = ({
                 // Set up MutationObserver to detect DOM changes and restore cursor
                 if (!mutationObserver) {
                     mutationObserver = new MutationObserver((mutations) => {
-                        // CRITICAL: Don't restore during active typing - this causes backwards typing
+                        // CRITICAL: If user is typing, ALWAYS force cursor to end (prevents cursor jumping during auto-save)
+                        if (isFocusedRef.current && isUserTypingRef.current) {
+                            const timeSinceLastInput = Date.now() - (lastUserInputTimeRef.current || 0);
+                            // If typing happened recently (within last 500ms), force cursor to end
+                            // This catches auto-save re-renders that happen during typing
+                            if (timeSinceLastInput < 500) {
+                                requestAnimationFrame(() => {
+                                    try {
+                                        const selection = window.getSelection();
+                                        if (selection && editor) {
+                                            const range = document.createRange();
+                                            range.selectNodeContents(editor);
+                                            range.collapse(false);
+                                            selection.removeAllRanges();
+                                            selection.addRange(range);
+                                        }
+                                    } catch (e) {
+                                        // Silently fail
+                                    }
+                                });
+                                return;
+                            }
+                        }
+                        
+                        // Don't restore during active typing - this causes backwards typing
                         if (!isFocusedRef.current || isRestoring || isUserTypingRef.current) return;
                         
                         // Also ignore if typing happened very recently (within last 100ms)
@@ -706,61 +730,43 @@ const RichTextEditor = ({
         // isInternalUpdateRef.current = true; // Not needed if we don't call setHtml
         // setHtml(newHtml); // REMOVED - prevents re-renders during typing
         
-        // Function to restore cursor position aggressively - especially for first keystroke
-        const restoreCursor = () => {
+        // Function to FORCE cursor to end of content - ALWAYS use this for every keystroke
+        // This ensures cursor is always to the right of the typed character
+        const forceCursorToEnd = () => {
             if (!editorRef.current || !isFocusedRef.current) return;
             
             try {
                 const selection = window.getSelection();
                 if (!selection || !editorRef.current) return;
                 
-                // For first keystroke, ALWAYS force cursor to end of content
-                if (isFirstKeystroke) {
-                    // Move cursor to end of content - this is CRITICAL for first keystroke
-                    const range = document.createRange();
-                    range.selectNodeContents(editorRef.current);
-                    range.collapse(false); // false = collapse to end
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                } else if (savedCursorPos) {
-                    // For subsequent keystrokes, restore the saved position
-                    restoreCursorPosition(savedCursorPos);
-                }
+                // ALWAYS force cursor to end of content - this prevents any cursor jumping
+                const range = document.createRange();
+                range.selectNodeContents(editorRef.current);
+                range.collapse(false); // false = collapse to end
+                selection.removeAllRanges();
+                selection.addRange(range);
             } catch (e) {
-                // Fallback: try to restore saved position
-                if (savedCursorPos) {
-                    restoreCursorPosition(savedCursorPos);
-                }
+                // Silently fail - cursor restoration is best effort
             }
         };
         
-        // CRITICAL: For first keystroke, restore cursor IMMEDIATELY and SYNCHRONOUSLY
+        // CRITICAL: ALWAYS force cursor to end IMMEDIATELY and SYNCHRONOUSLY for EVERY keystroke
         // Don't wait for any async operations - React might reset cursor before they complete
-        if (isFirstKeystroke) {
-            // Immediate synchronous restoration
-            restoreCursor();
-            
-            // Also restore aggressively with multiple strategies
-            queueMicrotask(restoreCursor);
-            requestAnimationFrame(() => {
-                restoreCursor();
-                requestAnimationFrame(restoreCursor);
-            });
-            setTimeout(restoreCursor, 0);
-            setTimeout(restoreCursor, 1);
-            setTimeout(restoreCursor, 5);
-            setTimeout(restoreCursor, 10);
-            setTimeout(restoreCursor, 20);
-            setTimeout(restoreCursor, 50);
-        } else if (savedCursorPos) {
-            // For subsequent keystrokes, restore immediately but less aggressively
-            restoreCursor();
-            queueMicrotask(restoreCursor);
-            requestAnimationFrame(() => {
-                requestAnimationFrame(restoreCursor);
-            });
-            setTimeout(restoreCursor, 0);
-        }
+        // This prevents cursor jumping on any keystroke, including during auto-save
+        forceCursorToEnd();
+        
+        // Also restore aggressively with multiple strategies for ALL keystrokes
+        queueMicrotask(forceCursorToEnd);
+        requestAnimationFrame(() => {
+            forceCursorToEnd();
+            requestAnimationFrame(forceCursorToEnd);
+        });
+        setTimeout(forceCursorToEnd, 0);
+        setTimeout(forceCursorToEnd, 1);
+        setTimeout(forceCursorToEnd, 5);
+        setTimeout(forceCursorToEnd, 10);
+        setTimeout(forceCursorToEnd, 20);
+        setTimeout(forceCursorToEnd, 50);
         
         // Debounce onChange to prevent too many state updates in parent
         // Clear existing timeout
@@ -776,23 +782,19 @@ const RichTextEditor = ({
                 onChange(newHtml);
             }
             
-            // CRITICAL: Restore cursor position again after onChange might have triggered re-render
-            // This is a backup in case the immediate restoration didn't work
-            if (isFirstKeystroke) {
-                // For first keystroke, be extra aggressive even after onChange
-                restoreCursor();
-                queueMicrotask(restoreCursor);
-                requestAnimationFrame(() => {
-                    restoreCursor();
-                    requestAnimationFrame(restoreCursor);
-                });
-                setTimeout(restoreCursor, 0);
-                setTimeout(restoreCursor, 10);
-                setTimeout(restoreCursor, 50);
-            } else if (savedCursorPos) {
-                // Normal restoration for subsequent keystrokes
-                restoreCursor();
-            }
+            // CRITICAL: Force cursor to end AGAIN after onChange (auto-save) might have triggered re-render
+            // Auto-save can cause parent to re-render which might reset cursor, so we force it back
+            forceCursorToEnd();
+            queueMicrotask(forceCursorToEnd);
+            requestAnimationFrame(() => {
+                forceCursorToEnd();
+                requestAnimationFrame(forceCursorToEnd);
+            });
+            setTimeout(forceCursorToEnd, 0);
+            setTimeout(forceCursorToEnd, 10);
+            setTimeout(forceCursorToEnd, 50);
+            setTimeout(forceCursorToEnd, 100); // Extra delay to catch late re-renders from auto-save
+            setTimeout(forceCursorToEnd, 200); // Even longer delay for slow auto-save operations
             
             window[onChangeTimeoutKey] = null;
         }, 150); // Small delay to batch rapid typing and reduce parent re-renders
