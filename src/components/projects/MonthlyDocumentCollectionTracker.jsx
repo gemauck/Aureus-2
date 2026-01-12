@@ -305,8 +305,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     const loadFromDatabase = useCallback(async () => {
         if (!project?.id) {
-                setIsLoading(false);
-                return;
+            setIsLoading(false);
+            return;
+        }
+        
+        // Prevent multiple simultaneous loads
+        if (hasLoadedRef.current) {
+            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping load - already loaded for this project');
+            return;
         }
         
         // Ensure API is available
@@ -324,8 +330,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     setError('Document Collection API not available. Please refresh the page.');
                 }
             }, 2000);
-                return;
+            return;
         }
+        
+        // Mark as loading to prevent concurrent calls
+        hasLoadedRef.current = true;
         
         // Only set loading to true if we're actually going to make an API call
         // and we're not already loading (to prevent resetting loading state on multiple calls)
@@ -348,6 +357,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } catch (err) {
             console.error('❌ MonthlyDocumentCollectionTracker: Failed to load document sections:', err);
             setError('Failed to load data. Please refresh the page.');
+            // Reset hasLoadedRef on error so we can retry
+            hasLoadedRef.current = false;
         } finally {
             console.log('✅ MonthlyDocumentCollectionTracker: Setting isLoading to false');
             setIsLoading(false);
