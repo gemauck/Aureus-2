@@ -330,13 +330,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setError(null);
         
         try {
+            console.log('🔄 MonthlyDocumentCollectionTracker: Loading from database...', { projectId: project.id });
             const freshProject = await apiRef.current.fetchProject(project.id);
+            console.log('✅ MonthlyDocumentCollectionTracker: Received project data', { 
+                hasDocumentSections: !!freshProject?.documentSections,
+                documentSectionsType: typeof freshProject?.documentSections
+            });
             const normalized = normalizeSectionsByYear(freshProject?.documentSections);
+            console.log('✅ MonthlyDocumentCollectionTracker: Normalized sections', { 
+                years: Object.keys(normalized),
+                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+            });
             setSectionsByYear(normalized);
         } catch (err) {
-            console.error('Failed to load document sections:', err);
+            console.error('❌ MonthlyDocumentCollectionTracker: Failed to load document sections:', err);
             setError('Failed to load data. Please refresh the page.');
         } finally {
+            console.log('✅ MonthlyDocumentCollectionTracker: Setting isLoading to false');
             setIsLoading(false);
         }
     }, [project?.id, isLoading]);
