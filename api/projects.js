@@ -753,7 +753,7 @@ async function handler(req, res) {
             // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
             hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
             hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
-            hasMonthlyFMSReviewProcess: true, // Include to show Monthly FMS Review tab in list
+            // hasMonthlyFMSReviewProcess: true, // Temporarily commented out - column doesn't exist yet
             _count: {
               select: {
                 tasks: true // Count tasks from Task table (source of truth)
