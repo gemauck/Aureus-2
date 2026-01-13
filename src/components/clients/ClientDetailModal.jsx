@@ -5615,7 +5615,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <div className="flex justify-end">
                                         <button
                                             type="button"
-                                            onClick={handleAddComment}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleAddComment();
+                                            }}
                                             className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                                         >
                                             <i className="fas fa-plus mr-1.5"></i>

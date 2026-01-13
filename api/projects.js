@@ -698,6 +698,22 @@ async function handler(req, res) {
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       try {
+        // Try to add missing columns if they don't exist (one-time migration)
+        try {
+          await prisma.$executeRaw`
+            ALTER TABLE "Project" 
+            ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
+            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false;
+          `;
+        } catch (migrationError) {
+          // Ignore migration errors (columns might already exist or connection issues)
+          // Only log if it's not a "column already exists" error
+          if (!migrationError.message?.includes('already exists') && 
+              !migrationError.message?.includes('duplicate column')) {
+            console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
+          }
+        }
+        
         const userRole = req.user?.role?.toLowerCase();
         
         // Build where clause
@@ -735,41 +751,77 @@ async function handler(req, res) {
         }
         
         // Optimize: Only select fields needed for the list view
-        const projects = await prisma.project.findMany({ 
-          where: whereClause,
-          select: {
-            id: true,
-            name: true,
-            clientName: true,
-            status: true,
-            type: true,
-            startDate: true,
-            dueDate: true,
-            assignedTo: true,
-            description: true,
-            createdAt: true,
-            updatedAt: true,
-            monthlyProgress: true,
-            // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
-            hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
-            hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
-            // hasMonthlyFMSReviewProcess: true, // Temporarily commented out - column doesn't exist yet
-            _count: {
-              select: {
-                tasks: true // Count tasks from Task table (source of truth)
+        // Wrap in try-catch to handle missing columns gracefully
+        let projects;
+        try {
+          projects = await prisma.project.findMany({ 
+            where: whereClause,
+            select: {
+              id: true,
+              name: true,
+              clientName: true,
+              status: true,
+              type: true,
+              startDate: true,
+              dueDate: true,
+              assignedTo: true,
+              description: true,
+              createdAt: true,
+              updatedAt: true,
+              monthlyProgress: true,
+              // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
+              hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
+              hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
+              // hasMonthlyFMSReviewProcess: true, // Temporarily commented - column may not exist yet
+              _count: {
+                select: {
+                  tasks: true // Count tasks from Task table (source of truth)
+                }
               }
-            }
-            // Exclude all JSON fields - data is now in separate tables:
-            // - tasksList → Task table
-            // - taskLists → ProjectTaskList table
-            // - customFieldDefinitions → ProjectCustomFieldDefinition table
-            // - documents → ProjectDocument table
-            // - comments → ProjectComment table
-            // - activityLog → ProjectActivityLog table
-            // - team → ProjectTeamMember table
-          },
-          orderBy: { createdAt: 'desc' } 
-        })
+              // Exclude all JSON fields - data is now in separate tables:
+              // - tasksList → Task table
+              // - taskLists → ProjectTaskList table
+              // - customFieldDefinitions → ProjectCustomFieldDefinition table
+              // - documents → ProjectDocument table
+              // - comments → ProjectComment table
+              // - activityLog → ProjectActivityLog table
+              // - team → ProjectTeamMember table
+            },
+            orderBy: { createdAt: 'desc' } 
+          });
+        } catch (queryError) {
+          // If query fails due to missing column, retry without problematic fields
+          if (queryError.message?.includes('does not exist') || queryError.message?.includes('Unknown column')) {
+            console.log('⚠️ Retrying project query without hasMonthlyFMSReviewProcess (column may not exist yet)');
+            projects = await prisma.project.findMany({ 
+              where: whereClause,
+              select: {
+                id: true,
+                name: true,
+                clientName: true,
+                status: true,
+                type: true,
+                startDate: true,
+                dueDate: true,
+                assignedTo: true,
+                description: true,
+                createdAt: true,
+                updatedAt: true,
+                monthlyProgress: true,
+                hasDocumentCollectionProcess: true,
+                hasWeeklyFMSReviewProcess: true,
+                _count: {
+                  select: {
+                    tasks: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' } 
+            });
+          } else {
+            throw queryError; // Re-throw if it's a different error
+          }
+        }
         
         // Calculate tasksCount from Task table only (no JSON fallback)
         const projectsWithTaskCount = projects.map(project => {

@@ -42,7 +42,6 @@ const TicketDetailModal = ({
     const [activeTab, setActiveTab] = useState('overview');
     const [isEditing, setIsEditing] = useState(isCreating);
     const [isSaving, setIsSaving] = useState(false);
-    const [isSavingNotes, setIsSavingNotes] = useState(false);
     
     // Form state
     const [formData, setFormData] = useState({
@@ -713,18 +712,9 @@ const TicketDetailModal = ({
                                 </div>
                                 <div className="flex justify-end">
                                     <button
-                                        type="button"
-                                        disabled={isSavingNotes}
-                                        onClick={async (e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            
-                                            // Prevent multiple clicks
-                                            if (isSavingNotes) return;
-                                            
+                                        onClick={async () => {
                                             // Save notes immediately
                                             if (ticket?.id) {
-                                                setIsSavingNotes(true);
                                                 try {
                                                     const customFields = {
                                                         ...currentCustomFields,
@@ -748,47 +738,23 @@ const TicketDetailModal = ({
                                                             credentials: 'include',
                                                             body: JSON.stringify(updateData)
                                                         });
-                                                        if (!fetchResponse.ok) {
-                                                            const errorText = await fetchResponse.text();
-                                                            throw new Error(`HTTP error! status: ${fetchResponse.status}, body: ${errorText}`);
-                                                        }
+                                                        if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
                                                     }
                                                     
-                                                    // Update current customFields state immediately
+                                                    // Reload ticket to get updated data
+                                                    await loadTicketDetails();
+                                                    
+                                                    // Update current customFields state
                                                     setCurrentCustomFields(customFields);
-                                                    
-                                                    // Show success feedback
-                                                    console.log('✅ Notes saved successfully');
-                                                    
-                                                    // Don't reload ticket details - it might cause issues
-                                                    // The notes are already saved and state is updated
-                                                    // User can refresh manually if needed
                                                 } catch (error) {
-                                                    console.error('❌ Error saving notes:', error);
-                                                    
-                                                    // Check if it's an authentication error
-                                                    if (error.message?.includes('401') || error.message?.includes('403') || error.message?.includes('Unauthorized')) {
-                                                        alert('Authentication error. Please refresh the page and try again.');
-                                                        return;
-                                                    }
-                                                    
-                                                    // Don't redirect or close modal on error
-                                                    alert(`Failed to save notes: ${error.message}\n\nPlease try again.`);
-                                                } finally {
-                                                    setIsSavingNotes(false);
+                                                    console.error('Error saving notes:', error);
+                                                    alert(`Failed to save notes: ${error.message}`);
                                                 }
-                                            } else {
-                                                // For new tickets, just update the state - notes will be saved when ticket is created
-                                                setCurrentCustomFields({
-                                                    ...currentCustomFields,
-                                                    notes: notes || ''
-                                                });
-                                                console.log('✅ Notes will be saved when ticket is created');
                                             }
                                         }}
                                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {isSavingNotes ? 'Saving...' : 'Save Notes'}
+                                        Save Notes
                                     </button>
                                 </div>
                             </div>

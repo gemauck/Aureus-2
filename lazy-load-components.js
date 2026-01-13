@@ -57,6 +57,7 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
         './src/components/projects/ProjectProgressTracker.jsx',
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
         './src/components/projects/WeeklyFMSReviewTracker.jsx', // Added as fallback if vite-projects fails
+        './src/components/projects/MonthlyFMSReviewTracker.jsx', // Monthly FMS Review tracker
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
         // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler

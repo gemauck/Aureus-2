@@ -5082,7 +5082,8 @@ function initializeProjectDetail() {
     const handleAddMonthlyFMSReviewProcess = async () => {
         console.log('🟢 ProjectDetail: Adding Monthly FMS Review process', {
             projectId: project.id,
-            currentHasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcess
+            currentHasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcess,
+            projectHasProcess: project.hasMonthlyFMSReviewProcess
         });
         
         try {
@@ -5099,8 +5100,11 @@ function initializeProjectDetail() {
             
             // Update state first
             setHasMonthlyFMSReviewProcess(true);
-            switchSection('monthlyFMSReview');
             setShowDocumentProcessDropdown(false);
+            
+            // Switch to monthly FMS review section
+            console.log('🔄 Switching to monthlyFMSReview section');
+            switchSection('monthlyFMSReview');
             
             // Immediately save to database to ensure persistence
             // Ensure monthlyFMSReviewSections is properly serialized
@@ -6073,18 +6077,28 @@ function initializeProjectDetail() {
                                             </div>
                                         </button>
                                     )}
-                                    {!hasMonthlyFMSReviewProcess && (
-                                        <button
-                                            onClick={handleAddMonthlyFMSReviewProcess}
-                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
-                                        >
-                                            <i className="fas fa-calendar-alt text-primary-600 w-4"></i>
-                                            <div>
-                                                <div className="font-medium">Monthly FMS Review</div>
-                                                <div className="text-[10px] text-gray-500">Monthly FMS review checklist</div>
-                                            </div>
-                                        </button>
-                                    )}
+                                    {(() => {
+                                        // Debug: Log the condition
+                                        const shouldShow = !hasMonthlyFMSReviewProcess;
+                                        console.log('🔍 Monthly FMS Review dropdown condition:', {
+                                            hasMonthlyFMSReviewProcess,
+                                            shouldShow,
+                                            projectHasProcess: project.hasMonthlyFMSReviewProcess,
+                                            projectId: project.id
+                                        });
+                                        return shouldShow ? (
+                                            <button
+                                                onClick={handleAddMonthlyFMSReviewProcess}
+                                                className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-calendar-alt text-primary-600 w-4"></i>
+                                                <div>
+                                                    <div className="font-medium">Monthly FMS Review</div>
+                                                    <div className="text-[10px] text-gray-500">Monthly FMS review checklist</div>
+                                                </div>
+                                            </button>
+                                        ) : null;
+                                    })()}
                                 </div>
                             </>
                         )}
