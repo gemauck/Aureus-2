@@ -2541,6 +2541,7 @@ const LeadDetailModal = ({
         
         const updatedFormData = {...formData, comments: updatedComments};
         setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
         
         // Log to audit trail
         if (window.AuditLogger) {
