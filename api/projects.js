@@ -753,6 +753,7 @@ async function handler(req, res) {
             // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
             hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
             hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
+            hasMonthlyFMSReviewProcess: true, // Include to show Monthly FMS Review tab in list
             _count: {
               select: {
                 tasks: true // Count tasks from Task table (source of truth)
@@ -950,6 +951,16 @@ async function handler(req, res) {
             ? body.hasWeeklyFMSReviewProcess 
             : Boolean(body.hasWeeklyFMSReviewProcess === true || body.hasWeeklyFMSReviewProcess === 'true' || body.hasWeeklyFMSReviewProcess === 1))
           : false,
+        monthlyFMSReviewSections: typeof body.monthlyFMSReviewSections === 'string' 
+          ? body.monthlyFMSReviewSections 
+          : JSON.stringify(body.monthlyFMSReviewSections && typeof body.monthlyFMSReviewSections === 'object'
+            ? body.monthlyFMSReviewSections
+            : {}),
+        hasMonthlyFMSReviewProcess: body.hasMonthlyFMSReviewProcess !== undefined 
+          ? (typeof body.hasMonthlyFMSReviewProcess === 'boolean' 
+            ? body.hasMonthlyFMSReviewProcess 
+            : Boolean(body.hasMonthlyFMSReviewProcess === true || body.hasMonthlyFMSReviewProcess === 'true' || body.hasMonthlyFMSReviewProcess === 1))
+          : false,
         monthlyProgress: typeof body.monthlyProgress === 'string'
           ? body.monthlyProgress
           : JSON.stringify(
@@ -1003,7 +1014,8 @@ async function handler(req, res) {
         const transformedProject = {
           ...project,
           documentSections: documentSectionsJson,
-          weeklyFMSReviewSections: weeklyFMSReviewSectionsJson
+          weeklyFMSReviewSections: weeklyFMSReviewSectionsJson,
+          monthlyFMSReviewSections: project.monthlyFMSReviewSections || '[]'
         };
 
         return created(res, { project: transformedProject })
@@ -1203,6 +1215,50 @@ async function handler(req, res) {
           updateData.hasWeeklyFMSReviewProcess = typeof body.hasWeeklyFMSReviewProcess === 'boolean'
             ? body.hasWeeklyFMSReviewProcess
             : Boolean(body.hasWeeklyFMSReviewProcess === true || body.hasWeeklyFMSReviewProcess === 'true' || body.hasWeeklyFMSReviewProcess === 1);
+        }
+
+        // Handle monthlyFMSReviewSections separately if provided - ensure it's properly saved
+        if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
+          try {
+            if (typeof body.monthlyFMSReviewSections === 'string') {
+              // Already a string, validate it's valid JSON
+              const trimmed = body.monthlyFMSReviewSections.trim();
+              if (trimmed === '') {
+                // Empty string means empty object/array
+                updateData.monthlyFMSReviewSections = JSON.stringify({});
+              } else {
+                try {
+                  // Validate it's valid JSON
+                  const parsed = JSON.parse(trimmed);
+                  // If it parsed successfully, use it as-is (it's already a stringified JSON)
+                  updateData.monthlyFMSReviewSections = trimmed;
+                } catch (parseError) {
+                  console.error('❌ Invalid monthlyFMSReviewSections JSON string:', parseError);
+                  // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
+                  updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+                }
+              }
+            } else if (Array.isArray(body.monthlyFMSReviewSections)) {
+              // It's an array, stringify it
+              updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+            } else if (typeof body.monthlyFMSReviewSections === 'object') {
+              // It's an object, stringify it
+              updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+            } else {
+              // It's something else (number, boolean, etc.), stringify it
+              updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+            }
+          } catch (error) {
+            console.error('❌ Error processing monthlyFMSReviewSections:', error);
+            // Don't fail the entire update, but log the error
+          }
+        }
+
+        // Handle hasMonthlyFMSReviewProcess separately if provided
+        if (body.hasMonthlyFMSReviewProcess !== undefined && body.hasMonthlyFMSReviewProcess !== null) {
+          updateData.hasMonthlyFMSReviewProcess = typeof body.hasMonthlyFMSReviewProcess === 'boolean'
+            ? body.hasMonthlyFMSReviewProcess
+            : Boolean(body.hasMonthlyFMSReviewProcess === true || body.hasMonthlyFMSReviewProcess === 'true' || body.hasMonthlyFMSReviewProcess === 1);
         }
 
         // Handle monthlyProgress separately if provided - with validation for safety

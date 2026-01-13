@@ -2160,13 +2160,17 @@ const TaskDetailModal = ({
                             <div className="space-y-3">
                                 {/* Upload */}
                                 <div>
-                                    <label className="block w-full px-3 py-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition cursor-pointer text-center">
-                                        <input
-                                            type="file"
-                                            multiple
-                                            onChange={handleFileUpload}
-                                            className="hidden"
-                                        />
+                                    <input
+                                        type="file"
+                                        id="taskAttachmentUpload"
+                                        multiple
+                                        onChange={handleFileUpload}
+                                        className="hidden"
+                                    />
+                                    <label
+                                        htmlFor="taskAttachmentUpload"
+                                        className="block w-full px-3 py-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition cursor-pointer text-center"
+                                    >
                                         {uploadingAttachments ? (
                                             <>
                                                 <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-1.5"></i>

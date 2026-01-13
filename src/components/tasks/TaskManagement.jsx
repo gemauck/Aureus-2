@@ -53,6 +53,7 @@ const TaskManagement = () => {
         return 'anonymous';
     };
     const getOfflineKey = () => `offline_user_tasks_${getCurrentUserId()}`;
+    const getOfflineProjectTasksKey = () => `offline_project_tasks_${getCurrentUserId()}`;
     const readOfflineTasks = () => {
         try {
             const raw = localStorage.getItem(getOfflineKey());
@@ -62,9 +63,23 @@ const TaskManagement = () => {
             return [];
         }
     };
+    const readOfflineProjectTasks = () => {
+        try {
+            const raw = localStorage.getItem(getOfflineProjectTasksKey());
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
     const writeOfflineTasks = (list) => {
         try {
             localStorage.setItem(getOfflineKey(), JSON.stringify(Array.isArray(list) ? list : []));
+        } catch {}
+    };
+    const writeOfflineProjectTasks = (list) => {
+        try {
+            localStorage.setItem(getOfflineProjectTasksKey(), JSON.stringify(Array.isArray(list) ? list : []));
         } catch {}
     };
 
@@ -98,6 +113,19 @@ const TaskManagement = () => {
             const token = storage?.getToken?.();
             if (!token) return;
 
+            // STEP 1: Load cached data immediately for instant display
+            const cachedUserTasks = readOfflineTasks();
+            const cachedProjectTasks = readOfflineProjectTasks();
+            
+            // Combine cached tasks for immediate display
+            if (cachedUserTasks.length > 0 || cachedProjectTasks.length > 0) {
+                const combinedCached = [
+                    ...cachedProjectTasks.map(t => ({ ...t, type: 'project' })),
+                    ...cachedUserTasks.map(t => ({ ...t, type: 'user' }))
+                ];
+                setTasks(combinedCached);
+            }
+
             const params = new URLSearchParams();
             if (filterStatus !== 'all') params.append('status', filterStatus);
             if (filterCategory !== 'all') params.append('category', filterCategory);
@@ -105,64 +133,136 @@ const TaskManagement = () => {
             if (filterPriority !== 'all') params.append('priority', filterPriority);
 
             const queryString = params.toString();
-            const url = queryString ? `/api/user-tasks?${queryString}` : '/api/user-tasks';
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                // Accept multiple possible API shapes to avoid empty UI when backend differs
-                // Prefer data.data.tasks, then data.tasks, then data.items
-                const tasksFromApi = Array.isArray(data?.data?.tasks)
-                    ? data.data.tasks
-                    : Array.isArray(data?.tasks)
-                        ? data.tasks
-                        : Array.isArray(data?.items)
-                            ? data.items
+            
+            // STEP 2: Load both user tasks and project tasks in parallel
+            const loadPromises = [
+                // Load user tasks
+                fetch(queryString ? `/api/user-tasks?${queryString}` : '/api/user-tasks', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).then(async response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    const tasksFromApi = Array.isArray(data?.data?.tasks)
+                        ? data.data.tasks
+                        : Array.isArray(data?.tasks)
+                            ? data.tasks
+                            : Array.isArray(data?.items)
+                                ? data.items
+                                : [];
+                    const categoriesFromApi = Array.isArray(data?.data?.categories)
+                        ? data.data.categories
+                        : Array.isArray(data?.categories)
+                            ? data.categories
                             : [];
-                const categoriesFromApi = Array.isArray(data?.data?.categories)
-                    ? data.data.categories
-                    : Array.isArray(data?.categories)
-                        ? data.categories
-                        : [];
-                const statsFromApi = data?.data?.stats || data?.stats || { total: 0, todo: 0, inProgress: 0, completed: 0 };
+                    const statsFromApi = data?.data?.stats || data?.stats || { total: 0, todo: 0, inProgress: 0, completed: 0 };
+                    return { type: 'user', tasks: tasksFromApi, categories: categoriesFromApi, stats: statsFromApi };
+                }).catch(err => {
+                    console.warn('TaskManagement: Failed to load user tasks', err);
+                    return { type: 'user', tasks: cachedUserTasks, categories: [], stats: null };
+                }),
+                
+                // Load project tasks (lightweight mode)
+                fetch('/api/tasks?lightweight=true', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).then(async response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    const tasksFromApi = Array.isArray(data?.data?.tasks)
+                        ? data.data.tasks
+                        : Array.isArray(data?.tasks)
+                            ? data.tasks
+                            : [];
+                    
+                    // Save to localStorage for offline use
+                    if (tasksFromApi.length > 0) {
+                        writeOfflineProjectTasks(tasksFromApi);
+                    }
+                    
+                    return { type: 'project', tasks: tasksFromApi };
+                }).catch(err => {
+                    console.warn('TaskManagement: Failed to load project tasks', err);
+                    return { type: 'project', tasks: cachedProjectTasks };
+                })
+            ];
 
-                setTasks(tasksFromApi);
-                setCategories(categoriesFromApi);
-                setStats(statsFromApi);
-            } else {
-                // Log non-OK responses to aid debugging
-                console.warn('TaskManagement: Failed to load tasks', response.status, response.statusText);
-                // Fallback to offline/local storage
-                const offline = readOfflineTasks();
-                const categoriesFromLocal = Array.from(new Set(offline.map(t => t.category).filter(Boolean)));
-                const statsFromLocal = {
-                    total: offline.length,
-                    todo: offline.filter(t => t.status === 'todo').length,
-                    inProgress: offline.filter(t => t.status === 'in-progress').length,
-                    completed: offline.filter(t => t.status === 'completed').length,
-                };
-                setTasks(offline);
-                setCategories(categoriesFromLocal);
-                setStats(statsFromLocal);
-                setOfflineMode(true);
-                setErrorMessage(`Server error (HTTP ${response.status}). Showing local tasks on this device.`);
+            const results = await Promise.allSettled(loadPromises);
+            const userResult = results[0]?.status === 'fulfilled' ? results[0].value : { type: 'user', tasks: cachedUserTasks, categories: [], stats: null };
+            const projectResult = results[1]?.status === 'fulfilled' ? results[1].value : { type: 'project', tasks: cachedProjectTasks };
+
+            // Combine user tasks and project tasks
+            const allUserTasks = userResult.tasks || [];
+            const allProjectTasks = projectResult.tasks || [];
+            
+            // Mark tasks with type for identification
+            const combinedTasks = [
+                ...allProjectTasks.map(t => ({ ...t, type: 'project' })),
+                ...allUserTasks.map(t => ({ ...t, type: 'user' }))
+            ];
+
+            // Combine categories (from user tasks)
+            const categories = userResult.categories || [];
+            
+            // Combine stats (only user tasks have stats, but count project tasks in total)
+            const userStats = userResult.stats || { total: 0, todo: 0, inProgress: 0, completed: 0 };
+            const projectTaskCounts = allProjectTasks.reduce((acc, task) => {
+                acc.total++;
+                const status = (task.status || 'todo').toLowerCase();
+                if (status === 'todo' || status === 'pending') acc.todo++;
+                else if (status === 'in-progress' || status === 'inprogress') acc.inProgress++;
+                else if (status === 'completed' || status === 'done') acc.completed++;
+                return acc;
+            }, { total: 0, todo: 0, inProgress: 0, completed: 0 });
+            
+            const combinedStats = {
+                total: userStats.total + projectTaskCounts.total,
+                todo: userStats.todo + projectTaskCounts.todo,
+                inProgress: userStats.inProgress + projectTaskCounts.inProgress,
+                completed: userStats.completed + projectTaskCounts.completed
+            };
+
+            // Save user tasks to localStorage
+            if (allUserTasks.length > 0) {
+                writeOfflineTasks(allUserTasks);
             }
+
+            setTasks(combinedTasks);
+            setCategories(categories);
+            setStats(combinedStats);
         } catch (error) {
             console.error('Error loading tasks:', error);
             // Fallback to offline/local storage
-            const offline = readOfflineTasks();
-            const categoriesFromLocal = Array.from(new Set(offline.map(t => t.category).filter(Boolean)));
-            const statsFromLocal = {
-                total: offline.length,
-                todo: offline.filter(t => t.status === 'todo').length,
-                inProgress: offline.filter(t => t.status === 'in-progress').length,
-                completed: offline.filter(t => t.status === 'completed').length,
+            const offlineUser = readOfflineTasks();
+            const offlineProject = readOfflineProjectTasks();
+            const combinedOffline = [
+                ...offlineProject.map(t => ({ ...t, type: 'project' })),
+                ...offlineUser.map(t => ({ ...t, type: 'user' }))
+            ];
+            const categoriesFromLocal = Array.from(new Set(offlineUser.map(t => t.category).filter(Boolean)));
+            const userStatsFromLocal = {
+                total: offlineUser.length,
+                todo: offlineUser.filter(t => t.status === 'todo').length,
+                inProgress: offlineUser.filter(t => t.status === 'in-progress').length,
+                completed: offlineUser.filter(t => t.status === 'completed').length,
             };
-            setTasks(offline);
+            const projectStatsFromLocal = {
+                total: offlineProject.length,
+                todo: offlineProject.filter(t => (t.status || 'todo') === 'todo').length,
+                inProgress: offlineProject.filter(t => (t.status || '').toLowerCase() === 'in-progress').length,
+                completed: offlineProject.filter(t => ['completed', 'done'].includes((t.status || '').toLowerCase())).length,
+            };
+            const combinedStatsFromLocal = {
+                total: userStatsFromLocal.total + projectStatsFromLocal.total,
+                todo: userStatsFromLocal.todo + projectStatsFromLocal.todo,
+                inProgress: userStatsFromLocal.inProgress + projectStatsFromLocal.inProgress,
+                completed: userStatsFromLocal.completed + projectStatsFromLocal.completed
+            };
+            setTasks(combinedOffline);
             setCategories(categoriesFromLocal);
-            setStats(statsFromLocal);
+            setStats(combinedStatsFromLocal);
             setOfflineMode(true);
             setErrorMessage(error?.message || 'Unexpected error while loading tasks. Showing local tasks.');
         } finally {
@@ -292,11 +392,12 @@ const TaskManagement = () => {
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            filtered = filtered.filter(task =>
-                task.title.toLowerCase().includes(query) ||
-                task.description.toLowerCase().includes(query) ||
-                task.category.toLowerCase().includes(query)
-            );
+            filtered = filtered.filter(task => {
+                const title = (task.title || task.name || '').toLowerCase();
+                const description = (task.description || '').toLowerCase();
+                const category = (task.category || '').toLowerCase();
+                return title.includes(query) || description.includes(query) || category.includes(query);
+            });
         }
 
         return filtered;
@@ -402,11 +503,51 @@ const TaskManagement = () => {
     };
 
     const handleEditTask = (task) => {
+        // For project tasks, navigate to the project page instead of opening edit modal
+        if (task.type === 'project' && task.projectId && window.RouteState) {
+            const taskId = task.id || task.taskId;
+            if (taskId) {
+                // Dispatch openTask event
+                window.dispatchEvent(new CustomEvent('openTask', {
+                    detail: { 
+                        taskId: taskId,
+                        tab: 'details'
+                    }
+                }));
+                
+                // Navigate to the project page with task parameter
+                window.RouteState.navigate({
+                    page: 'projects',
+                    segments: [task.projectId],
+                    search: `?task=${encodeURIComponent(taskId)}`,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+                return;
+            } else if (task.projectId) {
+                // Fallback: just navigate to project if no task ID
+                window.RouteState.navigate({
+                    page: 'projects',
+                    segments: [task.projectId]
+                });
+                return;
+            }
+        }
+        // For user tasks, open the edit modal
         setSelectedTask(task);
         setShowTaskModal(true);
     };
 
     const handleDeleteTask = async (taskId) => {
+        // Find the task to check if it's a project task
+        const task = tasks.find(t => String(t.id) === String(taskId));
+        
+        // Project tasks cannot be deleted from My Tasks page - they must be managed from the project page
+        if (task && task.type === 'project') {
+            alert('Project tasks cannot be deleted from My Tasks. Please manage them from the project page.');
+            return;
+        }
+        
         if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) return;
 
         try {
@@ -422,18 +563,20 @@ const TaskManagement = () => {
                 loadTasks();
                 // Show success feedback (could be enhanced with a toast notification)
             } else {
-                // Fallback to offline: remove locally
+                // Fallback to offline: remove locally (only user tasks)
                 const offline = readOfflineTasks().filter(t => String(t.id) !== String(taskId));
                 writeOfflineTasks(offline);
-                setTasks(offline);
+                // Also remove from current tasks state (filter out user tasks only)
+                setTasks(prevTasks => prevTasks.filter(t => !(String(t.id) === String(taskId) && t.type === 'user')));
                 setOfflineMode(true);
                 console.warn('Delete failed on server, removed locally instead');
             }
         } catch (error) {
-            // Fallback to offline: remove locally
+            // Fallback to offline: remove locally (only user tasks)
             const offline = readOfflineTasks().filter(t => String(t.id) !== String(taskId));
             writeOfflineTasks(offline);
-            setTasks(offline);
+            // Also remove from current tasks state (filter out user tasks only)
+            setTasks(prevTasks => prevTasks.filter(t => !(String(t.id) === String(taskId) && t.type === 'user')));
             setOfflineMode(true);
             console.warn('Delete failed due to error, removed locally instead:', error?.message);
         }

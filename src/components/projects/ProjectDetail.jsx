@@ -437,6 +437,151 @@ function initializeProjectDetail() {
         });
     })();
     
+    // Extract MonthlyFMSReviewProcessSection outside ProjectDetail to prevent recreation on every render
+    const MonthlyFMSReviewProcessSection = (() => {
+        const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
+        
+        const MonthlyFMSReviewProcessSectionInner = ({
+            project,
+            hasMonthlyFMSReviewProcess,
+            activeSection,
+            onBack
+        }) => {
+            
+            // Track component lifecycle
+            useEffectSection(() => {
+                return () => {
+                };
+            }, []);
+
+            const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
+            // Always check window directly, not from closure (component persists in window even after unmount)
+            const { useCallback: useCallbackSection } = window.React;
+            
+            const [trackerReady, setTrackerReady] = useStateSection(() => {
+                return !!(window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function');
+            });
+            const [loadAttempts, setLoadAttempts] = useStateSection(0);
+            const maxAttempts = 50; // 5 seconds (50 * 100ms)
+
+            // Continuous check for component availability (updates state when component becomes available)
+            // This runs on every mount/remount to immediately recognize if component is already loaded
+            useEffectSection(() => {
+                if (trackerReady) return;
+
+                const checkComponent = () => {
+                    if (window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function') {
+                        setTrackerReady(true);
+                        return true;
+                    }
+                    return false;
+                };
+
+                if (checkComponent()) return;
+
+                const handleViteReady = () => {
+                    if (checkComponent()) {
+                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                    }
+                };
+                window.addEventListener('viteProjectsReady', handleViteReady);
+
+                const interval = setInterval(() => {
+                    setLoadAttempts(prev => {
+                        const newAttempts = prev + 1;
+                        if (newAttempts >= maxAttempts) {
+                            clearInterval(interval);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                            console.warn('⚠️ MonthlyFMSReviewTracker failed to load after', maxAttempts, 'attempts');
+                            return newAttempts;
+                        }
+                        if (checkComponent()) {
+                            clearInterval(interval);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                        }
+                        return newAttempts;
+                    });
+                }, 100);
+
+                return () => {
+                    clearInterval(interval);
+                    window.removeEventListener('viteProjectsReady', handleViteReady);
+                };
+            }, [trackerReady]);
+
+            if (!trackerReady || !window.MonthlyFMSReviewTracker) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            {loadAttempts < maxAttempts 
+                                ? `The Monthly FMS Review Tracker is loading... (${loadAttempts * 100}ms)`
+                                : 'The component failed to load. Please try reloading the page.'}
+                        </p>
+                        {loadAttempts >= maxAttempts && (
+                            <div className="flex gap-2 justify-center">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                                >
+                                    <i className="fas fa-sync-alt mr-2"></i>
+                                    Reload Page
+                                </button>
+                                <button
+                                    onClick={handleBackToOverview}
+                                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                                >
+                                    <i className="fas fa-arrow-left mr-2"></i>
+                                    Back to Overview
+                                </button>
+                            </div>
+                        )}
+                        <div className="mt-4 text-xs text-gray-500">
+                            <p>Debug Info: window.MonthlyFMSReviewTracker = {String(typeof window.MonthlyFMSReviewTracker)}</p>
+                            <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Only render MonthlyFMSReviewTracker when activeSection is monthlyFMSReview
+            if (activeSection !== 'monthlyFMSReview') {
+                return null;
+            }
+            
+            // Always get latest version from window (vite-projects may have overridden dist version)
+            const LatestTracker = window.MonthlyFMSReviewTracker;
+            if (!LatestTracker) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600">The Monthly FMS Review Tracker is loading...</p>
+                    </div>
+                );
+            }
+            
+            return (
+                <LatestTracker
+                    key={`tracker-${project?.id || 'default'}`}
+                    project={project}
+                    onBack={handleBackToOverview}
+                />
+            );
+        };
+
+        return memo(MonthlyFMSReviewProcessSectionInner, (prevProps, nextProps) => {
+            const projectIdEqual = prevProps.project?.id === nextProps.project?.id;
+            const hasMonthlyFMSReviewEqual = prevProps.hasMonthlyFMSReviewProcess === nextProps.hasMonthlyFMSReviewProcess;
+            const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
+            const onBackEqual = prevProps.onBack === nextProps.onBack;
+            
+            const propsEqual = projectIdEqual && hasMonthlyFMSReviewEqual && activeSectionEqual && onBackEqual;
+            return propsEqual;
+        });
+    })();
+
     // Extract WeeklyFMSReviewProcessSection outside ProjectDetail to prevent recreation on every render
     const WeeklyFMSReviewProcessSection = (() => {
         const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
@@ -1684,6 +1829,48 @@ function initializeProjectDetail() {
         hasWeeklyFMSReviewProcessChangedRef.current = false;
     }, [project.id]); // Re-sync whenever we switch to a different project
 
+    // Track if monthly FMS review process exists
+    // Normalize the value from project prop (handle boolean, string, number, undefined)
+    const normalizeHasMonthlyFMSReviewProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    
+    const [hasMonthlyFMSReviewProcess, setHasMonthlyFMSReviewProcess] = useState(() => {
+        const normalized = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
+        return normalized;
+    });
+    
+    // Sync hasMonthlyFMSReviewProcess when project prop changes (e.g., after reloading from database)
+    // But only if it hasn't been explicitly changed by the user recently
+    const hasMonthlyFMSReviewProcessChangedRef = useRef(false);
+    
+    useEffect(() => {
+        const normalizedValue = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
+        
+        // Sync when value changes from prop (e.g., after database refresh)
+        // Only skip sync if ref is set AND we're not switching projects
+        // This ensures that when navigating back, we always sync from the database
+        if (normalizedValue !== hasMonthlyFMSReviewProcess) {
+            // Always sync - the ref is reset when project.id changes anyway
+            setHasMonthlyFMSReviewProcess(normalizedValue);
+            // Reset the ref after syncing from prop to allow future syncs
+            hasMonthlyFMSReviewProcessChangedRef.current = false;
+        }
+    }, [project.hasMonthlyFMSReviewProcess, project.id, hasMonthlyFMSReviewProcess]);
+    
+    // Also sync on mount to ensure we have the latest value
+    useEffect(() => {
+        const normalizedValue = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
+        // Only set if different to avoid unnecessary updates
+        if (normalizedValue !== hasMonthlyFMSReviewProcess) {
+            setHasMonthlyFMSReviewProcess(normalizedValue);
+        }
+        // Reset the changed ref when project changes to allow sync from database
+        hasMonthlyFMSReviewProcessChangedRef.current = false;
+    }, [project.id]); // Re-sync whenever we switch to a different project
+
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
     // is active so the MonthlyDocumentCollectionTracker can show the target comment.
@@ -2349,10 +2536,13 @@ function initializeProjectDetail() {
         nextDocuments,
         nextHasDocumentCollectionProcess,
         nextHasWeeklyFMSReviewProcess,
+        nextHasMonthlyFMSReviewProcess,
         excludeHasDocumentCollectionProcess = false,
         excludeHasWeeklyFMSReviewProcess = false,
+        excludeHasMonthlyFMSReviewProcess = false,
         excludeDocumentSections = true,  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
-        excludeWeeklyFMSReviewSections = true  // Default to true: don't overwrite weeklyFMSReviewSections managed by WeeklyFMSReviewTracker
+        excludeWeeklyFMSReviewSections = true,  // Default to true: don't overwrite weeklyFMSReviewSections managed by WeeklyFMSReviewTracker
+        excludeMonthlyFMSReviewSections = true  // Default to true: don't overwrite monthlyFMSReviewSections managed by MonthlyFMSReviewTracker
     } = {}) => {
         // Use provided values or fall back to current state from ref (avoids TDZ issues)
         const tasksToSave = nextTasks !== undefined ? nextTasks : tasksRef.current;
@@ -2361,6 +2551,7 @@ function initializeProjectDetail() {
         const documentsToSave = nextDocuments !== undefined ? nextDocuments : documents;
         const hasDocumentCollectionProcessToSave = nextHasDocumentCollectionProcess !== undefined ? nextHasDocumentCollectionProcess : hasDocumentCollectionProcess;
         const hasWeeklyFMSReviewProcessToSave = nextHasWeeklyFMSReviewProcess !== undefined ? nextHasWeeklyFMSReviewProcess : hasWeeklyFMSReviewProcess;
+        const hasMonthlyFMSReviewProcessToSave = nextHasMonthlyFMSReviewProcess !== undefined ? nextHasMonthlyFMSReviewProcess : hasMonthlyFMSReviewProcess;
         
         try {
             // tasksList JSON writes removed - tasks are now stored in Task table
@@ -2391,6 +2582,11 @@ function initializeProjectDetail() {
             // Only include hasWeeklyFMSReviewProcess if not excluded
             if (!excludeHasWeeklyFMSReviewProcess) {
                 updatePayload.hasWeeklyFMSReviewProcess = hasWeeklyFMSReviewProcessToSave;
+            }
+            
+            // Only include hasMonthlyFMSReviewProcess if not excluded
+            if (!excludeHasMonthlyFMSReviewProcess) {
+                updatePayload.hasMonthlyFMSReviewProcess = hasMonthlyFMSReviewProcessToSave;
             }
             
             
@@ -2441,6 +2637,7 @@ function initializeProjectDetail() {
                             documents: documentsToSave, 
                             hasDocumentCollectionProcess: hasDocumentCollectionProcessToSave,
                             hasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcessToSave,
+                            hasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcessToSave,
                             documentSections: normalizedSections
                         };
                     });
@@ -2583,6 +2780,63 @@ function initializeProjectDetail() {
             }
         };
     }, [tasks, taskLists, customFieldDefinitions, documents, hasWeeklyFMSReviewProcess, project.hasWeeklyFMSReviewProcess, persistProjectData, project]);
+
+    // Save hasMonthlyFMSReviewProcess back to project whenever it changes
+    useEffect(() => {
+        // Skip save if this was triggered by manual monthly FMS review process addition
+        // This prevents the debounced save from overwriting an explicit save
+        if (skipNextSaveRef.current) {
+            // Don't reset skipNextSaveRef here - it will be reset by the explicit save handler
+            return;
+        }
+        
+        // Normalize project prop value for comparison
+        const projectHasProcess = project.hasMonthlyFMSReviewProcess === true || 
+                                  project.hasMonthlyFMSReviewProcess === 'true' ||
+                                  project.hasMonthlyFMSReviewProcess === 1 ||
+                                  (typeof project.hasMonthlyFMSReviewProcess === 'string' && project.hasMonthlyFMSReviewProcess.toLowerCase() === 'true');
+        
+        // Only include hasMonthlyFMSReviewProcess in save if:
+        // 1. It was explicitly changed by the user (tracked by ref), OR
+        // 2. It differs from the project prop (meaning user changed it)
+        // Otherwise, exclude it from the save to prevent overwriting the database value
+        const shouldIncludeHasProcess = hasMonthlyFMSReviewProcessChangedRef.current || 
+                                       (hasMonthlyFMSReviewProcess !== projectHasProcess);
+        
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        
+        saveTimeoutRef.current = setTimeout(() => {
+            // Double-check that hasMonthlyFMSReviewProcess wasn't explicitly changed
+            // This prevents race conditions where the flag might have been reset
+            if (shouldIncludeHasProcess && hasMonthlyFMSReviewProcessChangedRef.current) {
+                // Include hasMonthlyFMSReviewProcess in save
+                persistProjectData({
+                    nextHasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcess
+                }).catch(() => {});
+                // Reset the flag after saving
+                hasMonthlyFMSReviewProcessChangedRef.current = false;
+            } else if (!shouldIncludeHasProcess) {
+                // Exclude hasMonthlyFMSReviewProcess from save to prevent overwriting database value
+                persistProjectData({
+                    excludeHasMonthlyFMSReviewProcess: true
+                }).catch(() => {});
+            } else {
+                // Flag was reset but we thought we should include it - skip to be safe
+                persistProjectData({
+                    excludeHasMonthlyFMSReviewProcess: true
+                }).catch(() => {});
+            }
+        }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
+        
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        };
+    }, [tasks, taskLists, customFieldDefinitions, documents, hasMonthlyFMSReviewProcess, project.hasMonthlyFMSReviewProcess, persistProjectData, project]);
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
@@ -4825,6 +5079,104 @@ function initializeProjectDetail() {
         setShowDocumentProcessDropdown(false);
     };
     
+    const handleAddMonthlyFMSReviewProcess = async () => {
+        console.log('🟢 ProjectDetail: Adding Monthly FMS Review process', {
+            projectId: project.id,
+            currentHasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcess
+        });
+        
+        try {
+            // Cancel any pending debounced saves to prevent overwriting
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            
+            // Set flag to skip the useEffect save to prevent duplicates
+            skipNextSaveRef.current = true;
+            // Mark that hasMonthlyFMSReviewProcess was explicitly changed
+            hasMonthlyFMSReviewProcessChangedRef.current = true;
+            
+            // Update state first
+            setHasMonthlyFMSReviewProcess(true);
+            switchSection('monthlyFMSReview');
+            setShowDocumentProcessDropdown(false);
+            
+            // Immediately save to database to ensure persistence
+            // Ensure monthlyFMSReviewSections is properly serialized
+            const sectionsToSave = '[]';
+            
+            const updatePayload = {
+                hasMonthlyFMSReviewProcess: true,
+                monthlyFMSReviewSections: sectionsToSave
+            };
+            
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            
+            // Reload project from database to ensure state is in sync
+            // Also clear any cache to ensure we get fresh data
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
+                try {
+                    // Clear cache for this project to ensure we get fresh data
+                    if (window.DatabaseAPI._responseCache) {
+                        const cacheKeysToDelete = [];
+                        window.DatabaseAPI._responseCache.forEach((value, key) => {
+                            if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                                cacheKeysToDelete.push(key);
+                            }
+                        });
+                        cacheKeysToDelete.forEach(key => {
+                            window.DatabaseAPI._responseCache.delete(key);
+                        });
+                    }
+                    
+                    // Also clear projects list cache to ensure fresh data
+                    if (window.DatabaseAPI._responseCache) {
+                        const projectsListCacheKeys = [];
+                        window.DatabaseAPI._responseCache.forEach((value, key) => {
+                            if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
+                                projectsListCacheKeys.push(key);
+                            }
+                        });
+                        projectsListCacheKeys.forEach(key => {
+                            window.DatabaseAPI._responseCache.delete(key);
+                        });
+                    }
+                    
+                    // Only reload and update if we're not in monthly FMS review view
+                    // (monthly FMS review manages its own state and updates)
+                    const isMonthlyFMSReviewView = activeSection === 'monthlyFMSReview';
+                    
+                    if (!isMonthlyFMSReviewView) {
+                        const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                        const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                        if (updatedProject) {
+                            // Update the project prop by triggering a re-render with updated data
+                            // This ensures the component has the latest data from the database
+                            
+                            // Try to update parent component's viewingProject state if possible
+                            // This ensures the prop is updated immediately
+                            // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
+                            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                                window.updateViewingProject(updatedProject);
+                            }
+                        }
+                    }
+                } catch (reloadError) {
+                    console.warn('⚠️ Failed to reload project after adding monthly FMS review process:', reloadError);
+                }
+            }
+            
+            console.log('✅ Monthly FMS Review process added successfully');
+        } catch (error) {
+            console.error('❌ Error adding Monthly FMS Review process:', error);
+            alert('Failed to add Monthly FMS Review process: ' + error.message);
+            // Revert state on error
+            setHasMonthlyFMSReviewProcess(false);
+            hasMonthlyFMSReviewProcessChangedRef.current = false;
+        }
+    };
+
     const handleAddWeeklyFMSReviewProcess = async () => {
         console.log('🟢 ProjectDetail: Adding Weekly FMS Review process', {
             projectId: project.id,
@@ -5653,6 +6005,19 @@ function initializeProjectDetail() {
                             Weekly FMS Review
                         </button>
                     )}
+                    {hasMonthlyFMSReviewProcess && (
+                        <button
+                            onClick={() => switchSection('monthlyFMSReview')}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'monthlyFMSReview'
+                                    ? 'bg-primary-600 text-white'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-calendar-alt mr-1.5"></i>
+                            Monthly FMS Review
+                        </button>
+                    )}
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -5705,6 +6070,18 @@ function initializeProjectDetail() {
                                             <div>
                                                 <div className="font-medium">Weekly FMS Review</div>
                                                 <div className="text-[10px] text-gray-500">Weekly FMS review per month</div>
+                                            </div>
+                                        </button>
+                                    )}
+                                    {!hasMonthlyFMSReviewProcess && (
+                                        <button
+                                            onClick={handleAddMonthlyFMSReviewProcess}
+                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-calendar-alt text-primary-600 w-4"></i>
+                                            <div>
+                                                <div className="font-medium">Monthly FMS Review</div>
+                                                <div className="text-[10px] text-gray-500">Monthly FMS review checklist</div>
                                             </div>
                                         </button>
                                     )}
@@ -5862,6 +6239,17 @@ function initializeProjectDetail() {
                     key={`weekly-fms-review-${project?.id || 'default'}`}
                     project={project}
                     hasWeeklyFMSReviewProcess={hasWeeklyFMSReviewProcess}
+                    activeSection={activeSection}
+                    onBack={handleBackToOverview}
+                />
+            )}
+            
+            {/* Always render MonthlyFMSReviewProcessSection when hasMonthlyFMSReviewProcess is true */}
+            {hasMonthlyFMSReviewProcess && (
+                <MonthlyFMSReviewProcessSection
+                    key={`monthly-fms-review-${project?.id || 'default'}`}
+                    project={project}
+                    hasMonthlyFMSReviewProcess={hasMonthlyFMSReviewProcess}
                     activeSection={activeSection}
                     onBack={handleBackToOverview}
                 />

@@ -407,6 +407,8 @@ model Project {
   documentSections             String                   @default("[]") // Legacy - deprecated, use DocumentSection table
   weeklyFMSReviewSections      String                   @default("[]") // Legacy - deprecated, use WeeklyFMSReviewSection table
   hasWeeklyFMSReviewProcess    Boolean                  @default(false)
+  monthlyFMSReviewSections     String                   @default("[]") // Legacy - deprecated, use MonthlyFMSReviewSection table
+  hasMonthlyFMSReviewProcess   Boolean                  @default(false)
   ownerId                      String?
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt
