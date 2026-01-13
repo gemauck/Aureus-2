@@ -80,7 +80,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1768309325110'; // Updated by build process
+        window.BUILD_VERSION = '1768335845193'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
@@ -1062,8 +1062,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1768309325110" as="script">
-    <script defer src="/dist/core-bundle.js?v=1768309325110"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1768335845193" as="script">
+    <script defer src="/dist/core-bundle.js?v=1768335845193"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1169,29 +1169,33 @@
                 typeof window.React.useRef === 'function') {
                 
                 // Check if already loaded from main source (lazy-load-components.js)
-                // The Vite module should only be a fallback if MonthlyDocumentCollectionTracker or WeeklyFMSReviewTracker aren't available
+                // The Vite module should only be a fallback if MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, or MonthlyFMSReviewTracker aren't available
                 const hasMonthlyTracker = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
                 const hasWeeklyTracker = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
+                const hasMonthlyFMSReviewTracker = window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function';
                 
-                if (hasMonthlyTracker && hasWeeklyTracker) {
-                    console.log('✅ MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker already available from main source, skipping Vite module load');
+                if (hasMonthlyTracker && hasWeeklyTracker && hasMonthlyFMSReviewTracker) {
+                    console.log('✅ MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, and MonthlyFMSReviewTracker already available from main source, skipping Vite module load');
                     // Dispatch event even if already loaded (for components that missed it)
                     if (typeof window.dispatchEvent === 'function') {
                         window.dispatchEvent(new CustomEvent('viteProjectsReady', {
                             detail: { 
                                 MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
-                                WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
+                                WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker,
+                                MonthlyFMSReviewTracker: window.MonthlyFMSReviewTracker
                             }
                         }));
                     }
                     return;
                 }
                 
-                // If only one is missing, still load vite-projects module
+                // If any are missing, still load vite-projects module
                 if (hasMonthlyTracker && !hasWeeklyTracker) {
                     console.log('⚠️ MonthlyDocumentCollectionTracker available but WeeklyFMSReviewTracker missing, loading Vite module...');
                 } else if (!hasMonthlyTracker && hasWeeklyTracker) {
                     console.log('⚠️ WeeklyFMSReviewTracker available but MonthlyDocumentCollectionTracker missing, loading Vite module...');
+                } else if (!hasMonthlyFMSReviewTracker) {
+                    console.log('⚠️ MonthlyFMSReviewTracker missing, loading Vite module...');
                 }
                 
                 // Check if script already exists - remove old ones with timestamp cache busting
@@ -1216,26 +1220,30 @@
                     // Only use existing script if it has the correct version
                     if (src.includes(VITE_PROJECTS_VERSION)) {
                         console.log('✅ Vite Projects module script already added with correct version, waiting for load...');
-                        // Listen for both components to become available
+                        // Listen for all components to become available
                         const checkExisting = setInterval(() => {
                             const hasMonthly = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
                             const hasWeekly = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
-                            if (hasMonthly && hasWeekly) {
-                                console.log('✅ MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker became available from existing script');
+                            const hasMonthlyFMS = window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function';
+                            if (hasMonthly && hasWeekly && hasMonthlyFMS) {
+                                console.log('✅ MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, and MonthlyFMSReviewTracker became available from existing script');
                                 clearInterval(checkExisting);
                                 // Dispatch event
                                 if (typeof window.dispatchEvent === 'function') {
                                     window.dispatchEvent(new CustomEvent('viteProjectsReady', {
                                         detail: { 
                                             MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
-                                            WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
+                                            WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker,
+                                            MonthlyFMSReviewTracker: window.MonthlyFMSReviewTracker
                                         }
                                     }));
                                 }
+                            } else if (hasMonthly && hasWeekly) {
+                                console.log('⏳ MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker available, waiting for MonthlyFMSReviewTracker...');
                             } else if (hasMonthly) {
-                                console.log('⏳ MonthlyDocumentCollectionTracker available, waiting for WeeklyFMSReviewTracker...');
+                                console.log('⏳ MonthlyDocumentCollectionTracker available, waiting for WeeklyFMSReviewTracker and MonthlyFMSReviewTracker...');
                             } else if (hasWeekly) {
-                                console.log('⏳ WeeklyFMSReviewTracker available, waiting for MonthlyDocumentCollectionTracker...');
+                                console.log('⏳ WeeklyFMSReviewTracker available, waiting for MonthlyDocumentCollectionTracker and MonthlyFMSReviewTracker...');
                             }
                         }, 100);
                         setTimeout(() => {
@@ -1245,6 +1253,7 @@
                                 const detail = {};
                                 if (window.MonthlyDocumentCollectionTracker) detail.MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
                                 if (window.WeeklyFMSReviewTracker) detail.WeeklyFMSReviewTracker = window.WeeklyFMSReviewTracker;
+                                if (window.MonthlyFMSReviewTracker) detail.MonthlyFMSReviewTracker = window.MonthlyFMSReviewTracker;
                                 if (Object.keys(detail).length > 0) {
                                     window.dispatchEvent(new CustomEvent('viteProjectsReady', { detail }));
                                 }
@@ -1393,8 +1402,13 @@
         window.addEventListener('babelready', () => {
             const hasMonthly = window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function';
             const hasWeekly = window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function';
-            if (!hasMonthly || !hasWeekly) {
-                console.log('🔄 babelready event received, checking Vite module... (missing:', !hasMonthly ? 'MonthlyDocumentCollectionTracker' : '', !hasWeekly ? 'WeeklyFMSReviewTracker' : '', ')');
+            const hasMonthlyFMS = window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function';
+            if (!hasMonthly || !hasWeekly || !hasMonthlyFMS) {
+                const missing = [];
+                if (!hasMonthly) missing.push('MonthlyDocumentCollectionTracker');
+                if (!hasWeekly) missing.push('WeeklyFMSReviewTracker');
+                if (!hasMonthlyFMS) missing.push('MonthlyFMSReviewTracker');
+                console.log('🔄 babelready event received, checking Vite module... (missing:', missing.join(', '), ')');
                 loadViteProjectsModule();
             }
         });

@@ -4,6 +4,7 @@ import ProjectDetail from './components/ProjectDetail';
 import ProjectModal from './components/ProjectModal';
 import MonthlyDocumentCollectionTracker from './components/MonthlyDocumentCollectionTracker';
 import WeeklyFMSReviewTracker from './components/WeeklyFMSReviewTracker';
+import MonthlyFMSReviewTracker from './components/MonthlyFMSReviewTracker';
 // Import API service to ensure it's included in the build and registers on window
 import './services/documentCollectionAPI.js';
 
@@ -20,10 +21,10 @@ const ProjectsModule = () => {
 };
 
 // Export components for use in other modules
-export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker };
+export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, MonthlyFMSReviewTracker };
 
 // Also expose to window for backwards compatibility
-// NOTE: Only MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker should be exposed here
+// NOTE: MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, and MonthlyFMSReviewTracker should be exposed here
 // The old Projects, ProjectDetail, and ProjectModal should NOT be exposed
 // as they conflict with newer versions in src/components/projects/
 if (typeof window !== 'undefined') {
@@ -36,6 +37,10 @@ if (typeof window !== 'undefined') {
   // Expose WeeklyFMSReviewTracker - ALWAYS override to ensure latest version
   window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
   console.log('✅ ProjectsModule: WeeklyFMSReviewTracker exposed to window (overriding any existing version)');
+  
+  // Expose MonthlyFMSReviewTracker - ALWAYS override to ensure latest version
+  window.MonthlyFMSReviewTracker = MonthlyFMSReviewTracker;
+  console.log('✅ ProjectsModule: MonthlyFMSReviewTracker exposed to window (overriding any existing version)');
   
   // DO NOT expose old Projects components - they will conflict with newer versions
   // These are commented out to prevent the old version from loading
