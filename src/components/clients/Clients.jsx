@@ -4098,6 +4098,7 @@ const Clients = React.memo(() => {
                                         l.id === parsedLead.id ? parsedLead : l
                                     );
                                     setLeads(refreshedLeads);
+                                    // CRITICAL: Update ref AFTER setLeads to ensure component uses fresh data
                                     selectedLeadRef.current = parsedLead;
                                     
                                     // Update localStorage with fresh data
@@ -4105,12 +4106,17 @@ const Clients = React.memo(() => {
                                         window.storage.setLeads(refreshedLeads);
                                     }
                                     
+                                    // CRITICAL: Force React to recognize the update by updating the leads array reference
+                                    // This ensures the modal receives the updated client prop with fresh comments
+                                    // The selectedLead computation will use the refreshed leads array
+                                    // (selectedLeadRef.current is updated, but setLeads triggers re-render which recomputes selectedLead)
+                                    
                                     }
                                 }
                             } catch (refreshError) {
                                 // Not critical - data was already saved
                             }
-                        }, 500); // Wait 500ms for database commit
+                        }, 3500); // Wait 3500ms for database commit and modal's isAutoSavingRef to clear (3s + buffer)
                         
                     } catch (apiError) {
                         // If API fails, still update local state but show warning
