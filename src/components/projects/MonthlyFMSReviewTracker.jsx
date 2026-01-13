@@ -336,6 +336,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -424,6 +425,26 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             loadData();
         }
     }, [project?.id, selectedYear, loadData]);
+    
+    // Load users for reviewer assignment
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                if (window.DatabaseAPI?.getUsers) {
+                    const usersResponse = await window.DatabaseAPI.getUsers();
+                    const allUsers =
+                        usersResponse?.data?.users ||
+                        usersResponse?.data?.data?.users ||
+                        usersResponse?.users ||
+                        [];
+                    setUsers(allUsers);
+                }
+            } catch (error) {
+                console.error('❌ Error loading users:', error);
+            }
+        };
+        loadUsers();
+    }, []);
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -752,6 +773,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             id: Date.now() + Math.random(),
             name: section.name,
             description: section.description || '',
+            reviewer: section.reviewer || '',
             documents: Array.isArray(section.documents) ? section.documents.map(doc => ({
                 id: Date.now() + Math.random(),
                 name: doc.name,
@@ -922,21 +944,72 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     };
     
     const handleSaveSection = (sectionData) => {
+        // Use current state from ref to ensure we have the latest
+        const currentState = sectionsRef.current || {};
+        const currentSections = currentState[selectedYear] || [];
+        
         if (editingSection) {
-            setSections(prev => prev.map(s => 
-                s.id === editingSection.id ? { ...s, ...sectionData } : s
-            ));
+            const updated = currentSections.map(s => 
+                String(s.id) === String(editingSection.id) ? { ...s, ...sectionData } : s
+            );
+            const updatedSectionsByYear = {
+                ...currentState,
+                [selectedYear]: updated
+            };
+            sectionsRef.current = updatedSectionsByYear;
+            setSectionsByYear(updatedSectionsByYear);
         } else {
             const newSection = {
-                id: Date.now(),
+                id: Date.now() + Math.random(),
                 ...sectionData,
-                documents: []
+                documents: [],
+                reviewer: sectionData.reviewer || ''
             };
-            setSections(prev => [...prev, newSection]);
+            const updated = [...currentSections, newSection];
+            const updatedSectionsByYear = {
+                ...currentState,
+                [selectedYear]: updated
+            };
+            sectionsRef.current = updatedSectionsByYear;
+            setSectionsByYear(updatedSectionsByYear);
         }
         
         setShowSectionModal(false);
         setEditingSection(null);
+    };
+    
+    // Handler to update reviewer for a section
+    const handleUpdateReviewer = (sectionId, reviewerId) => {
+        const currentState = sectionsRef.current || {};
+        const currentSections = currentState[selectedYear] || [];
+        
+        const updated = currentSections.map(section => {
+            if (String(section.id) === String(sectionId)) {
+                return {
+                    ...section,
+                    reviewer: reviewerId || ''
+                };
+            }
+            return section;
+        });
+        
+        const updatedSectionsByYear = {
+            ...currentState,
+            [selectedYear]: updated
+        };
+        
+        // Update ref immediately
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Update state (triggers auto-save)
+        setSectionsByYear(updatedSectionsByYear);
+        
+        // Force immediate save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase();
     };
     
     // Actual deletion logic extracted to separate function
@@ -2215,8 +2288,17 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const SectionModal = () => {
         const [formData, setFormData] = useState({
             name: editingSection?.name || '',
-            description: editingSection?.description || ''
+            description: editingSection?.description || '',
+            reviewer: editingSection?.reviewer || ''
         });
+        
+        useEffect(() => {
+            setFormData({
+                name: editingSection?.name || '',
+                description: editingSection?.description || '',
+                reviewer: editingSection?.reviewer || ''
+            });
+        }, [editingSection]);
         
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -2261,6 +2343,22 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                 rows="2"
                                 placeholder="Brief description..."
                             ></textarea>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Reviewer (Optional)</label>
+                            <select
+                                value={formData.reviewer || ''}
+                                onChange={(e) => setFormData({...formData, reviewer: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                            >
+                                <option value="">-- Select Reviewer --</option>
+                                {users.map(user => (
+                                    <option key={user.id} value={user.id}>
+                                        {user.name || user.email}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
@@ -3094,9 +3192,9 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         >
                             {/* Section header */}
                             <div className="px-3 py-2 bg-gray-100 flex items-center justify-between cursor-grab active:cursor-grabbing">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-1">
                                     <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="font-semibold text-sm text-gray-900">{section.name}</div>
                                         {section.description && (
                                             <div className="text-[10px] text-gray-500">{section.description}</div>
@@ -3104,6 +3202,23 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
+                                        <label className="text-[10px] font-medium text-gray-600">Reviewer:</label>
+                                        <select
+                                            value={section.reviewer || ''}
+                                            onChange={(e) => handleUpdateReviewer(section.id, e.target.value)}
+                                            className="px-2 py-0.5 text-[10px] border border-gray-300 rounded bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="">-- Select --</option>
+                                            {users.map(user => (
+                                                <option key={user.id} value={user.id}>
+                                                    {user.name || user.email}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                     <button
                                         onClick={() => handleAddDocument(section.id)}
                                         className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
