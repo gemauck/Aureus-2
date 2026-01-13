@@ -2406,144 +2406,85 @@ const LeadDetailModal = ({
             return;
         }
         
-        try {
-            // Get current user info for activity log - handle different storage API structures
-            let currentUser = { name: 'System', email: 'system', id: 'system' };
-            if (window.storage) {
-                if (typeof window.storage.getUserInfo === 'function') {
-                    currentUser = window.storage.getUserInfo() || currentUser;
-                } else if (typeof window.storage.getUser === 'function') {
-                    const user = window.storage.getUser();
-                    if (user) {
-                        currentUser = {
-                            name: user.name || 'System',
-                            email: user.email || 'system',
-                            id: user.id || 'system'
-                        };
-                    }
-                }
-            }
-            
-            const newFollowUpId = Date.now();
-            const updatedFollowUps = [...(Array.isArray(formData.followUps) ? formData.followUps : []), {
-                ...newFollowUp,
-                id: newFollowUpId,
-                createdAt: new Date().toISOString()
-            }];
-            
-            // Create activity log entry
-            const activity = {
-                id: Date.now(),
-                type: 'Follow-up Added',
-                description: `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`,
-                timestamp: new Date().toISOString(),
-                user: currentUser.name,
-                userId: currentUser.id,
-                userEmail: currentUser.email,
-                relatedId: newFollowUpId
-            };
-            
-            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
-            
-            const updatedFormData = {
-                ...formData, 
-                followUps: updatedFollowUps,
-                activityLog: updatedActivityLog
-            };
-            
-            setFormData(updatedFormData);
-            
-            
-            // Save follow-up changes immediately - stay in edit mode
-            // Ensure onSave completes - it's async
-            (async () => {
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving follow-up:', error);
-                    alert('Failed to save follow-up. Please try again.');
-                }
-            })();
-            
-            setNewFollowUp({
-                date: '',
-                time: '',
-                type: 'Call',
-                description: '',
-                completed: false
-            });
-        } catch (error) {
-            console.error('❌ Error adding follow-up:', error);
-            alert('Failed to add follow-up: ' + error.message);
-        }
+        const newFollowUpItem = {
+            ...newFollowUp,
+            id: Date.now(),
+            createdAt: new Date().toISOString()
+        };
+        
+        const currentFollowUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+        const updatedFollowUps = [...currentFollowUps, newFollowUpItem];
+        
+        // Get current user info
+        const updatedFormData = {
+            ...formData,
+            followUps: updatedFollowUps
+        };
+        setFormData(updatedFormData);
+        
+        // Log activity and get updated formData with activity log, then save everything
+        const finalFormData = logActivity('Follow-up Added', `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`, null, false, updatedFormData);
+        
+        // Save follow-up changes and activity log immediately - stay in edit mode
+        isAutoSavingRef.current = true;
+        onSave(finalFormData, true).finally(() => {
+            isAutoSavingRef.current = false;
+        });
+        
+        setNewFollowUp({
+            date: '',
+            time: '',
+            type: 'Call',
+            description: '',
+            completed: false
+        });
     };
 
     const handleToggleFollowUp = (followUpId) => {
-        try {
-            const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
-            const followUp = followUps.find(f => f.id === followUpId);
-            const updatedFollowUps = followUps.map(f => 
-                f.id === followUpId ? {...f, completed: !f.completed} : f
-            );
+        const followUp = formData.followUps.find(f => f.id === followUpId);
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? {...f, completed: !f.completed} : f
+        );
+        
+        const updatedFormData = {...formData, followUps: updatedFollowUps};
+        setFormData(updatedFormData);
+        
+        // Log activity when follow-up is completed
+        if (followUp && !followUp.completed) {
+            // Log activity and get updated formData with activity log, then save everything
+            const finalFormData = logActivity('Follow-up Completed', `Completed: ${followUp.description}`, null, false, updatedFormData);
             
-            let updatedActivityLog = Array.isArray(formData.activityLog) ? formData.activityLog : [];
-            
-            // Add activity log entry if completing follow-up
-            if (followUp && !followUp.completed) {
-                const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
-                const activity = {
-                    id: Date.now(),
-                    type: 'Follow-up Completed',
-                    description: `Completed: ${followUp.description}`,
-                    timestamp: new Date().toISOString(),
-                    user: currentUser.name,
-                    userId: currentUser.id,
-                    userEmail: currentUser.email,
-                    relatedId: followUpId
-                };
-                updatedActivityLog = [...updatedActivityLog, activity];
-            }
-            
-            const updatedFormData = {
-                ...formData, 
-                followUps: updatedFollowUps,
-                activityLog: updatedActivityLog
-            };
-            
-            setFormData(updatedFormData);
-            
-            
-            // Save follow-up toggle immediately - stay in edit mode
-            (async () => {
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving follow-up toggle:', error);
-                }
-            })();
-        } catch (error) {
-            console.error('❌ Error toggling follow-up:', error);
-            alert('Failed to toggle follow-up: ' + error.message);
+            // Save follow-up toggle and activity log immediately - stay in edit mode
+            isAutoSavingRef.current = true;
+            onSave(finalFormData, true).finally(() => {
+                isAutoSavingRef.current = false;
+            });
+        } else {
+            // Just save the follow-up toggle (no activity log needed for uncompleting)
+            isAutoSavingRef.current = true;
+            onSave(updatedFormData, true).finally(() => {
+                isAutoSavingRef.current = false;
+            });
         }
     };
 
     const handleDeleteFollowUp = (followUpId) => {
         if (confirm('Delete this follow-up?')) {
-            const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+            const followUp = formData.followUps.find(f => f.id === followUpId);
             const updatedFormData = {
                 ...formData,
-                followUps: followUps.filter(f => f.id !== followUpId)
+                followUps: formData.followUps.filter(f => f.id !== followUpId)
             };
             setFormData(updatedFormData);
             
-            // Save follow-up deletion immediately - stay in edit mode
-            (async () => {
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving follow-up deletion:', error);
-                }
-            })();
+            // Log activity and get updated formData with activity log, then save everything
+            const finalFormData = logActivity('Follow-up Deleted', `Deleted follow-up: ${followUp?.description || followUp?.type || 'Unknown'}`, null, false, updatedFormData);
+            
+            // Save follow-up deletion and activity log immediately - stay in edit mode
+            isAutoSavingRef.current = true;
+            onSave(finalFormData, true).finally(() => {
+                isAutoSavingRef.current = false;
+            });
         }
     };
 
@@ -2552,169 +2493,150 @@ const LeadDetailModal = ({
     const handleAddComment = async () => {
         if (!newComment.trim()) return;
         
-        try {
-            // Get current user info
-            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
-            
-            // Process @mentions if MentionHelper is available
-            if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
-                try {
-                    // Fetch all users for mention matching
-                    const token = window.storage?.getToken?.();
-                    if (token && window.DatabaseAPI?.getUsers) {
-                        const usersResponse = await window.DatabaseAPI.getUsers();
-                        const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
-                        
-                        const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
-                        const contextLink = `#/leads/${formData.id}`;
-                        
-                        // Process mentions
-                        await window.MentionHelper.processMentions(
-                            newComment,
-                            contextTitle,
-                            contextLink,
-                            currentUser.name || currentUser.email || 'Unknown',
-                            allUsers
-                        );
-                    }
-                } catch (error) {
-                    console.error('❌ Error processing @mentions:', error);
-                    // Don't fail the comment if mention processing fails
+        // Get current user info
+        const user = window.storage?.getUser?.() || {};
+        const currentUser = {
+            name: user?.name || 'System',
+            email: user?.email || 'system',
+            id: user?.id || 'system'
+        };
+        
+        // Process @mentions if MentionHelper is available
+        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
+            try {
+                // Fetch all users for mention matching
+                const token = window.storage?.getToken?.();
+                if (token && window.DatabaseAPI?.getUsers) {
+                    const usersResponse = await window.DatabaseAPI.getUsers();
+                    const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
+                    
+                    const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
+                    const contextLink = `#/leads/${formData.id}`;
+                    
+                    // Process mentions
+                    await window.MentionHelper.processMentions(
+                        newComment,
+                        contextTitle,
+                        contextLink,
+                        currentUser.name || currentUser.email || 'Unknown',
+                        allUsers
+                    );
                 }
+            } catch (error) {
+                console.error('❌ Error processing @mentions:', error);
+                // Don't fail the comment if mention processing fails
             }
-            
-            const commentId = Date.now();
-            const updatedComments = [...(Array.isArray(formData.comments) ? formData.comments : []), {
-                id: commentId,
-                text: newComment,
-                tags: Array.isArray(newNoteTags) ? newNoteTags : [],
-                attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
-                createdAt: new Date().toISOString(),
-                createdBy: currentUser.name,
-                createdByEmail: currentUser.email,
-                createdById: currentUser.id
-            }];
-            
-            // Create activity log entry
-            const activity = {
-                id: Date.now(),
-                type: 'Comment Added',
-                description: `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`,
-                timestamp: new Date().toISOString(),
-                user: currentUser.name,
-                userId: currentUser.id,
-                userEmail: currentUser.email,
-                relatedId: commentId
-            };
-            
-            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
-            
-            const updatedFormData = {
-                ...formData, 
-                comments: updatedComments,
-                activityLog: updatedActivityLog
-            };
-            
-            setFormData(updatedFormData);
-            
-            
-            // Log to audit trail
-            if (window.AuditLogger) {
-                window.AuditLogger.log(
-                    'comment',
-                    'leads',
-                    {
-                        action: 'Comment Added',
-                        leadId: formData.id,
-                        leadName: formData.name || formData.companyName,
-                        commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
-                    },
-                    currentUser
-                );
-            }
-            
-            // Save comment changes immediately
-            (async () => {
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving comment:', error);
-                    alert('Failed to save comment. Please try again.');
-                }
-            })();
-            
-            setNewComment('');
-            setNewNoteTags([]);
-            setNewNoteTagsInput('');
-            setNewNoteAttachments([]);
-        } catch (error) {
-            console.error('❌ Error adding comment:', error);
-            alert('Failed to add comment: ' + error.message);
         }
+        
+        const updatedComments = [...(formData.comments || []), {
+            id: Date.now(),
+            text: newComment,
+            tags: Array.isArray(newNoteTags) ? newNoteTags : [],
+            attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
+            createdAt: new Date().toISOString(),
+            createdBy: currentUser.name,
+            createdByEmail: currentUser.email,
+            createdById: currentUser.id
+        }];
+        
+        const updatedFormData = {...formData, comments: updatedComments};
+        setFormData(updatedFormData);
+        
+        // Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'comment',
+                'leads',
+                {
+                    action: 'Comment Added',
+                    leadId: formData.id,
+                    leadName: formData.name || formData.companyName,
+                    commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
+                },
+                currentUser
+            );
+        }
+        
+        // Log activity and get updated formData with activity log, then save everything
+        const finalFormData = logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`, null, false, updatedFormData);
+        
+        // Save comment changes and activity log immediately - stay in edit mode
+        isAutoSavingRef.current = true;
+        onSave(finalFormData, true);
+        
+        // Clear the flag after a delay to allow API response to propagate
+        setTimeout(() => {
+            isAutoSavingRef.current = false;
+        }, 3000);
+        
+        setNewComment('');
+        setNewNoteTags([]);
+        setNewNoteTagsInput('');
+        setNewNoteAttachments([]);
+        
     };
 
-    const logActivity = (type, description, relatedId = null) => {
-        try {
-            // Get current user info - handle different storage API structures
-            let currentUser = { name: 'System', email: 'system', id: 'system' };
-            
-            if (window.storage) {
-                if (typeof window.storage.getUserInfo === 'function') {
-                    currentUser = window.storage.getUserInfo() || currentUser;
-                } else if (typeof window.storage.getUser === 'function') {
-                    const user = window.storage.getUser();
-                    if (user) {
-                        currentUser = {
-                            name: user.name || 'System',
-                            email: user.email || 'system',
-                            id: user.id || 'system'
-                        };
-                    }
-                }
-            }
-            
-            const activity = {
-                id: Date.now(),
-                type,
-                description,
-                timestamp: new Date().toISOString(),
-                user: currentUser.name,
-                userId: currentUser.id,
-                userEmail: currentUser.email,
-                relatedId
-            };
-            
-            // Use functional update to ensure we have latest formData
-            setFormData(prevFormData => {
-                const updatedActivityLog = [...(Array.isArray(prevFormData.activityLog) ? prevFormData.activityLog : []), activity];
-                return {
-                    ...prevFormData,
-                    activityLog: updatedActivityLog
-                };
+    const logActivity = (type, description, relatedId = null, autoSave = true, formDataToUpdate = null) => {
+        // Get current user info
+        const user = window.storage?.getUser?.() || {};
+        const currentUser = {
+            name: user?.name || 'System',
+            email: user?.email || 'system',
+            id: user?.id || 'system'
+        };
+        
+        const activity = {
+            id: Date.now(),
+            type,
+            description,
+            timestamp: new Date().toISOString(),
+            user: currentUser.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
+            relatedId
+        };
+        
+        // Use provided formData or current formData
+        const baseFormData = formDataToUpdate || formDataRef.current || formData;
+        const updatedFormData = {
+            ...baseFormData,
+            activityLog: [...(baseFormData.activityLog || []), activity]
+        };
+        
+        setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
+        
+        // Auto-save activity log to database if enabled (default: true)
+        if (autoSave && lead && onSave) {
+            isAutoSavingRef.current = true;
+            // Don't await - let it run in background to avoid blocking UI
+            onSave(updatedFormData, true).finally(() => {
+                // Clear flag immediately after save completes (no artificial delay)
+                isAutoSavingRef.current = false;
             });
-        } catch (error) {
-            console.error('❌ Error logging activity:', error);
-            // Don't throw - just log the error so the save can continue
         }
+        
+        // Return updated formData so callers can use it if needed
+        return updatedFormData;
     };
 
     const handleDeleteComment = (commentId) => {
         if (confirm('Delete this comment?')) {
-            const comments = Array.isArray(formData.comments) ? formData.comments : [];
             const updatedFormData = {
                 ...formData,
-                comments: comments.filter(c => c.id !== commentId)
+                comments: formData.comments.filter(c => c.id !== commentId)
             };
             setFormData(updatedFormData);
             
             // Save comment deletion immediately - stay in edit mode
-            (async () => {
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving comment deletion:', error);
-                }
-            })();
+            isAutoSavingRef.current = true;
+            onSave(updatedFormData, true);
+            
+            // Clear the flag after a delay to allow API response to propagate
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+            }, 3000);
+            
         }
     };
 
