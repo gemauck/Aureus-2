@@ -80,7 +80,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1768308117534'; // Updated by build process
+        window.BUILD_VERSION = '1768309325110'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
@@ -767,6 +767,13 @@
                     (allErrorText.includes('opportunities') && (allErrorText.includes('500') || allErrorText.includes('server error'))) ||
                     (allErrorText.includes('/opportunities') && (allErrorText.includes('500') || allErrorText.includes('internal server error')));
                 
+                // Check for projects API errors (500s) - these are server-side issues
+                const isProjectsApiError = 
+                    allErrorText.includes('failed to get project') ||
+                    allErrorText.includes('failed to fetch project') ||
+                    (allErrorText.includes('projects') && (allErrorText.includes('500') || allErrorText.includes('server error'))) ||
+                    (allErrorText.includes('/projects/') && (allErrorText.includes('500') || allErrorText.includes('internal server error')));
+                
                 // Check for server errors (5xx) - Bad Gateway, Service Unavailable, Gateway Timeout, etc.
                 // These are server-side issues that the client can't fix, so suppress them
                 const isServerError = 
@@ -786,8 +793,8 @@
                     allErrorText.includes('already exists') ||
                     (allErrorText.includes('duplicate') && (allErrorText.includes('weekly') || allErrorText.includes('notes')));
                 
-                // Only log non-database, non-opportunities-api, non-server, and non-already-exists errors
-                if (!isDatabaseError && !isOpportunitiesApiError && !isServerError && !isAlreadyExistsError) {
+                // Only log non-database, non-opportunities-api, non-projects-api, non-server, and non-already-exists errors
+                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError) {
                     console.error('🚨 Unhandled Promise Rejection:', {
                         reason: error,
                         promise: event.promise,
@@ -1055,8 +1062,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1768308117534" as="script">
-    <script defer src="/dist/core-bundle.js?v=1768308117534"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1768309325110" as="script">
+    <script defer src="/dist/core-bundle.js?v=1768309325110"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {

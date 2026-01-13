@@ -2245,18 +2245,38 @@ const Projects = () => {
                         throw new Error('window.api.getProject not available');
                     }
                 } catch (api2Error) {
+                    console.warn('⚠️ window.api.getProject failed, trying direct fetch:', api2Error);
                     // Final fallback: fetch directly
-                    const fetchResponse = await fetch(`/api/projects/${project.id}`, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                    try {
+                        // Get token from proper storage location
+                        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || '';
+                        const fetchResponse = await fetch(`/api/projects/${project.id}`, {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': token ? `Bearer ${token}` : ''
+                            }
+                        });
+                        if (!fetchResponse.ok) {
+                            const errorText = await fetchResponse.text();
+                            let errorData;
+                            try {
+                                errorData = JSON.parse(errorText);
+                            } catch {
+                                errorData = { message: errorText || `HTTP ${fetchResponse.status}` };
+                            }
+                            throw new Error(`HTTP error! status: ${fetchResponse.status}, message: ${errorData.message || errorData.error || 'Unknown error'}`);
                         }
-                    });
-                    if (!fetchResponse.ok) {
-                        throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                        const data = await fetchResponse.json();
+                        response = { data: { project: data.project || data.data || data } };
+                    } catch (fetchError) {
+                        console.error('❌ All project fetch methods failed:', {
+                            apiError: apiError.message,
+                            api2Error: api2Error.message,
+                            fetchError: fetchError.message,
+                            projectId: project.id
+                        });
+                        throw new Error(`Failed to fetch project: ${fetchError.message || apiError.message || 'Unknown error'}`);
                     }
-                    const data = await fetchResponse.json();
-                    response = { data: { project: data.project || data.data || data } };
                 }
             }
             const fullProject = response?.data?.project || response?.project || response?.data;
@@ -2396,7 +2416,10 @@ const Projects = () => {
                     }
                 }
             };
-            updateUrl(); // Fire and forget - don't block the rest of the function
+            // Fire and forget - but catch errors to prevent unhandled promise rejections
+            updateUrl().catch(error => {
+                console.error('❌ Error in updateUrl (non-critical):', error);
+            });
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
@@ -2450,8 +2473,31 @@ const Projects = () => {
                 // The render will show the loading state
             }
         } catch (error) {
-            console.error('Error setting viewingProject:', error);
-            alert('Error opening project: ' + error.message);
+            console.error('❌ Error in handleViewProject:', {
+                error: error.message,
+                stack: error.stack,
+                projectId: project?.id,
+                projectName: project?.name
+            });
+            // Prevent unhandled promise rejection - wrap all operations
+            try {
+                // Use setTimeout to ensure alert doesn't block and cause issues
+                setTimeout(() => {
+                    try {
+                        alert('Error opening project: ' + (error.message || 'Unknown error occurred'));
+                    } catch (alertError) {
+                        console.error('❌ Failed to show error alert:', alertError);
+                    }
+                }, 0);
+            } catch (alertError) {
+                console.error('❌ Failed to schedule error alert:', alertError);
+            }
+            // Reset state on error - wrap in try-catch to prevent errors
+            try {
+                setWaitingForProjectDetail(false);
+            } catch (stateError) {
+                console.error('❌ Failed to reset waiting state:', stateError);
+            }
         }
     };
 

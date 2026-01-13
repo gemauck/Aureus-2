@@ -6,6 +6,210 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson } from '../projects.js'
 
+/**
+ * Safely load project with all relations, with fallback if relations fail
+ */
+async function loadProjectWithRelations(projectId) {
+  try {
+    // Try full query first
+    return await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        tasks: {
+          where: { parentTaskId: null },
+          include: {
+            subtasks: {
+              orderBy: { createdAt: 'asc' }
+            },
+            assigneeUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
+        documentSectionsTable: {
+          include: {
+            documents: {
+              include: {
+                statuses: true,
+                comments: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          },
+          orderBy: [{ year: 'desc' }, { order: 'asc' }]
+        },
+        weeklyFMSReviewSectionsTable: {
+          include: {
+            items: {
+              include: {
+                statuses: true,
+                comments: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          },
+          orderBy: [{ year: 'desc' }, { order: 'asc' }]
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Full project query failed, attempting step-by-step load:', {
+      error: error.message,
+      code: error.code,
+      projectId
+    });
+    
+    // Fallback: Load project and relations separately
+    try {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          tasks: {
+            where: { parentTaskId: null },
+            orderBy: { createdAt: 'asc' }
+          }
+        }
+      });
+      
+      if (!project) {
+        return null;
+      }
+      
+      // Load relations separately with error handling
+      try {
+        project.documentSectionsTable = await prisma.documentSection.findMany({
+          where: { projectId },
+          include: {
+            documents: {
+              include: {
+                statuses: true,
+                comments: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          },
+          orderBy: [{ year: 'desc' }, { order: 'asc' }]
+        });
+      } catch (docError) {
+        console.error('❌ Failed to load documentSectionsTable:', docError.message);
+        project.documentSectionsTable = [];
+      }
+      
+      try {
+        project.weeklyFMSReviewSectionsTable = await prisma.weeklyFMSReviewSection.findMany({
+          where: { projectId },
+          include: {
+            items: {
+              include: {
+                statuses: true,
+                comments: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          },
+          orderBy: [{ year: 'desc' }, { order: 'asc' }]
+        });
+      } catch (fmsError) {
+        console.error('❌ Failed to load weeklyFMSReviewSectionsTable:', fmsError.message);
+        project.weeklyFMSReviewSectionsTable = [];
+      }
+      
+      // Load task subtasks and assignees separately
+      if (project.tasks && project.tasks.length > 0) {
+        try {
+          const taskIds = project.tasks.map(t => t.id);
+          const subtasks = await prisma.task.findMany({
+            where: {
+              parentTaskId: { in: taskIds }
+            },
+            orderBy: { createdAt: 'asc' }
+          });
+          
+          const assignees = await prisma.user.findMany({
+            where: {
+              id: { in: project.tasks.map(t => t.assigneeId).filter(Boolean) }
+            },
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          });
+          
+          const assigneeMap = new Map(assignees.map(a => [a.id, a]));
+          
+          project.tasks = project.tasks.map(task => ({
+            ...task,
+            subtasks: subtasks.filter(st => st.parentTaskId === task.id),
+            assigneeUser: task.assigneeId ? assigneeMap.get(task.assigneeId) : null
+          }));
+        } catch (taskError) {
+          console.error('❌ Failed to load task relations:', taskError.message);
+          project.tasks = project.tasks.map(task => ({
+            ...task,
+            subtasks: [],
+            assigneeUser: null
+          }));
+        }
+      }
+      
+      return project;
+    } catch (fallbackError) {
+      console.error('❌ Fallback query also failed:', fallbackError.message);
+      throw fallbackError;
+    }
+  }
+}
+
 async function handler(req, res) {
   try {
     // Extract ID from Express params first (most reliable)
@@ -37,6 +241,21 @@ async function handler(req, res) {
     // Get Single Project (GET /api/projects/[id])
     if (req.method === 'GET') {
       try {
+        // Try to add missing columns if they don't exist (one-time migration)
+        try {
+          await prisma.$executeRaw`
+            ALTER TABLE "Project" 
+            ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
+            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false;
+          `;
+        } catch (migrationError) {
+          // Ignore migration errors (columns might already exist or connection issues)
+          if (!migrationError.message?.includes('already exists') && 
+              !migrationError.message?.includes('duplicate column')) {
+            console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
+          }
+        }
+        
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();
         let whereClause = { id };
@@ -63,99 +282,49 @@ async function handler(req, res) {
           }
         }
         
-        // Load project with all related data from tables
-        // Only include relations that exist in the Prisma schema
+        // Load project with all related data from tables using safe loader
         let project;
         try {
-          project = await prisma.project.findUnique({
-            where: { id },
-            include: {
-              tasks: {
-                where: { parentTaskId: null }, // Only top-level tasks
-                include: {
-                  subtasks: {
-                    orderBy: { createdAt: 'asc' }
-                  },
-                  assigneeUser: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true
-                    }
-                  }
-                },
-                orderBy: { createdAt: 'asc' }
-              },
-              // Note: projectComments, projectDocuments, projectTeamMembers, 
-              // projectTaskLists, projectCustomFieldDefinitions, and projectActivityLogs
-              // are not defined as relations in the Prisma schema, so they're excluded here
-              documentSectionsTable: {
-                include: {
-                  documents: {
-                    include: {
-                      statuses: true,
-                      comments: {
-                        include: {
-                          authorUser: {
-                            select: {
-                              id: true,
-                              name: true,
-                              email: true
-                            }
-                          }
-                        }
-                      }
-                    },
-                    orderBy: { order: 'asc' }
-                  }
-                },
-                orderBy: [{ year: 'desc' }, { order: 'asc' }]
-              },
-              weeklyFMSReviewSectionsTable: {
-                include: {
-                  items: {
-                    include: {
-                      statuses: true,
-                      comments: {
-                        include: {
-                          authorUser: {
-                            select: {
-                              id: true,
-                              name: true,
-                              email: true
-                            }
-                          }
-                        }
-                      }
-                    },
-                    orderBy: { order: 'asc' }
-                  }
-                },
-                orderBy: [{ year: 'desc' }, { order: 'asc' }]
-              }
-            }
-          });
+          project = await loadProjectWithRelations(id);
+          
+          if (!project) {
+            return notFound(res);
+          }
+          
+          // Ensure all relation arrays exist
+          if (!project.tasks) project.tasks = [];
+          if (!project.documentSectionsTable) project.documentSectionsTable = [];
+          if (!project.weeklyFMSReviewSectionsTable) project.weeklyFMSReviewSectionsTable = [];
         } catch (dbQueryError) {
           console.error('❌ Database query error getting project:', {
             error: dbQueryError.message,
             code: dbQueryError.code,
+            name: dbQueryError.name,
             meta: dbQueryError.meta,
-            stack: dbQueryError.stack
+            stack: dbQueryError.stack?.substring(0, 1000),
+            projectId: id,
+            userRole: req.user?.role,
+            userId: req.user?.sub
           });
-          // Try to load project without relations to see if it exists
+          
+          // Final fallback: try basic project query
           try {
             const basicProject = await prisma.project.findUnique({
               where: { id },
               select: { id: true, name: true }
             });
             if (!basicProject) {
+              console.error('❌ Project not found in database:', id);
               return notFound(res);
             }
-            console.error('❌ Project exists but query with relations failed. Possible schema mismatch.');
+            // If project exists but we can't load relations, return error
+            throw dbQueryError;
           } catch (basicError) {
-            console.error('❌ Even basic project query failed:', basicError.message);
+            if (basicError.code === 'P2025' || basicError.message?.includes('not found')) {
+              return notFound(res);
+            }
+            throw dbQueryError;
           }
-          throw dbQueryError;
         }
         
         if (!project) {
@@ -470,8 +639,21 @@ async function handler(req, res) {
         
         return ok(res, { project: transformedProject })
       } catch (dbError) {
-        console.error('❌ Database error getting project:', dbError)
-        return serverError(res, 'Failed to get project', dbError.message)
+        console.error('❌ Database error getting project:', {
+          error: dbError.message,
+          code: dbError.code,
+          name: dbError.name,
+          meta: dbError.meta,
+          stack: dbError.stack,
+          projectId: id,
+          userRole: req.user?.role,
+          userId: req.user?.sub
+        })
+        // Return more detailed error in development
+        const errorMessage = process.env.NODE_ENV === 'development' 
+          ? `Failed to get project: ${dbError.message} (Code: ${dbError.code || 'N/A'})`
+          : 'Failed to get project'
+        return serverError(res, errorMessage, dbError.message)
       }
     }
 
