@@ -754,11 +754,7 @@ const MainLayout = () => {
             const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
             const finalComponent = ProjectsComponent;
             
-            if (finalComponent && !projectsComponentReady) {
-                if (fallbackProjects) {
-                    console.warn('⚠️ MainLayout: Using fallback Projects component (old Vite module version). Prefer ProjectsDatabaseFirst or ProjectsSimple.');
-                } else {
-                }
+            if (finalComponent && typeof finalComponent === 'function' && !projectsComponentReady) {
                 setProjectsComponentReady(true);
             }
         };
