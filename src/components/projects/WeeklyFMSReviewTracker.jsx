@@ -577,7 +577,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Handle navigation with save - ensures data is saved before navigating away
     const handleBackWithSave = useCallback(async () => {
         // Check if there are unsaved changes
-        const currentData = JSON.stringify(sectionsRef.current || {});
+        const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
         const hasUnsavedChanges = currentData !== lastSavedDataRef.current;
         
         if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
@@ -587,10 +587,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 saveTimeoutRef.current = null;
             }
             
-            // Save immediately before navigating
+            // Save immediately before navigating - WAIT for save to complete
             console.log('💾 Saving before navigation...');
             try {
-                await saveToDatabase({ skipParentUpdate: true });
+                await saveToDatabase({ skipParentUpdate: false }); // Update parent so it has latest data
                 console.log('✅ Save complete, navigating...');
             } catch (error) {
                 console.error('❌ Error saving before navigation:', error);
@@ -598,11 +598,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         }
         
-        // Call original onBack handler
+        // Call original onBack handler AFTER save completes
         if (typeof onBack === 'function') {
             onBack();
         }
-    }, [project?.id, onBack]);
+    }, [project?.id, onBack, sectionsByYear]);
     
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
