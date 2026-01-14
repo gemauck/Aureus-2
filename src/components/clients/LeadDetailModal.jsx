@@ -2561,15 +2561,34 @@ const LeadDetailModal = ({
         // Log activity and get updated formData with activity log, then save everything
         const finalFormData = logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`, null, false, updatedFormData);
         
-        // Save comment changes and activity log immediately - stay in edit mode
+        // CRITICAL FIX: Await the save to ensure it completes before clearing form
+        // This prevents navigation/reset from happening before the save completes
         isAutoSavingRef.current = true;
-        onSave(finalFormData, true);
-        
-        // Clear the flag after a delay to allow API response to propagate
-        setTimeout(() => {
+        try {
+            // Ensure we stay on Notes tab - don't let save trigger tab reset
+            const currentTab = activeTab;
+            
+            // Await the save to ensure it completes
+            if (onSave && typeof onSave === 'function') {
+                await onSave(finalFormData, true); // true = stay in edit mode
+            }
+            
+            // Ensure we're still on Notes tab after save
+            if (currentTab === 'notes') {
+                setActiveTab('notes');
+                if (onTabChange) {
+                    onTabChange('notes');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error saving comment:', error);
+            alert('Failed to save comment. Please try again.');
+        } finally {
+            // Clear the flag after save completes
             isAutoSavingRef.current = false;
-        }, 3000);
+        }
         
+        // Clear form fields only after successful save
         setNewComment('');
         setNewNoteTags([]);
         setNewNoteTagsInput('');

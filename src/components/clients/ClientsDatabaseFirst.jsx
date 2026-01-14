@@ -253,12 +253,13 @@ const ClientsDatabaseFirst = () => {
                 
                 await window.api.updateLead(updatedLead.id, updatedLead);
                 
-                // CRITICAL: Reload leads from database to ensure UI shows persisted data
-                await loadLeads();
-                
-                // Only update selectedLead if not staying in edit mode
-                // This prevents the modal from re-rendering and resetting formData
+                // CRITICAL: Only reload leads list if NOT staying in edit mode
+                // When stayInEditMode is true (e.g., adding comments), we don't want to reload
+                // as it can cause tab resets and UI flickering
                 if (!stayInEditMode) {
+                    // Reload leads from database to ensure UI shows persisted data
+                    await loadLeads();
+                    
                     // Find the updated lead from the reloaded list
                     const reloadedLeads = await window.DatabaseAPI.getLeads();
                     const parsedLeads = (reloadedLeads?.data?.leads || []).map(lead => ({
@@ -276,6 +277,15 @@ const ClientsDatabaseFirst = () => {
                     if (updatedLeadFromDB) {
                         setSelectedLead(updatedLeadFromDB);
                     }
+                } else {
+                    // When stayInEditMode is true, update selectedLead in place without reloading
+                    // This preserves the current tab and prevents UI flickering
+                    // Merge the saved data into the existing selectedLead to keep it in sync
+                    setSelectedLead(prev => prev ? {
+                        ...prev,
+                        ...updatedLead,
+                        // Preserve the current tab state by not triggering a full reload
+                    } : prev);
                 }
                 
             } else {
