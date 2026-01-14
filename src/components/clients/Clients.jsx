@@ -4034,89 +4034,97 @@ const Clients = React.memo(() => {
                         }
                         
                         // CRITICAL: Refresh from database after save to ensure persistence
-                        // Wait a short moment for database to commit, then fetch fresh data
-                        setTimeout(async () => {
-                            try {
-                                const token = window.storage?.getToken?.();
-                                if (!token) return;
-                                
-                                const response = await fetch(`/api/leads/${savedLead.id}`, {
-                                    method: 'GET',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                    },
-                                    credentials: 'include'
-                                });
-                                
-                                if (response.ok) {
-                                    const refreshedLead = await response.json();
-                                    const freshLead = refreshedLead?.data?.lead || refreshedLead?.lead;
-                                    if (freshLead) {
-                                    // Parse JSON fields
-                                    const parseField = (val, defaultVal) => {
-                                        if (Array.isArray(val)) return val;
-                                        if (typeof val === 'string' && val.trim()) {
-                                            try { return JSON.parse(val); } catch { return defaultVal; }
-                                        }
-                                        return val || defaultVal;
-                                    };
-                                    const parsedLead = {
-                                        ...freshLead,
-                                        // CRITICAL: Explicitly preserve status and stage from database
-                                        status: freshLead.status || updatedLead.status || 'Potential',
-                                        stage: freshLead.stage || updatedLead.stage || 'Awareness',
-                                        // CRITICAL: Map stage to aidaStatus for ClientDetailModal (uses aidaStatus in formData)
-                                        aidaStatus: freshLead.aidaStatus || freshLead.stage || updatedLead.aidaStatus || updatedLead.stage || 'Awareness',
-                                        // CRITICAL: Preserve notes from database - always ensure it's a string
-                                        notes: freshLead.notes !== undefined && freshLead.notes !== null 
-                                            ? String(freshLead.notes) 
-                                            : (leadDataToSend?.notes !== undefined && leadDataToSend.notes !== null 
-                                                ? String(leadDataToSend.notes) 
-                                                : (updatedLead.notes || '')),
-                                        // CRITICAL: Preserve followUps from database - use parseField to handle normalized table data
-                                        followUps: parseField(freshLead.followUps, []),
-                                        contacts: parseField(freshLead.contacts, []),
-                                        comments: parseField(freshLead.comments, []),
-                                        proposals: parseField(freshLead.proposals, []),
-                                        services: parseField(freshLead.services, [])
-                                    };
+                        // For normal saves we do a delayed refresh. However, when stayInEditMode is true
+                        // (e.g. adding comments/notes), this refresh can cause the lead detail view
+                        // to re-render and reset the active tab back to Overview.
+                        //
+                        // To prevent the Notes tab from resetting after adding a comment, we SKIP the
+                        // delayed refresh when stayInEditMode is true. The immediate API response
+                        // (savedLead / leadDataToSend) already contains the latest comments.
+                        if (!stayInEditMode) {
+                            // Wait a short moment for database to commit, then fetch fresh data
+                            setTimeout(async () => {
+                                try {
+                                    const token = window.storage?.getToken?.();
+                                    if (!token) return;
                                     
-                                    console.log('🔄 Refreshed lead after save:', {
-                                        id: parsedLead.id,
-                                        status: parsedLead.status,
-                                        stage: parsedLead.stage,
-                                        freshStatus: freshLead.status,
-                                        freshStage: freshLead.stage,
-                                        notesLength: parsedLead.notes?.length || 0,
-                                        followUpsCount: parsedLead.followUps?.length || 0,
-                                        commentsCount: parsedLead.comments?.length || 0
+                                    const response = await fetch(`/api/leads/${savedLead.id}`, {
+                                        method: 'GET',
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`,
+                                            'Content-Type': 'application/json'
+                                        },
+                                        credentials: 'include'
                                     });
                                     
-                                    // Update state with fresh data from database
-                                    const refreshedLeads = leads.map(l => 
-                                        l.id === parsedLead.id ? parsedLead : l
-                                    );
-                                    setLeads(refreshedLeads);
-                                    // CRITICAL: Update ref AFTER setLeads to ensure component uses fresh data
-                                    selectedLeadRef.current = parsedLead;
-                                    
-                                    // Update localStorage with fresh data
-                                    if (window.storage?.setLeads) {
-                                        window.storage.setLeads(refreshedLeads);
+                                    if (response.ok) {
+                                        const refreshedLead = await response.json();
+                                        const freshLead = refreshedLead?.data?.lead || refreshedLead?.lead;
+                                        if (freshLead) {
+                                            // Parse JSON fields
+                                            const parseField = (val, defaultVal) => {
+                                                if (Array.isArray(val)) return val;
+                                                if (typeof val === 'string' && val.trim()) {
+                                                    try { return JSON.parse(val); } catch { return defaultVal; }
+                                                }
+                                                return val || defaultVal;
+                                            };
+                                            const parsedLead = {
+                                                ...freshLead,
+                                                // CRITICAL: Explicitly preserve status and stage from database
+                                                status: freshLead.status || updatedLead.status || 'Potential',
+                                                stage: freshLead.stage || updatedLead.stage || 'Awareness',
+                                                // CRITICAL: Map stage to aidaStatus for ClientDetailModal (uses aidaStatus in formData)
+                                                aidaStatus: freshLead.aidaStatus || freshLead.stage || updatedLead.aidaStatus || updatedLead.stage || 'Awareness',
+                                                // CRITICAL: Preserve notes from database - always ensure it's a string
+                                                notes: freshLead.notes !== undefined && freshLead.notes !== null 
+                                                    ? String(freshLead.notes) 
+                                                    : (leadDataToSend?.notes !== undefined && leadDataToSend.notes !== null 
+                                                        ? String(leadDataToSend.notes) 
+                                                        : (updatedLead.notes || '')),
+                                                // CRITICAL: Preserve followUps from database - use parseField to handle normalized table data
+                                                followUps: parseField(freshLead.followUps, []),
+                                                contacts: parseField(freshLead.contacts, []),
+                                                comments: parseField(freshLead.comments, []),
+                                                proposals: parseField(freshLead.proposals, []),
+                                                services: parseField(freshLead.services, [])
+                                            };
+                                            
+                                            console.log('🔄 Refreshed lead after save:', {
+                                                id: parsedLead.id,
+                                                status: parsedLead.status,
+                                                stage: parsedLead.stage,
+                                                freshStatus: freshLead.status,
+                                                freshStage: freshLead.stage,
+                                                notesLength: parsedLead.notes?.length || 0,
+                                                followUpsCount: parsedLead.followUps?.length || 0,
+                                                commentsCount: parsedLead.comments?.length || 0
+                                            });
+                                            
+                                            // Update state with fresh data from database
+                                            const refreshedLeads = leads.map(l => 
+                                                l.id === parsedLead.id ? parsedLead : l
+                                            );
+                                            setLeads(refreshedLeads);
+                                            // CRITICAL: Update ref AFTER setLeads to ensure component uses fresh data
+                                            selectedLeadRef.current = parsedLead;
+                                            
+                                            // Update localStorage with fresh data
+                                            if (window.storage?.setLeads) {
+                                                window.storage.setLeads(refreshedLeads);
+                                            }
+                                            
+                                            // CRITICAL: Force React to recognize the update by updating the leads array reference
+                                            // This ensures the modal receives the updated client prop with fresh comments
+                                            // The selectedLead computation will use the refreshed leads array
+                                            // (selectedLeadRef.current is updated, but setLeads triggers re-render which recomputes selectedLead)
+                                        }
                                     }
-                                    
-                                    // CRITICAL: Force React to recognize the update by updating the leads array reference
-                                    // This ensures the modal receives the updated client prop with fresh comments
-                                    // The selectedLead computation will use the refreshed leads array
-                                    // (selectedLeadRef.current is updated, but setLeads triggers re-render which recomputes selectedLead)
-                                    
-                                    }
+                                } catch (refreshError) {
+                                    // Not critical - data was already saved
                                 }
-                            } catch (refreshError) {
-                                // Not critical - data was already saved
-                            }
-                        }, 3500); // Wait 3500ms for database commit and modal's isAutoSavingRef to clear (3s + buffer)
+                            }, 3500); // Wait 3500ms for database commit
+                        }
                         
                     } catch (apiError) {
                         // If API fails, still update local state but show warning

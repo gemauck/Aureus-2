@@ -442,14 +442,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, []);
     
     // Update tab when initialTab prop changes
+    // CRITICAL: Don't reset the active tab while we're auto-saving (e.g. adding comments/notes)
+    // Otherwise, saving a note can cause the UI to jump back to the Overview tab.
     useEffect(() => {
+        // If we're auto-saving, preserve the current tab and skip updates from initialTab
+        if (isAutoSavingRef.current) {
+            return;
+        }
+        
         // If user tries to access contracts tab but is not admin, default to overview
         if (initialTab === 'contracts' && !isAdmin) {
             setActiveTab('overview');
-        } else {
+        } else if (initialTab && initialTab !== activeTab) {
+            // Only update if the desired tab is different from the current one
             setActiveTab(initialTab);
         }
-    }, [initialTab, isAdmin]);
+    }, [initialTab, isAdmin, activeTab]);
     
     // MANUFACTURING PATTERN: Only sync formData when client ID changes (switching to different client)
     // Reset initial loading state when client changes
@@ -2365,16 +2373,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // Log activity and get updated formData with activity log, then save everything
         // NOTE: logActivity will call setFormData again with activity log, but comments are preserved
-        const finalFormData = logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`, null, false, updatedFormData);
+        const finalFormData = logActivity(
+            'Comment Added',
+            `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`,
+            null,
+            false,
+            updatedFormData
+        );
         
         // Save comment changes and activity log immediately - stay in edit mode
+        // CRITICAL: Await the save so we don't navigate or reset tabs before it completes.
         isAutoSavingRef.current = true;
-        onSave(finalFormData, true);
-        
-        // Clear the flag after a delay to allow API response to propagate
-        setTimeout(() => {
-            isAutoSavingRef.current = false;
-        }, 3000);
+        try {
+            await onSave(finalFormData, true);
+            // After a successful save, ensure we remain on the notes tab
+            setActiveTab('notes');
+            if (onTabChange) {
+                onTabChange('notes');
+            }
+        } catch (error) {
+            console.error('❌ Error saving comment:', error);
+            alert('Failed to save comment. Please try again.');
+        } finally {
+            // Clear the flag after a delay to allow API response to propagate
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+            }, 3000);
+        }
         
         setNewComment('');
         setNewNoteTags([]);
