@@ -4004,7 +4004,12 @@ const Clients = React.memo(() => {
                             contacts: safeParseJSON(savedLead.contacts, []),
                             followUps: safeParseJSON(savedLead.followUps, []),
                             projectIds: safeParseJSON(savedLead.projectIds, []),
-                            comments: safeParseJSON(savedLead.comments, []),
+                            // CRITICAL: When stayInEditMode is true (e.g. adding comments), preserve comments from leadFormData
+                            // The API response might not include the new comment yet (normalized table sync delay)
+                            // This prevents the comment from vanishing immediately after being added
+                            comments: stayInEditMode 
+                                ? safeParseJSON(leadFormData.comments || savedLead.comments, [])
+                                : safeParseJSON(savedLead.comments, []),
                             activityLog: safeParseJSON(savedLead.activityLog, []),
                             sites: safeParseJSON(savedLead.sites, []),
                             contracts: safeParseJSON(savedLead.contracts, []),
