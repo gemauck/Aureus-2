@@ -338,6 +338,13 @@ async function handler(req, res) {
           ? body.billingTerms 
           : JSON.stringify(body.billingTerms)
       }
+      // CRITICAL: Update comments JSON field in Client table
+      if (body.comments !== undefined) {
+        updateData.comments = typeof body.comments === 'string' 
+          ? body.comments 
+          : JSON.stringify(Array.isArray(body.comments) ? body.comments : [])
+        console.log(`📝 [LEADS ID] Updating comments JSON field for lead ${id}, count: ${Array.isArray(body.comments) ? body.comments.length : 0}`)
+      }
       
       // CRITICAL: Preserve lead type - always set type to 'lead' to prevent accidental conversion
       updateData.type = 'lead'
@@ -497,9 +504,12 @@ async function handler(req, res) {
             try {
               commentsArray = JSON.parse(body.comments)
             } catch (e) {
+              console.error('❌ [LEADS ID] Failed to parse comments JSON:', e.message)
               commentsArray = []
             }
           }
+          
+          console.log(`📝 [LEADS ID] Processing ${commentsArray.length} comments for lead ${id}`)
           
           try {
             const userId = req.user?.sub || null
@@ -517,7 +527,7 @@ async function handler(req, res) {
                   userName = user.email || ''
                 }
               } catch (userError) {
-                // User lookup failed
+                console.warn('⚠️ [LEADS ID] User lookup failed:', userError.message)
               }
             }
             
@@ -546,12 +556,14 @@ async function handler(req, res) {
                   data: commentData
                 })
                 commentsToKeep.add(comment.id)
+                console.log(`✅ [LEADS ID] Updated comment ${comment.id} for lead ${id}`)
               } else if (comment.id) {
                 try {
                   await prisma.clientComment.create({
                     data: { id: comment.id, ...commentData }
                   })
                   commentsToKeep.add(comment.id)
+                  console.log(`✅ [LEADS ID] Created comment ${comment.id} for lead ${id}`)
                 } catch (createError) {
                   if (createError.code === 'P2002') {
                     await prisma.clientComment.update({
@@ -559,13 +571,16 @@ async function handler(req, res) {
                       data: commentData
                     })
                     commentsToKeep.add(comment.id)
+                    console.log(`✅ [LEADS ID] Updated comment ${comment.id} after ID conflict for lead ${id}`)
                   } else {
+                    console.error(`❌ [LEADS ID] Failed to create comment ${comment.id}:`, createError.message)
                     throw createError
                   }
                 }
               } else {
                 const created = await prisma.clientComment.create({ data: commentData })
                 commentsToKeep.add(created.id)
+                console.log(`✅ [LEADS ID] Created new comment ${created.id} for lead ${id}`)
               }
             }
             
@@ -575,8 +590,17 @@ async function handler(req, res) {
                 NOT: { id: { in: Array.from(commentsToKeep) } }
               }
             })
+            
+            console.log(`✅ [LEADS ID] Successfully synced ${commentsArray.length} comments to normalized table for lead ${id}`)
           } catch (commentSyncError) {
-            console.warn('⚠️ Failed to sync comments to normalized table:', commentSyncError.message)
+            console.error('❌ [LEADS ID] Failed to sync comments to normalized table:', commentSyncError.message)
+            console.error('❌ [LEADS ID] Comment sync error details:', {
+              message: commentSyncError.message,
+              code: commentSyncError.code,
+              stack: commentSyncError.stack
+            })
+            // Don't throw - allow lead update to succeed even if comment sync fails
+            // The JSON field will still be updated above
           }
         }
         
