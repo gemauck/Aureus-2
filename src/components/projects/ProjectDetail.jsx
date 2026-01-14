@@ -459,7 +459,13 @@ function initializeProjectDetail() {
             const { useCallback: useCallbackSection } = window.React;
             
             const [trackerReady, setTrackerReady] = useStateSection(() => {
-                return !!(window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function');
+                const isAvailable = !!(window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function');
+                console.log('🔍 MonthlyFMSReviewProcessSection: Initial trackerReady check', {
+                    isAvailable,
+                    trackerType: typeof window.MonthlyFMSReviewTracker,
+                    activeSection
+                });
+                return isAvailable;
             });
             const [loadAttempts, setLoadAttempts] = useStateSection(0);
             const maxAttempts = 50; // 5 seconds (50 * 100ms)
@@ -467,17 +473,28 @@ function initializeProjectDetail() {
             // Continuous check for component availability (updates state when component becomes available)
             // This runs on every mount/remount to immediately recognize if component is already loaded
             useEffectSection(() => {
-                if (trackerReady) return;
-
+                // Always check on mount - tracker might have loaded after initial state
                 const checkComponent = () => {
-                    if (window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function') {
+                    const isAvailable = !!(window.MonthlyFMSReviewTracker && typeof window.MonthlyFMSReviewTracker === 'function');
+                    if (isAvailable && !trackerReady) {
+                        console.log('✅ MonthlyFMSReviewTracker became available, updating trackerReady', {
+                            activeSection,
+                            projectId: project?.id
+                        });
                         setTrackerReady(true);
                         return true;
                     }
-                    return false;
+                    return isAvailable;
                 };
 
-                if (checkComponent()) return;
+                // Check immediately on mount
+                if (checkComponent()) {
+                    console.log('✅ MonthlyFMSReviewTracker already available on mount', {
+                        activeSection,
+                        projectId: project?.id
+                    });
+                    return;
+                }
 
                 const handleViteReady = () => {
                     if (checkComponent()) {
@@ -509,7 +526,25 @@ function initializeProjectDetail() {
                 };
             }, [trackerReady]);
 
-            if (!trackerReady || !window.MonthlyFMSReviewTracker) {
+            // Only render MonthlyFMSReviewTracker when activeSection is monthlyFMSReview
+            if (activeSection !== 'monthlyFMSReview') {
+                return null;
+            }
+            
+            // Always get latest version from window (vite-projects may have overridden dist version)
+            const LatestTracker = window.MonthlyFMSReviewTracker;
+            
+            // Check if tracker is available - use direct check instead of state to avoid stale state
+            const isTrackerAvailable = !!(LatestTracker && typeof LatestTracker === 'function');
+            
+            if (!isTrackerAvailable) {
+                console.log('⚠️ MonthlyFMSReviewTracker not available', {
+                    trackerReady,
+                    hasTracker: !!LatestTracker,
+                    trackerType: typeof LatestTracker,
+                    activeSection,
+                    projectId: project?.id
+                });
                 return (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
@@ -540,27 +575,19 @@ function initializeProjectDetail() {
                         <div className="mt-4 text-xs text-gray-500">
                             <p>Debug Info: window.MonthlyFMSReviewTracker = {String(typeof window.MonthlyFMSReviewTracker)}</p>
                             <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
+                            <p>Active Section: {activeSection}</p>
+                            <p>Project ID: {project?.id || 'N/A'}</p>
                         </div>
                     </div>
                 );
             }
-
-            // Only render MonthlyFMSReviewTracker when activeSection is monthlyFMSReview
-            if (activeSection !== 'monthlyFMSReview') {
-                return null;
-            }
             
-            // Always get latest version from window (vite-projects may have overridden dist version)
-            const LatestTracker = window.MonthlyFMSReviewTracker;
-            if (!LatestTracker) {
-                return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
-                        <p className="text-sm text-gray-600">The Monthly FMS Review Tracker is loading...</p>
-                    </div>
-                );
-            }
+            console.log('✅ Rendering MonthlyFMSReviewTracker', {
+                projectId: project?.id,
+                activeSection,
+                trackerType: typeof LatestTracker,
+                hasTracker: !!LatestTracker
+            });
             
             return (
                 <LatestTracker

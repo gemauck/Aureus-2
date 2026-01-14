@@ -2343,6 +2343,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }];
         
         const updatedFormData = {...formData, comments: updatedComments};
+        // CRITICAL: Update formDataRef immediately so guards and other code see the updated comments
+        formDataRef.current = updatedFormData;
+        // CRITICAL: Update state immediately so comment appears in UI
         setFormData(updatedFormData);
         
         // Log to audit trail
@@ -2361,6 +2364,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         
         // Log activity and get updated formData with activity log, then save everything
+        // NOTE: logActivity will call setFormData again with activity log, but comments are preserved
         const finalFormData = logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`, null, false, updatedFormData);
         
         // Save comment changes and activity log immediately - stay in edit mode
@@ -5618,7 +5622,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                handleAddComment();
+                                                handleAddComment().catch(err => {
+                                                    console.error('Error adding comment:', err);
+                                                });
                                             }}
                                             className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                                         >
