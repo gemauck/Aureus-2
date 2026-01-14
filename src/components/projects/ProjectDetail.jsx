@@ -5144,59 +5144,25 @@ function initializeProjectDetail() {
             
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
             
-            // Reload project from database to ensure state is in sync
-            // Also clear any cache to ensure we get fresh data
-            if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
+            // Clear cache for this project to ensure fresh data
+            if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
                 try {
-                    // Clear cache for this project to ensure we get fresh data
-                    if (window.DatabaseAPI._responseCache) {
-                        const cacheKeysToDelete = [];
-                        window.DatabaseAPI._responseCache.forEach((value, key) => {
-                            if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
-                                cacheKeysToDelete.push(key);
-                            }
-                        });
-                        cacheKeysToDelete.forEach(key => {
-                            window.DatabaseAPI._responseCache.delete(key);
-                        });
-                    }
-                    
-                    // Also clear projects list cache to ensure fresh data
-                    if (window.DatabaseAPI._responseCache) {
-                        const projectsListCacheKeys = [];
-                        window.DatabaseAPI._responseCache.forEach((value, key) => {
-                            if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
-                                projectsListCacheKeys.push(key);
-                            }
-                        });
-                        projectsListCacheKeys.forEach(key => {
-                            window.DatabaseAPI._responseCache.delete(key);
-                        });
-                    }
-                    
-                    // Only reload and update if we're not in monthly FMS review view
-                    // (monthly FMS review manages its own state and updates)
-                    const isMonthlyFMSReviewView = activeSection === 'monthlyFMSReview';
-                    
-                    if (!isMonthlyFMSReviewView) {
-                        const refreshedProject = await window.DatabaseAPI.getProject(project.id);
-                        const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
-                        if (updatedProject) {
-                            // Update the project prop by triggering a re-render with updated data
-                            // This ensures the component has the latest data from the database
-                            
-                            // Try to update parent component's viewingProject state if possible
-                            // This ensures the prop is updated immediately
-                            // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
-                            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                                window.updateViewingProject(updatedProject);
-                            }
+                    const cacheKeysToDelete = [];
+                    window.DatabaseAPI._responseCache.forEach((value, key) => {
+                        if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                            cacheKeysToDelete.push(key);
                         }
-                    }
-                } catch (reloadError) {
-                    console.warn('⚠️ Failed to reload project after adding monthly FMS review process:', reloadError);
+                    });
+                    cacheKeysToDelete.forEach(key => {
+                        window.DatabaseAPI._responseCache.delete(key);
+                    });
+                } catch (cacheError) {
+                    console.warn('⚠️ Failed to clear cache after adding monthly FMS review process:', cacheError);
                 }
             }
+            
+            // Don't reload project data here - we're switching to monthlyFMSReview view
+            // which manages its own state. The component will load fresh data when it mounts.
             
             console.log('✅ Monthly FMS Review process added successfully');
         } catch (error) {
