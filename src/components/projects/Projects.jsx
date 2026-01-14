@@ -118,18 +118,22 @@ const Projects = () => {
             }
 
             const newHash = `${basePath}?${searchParams.toString()}`;
+
+            // Always try to keep URL in sync, but don't rely on it for state
             if (window.location.hash !== newHash) {
                 window.location.hash = newHash;
-            } else {
-                setShowProgressTracker(true);
-                setTrackerFocus({
-                    projectId: params.projectId || null,
-                    monthIndex: typeof params.monthIndex === 'number' && !Number.isNaN(params.monthIndex) ? params.monthIndex : null,
-                    month: params.month || null,
-                    field: params.field || null,
-                    year: params.year || null
-                });
             }
+
+            // Ensure tracker UI always opens when button is clicked,
+            // even if the router/hash handling changes
+            setShowProgressTracker(true);
+            setTrackerFocus({
+                projectId: params.projectId || null,
+                monthIndex: typeof params.monthIndex === 'number' && !Number.isNaN(params.monthIndex) ? params.monthIndex : null,
+                month: params.month || null,
+                field: params.field || null,
+                year: params.year || null
+            });
         } catch (error) {
             console.error('❌ Projects: Failed to set progress tracker hash:', error);
             setShowProgressTracker(true);
