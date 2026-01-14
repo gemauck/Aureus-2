@@ -3338,5 +3338,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     );
 };
 
-// Make available globally
-window.MonthlyFMSReviewTracker = MonthlyFMSReviewTracker;
+// Make available globally for legacy entrypoints and plain <script> usage
+if (typeof window !== 'undefined') {
+    window.MonthlyFMSReviewTracker = MonthlyFMSReviewTracker;
+}
+
+// Default export for Vite / ES module imports (used by ProjectsModule.jsx)
+export default MonthlyFMSReviewTracker;

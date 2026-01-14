@@ -5144,6 +5144,19 @@ function initializeProjectDetail() {
             
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
             
+            // Validate API response
+            if (!apiResponse) {
+                throw new Error('API returned no response');
+            }
+            
+            // Check if the response indicates an error
+            if (apiResponse.error || (apiResponse.data && apiResponse.data.error)) {
+                const errorMessage = apiResponse.error || apiResponse.data?.error || 'Unknown error';
+                throw new Error(`API error: ${errorMessage}`);
+            }
+            
+            console.log('✅ API update successful:', apiResponse);
+            
             // Clear cache for this project to ensure fresh data
             if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
                 try {
@@ -5161,8 +5174,37 @@ function initializeProjectDetail() {
                 }
             }
             
-            // Don't reload project data here - we're switching to monthlyFMSReview view
-            // which manages its own state. The component will load fresh data when it mounts.
+            // Reload project from database to ensure state is in sync
+            // This updates the project prop so the tab appears immediately
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
+                try {
+                    const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                    const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                    if (updatedProject) {
+                        console.log('🔄 Reloaded project from database:', {
+                            hasMonthlyFMSReviewProcess: updatedProject.hasMonthlyFMSReviewProcess,
+                            type: typeof updatedProject.hasMonthlyFMSReviewProcess,
+                            isTrue: updatedProject.hasMonthlyFMSReviewProcess === true
+                        });
+                        
+                        // Update the project prop by triggering a re-render with updated data
+                        // This ensures the component has the latest data from the database
+                        // and the tab appears immediately
+                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                            console.log('🔄 Updating parent viewingProject state');
+                            window.updateViewingProject(updatedProject);
+                        } else {
+                            console.warn('⚠️ window.updateViewingProject is not available');
+                        }
+                    } else {
+                        console.warn('⚠️ Failed to get updated project from API response');
+                    }
+                } catch (reloadError) {
+                    console.warn('⚠️ Failed to reload project after adding monthly FMS review process:', reloadError);
+                }
+            } else {
+                console.warn('⚠️ window.DatabaseAPI.getProject is not available');
+            }
             
             console.log('✅ Monthly FMS Review process added successfully');
         } catch (error) {

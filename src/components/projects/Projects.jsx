@@ -79,6 +79,10 @@ const Projects = () => {
     const [draggedProject, setDraggedProject] = useState(null);
     const mouseDownRef = useRef(null);
     const handleViewProjectRef = useRef(null);
+    // Refs to prevent infinite loops in route handling
+    const lastProcessedRouteRef = useRef(null);
+    const lastProcessedProjectIdRef = useRef(null);
+    const routeCheckInProgressRef = useRef(false);
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -416,22 +420,33 @@ const Projects = () => {
     
     // Listen for route changes to handle project navigation and URL-based project opening
     useEffect(() => {
-        console.log('🔍 Projects: Route change handler useEffect running, RouteState available:', !!window.RouteState, 'projects loaded:', projects.length);
+        // Prevent infinite loops - only log once per route change
+        if (routeCheckInProgressRef.current) {
+            return;
+        }
+        
         if (!window.RouteState) {
-            console.log('⚠️ Projects: RouteState not available yet, will retry...');
             // Retry after a short delay
             const retryTimeout = setTimeout(() => {
-                if (window.RouteState) {
-                    console.log('✅ Projects: RouteState now available, re-running effect');
-                    // Re-run this effect by updating a dependency
+                if (window.RouteState && !routeCheckInProgressRef.current) {
+                    routeCheckInProgressRef.current = true;
                     setForceRender(prev => prev + 1);
+                    setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                 }
             }, 500);
             return () => clearTimeout(retryTimeout);
         }
         
+        routeCheckInProgressRef.current = true;
+        
         const handleRouteChange = async (route) => {
-            console.log('🔍 Projects: Route change detected:', route);
+            // Prevent processing the same route multiple times
+            const routeKey = route ? `${route.page}-${route.segments?.join('-')}-${route.search?.toString()}` : 'none';
+            if (lastProcessedRouteRef.current === routeKey) {
+                return;
+            }
+            lastProcessedRouteRef.current = routeKey;
+            
             // If we're on the projects page
             if (route?.page === 'projects') {
                 // If there are no segments, reset selected project
@@ -444,12 +459,17 @@ const Projects = () => {
                     // URL contains a project ID - open that project
                     const projectId = route.segments[0];
                     const taskId = route.search?.get('task');
-                    console.log('🔍 Projects: Opening project from route:', { projectId, taskId, projectsLoaded: projects.length > 0 });
                     
                     if (projectId) {
+                        // Prevent processing the same project multiple times
+                        if (lastProcessedProjectIdRef.current === projectId && viewingProject && String(viewingProject.id) === String(projectId)) {
+                            routeCheckInProgressRef.current = false;
+                            return;
+                        }
+                        lastProcessedProjectIdRef.current = projectId;
+                        
                         // Check if we're already viewing this project
                         if (viewingProject && String(viewingProject.id) === String(projectId)) {
-                            console.log('✅ Projects: Already viewing this project, checking for task parameter');
                             // Already viewing this project, but check if we need to handle tab/section/task
                             const tab = route.search?.get('tab');
                             const section = route.search?.get('section');
@@ -619,15 +639,12 @@ const Projects = () => {
             // Fallback to RouteState if available
             if (window.RouteState) {
                 const currentRoute = window.RouteState.getRoute();
-                console.log('🔍 Projects: Checking route via RouteState (projects loaded:', projects.length, '):', currentRoute);
                 
                 if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
                     // We're on a project page - handle it
-                    console.log('✅ Projects: On project page, handling route via RouteState');
                     handleRouteChange(currentRoute);
                 }
             } else {
-                console.log('⏳ Projects: RouteState not available yet, will retry...');
                 setTimeout(checkAndHandleRoute, 200);
             }
         };
@@ -639,31 +656,36 @@ const Projects = () => {
         let unsubscribe = null;
         if (window.RouteState && typeof window.RouteState.subscribe === 'function') {
             unsubscribe = window.RouteState.subscribe((route) => {
-                console.log('🔔 Projects: Route change subscription triggered:', route);
-                handleRouteChange(route);
+                if (!routeCheckInProgressRef.current) {
+                    handleRouteChange(route);
+                }
             });
         }
         
         // Also listen for popstate events (browser back/forward)
         const handlePopState = () => {
-            const route = window.RouteState.getRoute();
-            console.log('🔔 Projects: PopState event, route:', route);
-            handleRouteChange(route);
+            if (!routeCheckInProgressRef.current && window.RouteState) {
+                const route = window.RouteState.getRoute();
+                handleRouteChange(route);
+            }
         };
         window.addEventListener('popstate', handlePopState);
         
         // Also listen for custom route:change events (dispatched by MainLayout)
         const handleRouteChangeEvent = (event) => {
-            const route = event.detail || window.RouteState?.getRoute();
-            console.log('🔔 Projects: route:change event received, route:', route);
-            if (route) {
-                handleRouteChange(route);
+            if (!routeCheckInProgressRef.current) {
+                const route = event.detail || window.RouteState?.getRoute();
+                if (route) {
+                    handleRouteChange(route);
+                }
             }
         };
         window.addEventListener('route:change', handleRouteChangeEvent);
         
         // Set up an interval to periodically check the route (fallback for missed events)
         const routeCheckInterval = setInterval(() => {
+            if (routeCheckInProgressRef.current) return;
+            
             // Check URL directly first
             const urlPath = window.location.pathname || '';
             let projectId = null;
@@ -680,12 +702,12 @@ const Projects = () => {
             
             // Only check if we're not already viewing this project
             if (projectId && (!viewingProject || String(viewingProject.id) !== String(projectId))) {
-                console.log('🔍 Projects: Periodic route check - project not open, opening:', projectId);
                 checkAndHandleRoute();
             }
-        }, 1000); // Check every second
+        }, 2000); // Check every 2 seconds (reduced frequency)
         
         return () => {
+            routeCheckInProgressRef.current = false;
             if (unsubscribe && typeof unsubscribe === 'function') {
                 unsubscribe();
             }
@@ -1234,20 +1256,13 @@ const Projects = () => {
     }, []); // Run ONLY on mount
     
     useEffect(() => {
-        console.log('🔍 Projects: Mount-time route check STARTING', {
-            url: window.location.href,
-            pathname: window.location.pathname,
-            search: window.location.search,
-            hash: window.location.hash,
-            RouteStateAvailable: !!window.RouteState
-        });
+        if (routeCheckInProgressRef.current) {
+            return;
+        }
         
         // Also check sessionStorage in case it was set by the global listener
         const storedProjectId = sessionStorage.getItem('openProjectId');
         const storedTaskId = sessionStorage.getItem('openTaskId');
-        if (storedProjectId) {
-            console.log('📦 Projects: Found project ID in sessionStorage on mount:', storedProjectId);
-        }
         
         const tryOpenProjectFromRoute = async () => {
             // First check sessionStorage (set by global listener or previous attempt)
@@ -1260,20 +1275,16 @@ const Projects = () => {
             // Try to get from RouteState first
             if (window.RouteState) {
                 const currentRoute = window.RouteState.getRoute();
-                console.log('🔍 Projects: RouteState available on mount, checking route:', currentRoute);
                 
                 if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
                     projectId = currentRoute.segments[0];
                     taskId = currentRoute.search?.get('task');
-                    console.log('✅ Projects: Found project in route on mount:', { projectId, taskId });
                 }
             } else {
-                console.log('⏸️ Projects: RouteState not available yet, checking sessionStorage...');
                 // Use sessionStorage if RouteState not available
                 if (sessionProjectId) {
                     projectId = sessionProjectId;
                     taskId = sessionTaskId;
-                    console.log('📦 Projects: Using project ID from sessionStorage:', projectId);
                 } else {
                     // Retry after a short delay
                     setTimeout(tryOpenProjectFromRoute, 200);
@@ -1283,6 +1294,13 @@ const Projects = () => {
             
             // Store in sessionStorage immediately
             if (projectId) {
+                // Prevent processing the same project multiple times
+                if (lastProcessedProjectIdRef.current === projectId) {
+                    return;
+                }
+                routeCheckInProgressRef.current = true;
+                lastProcessedProjectIdRef.current = projectId;
+                
                 sessionStorage.setItem('openProjectId', projectId);
                 if (taskId) {
                     sessionStorage.setItem('openTaskId', taskId);
@@ -1290,7 +1308,6 @@ const Projects = () => {
                 
                 // Try to fetch from API immediately (don't wait for projects to load)
                 if (window.DatabaseAPI?.getProject) {
-                    console.log('📡 Projects: Fetching project from API immediately on mount...', projectId);
                     try {
                         const response = await window.DatabaseAPI.getProject(projectId);
                         const projectData = response?.data?.project || response?.project;
@@ -1299,7 +1316,6 @@ const Projects = () => {
                                 ...projectData,
                                 client: projectData.clientName || projectData.client || ''
                             };
-                            console.log('✅ Projects: Fetched project from API on mount:', fetchedProject.name);
                             // Add to projects array
                             setProjects(prev => {
                                 const exists = prev.find(p => String(p.id) === String(projectId));
@@ -1309,9 +1325,9 @@ const Projects = () => {
                                 return prev;
                             });
                                 // Open the project immediately
-                                console.log('🎯 Projects: Setting viewingProject to open project:', fetchedProject.name);
                                 setViewingProject(fetchedProject);
                                 setShowModal(false);
+                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                                 
                                 // Update URL to include task parameter if present
                                 if (taskId && window.RouteState) {
@@ -1319,11 +1335,9 @@ const Projects = () => {
                                 }
                                 
                                 if (taskId) {
-                                    console.log('📋 Projects: Will open task with retry logic:', taskId);
                                     // Dispatch multiple times with increasing delays to ensure ProjectDetail catches it
                                     // ProjectDetail needs time to mount and load tasks
                                     const dispatchOpenTask = (attempt = 1) => {
-                                        console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
                                         window.dispatchEvent(new CustomEvent('openTask', {
                                             detail: { taskId: taskId, tab: 'details' }
                                         }));
@@ -1338,17 +1352,12 @@ const Projects = () => {
                                     setTimeout(() => dispatchOpenTask(1), 1000);
                                 }
                                 return;
-                        } else {
-                            console.warn('⚠️ Projects: API returned no project data for ID:', projectId);
                         }
                     } catch (error) {
                         console.error('❌ Projects: Failed to fetch project from API on mount:', error);
+                        setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                     }
-                } else {
-                    console.warn('⚠️ Projects: DatabaseAPI.getProject not available');
                 }
-            } else {
-                console.log('⏸️ Projects: No project ID found in route or sessionStorage');
             }
         };
         
@@ -1358,22 +1367,30 @@ const Projects = () => {
     
     // Check route when projects load or viewingProject changes - this handles cases where projects weren't loaded yet
     useEffect(() => {
-        console.log('🔍 Projects: Route check after projects/viewingProject change, projects loaded:', projects.length);
+        if (routeCheckInProgressRef.current) {
+            return;
+        }
         
         const tryOpenProjectFromRoute = async () => {
             if (!window.RouteState) {
-                console.log('⏸️ Projects: RouteState not available yet, will retry...');
                 setTimeout(tryOpenProjectFromRoute, 200);
                 return;
             }
             
+            if (routeCheckInProgressRef.current) {
+                return;
+            }
+            
             const currentRoute = window.RouteState.getRoute();
-            console.log('🔍 Projects: RouteState available, checking route:', currentRoute);
             
             if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
                 const projectId = currentRoute.segments[0];
                 const taskId = currentRoute.search?.get('task');
-                console.log('✅ Projects: Found project in route:', { projectId, taskId });
+                
+                // Prevent processing the same project multiple times
+                if (lastProcessedProjectIdRef.current === projectId && viewingProject && String(viewingProject.id) === String(projectId)) {
+                    return;
+                }
                 
                 // Store in sessionStorage for later use
                 if (projectId) {
@@ -1413,9 +1430,11 @@ const Projects = () => {
                     // Try to find project in already loaded projects
                     const existingProject = projects.find(p => String(p.id) === String(projectId));
                     if (existingProject) {
-                        console.log('✅ Projects: Project found in loaded projects, opening immediately:', existingProject.name);
+                        routeCheckInProgressRef.current = true;
+                        lastProcessedProjectIdRef.current = projectId;
                         setViewingProject(existingProject);
                         setShowModal(false);
+                        setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                         
                         // Update URL to include task parameter if present
                         if (taskId && window.RouteState) {
@@ -1430,8 +1449,8 @@ const Projects = () => {
                     
                     // If project not in loaded list, try to fetch it from API
                     if (window.DatabaseAPI?.getProject) {
-                        console.log('📡 Projects: Project not in loaded list, fetching from API...');
                         try {
+                            routeCheckInProgressRef.current = true;
                             const response = await window.DatabaseAPI.getProject(projectId);
                             const projectData = response?.data?.project || response?.project;
                             if (projectData) {
@@ -1439,7 +1458,7 @@ const Projects = () => {
                                     ...projectData,
                                     client: projectData.clientName || projectData.client || ''
                                 };
-                                console.log('✅ Projects: Fetched project from API:', fetchedProject.name);
+                                lastProcessedProjectIdRef.current = projectId;
                                 // Add to projects array
                                 setProjects(prev => {
                                     const exists = prev.find(p => String(p.id) === String(projectId));
@@ -1451,6 +1470,7 @@ const Projects = () => {
                                 // Open the project immediately
                                 setViewingProject(fetchedProject);
                                 setShowModal(false);
+                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                                 
                                 // Update URL to include task parameter if present
                                 if (taskId && window.RouteState) {
@@ -1476,24 +1496,29 @@ const Projects = () => {
 
     // Check route after projects are loaded to open project from URL
     useEffect(() => {
-        console.log('🔍 Projects: Route check after projects load useEffect running, projects:', projects.length, 'RouteState:', !!window.RouteState, 'viewingProject:', !!viewingProject);
+        if (routeCheckInProgressRef.current) {
+            return;
+        }
         
         // Wait for RouteState to be available
         if (!window.RouteState) {
-            console.log('⏸️ Projects: RouteState not available yet, will retry...');
             const retryTimeout = setTimeout(() => {
-                if (window.RouteState) {
+                if (window.RouteState && !routeCheckInProgressRef.current) {
                     // Re-trigger this effect by checking again
                     const currentRoute = window.RouteState.getRoute();
                     if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
-                        console.log('✅ Projects: RouteState now available, processing route:', currentRoute);
                         // Process route if projects are loaded
                         if (projects.length > 0) {
                             const projectId = currentRoute.segments[0];
                             const taskId = currentRoute.search?.get('task');
                             const projectToOpen = projects.find(p => String(p.id) === String(projectId));
                             if (projectToOpen && (!viewingProject || String(viewingProject.id) !== String(projectId))) {
-                                console.log('✅ Projects: Opening project from route (retry):', projectToOpen.name);
+                                // Prevent processing the same project multiple times
+                                if (lastProcessedProjectIdRef.current === projectId) {
+                                    return;
+                                }
+                                routeCheckInProgressRef.current = true;
+                                lastProcessedProjectIdRef.current = projectId;
                                 
                                 // CRITICAL: Always refresh from database to ensure we have latest data
                                 if (window.DatabaseAPI?.getProject) {
@@ -1508,6 +1533,7 @@ const Projects = () => {
                                                 setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? normalizedProject : p));
                                                 setViewingProject(normalizedProject);
                                                 setShowModal(false);
+                                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                                                 if (taskId) {
                                                     setTimeout(() => {
                                                         window.dispatchEvent(new CustomEvent('openTask', {
@@ -1518,11 +1544,13 @@ const Projects = () => {
                                             } else {
                                                 setViewingProject(projectToOpen);
                                                 setShowModal(false);
+                                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                                             }
                                         })
                                         .catch(() => {
                                             setViewingProject(projectToOpen);
                                             setShowModal(false);
+                                            setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                                         });
                                 } else {
                                     setViewingProject(projectToOpen);

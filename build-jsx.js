@@ -214,21 +214,43 @@ async function buildJSX() {
     const indexHtmlPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexHtmlPath)) {
         let indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+        
+        // Use the numeric version as the single source of truth for all cache-busting
+        const versionPattern = versionInfo.version;
+        
         // Replace the BUILD_VERSION value
         indexHtml = indexHtml.replace(
             /window\.BUILD_VERSION\s*=\s*['"][^'"]*['"]/,
-            `window.BUILD_VERSION = '${versionInfo.version}'`
+            `window.BUILD_VERSION = '${versionPattern}'`
         );
+        
+        // Also update APP_VERSION used by the early cache-clearing script so that
+        // every build automatically forces a full reload across all HTML/JS/CSS.
+        // Match: var APP_VERSION = '...';
+        indexHtml = indexHtml.replace(
+            /var\s+APP_VERSION\s*=\s*['"][^'"]*['"]/,
+            `var APP_VERSION = '${versionPattern}'`
+        );
+        
         // Replace core-bundle.js version parameter for cache busting
         // Match patterns like: /dist/core-bundle.js?v=20260111-25ed885 or /dist/core-bundle.js?v=1768113388877
-        const versionPattern = versionInfo.version;
-        // More flexible regex to match any version format (numbers, dashes, etc.)
         indexHtml = indexHtml.replace(
             /\/dist\/core-bundle\.js\?v=[^\s"']+/g,
             `/dist/core-bundle.js?v=${versionPattern}`
         );
+        
+        // Ensure lazy-load-components.js also gets a fresh version parameter so that
+        // route-handling / ProjectDetail / Projects changes are never served from cache.
+        indexHtml = indexHtml.replace(
+            /\/lazy-load-components\.js\?v=[^\s"']+/g,
+            `/lazy-load-components.js?v=${versionPattern}`
+        );
+        
+        // If we later add other top-level bundles that need cache-busting, we can
+        // extend the same pattern here so all are kept in sync with BUILD_VERSION.
+        
         fs.writeFileSync(indexHtmlPath, indexHtml);
-        console.log(`🔄 Updated index.html with build version: ${versionInfo.version}`);
+        console.log(`🔄 Updated index.html with build version & cache bust params: ${versionPattern}`);
     }
      
     if (!isWatchMode) {
