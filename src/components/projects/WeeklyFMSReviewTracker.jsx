@@ -531,47 +531,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, selectedYear]); // Removed project?.weeklyFMSReviewSections to prevent unnecessary reloads
+    }, [project?.id, project?.weeklyFMSReviewSections, selectedYear]);
     
     // Load data on mount and when project/year changes
     useEffect(() => {
-        if (!project?.id) {
-            console.log('⏸️ LoadData useEffect: No project ID');
-            return;
-        }
-        
-        // Ensure API is available before loading
-        if (!apiRef.current && window.DocumentCollectionAPI) {
-            apiRef.current = window.DocumentCollectionAPI;
-            console.log('✅ DocumentCollectionAPI set in loadData useEffect');
-        }
-        
-        if (!apiRef.current) {
-            console.warn('⚠️ DocumentCollectionAPI not available, will retry');
-            // Retry after a short delay
-            const retryTimeout = setTimeout(() => {
-                if (window.DocumentCollectionAPI) {
-                    apiRef.current = window.DocumentCollectionAPI;
-                    console.log('✅ DocumentCollectionAPI set on retry');
-                    loadData();
-                }
-            }, 500);
-            return () => clearTimeout(retryTimeout);
-        }
-        
-        console.log('📥 LoadData useEffect: Calling loadData', { 
-            projectId: project.id, 
-            selectedYear,
-            hasAPI: !!apiRef.current 
-        });
-        
-        // Small delay to ensure API is initialized
-        const timeoutId = setTimeout(() => {
+        if (project?.id) {
             loadData();
-        }, 100);
-        
-        return () => clearTimeout(timeoutId);
-    }, [project?.id, selectedYear, loadData]); // Include loadData to ensure it runs when dependencies change
+        }
+    }, [project?.id, selectedYear, loadData]);
     
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
@@ -596,7 +563,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Debounce save by 1 second
         saveTimeoutRef.current = setTimeout(() => {
-            saveToDatabase({ skipParentUpdate: false }); // Update parent so data persists
+            saveToDatabase();
         }, 1000);
         
         return () => {
@@ -716,9 +683,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => {
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
-                // Save on unmount - update parent so data persists when navigating back
-                // Use fetch with keepalive to ensure request completes even if page unloads
-                saveToDatabase({ skipParentUpdate: false });
+                // Fire-and-forget save on unmount
+                saveToDatabase({ skipParentUpdate: true });
             }
         };
     }, [project?.id]);

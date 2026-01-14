@@ -885,6 +885,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const currentClientId = client?.id;
         const previousClientId = previousClientIdRef.current;
         
+        // CRITICAL: Don't reset tab if we're auto-saving (e.g. adding comments/notes)
+        // This prevents the tab from jumping to Overview when saving a comment
+        if (isAutoSavingRef.current) {
+            return;
+        }
+        
         // Only reset if we're switching to a different client/lead
         if (currentClientId && currentClientId !== previousClientId) {
             // Always default to 'overview' when opening a new client/lead
@@ -2409,11 +2415,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             await onSave(dataToSave, true);
             
-            // After a successful save, ensure we remain on the notes tab
-            setActiveTab('notes');
-            if (onTabChange) {
-                onTabChange('notes');
-            }
+            // CRITICAL: After a successful save, ensure we remain on the notes tab
+            // Use setTimeout to ensure this happens after any potential re-renders
+            // Use handleTabChange to ensure it persists to localStorage
+            setTimeout(() => {
+                handleTabChange('notes');
+            }, 0);
         } catch (error) {
             console.error('❌ Error saving comment:', error);
             alert('Failed to save comment. Please try again.');
@@ -2426,6 +2433,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             formDataRef.current = revertedFormData;
         } finally {
             // Clear the flag after a delay to allow API response to propagate
+            // This delay ensures any effects that check isAutoSavingRef won't reset the tab
             setTimeout(() => {
                 isAutoSavingRef.current = false;
             }, 3000);
