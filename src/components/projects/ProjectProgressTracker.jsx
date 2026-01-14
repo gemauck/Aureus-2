@@ -1,15 +1,55 @@
-// Get React hooks from window - with safety checks
-let useState, useEffect, useRef, memo;
-if (typeof React !== 'undefined') {
-    ({ useState, useEffect, useRef, memo } = React);
+// Get React hooks from window - with safety checks and retry mechanism
+let useState, useEffect, useRef, memo, ReactElement;
+const getReactHooks = () => {
+    if (typeof window !== 'undefined' && window.React) {
+        const React = window.React;
+        return {
+            useState: React.useState,
+            useEffect: React.useEffect,
+            useRef: React.useRef,
+            memo: React.memo,
+            createElement: React.createElement
+        };
+    }
+    return null;
+};
+
+let hooks = getReactHooks();
+if (hooks) {
+    ({ useState, useEffect, useRef, memo } = hooks);
+    ReactElement = hooks.createElement;
 } else {
-    console.error('❌ ProjectProgressTracker: React is not available when component loads');
-    // Create fallback functions to prevent errors
-    useState = function(initial) { return [initial, function() {}]; };
-    useEffect = function() {};
-    useRef = function(initial) { return { current: initial }; };
-    memo = function(component) { return component; };
+    // If React is not available, wait for it and retry
+    console.warn('⚠️ ProjectProgressTracker: React not available immediately, will retry...');
+    let retries = 0;
+    const maxRetries = 50; // 5 seconds max
+    
+    const checkReact = setInterval(() => {
+        retries++;
+        hooks = getReactHooks();
+        if (hooks) {
+            ({ useState, useEffect, useRef, memo } = hooks);
+            ReactElement = hooks.createElement;
+            clearInterval(checkReact);
+            console.log('✅ ProjectProgressTracker: React hooks loaded successfully');
+        } else if (retries >= maxRetries) {
+            clearInterval(checkReact);
+            console.error('❌ ProjectProgressTracker: React is not available after retries');
+            // Create fallback functions to prevent errors
+            useState = function(initial) { return [initial, function() {}]; };
+            useEffect = function() {};
+            useRef = function(initial) { return { current: initial }; };
+            memo = function(component) { return component; };
+            ReactElement = function() { return null; };
+        }
+    }, 100);
 }
+
+// Ensure React.createElement is available
+if (!ReactElement && typeof window !== 'undefined' && window.React && window.React.createElement) {
+    ReactElement = window.React.createElement;
+}
+
 const storage = window.storage;
 
 // Main component - completely rebuilt for reliability
@@ -2303,34 +2343,76 @@ try {
     ProjectProgressTrackerMemo = ProjectProgressTracker;
 }
 
-// Register globally - simplified and more robust
-try {
-    if (typeof window !== 'undefined') {
+// Register globally - ensure React is available first
+const registerComponent = () => {
+    try {
+        if (typeof window === 'undefined') {
+            console.error('❌ ProjectProgressTracker: window is not available');
+            return;
+        }
+
+        // Ensure React is available before registering
+        if (typeof window.React === 'undefined') {
+            console.warn('⚠️ ProjectProgressTracker: React not available yet, deferring registration...');
+            // Retry after a short delay
+            setTimeout(registerComponent, 100);
+            return;
+        }
+
+        // Register the component
         window.ProjectProgressTracker = ProjectProgressTrackerMemo;
+        console.log('✅ ProjectProgressTracker: Component registered successfully');
         
         // Dispatch componentLoaded event so other components know it's available
         try {
-            window.dispatchEvent(new CustomEvent('componentLoaded', { 
+            const event = new CustomEvent('componentLoaded', { 
                 detail: { component: 'ProjectProgressTracker' } 
-            }));
+            });
+            window.dispatchEvent(event);
+            console.log('✅ ProjectProgressTracker: componentLoaded event dispatched');
         } catch (eventError) {
             console.warn('⚠️ ProjectProgressTracker: Failed to dispatch componentLoaded event:', eventError);
         }
-    } else {
-        console.error('❌ ProjectProgressTracker: window is not available');
+    } catch (error) {
+        console.error('❌ Failed to register ProjectProgressTracker:', error);
+        console.error('❌ Error stack:', error?.stack);
+        // Fallback: register a simple error component
+        if (typeof window !== 'undefined' && window.React && window.React.createElement) {
+            window.ProjectProgressTracker = function() {
+                try {
+                    return window.React.createElement('div', { className: 'p-4 bg-red-50' },
+                        window.React.createElement('p', { className: 'text-red-800' }, 
+                            'Component registration failed: ' + (error?.message || 'Unknown error')
+                        )
+                    );
+                } catch (e) {
+                    console.error('❌ Failed to create error component:', e);
+                    return null;
+                }
+            };
+            console.log('⚠️ ProjectProgressTracker: Registered fallback error component');
+        }
     }
-} catch (error) {
-    console.error('❌ Failed to register ProjectProgressTracker:', error);
-    // Fallback: register a simple error component
-    if (typeof window !== 'undefined' && typeof React !== 'undefined') {
-        window.ProjectProgressTracker = function() {
-            try {
-                return React.createElement('div', { className: 'p-4 bg-red-50' },
-                    React.createElement('p', { className: 'text-red-800' }, 'Component registration failed: ' + (error?.message || 'Unknown error'))
-                );
-            } catch (e) {
-                return null;
-            }
-        };
-    }
+};
+
+// Register immediately if React is available, otherwise wait
+if (typeof window !== 'undefined' && window.React) {
+    registerComponent();
+} else {
+    // Wait for React to be available
+    const checkReact = setInterval(() => {
+        if (typeof window !== 'undefined' && window.React) {
+            clearInterval(checkReact);
+            registerComponent();
+        }
+    }, 50);
+    
+    // Timeout after 10 seconds
+    setTimeout(() => {
+        clearInterval(checkReact);
+        if (typeof window !== 'undefined' && !window.ProjectProgressTracker) {
+            console.error('❌ ProjectProgressTracker: React did not become available after 10 seconds');
+            registerComponent(); // Try anyway
+        }
+    }, 10000);
 }

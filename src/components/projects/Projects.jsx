@@ -733,27 +733,55 @@ const Projects = () => {
             console.warn('⚠️ Projects: ProjectProgressTracker not available yet, waiting...');
             setWaitingForTracker(true);
             let attempts = 0;
-            const maxAttempts = 20; // 2 seconds max
+            const maxAttempts = 50; // 5 seconds max (increased from 2 seconds)
             
             // Listen for componentLoaded event
             const handleComponentLoaded = (event) => {
                 if (event.detail && event.detail.component === 'ProjectProgressTracker') {
+                    console.log('✅ Projects: Received componentLoaded event for ProjectProgressTracker');
                     setWaitingForTracker(false);
                     setForceRender(prev => prev + 1);
                 }
             };
             window.addEventListener('componentLoaded', handleComponentLoaded);
             
+            // Also try to manually trigger component loading if it's not loaded
+            const tryLoadComponent = () => {
+                // Check if component-loader has loaded it
+                const script = document.querySelector('script[data-component-path*="ProjectProgressTracker"]');
+                if (!script) {
+                    console.warn('⚠️ Projects: ProjectProgressTracker script tag not found, component may not be loading');
+                    // Try to trigger component-loader to load it
+                    if (typeof window.loadComponent === 'function') {
+                        console.log('🔄 Projects: Attempting to manually load ProjectProgressTracker...');
+                        window.loadComponent('components/projects/ProjectProgressTracker.jsx');
+                    }
+                }
+            };
+            
+            // Try loading immediately
+            tryLoadComponent();
+            
             const checkInterval = setInterval(() => {
                 attempts++;
-                if (window.ProjectProgressTracker || attempts >= maxAttempts) {
+                if (window.ProjectProgressTracker) {
+                    console.log('✅ Projects: ProjectProgressTracker is now available');
                     clearInterval(checkInterval);
                     window.removeEventListener('componentLoaded', handleComponentLoaded);
                     setWaitingForTracker(false);
-                    if (window.ProjectProgressTracker) {
-                    } else {
-                        console.error('❌ ProjectProgressTracker still not available after waiting');
-                    }
+                    setForceRender(prev => prev + 1);
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(checkInterval);
+                    window.removeEventListener('componentLoaded', handleComponentLoaded);
+                    setWaitingForTracker(false);
+                    console.error('❌ ProjectProgressTracker still not available after waiting', {
+                        attempts,
+                        maxAttempts,
+                        windowHasReact: typeof window.React !== 'undefined',
+                        scriptExists: !!document.querySelector('script[data-component-path*="ProjectProgressTracker"]')
+                    });
+                    // Try one more time to load
+                    tryLoadComponent();
                 }
             }, 100);
             
