@@ -1536,27 +1536,27 @@ const LeadDetailModal = ({
         }
     }); // Run on every render to sync with formDataRef
     
-    // Notes tab removed for leads - this useEffect is no longer needed
-    // useEffect(() => {
-    //     // Use formDataRef.current instead of formData directly to avoid TDZ errors
-    //     const currentFormData = formDataRef.current || defaultFormData;
-    //     if (activeTab === 'notes' && commentsContainerRef.current && currentFormData.comments && Array.isArray(currentFormData.comments) && currentFormData.comments.length > 0) {
-    //         // Small delay to ensure DOM is ready
-    //         setTimeout(() => {
-    //             // Scroll the parent scrollable container to show the last comment
-    //             if (contentScrollableRef.current) {
-    //                 // Find the last comment element
-    //                 const lastComment = commentsContainerRef.current?.lastElementChild;
-    //                 if (lastComment) {
-    //                     lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    //                 } else if (contentScrollableRef.current) {
-    //                     // Fallback: scroll container to bottom
-    //                     contentScrollableRef.current.scrollTop = contentScrollableRef.current.scrollHeight;
-    //                 }
-    //             }
-    //         }, 150);
-    //     }
-    // }, [activeTab, commentsLength]); // Use state value instead of formData directly
+    // Auto-scroll to last comment when notes tab is opened
+    useEffect(() => {
+        // Use formDataRef.current instead of formData directly to avoid TDZ errors
+        const currentFormData = formDataRef.current || defaultFormData;
+        if (activeTab === 'notes' && commentsContainerRef.current && currentFormData.comments && Array.isArray(currentFormData.comments) && currentFormData.comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                // Scroll the parent scrollable container to show the last comment
+                if (contentScrollableRef.current) {
+                    // Find the last comment element
+                    const lastComment = commentsContainerRef.current?.lastElementChild;
+                    if (lastComment) {
+                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    } else if (contentScrollableRef.current) {
+                        // Fallback: scroll container to bottom
+                        contentScrollableRef.current.scrollTop = contentScrollableRef.current.scrollHeight;
+                    }
+                }
+            }, 150);
+        }
+    }, [activeTab, commentsLength]); // Use state value instead of formData directly
     
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
@@ -2912,10 +2912,10 @@ const LeadDetailModal = ({
                     </div>
                 </div>
 
-                {/* Tabs (lead: Notes & Calendar removed at user request) */}
+                {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'sites', ...(isAdmin ? ['proposals'] : []), 'activity'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -2930,8 +2930,10 @@ const LeadDetailModal = ({
                                     tab === 'overview' ? 'info-circle' :
                                     tab === 'contacts' ? 'users' :
                                     tab === 'sites' ? 'map-marker-alt' :
+                                    tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
+                                    tab === 'notes' ? 'sticky-note' :
                                     'info-circle'
                                 } mr-2`}></i>
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -4232,8 +4234,341 @@ const LeadDetailModal = ({
                             </div>
                         )}
 
-                        {/* Calendar/Follow-ups Tab - REMOVED for leads */}
-                        {/* Notes/Comments Tab - REMOVED for leads */}
+                        {/* Calendar/Follow-ups Tab */}
+                        {activeTab === 'calendar' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Follow-ups & Meetings</h3>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                    <h4 className="font-medium text-gray-900 mb-3 text-sm">Schedule Follow-up</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
+                                            <input
+                                                type="date"
+                                                value={newFollowUp.date}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, date: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
+                                            <input
+                                                type="time"
+                                                value={newFollowUp.time}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, time: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                                            <select
+                                                value={newFollowUp.type}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, type: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            >
+                                                <option>Call</option>
+                                                <option>Meeting</option>
+                                                <option>Email</option>
+                                                <option>Visit</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
+                                            <textarea
+                                                value={newFollowUp.description}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, description: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                rows="2"
+                                                placeholder="What needs to be discussed..."
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end mt-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleAddFollowUp}
+                                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                        >
+                                            <i className="fas fa-plus mr-1.5"></i>
+                                            Add Follow-up
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="font-medium text-gray-900 text-sm">Upcoming Follow-ups</h4>
+                                    {upcomingFollowUps.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                            <i className="fas fa-calendar-alt text-3xl mb-2"></i>
+                                            <p>No upcoming follow-ups scheduled</p>
+                                        </div>
+                                    ) : (
+                                        upcomingFollowUps.map(followUp => (
+                                            <div key={followUp.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex items-start gap-3 flex-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={followUp.completed}
+                                                            onChange={() => handleToggleFollowUp(followUp.id)}
+                                                            className="mt-1"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                                                    followUp.type === 'Call' ? 'bg-blue-100 text-blue-700' :
+                                                                    followUp.type === 'Meeting' ? 'bg-purple-100 text-purple-700' :
+                                                                    followUp.type === 'Email' ? 'bg-green-100 text-green-700' :
+                                                                    'bg-gray-100 text-gray-700'
+                                                                }`}>
+                                                                    {followUp.type}
+                                                                </span>
+                                                                <span className="text-sm font-medium text-gray-900">
+                                                                    {followUp.date} {followUp.time && `at ${followUp.time}`}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteFollowUp(followUp.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                {formData.followUps?.filter(f => f.completed).length > 0 && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium text-gray-900 text-sm">Completed Follow-ups</h4>
+                                        {formData.followUps.filter(f => f.completed).map(followUp => (
+                                            <div key={followUp.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 opacity-60">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex items-start gap-3 flex-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={true}
+                                                            onChange={() => handleToggleFollowUp(followUp.id)}
+                                                            className="mt-1"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="px-2 py-0.5 text-xs rounded font-medium bg-gray-200 text-gray-700">
+                                                                    {followUp.type}
+                                                                </span>
+                                                                <span className="text-sm font-medium text-gray-900 line-through">
+                                                                    {followUp.date} {followUp.time && `at ${followUp.time}`}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600 line-through">{followUp.description}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteFollowUp(followUp.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Notes/Comments Tab */}
+                        {activeTab === 'notes' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Notes & Comments</h3>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                    <textarea
+                                        ref={commentTextareaRef}
+                                        value={newComment}
+                                        onChange={(e) => {
+                                            setNewComment(e.target.value);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            // Handle spacebar specially to prevent cursor jumping
+                                            if (e.key === ' ') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                const textarea = e.target;
+                                                const start = textarea.selectionStart;
+                                                const end = textarea.selectionEnd;
+                                                const newValue = newComment.substring(0, start) + ' ' + newComment.substring(end);
+                                                setNewComment(newValue);
+                                                // Restore cursor position after space
+                                                setTimeout(() => {
+                                                    if (commentTextareaRef.current) {
+                                                        commentTextareaRef.current.setSelectionRange(start + 1, start + 1);
+                                                        commentTextareaRef.current.focus();
+                                                    }
+                                                }, 0);
+                                            }
+                                        }}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-2"
+                                        rows="3"
+                                        placeholder="Add a comment or note..."
+                                    ></textarea>
+                                    {/* Tags input */}
+                                    <div className="mb-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Tags</label>
+                                        <div className="flex gap-2 items-center">
+                                            <input
+                                                type="text"
+                                                value={newNoteTagsInput}
+                                                onChange={(e) => setNewNoteTagsInput(e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTagFromInput(); } }}
+                                                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                placeholder="Type a tag and press Enter or comma"
+                                            />
+                                            <button type="button" onClick={handleAddTagFromInput} className="px-2.5 py-1.5 text-xs bg-gray-200 rounded hover:bg-gray-300">Add</button>
+                                        </div>
+                                        {(newNoteTags || []).length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {newNoteTags.map(tag => (
+                                                    <span key={tag} className="inline-flex items-center px-2 py-0.5 text-xs bg-primary-100 text-primary-700 rounded">
+                                                        <i className="fas fa-tag mr-1"></i>{tag}
+                                                        <button type="button" className="ml-1 text-primary-700" onClick={() => handleRemoveNewTag(tag)}><i className="fas fa-times"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Attachments */}
+                                    <div className="mb-3">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Attachments</label>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            onChange={(e) => handleAttachmentFiles(e.target.files)}
+                                            className="block w-full text-xs text-gray-600"
+                                        />
+                                        {(newNoteAttachments || []).length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                                {newNoteAttachments.map(att => (
+                                                    <div key={att.id} className="flex items-center justify-between text-xs bg-white border border-gray-200 rounded px-2 py-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <i className="fas fa-paperclip text-gray-500"></i>
+                                                            <span className="text-gray-700">{att.name}</span>
+                                                            <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>
+                                                            <button type="button" className="text-red-600" onClick={() => handleRemoveNewAttachment(att.id)} title="Remove"><i className="fas fa-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleAddComment().catch(err => {
+                                                    console.error('Error adding comment:', err);
+                                                });
+                                            }}
+                                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                        >
+                                            <i className="fas fa-plus mr-1.5"></i>
+                                            Add Comment
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Tag filter */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Filter by tag:</span>
+                                    <button type="button" className={`text-xs px-2 py-0.5 rounded ${!notesTagFilter ? 'bg-gray-200' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(null)}>All</button>
+                                    {Array.from(new Set((formData.comments || []).flatMap(c => Array.isArray(c.tags) ? c.tags : []))).map(tag => (
+                                        <button key={tag} type="button" className={`text-xs px-2 py-0.5 rounded ${notesTagFilter === tag ? 'bg-primary-200 text-primary-800' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(tag)}>
+                                            <i className="fas fa-tag mr-1"></i>{tag}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div ref={commentsContainerRef} className="space-y-2">
+                                    {(!formData.comments || formData.comments.length === 0) ? (
+                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                            <i className="fas fa-comment-alt text-3xl mb-2"></i>
+                                            <p>No comments yet</p>
+                                        </div>
+                                    ) : (
+                                        (formData.comments.filter(c => !notesTagFilter || (Array.isArray(c.tags) && c.tags.includes(notesTagFilter)))).map(comment => (
+                                            <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                                            <span className="text-primary-600 font-semibold text-xs">
+                                                                {(comment.createdBy || comment.author || 'U').charAt(0).toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy || comment.author || 'User'}{comment.createdByEmail || comment.authorEmail ? ` (${comment.createdByEmail || comment.authorEmail})` : ''}</div>
+                                                            <div className="text-xs text-gray-500">
+                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteComment(comment.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash text-xs"></i>
+                                                    </button>
+                                                </div>
+                                                {Array.isArray(comment.tags) && comment.tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                                        {comment.tags.map(tag => (
+                                                            <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] bg-gray-100 text-gray-700 rounded">
+                                                                <i className="fas fa-tag mr-1"></i>{tag}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{comment.text}</p>
+                                                {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                    <div className="mt-2 space-y-1">
+                                                        {comment.attachments.map(att => (
+                                                            <div key={att.id || att.name} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <i className="fas fa-paperclip text-gray-500"></i>
+                                                                    <span className="text-gray-700">{att.name}</span>
+                                                                    {att.size && <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>}
+                                                                </div>
+                                                                {att.dataUrl && <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Proposals Tab */}
                         {activeTab === 'proposals' && isAdmin && (
