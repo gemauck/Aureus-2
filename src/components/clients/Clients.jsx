@@ -3990,7 +3990,7 @@ const Clients = React.memo(() => {
                         };
                         
                         // Parse JSON fields from database (they come as strings)
-                        savedLead = {
+                        const parsedApiLead = {
                             ...savedLead,
                             stage: savedLead.stage || updatedLead.stage || 'Awareness', // Ensure stage is preserved
                             status: savedLead.status || updatedLead.status || 'active', // Ensure status is preserved
@@ -4004,12 +4004,7 @@ const Clients = React.memo(() => {
                             contacts: safeParseJSON(savedLead.contacts, []),
                             followUps: safeParseJSON(savedLead.followUps, []),
                             projectIds: safeParseJSON(savedLead.projectIds, []),
-                            // CRITICAL: When stayInEditMode is true (e.g. adding comments), preserve comments from leadFormData
-                            // The API response might not include the new comment yet (normalized table sync delay)
-                            // This prevents the comment from vanishing immediately after being added
-                            comments: stayInEditMode 
-                                ? safeParseJSON(leadFormData.comments || savedLead.comments, [])
-                                : safeParseJSON(savedLead.comments, []),
+                            comments: safeParseJSON(savedLead.comments, []),
                             activityLog: safeParseJSON(savedLead.activityLog, []),
                             sites: safeParseJSON(savedLead.sites, []),
                             contracts: safeParseJSON(savedLead.contracts, []),
@@ -4021,12 +4016,25 @@ const Clients = React.memo(() => {
                             services: safeParseJSON(leadFormData.services || savedLead.services, [])
                         };
                         
+                        // FINAL MERGE (mirror client behaviour):
+                        // Always prefer the latest form data for fields the user just edited,
+                        // especially comments and notes. This makes leads behave like clients:
+                        // the UI is the source of truth immediately after a save.
+                        const finalSavedLead = {
+                            ...parsedApiLead,
+                            // Prefer comments from the form data if present; fall back to parsed API comments.
+                            comments: Array.isArray(leadFormData.comments)
+                                ? leadFormData.comments
+                                : (parsedApiLead.comments || []),
+                            // Prefer notes from the form data if present (already normalised above)
+                            notes: parsedApiLead.notes
+                        };
                         
-                        // CRITICAL: Use the API response to update state, not optimistic updates
-                        // This ensures we're synced with the database
-                        const savedLeads = leads.map(l => l.id === savedLead.id ? savedLead : l);
+                        // CRITICAL: Use the merged lead (API + form data) to update state.
+                        // This ensures comments/notes never disappear after a save.
+                        const savedLeads = leads.map(l => l.id === finalSavedLead.id ? finalSavedLead : l);
                         setLeads(savedLeads);
-                        selectedLeadRef.current = savedLead; // Update selected lead ref with persisted data
+                        selectedLeadRef.current = finalSavedLead; // Update selected lead ref with persisted data
                         
                         // Also update localStorage to keep cache in sync
                         if (window.storage?.setLeads) {

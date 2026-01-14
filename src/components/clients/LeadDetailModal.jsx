@@ -2922,10 +2922,10 @@ const LeadDetailModal = ({
                     </div>
                 </div>
 
-                {/* Tabs */}
+                {/* Tabs (lead: Notes & Calendar removed at user request) */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', ...(isAdmin ? ['proposals'] : []), 'activity'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -2940,10 +2940,9 @@ const LeadDetailModal = ({
                                     tab === 'overview' ? 'info-circle' :
                                     tab === 'contacts' ? 'users' :
                                     tab === 'sites' ? 'map-marker-alt' :
-                                    tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
-                                    'comment-alt'
+                                    'info-circle'
                                 } mr-2`}></i>
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
                                 {tab === 'contacts' && Array.isArray(formData.contacts) && formData.contacts.length > 0 && (
@@ -2959,11 +2958,6 @@ const LeadDetailModal = ({
                                 {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.proposals.length}
-                                    </span>
-                                )}
-                                {tab === 'calendar' && Array.isArray(upcomingFollowUps) && upcomingFollowUps.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs">
-                                        {upcomingFollowUps.length}
                                     </span>
                                 )}
                             </button>
@@ -4248,114 +4242,9 @@ const LeadDetailModal = ({
                             </div>
                         )}
 
-                        {/* Calendar/Follow-ups Tab */}
-                        {activeTab === 'calendar' && (
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Follow-ups & Meetings</h3>
-                                </div>
-
-                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                    <h4 className="font-medium text-gray-900 mb-3 text-sm">Schedule Follow-up</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
-                                            <input
-                                                type="date"
-                                                value={newFollowUp.date}
-                                                onChange={(e) => setNewFollowUp({...newFollowUp, date: e.target.value})}
-                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
-                                            <input
-                                                type="time"
-                                                value={newFollowUp.time}
-                                                onChange={(e) => setNewFollowUp({...newFollowUp, time: e.target.value})}
-                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
-                                            <select
-                                                value={newFollowUp.type}
-                                                onChange={(e) => setNewFollowUp({...newFollowUp, type: e.target.value})}
-                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                            >
-                                                <option value="Call">Call</option>
-                                                <option value="Meeting">Meeting</option>
-                                                <option value="Email">Email</option>
-                                                <option value="Visit">Visit</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
-                                            <input
-                                                type="text"
-                                                value={newFollowUp.description}
-                                                onChange={(e) => setNewFollowUp({...newFollowUp, description: e.target.value})}
-                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                placeholder="Enter follow-up description"
-                                            />
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={handleAddFollowUp}
-                                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-                                    >
-                                        Add Follow-up
-                                    </button>
-                                </div>
-
-                                <div className="bg-white rounded-lg border border-gray-200">
-                                    <h4 className="font-medium text-gray-900 mb-3 p-4 border-b border-gray-200">Upcoming Follow-ups</h4>
-                                    <div className="divide-y divide-gray-200">
-                                        {formData.followUps && formData.followUps.length > 0 ? (
-                                            formData.followUps
-                                                .filter(f => !f.completed)
-                                                .sort((a, b) => {
-                                                    const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
-                                                    const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
-                                                    return dateA - dateB;
-                                                })
-                                                .map((followUp) => (
-                                                    <div key={followUp.id} className="p-4 hover:bg-gray-50">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <span className="font-medium text-gray-900">{followUp.type}</span>
-                                                                    <span className="text-xs text-gray-500">
-                                                                        {new Date(`${followUp.date}T${followUp.time || '00:00'}`).toLocaleString()}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="text-sm text-gray-600">{followUp.description}</p>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const updatedFollowUps = formData.followUps.map(f =>
-                                                                        f.id === followUp.id ? { ...f, completed: true } : f
-                                                                    );
-                                                                    setFormData({ ...formData, followUps: updatedFollowUps });
-                                                                    onSave({ ...formData, followUps: updatedFollowUps }, true);
-                                                                }}
-                                                                className="ml-4 px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700"
-                                                            >
-                                                                Mark Complete
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                        ) : (
-                                            <p className="p-4 text-sm text-gray-500">No upcoming follow-ups</p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Calendar/Follow-ups Tab */}
-                        {activeTab === 'calendar' && (
+                        {/* Calendar/Follow-ups Tab - REMOVED for leads */}
+                        {/* Notes/Comments Tab - REMOVED for leads */}
+                        {false && activeTab === 'calendar' && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
                                     <h3 className="text-lg font-semibold text-gray-900">Follow-ups & Meetings</h3>

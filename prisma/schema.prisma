@@ -79,6 +79,7 @@ model User {
   taskComments              TaskComment[]                @relation("TaskCommentAuthor")
   documentComments          DocumentItemComment[]        @relation("DocumentCommentAuthor")
   weeklyFMSComments         WeeklyFMSReviewItemComment[] @relation("WeeklyFMSCommentAuthor")
+  monthlyFMSComments         MonthlyFMSReviewItemComment[] @relation("MonthlyFMSCommentAuthor")
   clientComments            ClientComment[]              @relation("ClientCommentAuthor")
   clientFollowUps           ClientFollowUp[]             @relation("ClientFollowUpAssignee")
 
@@ -422,6 +423,7 @@ model Project {
   taskComments                 TaskComment[]
   documentSectionsTable        DocumentSection[]        @relation("DocumentSections")
   weeklyFMSReviewSectionsTable WeeklyFMSReviewSection[] @relation("WeeklyFMSReviewSections")
+  monthlyFMSReviewSectionsTable MonthlyFMSReviewSection[] @relation("MonthlyFMSReviewSections")
 
   @@index([clientId])
   @@index([status])
@@ -725,6 +727,78 @@ model WeeklyFMSReviewItemComment {
 
   @@index([itemId])
   @@index([itemId, year, month, week])
+  @@index([createdAt])
+}
+
+model MonthlyFMSReviewSection {
+  id          String   @id @default(cuid())
+  projectId   String
+  year        Int // Year (e.g., 2024)
+  name        String
+  description String   @default("")
+  reviewer    String?  @default("") // Optional reviewer name
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project               @relation("MonthlyFMSReviewSections", fields: [projectId], references: [id], onDelete: Cascade)
+  items   MonthlyFMSReviewItem[]
+
+  @@index([projectId])
+  @@index([projectId, year])
+  @@index([order])
+}
+
+model MonthlyFMSReviewItem {
+  id          String   @id @default(cuid())
+  sectionId   String
+  name        String
+  description String   @default("")
+  required    Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  section  MonthlyFMSReviewSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  statuses MonthlyFMSReviewItemStatus[]
+  comments MonthlyFMSReviewItemComment[]
+
+  @@index([sectionId])
+  @@index([order])
+}
+
+model MonthlyFMSReviewItemStatus {
+  id        String   @id @default(cuid())
+  itemId    String
+  year      Int // Year (e.g., 2024)
+  month     Int // Month (1-12)
+  status    String   @default("pending") // pending, completed, not_applicable, etc.
+  updatedBy String? // User ID
+  updatedAt DateTime @default(now())
+
+  item MonthlyFMSReviewItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, year, month])
+  @@index([itemId])
+  @@index([year, month])
+}
+
+model MonthlyFMSReviewItemComment {
+  id        String   @id @default(cuid())
+  itemId    String
+  year      Int
+  month     Int
+  text      String
+  authorId  String?
+  author    String // Denormalized author name
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item       MonthlyFMSReviewItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  authorUser User?                @relation("MonthlyFMSCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([itemId])
+  @@index([itemId, year, month])
   @@index([createdAt])
 }
 

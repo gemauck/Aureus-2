@@ -17,21 +17,36 @@ npm run build:jsx || echo "⚠️  JSX build skipped"
 echo "✅ Build complete"
 echo ""
 
-# Step 2: Deploy files via rsync
-echo "📤 Copying fixed files to server..."
+# Step 2: Verify build output
+if [ ! -f "dist/src/components/clients/Clients.js" ]; then
+    echo "❌ ERROR: dist/src/components/clients/Clients.js not found after build!"
+    echo "   Make sure build:jsx completed successfully"
+    exit 1
+fi
+
+if [ ! -f "dist/build-version.json" ]; then
+    echo "❌ ERROR: dist/build-version.json not found after build!"
+    echo "   Make sure build:jsx completed successfully"
+    exit 1
+fi
+
+BUILD_VERSION=$(cat dist/build-version.json | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+echo "📦 Build version: $BUILD_VERSION"
+echo ""
+
+# Step 3: Deploy files via rsync
+echo "📤 Copying built files to server..."
 rsync -avz --progress \
-  src/utils/databaseAPI.js \
-  src/components/clients/ClientsDatabaseFirst.jsx \
-  src/components/clients/ClientsMobileOptimized.jsx \
   dist/ \
+  index.html \
   "$SERVER:$APP_DIR/"
 
 echo "✅ Files copied"
 echo ""
 
-# Step 3: Restart application on server
+# Step 4: Restart application on server
 echo "🔄 Restarting application..."
-ssh $SERVER << 'DEPLOY'
+ssh $SERVER << DEPLOY
 set -e
 
 cd /var/www/abcotronics-erp
@@ -48,10 +63,23 @@ echo ""
 echo "📋 Recent logs:"
 pm2 logs abcotronics-erp --lines 10 --nostream
 
+echo ""
+echo "🧹 Clearing server-side cache..."
+# Clear any server-side caches
+if [ -d "/var/www/abcotronics-erp/.cache" ]; then
+    rm -rf /var/www/abcotronics-erp/.cache/*
+    echo "   Cleared .cache directory"
+fi
+
 DEPLOY
 
 echo ""
 echo "✅ Deployment complete!"
 echo "🌐 Test at: https://abcoafrica.co.za"
-echo "💡 Hard refresh your browser (Cmd+Shift+R / Ctrl+Shift+R) to see changes"
+echo "📦 Build version: $BUILD_VERSION"
+echo ""
+echo "💡 IMPORTANT: Clear your browser cache:"
+echo "   - Chrome/Edge: Cmd+Shift+Delete (Mac) or Ctrl+Shift+Delete (Windows)"
+echo "   - Or hard refresh: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)"
+echo "   - Or add ?forceRefresh=1 to the URL"
 

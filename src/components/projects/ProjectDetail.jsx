@@ -1876,14 +1876,21 @@ function initializeProjectDetail() {
     useEffect(() => {
         const normalizedValue = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
         
-        // Sync when value changes from prop (e.g., after database refresh)
-        // Only skip sync if ref is set AND we're not switching projects
-        // This ensures that when navigating back, we always sync from the database
+        // If the user has explicitly toggled the Monthly FMS flag (e.g. via "Add a Process"),
+        // avoid immediately overwriting that local state with the (stale) value from the database.
+        // Once the database value catches up and matches the local state, clear the flag so that
+        // future backend-driven changes can sync normally.
+        if (hasMonthlyFMSReviewProcessChangedRef.current) {
+            if (normalizedValue === hasMonthlyFMSReviewProcess) {
+                // Backend has caught up with the local user action – allow future syncs
+                hasMonthlyFMSReviewProcessChangedRef.current = false;
+            }
+            return;
+        }
+        
+        // Normal sync path: keep local state aligned with project prop
         if (normalizedValue !== hasMonthlyFMSReviewProcess) {
-            // Always sync - the ref is reset when project.id changes anyway
             setHasMonthlyFMSReviewProcess(normalizedValue);
-            // Reset the ref after syncing from prop to allow future syncs
-            hasMonthlyFMSReviewProcessChangedRef.current = false;
         }
     }, [project.hasMonthlyFMSReviewProcess, project.id, hasMonthlyFMSReviewProcess]);
     
@@ -6044,19 +6051,18 @@ function initializeProjectDetail() {
                             Weekly FMS Review
                         </button>
                     )}
-                    {hasMonthlyFMSReviewProcess && (
-                        <button
-                            onClick={() => switchSection('monthlyFMSReview')}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'monthlyFMSReview'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-calendar-alt mr-1.5"></i>
-                            Monthly FMS Review
-                        </button>
-                    )}
+                    {/* Always show Monthly FMS Review tab for all projects */}
+                    <button
+                        onClick={() => switchSection('monthlyFMSReview')}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeSection === 'monthlyFMSReview'
+                                ? 'bg-primary-600 text-white'
+                                : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-calendar-alt mr-1.5"></i>
+                        Monthly FMS Review
+                    </button>
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -6293,12 +6299,12 @@ function initializeProjectDetail() {
                 />
             )}
             
-            {/* Always render MonthlyFMSReviewProcessSection when hasMonthlyFMSReviewProcess is true */}
-            {hasMonthlyFMSReviewProcess && (
+            {/* Always render MonthlyFMSReviewProcessSection when the Monthly FMS tab is active */}
+            {activeSection === 'monthlyFMSReview' && (
                 <MonthlyFMSReviewProcessSection
                     key={`monthly-fms-review-${project?.id || 'default'}`}
                     project={project}
-                    hasMonthlyFMSReviewProcess={hasMonthlyFMSReviewProcess}
+                    hasMonthlyFMSReviewProcess={true}
                     activeSection={activeSection}
                     onBack={handleBackToOverview}
                 />
