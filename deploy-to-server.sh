@@ -139,6 +139,13 @@ else
     fi
 fi
 
+# Run Prisma migrations
+echo ""
+echo "🗄️  Running Prisma migrations..."
+if command -v npx &> /dev/null && [ -f prisma/schema.prisma ]; then
+    npx prisma migrate deploy || echo "⚠️  Prisma migrate deploy failed, continuing anyway..."
+fi
+
 # Clear Prisma cache and regenerate
 echo ""
 echo "🔄 Clearing Prisma cache and regenerating client..."

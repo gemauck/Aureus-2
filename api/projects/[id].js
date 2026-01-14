@@ -4,7 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson } from '../projects.js'
 
 /**
  * Safely load project with all relations, with fallback if relations fail
@@ -161,6 +161,36 @@ async function loadProjectWithRelations(projectId) {
       } catch (fmsError) {
         console.error('❌ Failed to load weeklyFMSReviewSectionsTable:', fmsError.message);
         project.weeklyFMSReviewSectionsTable = [];
+      }
+      
+      try {
+        project.monthlyFMSReviewSectionsTable = await prisma.monthlyFMSReviewSection.findMany({
+          where: { projectId },
+          include: {
+            items: {
+              include: {
+                statuses: true,
+                comments: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          },
+          orderBy: [{ year: 'desc' }, { order: 'asc' }]
+        });
+      } catch (monthlyFmsError) {
+        console.error('❌ Failed to load monthlyFMSReviewSectionsTable:', monthlyFmsError.message);
+        project.monthlyFMSReviewSectionsTable = [];
       }
       
       // Load task subtasks and assignees separately
@@ -516,6 +546,7 @@ async function handler(req, res) {
         // Frontend components expect year-based objects: { "2024": [...], "2025": [...] }
         let documentSectionsJson = null;
         let weeklyFMSReviewSectionsJson = null;
+        let monthlyFMSReviewSectionsJson = null;
         
         try {
           // Convert documentSections from table to JSON format
@@ -615,6 +646,55 @@ async function handler(req, res) {
           }
         }
         
+        try {
+          // Convert monthlyFMSReviewSections from table to JSON format
+          monthlyFMSReviewSectionsJson = await monthlyFMSReviewSectionsToJson(id);
+          console.log('📊 GET /api/projects/[id]: monthlyFMSReviewSectionsToJson result:', {
+            projectId: id,
+            hasData: !!monthlyFMSReviewSectionsJson,
+            isObject: typeof monthlyFMSReviewSectionsJson === 'object',
+            keys: monthlyFMSReviewSectionsJson ? Object.keys(monthlyFMSReviewSectionsJson) : [],
+            yearCount: monthlyFMSReviewSectionsJson ? Object.keys(monthlyFMSReviewSectionsJson).length : 0
+          });
+          
+          // If no table data, fallback to JSON field if it exists
+          if (!monthlyFMSReviewSectionsJson && project.monthlyFMSReviewSections) {
+            try {
+              if (typeof project.monthlyFMSReviewSections === 'string') {
+                monthlyFMSReviewSectionsJson = JSON.parse(project.monthlyFMSReviewSections);
+              } else {
+                monthlyFMSReviewSectionsJson = project.monthlyFMSReviewSections;
+              }
+              console.log('📊 GET /api/projects/[id]: Using JSON field fallback for monthlyFMSReviewSections');
+            } catch (e) {
+              console.warn('⚠️ Failed to parse monthlyFMSReviewSections JSON field:', e.message);
+              monthlyFMSReviewSectionsJson = {};
+            }
+          }
+          
+          // Ensure we always return an object (not null)
+          if (!monthlyFMSReviewSectionsJson) {
+            monthlyFMSReviewSectionsJson = {};
+          }
+        } catch (e) {
+          console.error('❌ Failed to convert monthlyFMSReviewSections from table:', e);
+          // Fallback to JSON field
+          if (project.monthlyFMSReviewSections) {
+            try {
+              if (typeof project.monthlyFMSReviewSections === 'string') {
+                monthlyFMSReviewSectionsJson = JSON.parse(project.monthlyFMSReviewSections);
+              } else {
+                monthlyFMSReviewSectionsJson = project.monthlyFMSReviewSections;
+              }
+            } catch (parseError) {
+              console.error('❌ Failed to parse monthlyFMSReviewSections JSON field:', parseError);
+              monthlyFMSReviewSectionsJson = {};
+            }
+          } else {
+            monthlyFMSReviewSectionsJson = {};
+          }
+        }
+        
         // Transform project - use table data instead of JSON fields
         // Frontend expects these field names, so map table data to them
         const transformedProject = {
@@ -629,13 +709,15 @@ async function handler(req, res) {
           team: projectTeamMembers, // Team from ProjectTeamMember table
           // Document sections: converted from table to JSON format, or fallback to empty object
           documentSections: documentSectionsJson || {},
-          weeklyFMSReviewSections: weeklyFMSReviewSectionsJson || {}
+          weeklyFMSReviewSections: weeklyFMSReviewSectionsJson || {},
+          monthlyFMSReviewSections: monthlyFMSReviewSectionsJson || {}
         };
         
         // Remove the table relation fields to avoid confusion (keep only transformed fields)
         delete transformedProject.tasks; // Use tasksList instead
         delete transformedProject.documentSectionsTable;
         delete transformedProject.weeklyFMSReviewSectionsTable;
+        delete transformedProject.monthlyFMSReviewSectionsTable;
         
         return ok(res, { project: transformedProject })
       } catch (dbError) {
@@ -821,6 +903,44 @@ async function handler(req, res) {
           : Boolean(body.hasWeeklyFMSReviewProcess === true || body.hasWeeklyFMSReviewProcess === 'true' || body.hasWeeklyFMSReviewProcess === 1);
       }
       
+      // Handle monthlyFMSReviewSections separately if provided - ensure it's properly saved to JSON field
+      if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
+        try {
+          if (typeof body.monthlyFMSReviewSections === 'string') {
+            const trimmed = body.monthlyFMSReviewSections.trim();
+            if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
+              updateData.monthlyFMSReviewSections = JSON.stringify({});
+            } else {
+              // Validate it's valid JSON
+              try {
+                JSON.parse(trimmed);
+                updateData.monthlyFMSReviewSections = trimmed;
+              } catch (parseError) {
+                console.error('❌ Invalid monthlyFMSReviewSections JSON string:', parseError);
+                // Try to stringify the original value as fallback
+                updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+              }
+            }
+          } else if (Array.isArray(body.monthlyFMSReviewSections)) {
+            updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+          } else if (typeof body.monthlyFMSReviewSections === 'object') {
+            updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+          } else {
+            updateData.monthlyFMSReviewSections = JSON.stringify(body.monthlyFMSReviewSections);
+          }
+        } catch (error) {
+          console.error('❌ Error processing monthlyFMSReviewSections:', error);
+          updateData.monthlyFMSReviewSections = JSON.stringify({});
+        }
+      }
+      
+      // Handle hasMonthlyFMSReviewProcess separately if provided - normalize to boolean
+      if (body.hasMonthlyFMSReviewProcess !== undefined && body.hasMonthlyFMSReviewProcess !== null) {
+        updateData.hasMonthlyFMSReviewProcess = typeof body.hasMonthlyFMSReviewProcess === 'boolean'
+          ? body.hasMonthlyFMSReviewProcess
+          : Boolean(body.hasMonthlyFMSReviewProcess === true || body.hasMonthlyFMSReviewProcess === 'true' || body.hasMonthlyFMSReviewProcess === 1);
+      }
+      
       // Handle monthlyProgress separately if provided - with validation for safety
       if (body.monthlyProgress !== undefined && body.monthlyProgress !== null) {
         try {
@@ -939,6 +1059,31 @@ async function handler(req, res) {
             });
             // Re-throw to fail the request - table save is critical for persistence
             throw new Error(`Failed to save weeklyFMSReviewSections to table: ${tableError.message}`);
+          }
+        }
+        
+        if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
+          try {
+            console.log('💾 PUT /api/projects/[id]: Saving monthlyFMSReviewSections to table', {
+              projectId: id,
+              type: typeof body.monthlyFMSReviewSections,
+              isString: typeof body.monthlyFMSReviewSections === 'string',
+              length: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.length : 'N/A',
+              preview: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.substring(0, 200) : JSON.stringify(body.monthlyFMSReviewSections).substring(0, 200)
+            });
+            // Pass the original body value - saveMonthlyFMSReviewSectionsToTable handles string parsing
+            // Don't fail the request if table save fails - JSON field is already saved above
+            await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections)
+            console.log('✅ PUT /api/projects/[id]: Successfully saved monthlyFMSReviewSections to table');
+          } catch (tableError) {
+            console.error('⚠️ WARNING: Error saving monthlyFMSReviewSections to table (JSON field already saved):', {
+              error: tableError.message,
+              stack: tableError.stack,
+              projectId: id,
+              dataType: typeof body.monthlyFMSReviewSections
+            });
+            // Don't fail the request - JSON field is already saved, table save is optional
+            // This allows data to persist even if table doesn't exist yet
           }
         }
         
