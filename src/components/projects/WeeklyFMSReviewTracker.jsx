@@ -138,8 +138,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const workingWeeks = getWorkingWeeks();
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
-    const previousProjectIdRef = useRef(project?.id);
-    const hasLoadedInitialDataRef = useRef(false);
     const renderCountRef = useRef(0);
     const lastLoggedProjectIdRef = useRef(null);
     
@@ -158,16 +156,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         renderCountRef.current += 1;
     }, [project?.id]);
     const sectionsRef = useRef({});
-    const lastSavedSnapshotRef = useRef('{}');
+    const lastSavedDataRef = useRef(null); // Track last saved data to prevent unnecessary saves
     const apiRef = useRef(window.DocumentCollectionAPI || null);
+    
+    // Ensure API ref is updated when DocumentCollectionAPI becomes available
+    useEffect(() => {
+        if (window.DocumentCollectionAPI) {
+            apiRef.current = window.DocumentCollectionAPI;
+            console.log('✅ DocumentCollectionAPI initialized for Weekly FMS Review');
+        }
+    }, []);
     const isDeletingRef = useRef(false);
     const deletionTimestampRef = useRef(null); // Track when deletion started
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionQueueRef = useRef([]); // Queue for consecutive deletions
     const isProcessingDeletionQueueRef = useRef(false); // Track if we're processing the queue
-    const lastChangeTimestampRef = useRef(0); // Track when last status change was made
-    const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
-    const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
     const sectionScrollRefs = useRef({}); // Track scroll containers for each section
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     const savedScrollPositionsRef = useRef({}); // Track saved scroll positions per section
@@ -361,9 +364,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
     // Year‑scoped setter: only updates the array for the active year
     const setSections = (updater) => {
-        // CRITICAL: Update timestamp when sections change so save logic can detect changes
-        lastChangeTimestampRef.current = Date.now();
-        
         setSectionsByYear(prev => {
             const prevForYear = prev[selectedYear] || [];
             const nextForYear = typeof updater === 'function'
@@ -375,7 +375,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 [selectedYear]: nextForYear
             };
             
-            // CRITICAL: Keep ref in sync immediately so save functions have latest data
+            // CRITICAL: Update ref immediately to prevent race conditions with save
             sectionsRef.current = updated;
             
             return updated;
@@ -396,9 +396,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, []);
     
-    // Store callbacks in refs to prevent unnecessary re-renders
-    const loadFromProjectPropRef = useRef(null);
-    const refreshFromDatabaseRef = useRef(null);
     
     // Templates state
     const [templates, setTemplates] = useState([]);
@@ -451,387 +448,137 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [selectedCells]);
     
     // ============================================================
-    // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
+    // LOAD DATA FROM DATABASE - Simple and reliable
     // ============================================================
-    // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
+    // ⚠️ IMPORTANT: Always load from database first (source of truth)
     
-    const loadFromProjectProp = useCallback(() => {
+    // Simplified loading - load from database, use prop as fallback
+    const loadData = useCallback(async () => {
         if (!project?.id) return;
         
-        console.log('📥 Loading weekly review sections from project prop...', {
-            projectId: project.id,
-            hasWeeklyFMSReviewSections: !!project.weeklyFMSReviewSections,
-            hasDocumentSections: !!project.documentSections,
-            weeklyFMSReviewSectionsType: typeof project.weeklyFMSReviewSections,
-            weeklyFMSReviewSectionsLength: project.weeklyFMSReviewSections?.length || 0
-        });
+        // Don't reload if we're currently saving - wait for save to complete
+        if (isSavingRef.current) {
+            console.log('⏸️ Load skipped: save in progress');
+            return;
+        }
         
         setIsLoading(true);
+        
         try {
-            const snapshotKey = getSnapshotKey(project.id);
-            const normalizedFromProp = normalizeSectionsByYear(project.weeklyFMSReviewSections || project.documentSections);
-            const propYearKeys = Object.keys(normalizedFromProp || {});
-            const propHasData = propYearKeys.length > 0 && 
-                propYearKeys.some(year => {
-                    const yearSections = normalizedFromProp[year] || [];
-                    return Array.isArray(yearSections) && yearSections.length > 0;
+            // ALWAYS load from database first (most reliable, has latest data)
+            if (apiRef.current?.fetchProject) {
+                console.log('📥 Loading weekly FMS review from database...', { 
+                    projectId: project.id,
+                    hasAPI: !!apiRef.current,
+                    hasFetchMethod: !!apiRef.current.fetchProject
                 });
-            
-            console.log('📥 Normalized from prop:', {
-                propYearKeys,
-                propHasData,
-                sectionCounts: propYearKeys.reduce((acc, year) => {
-                    acc[year] = (normalizedFromProp[year] || []).length;
-                    return acc;
-                }, {})
-            });
-            
-            let normalized = normalizedFromProp;
-            
-            // CRITICAL: Always check localStorage as backup, even if prop has data
-            // This ensures we don't lose data if the prop hasn't been refreshed yet
-            if (snapshotKey && window.localStorage) {
-                try {
-                    const snapshotString = window.localStorage.getItem(snapshotKey);
-                    if (snapshotString) {
-                        const snapshotParsed = JSON.parse(snapshotString);
-                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
-                        const snapshotYears = Object.keys(snapshotMap || {});
-                        const snapshotHasData = snapshotYears.length > 0 &&
-                            snapshotYears.some(year => {
-                                const yearSections = snapshotMap[year] || [];
-                                return Array.isArray(yearSections) && yearSections.length > 0;
-                            });
-                        
-                        // CRITICAL: Always prefer prop (database) over localStorage when prop has data
-                        // This prevents deleted sections from being restored from localStorage
-                        // localStorage should only be used as a fallback when prop is empty
-                        if (snapshotHasData) {
-                            if (!propHasData) {
-                                // Prop is empty, use localStorage as fallback
-                                normalized = snapshotMap;
-                                console.log('💾 Restored from localStorage (prop was empty)', {
-                                    snapshotYears,
-                                    sectionsCount: snapshotYears.reduce((sum, year) => 
-                                        sum + (snapshotMap[year]?.length || 0), 0
-                                    )
-                                });
-                            } else {
-                                // Prop has data - ALWAYS use prop (database is source of truth)
-                                // Don't compare section counts - database state takes precedence
-                                // This ensures deletions persist and aren't restored from localStorage
-                                console.log('✅ Using prop data (database is source of truth)', {
-                                    propCount: propYearKeys.reduce((sum, year) => 
-                                        sum + ((normalizedFromProp[year] || []).length), 0
-                                    ),
-                                    snapshotCount: snapshotYears.reduce((sum, year) => 
-                                        sum + ((snapshotMap[year] || []).length), 0
-                                    )
-                                });
-                                // normalized already equals normalizedFromProp, so no change needed
-                            }
-                        }
-                    }
-                } catch (snapshotError) {
-                    console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
+                const freshProject = await apiRef.current.fetchProject(project.id);
+                console.log('📥 Loaded project from database:', { 
+                    hasWeeklyFMSReviewSections: !!freshProject?.weeklyFMSReviewSections,
+                    weeklyFMSReviewSectionsType: typeof freshProject?.weeklyFMSReviewSections,
+                    weeklyFMSReviewSectionsLength: typeof freshProject?.weeklyFMSReviewSections === 'string' 
+                        ? freshProject.weeklyFMSReviewSections.length 
+                        : 'N/A',
+                    isObject: typeof freshProject?.weeklyFMSReviewSections === 'object',
+                    isString: typeof freshProject?.weeklyFMSReviewSections === 'string'
+                });
+                
+                if (freshProject?.weeklyFMSReviewSections) {
+                    const normalized = normalizeSectionsByYear(freshProject.weeklyFMSReviewSections);
+                    console.log('📥 Normalized sections:', { 
+                        yearKeys: Object.keys(normalized),
+                        sectionsCount: normalized[selectedYear]?.length || 0,
+                        totalYears: Object.keys(normalized).length
+                    });
+            setSectionsByYear(normalized);
+                    sectionsRef.current = normalized;
+            lastSavedDataRef.current = JSON.stringify(normalized);
+            setIsLoading(false);
+            return;
+                } else {
+                    console.log('⚠️ No weeklyFMSReviewSections in database response');
                 }
+                            } else {
+                console.log('⚠️ API not available, using fallback:', {
+                    hasAPI: !!apiRef.current,
+                    hasFetchMethod: !!apiRef.current?.fetchProject
+                });
             }
             
-            const finalYearKeys = Object.keys(normalized || {});
-            const finalSectionCount = finalYearKeys.reduce((sum, year) => 
-                sum + ((normalized[year] || []).length), 0
-            );
-            
-            console.log('📥 Final loaded data:', {
-                finalYearKeys,
-                finalSectionCount,
-                source: normalized === normalizedFromProp ? 'prop' : 'localStorage'
-            });
-            
-            setSectionsByYear(normalized);
-            lastSavedSnapshotRef.current = serializeSections(normalized);
+            // Fallback to prop data (only if database load failed)
+            console.log('⚠️ Falling back to prop data');
+            if (project?.weeklyFMSReviewSections) {
+                const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
+                        setSectionsByYear(normalized);
+                sectionsRef.current = normalized;
+                lastSavedDataRef.current = JSON.stringify(normalized);
+                    } else {
+                // No data - initialize empty
+                console.log('📭 No data found, initializing empty');
+                setSectionsByYear({});
+                sectionsRef.current = {};
+                lastSavedDataRef.current = JSON.stringify({});
+            }
         } catch (error) {
-            console.error('❌ Error loading sections from prop:', error);
+            console.error('❌ Error loading data:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                projectId: project.id
+            });
             setSectionsByYear({});
-            lastSavedSnapshotRef.current = '{}';
+            sectionsRef.current = {};
         } finally {
-            hasLoadedInitialDataRef.current = true;
             setIsLoading(false);
         }
-    }, [project?.weeklyFMSReviewSections, project?.documentSections, project?.id]);
+    }, [project?.id, selectedYear]); // Removed project?.weeklyFMSReviewSections to prevent unnecessary reloads
     
-    const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
-        if (!project?.id || !apiRef.current) return;
-        
-        // Don't refresh if a save is in progress to avoid race conditions
-        if (isSavingRef.current && !forceUpdate) {
-            console.log('⏸️ Refresh skipped: save in progress');
-            return;
-        }
-        
-        // Don't refresh if user made changes recently (within last 15 seconds)
-        // This prevents overwriting rapid consecutive changes
-        // Increased from 5 seconds to 15 seconds to better handle rapid consecutive changes
-        const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-        if (!forceUpdate && timeSinceLastChange < 15000) {
-            console.log('⏸️ Refresh skipped: recent changes detected (will not overwrite)', {
-                timeSinceLastChange: `${timeSinceLastChange}ms`
-            });
-            return;
-        }
-        
-        // Also check if there are unsaved changes - don't refresh if user is still editing
-        // This provides additional protection even if the timestamp check passes
-        // BUT: Allow refresh if currentSnapshot is empty (fresh load, not editing)
-        const currentSnapshot = serializeSections(sectionsRef.current);
-        const isEmptySnapshot = currentSnapshot === '{}' || currentSnapshot === '';
-        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-        if (!forceUpdate && hasUnsavedChanges && !isEmptySnapshot && timeSinceLastChange < 20000) {
-            console.log('⏸️ Refresh skipped: unsaved changes detected (will not overwrite)', {
-                hasUnsavedChanges: true,
-                timeSinceLastChange: `${timeSinceLastChange}ms`
-            });
-            return;
-        }
-        
-        // Don't refresh if a delete operation just happened (give it time to save)
-        // This is critical to prevent the deletion from being overwritten by stale data
-        if (isDeletingRef.current && !forceUpdate) {
-            const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : 0;
-            // Block refreshes for at least 5 seconds after deletion starts
-            if (timeSinceDeletion < 5000) {
-                console.log(`⏸️ Refresh skipped: deletion in progress (${timeSinceDeletion}ms ago)`);
-                return;
-            }
-        }
-        
-        try {
-            const freshProject = await apiRef.current.fetchProject(project.id);
-            const snapshotKey = getSnapshotKey(project.id);
-            const normalizedFromDb = normalizeSectionsByYear(freshProject?.weeklyFMSReviewSections || freshProject?.documentSections);
-            let normalized = normalizedFromDb;
-            const yearKeys = Object.keys(normalizedFromDb || {});
-            const currentSnapshot = serializeSections(sectionsRef.current);
-            const freshSnapshot = serializeSections(normalized);
-            
-            // If DB has no data but we have a local snapshot, treat snapshot as source of truth
-            // BUT: Don't use snapshot if it has more sections than current state (indicates deletion happened)
-            if ((!normalizedFromDb || yearKeys.length === 0) && snapshotKey && window.localStorage) {
-                try {
-                    const snapshotString = window.localStorage.getItem(snapshotKey);
-                    if (snapshotString) {
-                        const snapshotParsed = JSON.parse(snapshotString);
-                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
-                        const snapshotYears = Object.keys(snapshotMap || {});
-                        if (snapshotYears.length > 0) {
-                            // Check if snapshot would restore deleted sections
-                            const currentYearSections = sectionsRef.current[selectedYear] || [];
-                            const snapshotYearSections = snapshotMap[selectedYear] || [];
-                            
-                            // Only use snapshot if it doesn't have more sections than current state
-                            // This prevents restoring sections that were just deleted
-                            if (snapshotYearSections.length <= currentYearSections.length || currentYearSections.length === 0) {
-                                normalized = snapshotMap;
-                            } else {
-                                console.log('⏸️ Snapshot ignored: would restore deleted sections', {
-                                    current: currentYearSections.length,
-                                    snapshot: snapshotYearSections.length
-                                });
-                            }
-                        }
-                    }
-                } catch (snapshotError) {
-                    console.warn('⚠️ Failed to apply document collection snapshot as DB fallback:', snapshotError);
-                }
-            }
-            
-            // Update from database if data has changed
-            // Check if we have unsaved local changes
-            const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-            
-            // Double-check deletion flag before updating (defensive programming)
-            // This prevents race conditions where the flag might be checked but then cleared
-            // between the check and the state update
-            if (isDeletingRef.current && !forceUpdate) {
-                console.log('⏸️ Refresh aborted: deletion flag detected during update');
-                return;
-            }
-            
-            if (freshSnapshot !== currentSnapshot) {
-            // CRITICAL: Don't restore deleted sections
-            // If current state has fewer sections than database, a deletion likely just happened
-            const currentYearSections = sectionsRef.current[selectedYear] || [];
-            const freshYearSections = normalized[selectedYear] || [];
-            
-            // Check if any sections in the database are ones we're currently deleting
-            const currentSectionIds = new Set(currentYearSections.map(s => String(s.id)));
-            const freshSectionIds = new Set(freshYearSections.map(s => String(s.id)));
-            const sectionsToRestore = freshYearSections.filter(s => 
-                !currentSectionIds.has(String(s.id)) && 
-                deletionSectionIdsRef.current.has(String(s.id))
-            );
-            
-            // If database has sections we're deleting, don't update (deletion in progress)
-            if (sectionsToRestore.length > 0) {
-                console.log('⏸️ Refresh skipped: database contains sections being deleted', {
-                    sectionsToRestore: sectionsToRestore.map(s => ({ id: s.id, name: s.name })),
-                    deletionIds: Array.from(deletionSectionIdsRef.current)
-                });
-                return;
-            }
-            
-            // If database has more sections than current state, don't update (deletion likely in progress)
-            if (freshYearSections.length > currentYearSections.length && currentYearSections.length > 0) {
-                const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : Infinity;
-                // Only block if deletion happened recently (within last 10 seconds)
-                if (timeSinceDeletion < 10000) {
-                    console.log('⏸️ Refresh skipped: database has more sections than current state (deletion likely in progress)', {
-                        current: currentYearSections.length,
-                        database: freshYearSections.length,
-                        timeSinceDeletion: `${timeSinceDeletion}ms`
-                    });
-                    return;
-                }
-            }
-                
-                // CRITICAL: Never update if we have unsaved local changes, regardless of snapshot matching
-                // This prevents overwriting local changes before they're saved to the database
-                // The only exception is forceUpdate, which should only be used after a successful save
-                // ALSO: Allow refresh if currentSnapshot is empty (fresh load, not editing)
-                const isEmptySnapshot = currentSnapshot === '{}' || currentSnapshot === '';
-                if (hasUnsavedChanges && !forceUpdate && !isEmptySnapshot) {
-                    console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)', {
-                        hasUnsavedChanges: true,
-                        isSaving: isSavingRef.current,
-                        currentSnapshot: currentSnapshot.substring(0, 100),
-                        lastSavedSnapshot: lastSavedSnapshotRef.current.substring(0, 100)
-                    });
-                    return;
-                }
-                
-                // Update if:
-                // 1. No unsaved local changes (safe to update), OR
-                // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
-                // 3. Force update requested (after successful save)
-                const shouldUpdate = !hasUnsavedChanges || 
-                                    (freshSnapshot === lastSavedSnapshotRef.current) || 
-                                    forceUpdate;
-                
-                if (shouldUpdate) {
-                    // Final check before updating state
-                    if (!isDeletingRef.current || forceUpdate) {
-                        // Save scroll positions before refresh (if not already saved)
-                        if (Object.keys(savedScrollPositionsRef.current).length === 0) {
-                            Object.entries(sectionScrollRefs.current).forEach(([sectionId, scrollContainer]) => {
-                                if (scrollContainer) {
-                                    savedScrollPositionsRef.current[sectionId] = scrollContainer.scrollLeft;
-                                }
-                            });
-                        }
-                        setSectionsByYear(normalized);
-                        // Restore scroll positions after refresh
-                        setTimeout(() => {
-                            requestAnimationFrame(() => {
-                                Object.entries(sectionScrollRefs.current).forEach(([sectionId, scrollContainer]) => {
-                                    if (scrollContainer && savedScrollPositionsRef.current[sectionId] !== undefined) {
-                                        const savedPosition = savedScrollPositionsRef.current[sectionId];
-                                        isScrollingRef.current = true;
-                                        scrollContainer.scrollLeft = savedPosition;
-                                        setTimeout(() => {
-                                            isScrollingRef.current = false;
-                                        }, 50);
-                                    }
-                                });
-                            });
-                        }, 100);
-                        // Update snapshot reference to match database state
-                        if (freshSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
-                            lastSavedSnapshotRef.current = freshSnapshot;
-                        }
-                    } else {
-                        console.log('⏸️ State update skipped: deletion in progress');
-                    }
-                }
-            } else {
-                // Data matches, update snapshot reference if needed
-                if (hasUnsavedChanges && freshSnapshot === lastSavedSnapshotRef.current) {
-                    lastSavedSnapshotRef.current = freshSnapshot;
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error fetching fresh project data:', error);
-        }
-    }, [project?.id]);
-    
-    // Store callbacks in refs to prevent unnecessary re-renders
-    // This must be after both functions are declared to avoid temporal dead zone error
+    // Load data on mount and when project/year changes
     useEffect(() => {
-        loadFromProjectPropRef.current = loadFromProjectProp;
-        refreshFromDatabaseRef.current = refreshFromDatabase;
-    }, [loadFromProjectProp, refreshFromDatabase]);
-    
-    // Track previous project data to detect actual changes
-    const previousProjectDataRef = useRef(null);
-    
-    useEffect(() => {
-        if (!project?.id) return;
-        
-        const isNewProject = previousProjectIdRef.current !== project.id;
-        if (isNewProject) {
-            previousProjectIdRef.current = project.id;
-            hasLoadedInitialDataRef.current = false;
-            previousProjectDataRef.current = null; // Reset on new project
+        if (!project?.id) {
+            console.log('⏸️ LoadData useEffect: No project ID');
+            return;
         }
         
-        // Only trigger if project data actually changed (not just object reference)
-        const currentProjectData = JSON.stringify({
-            weeklyFMSReviewSections: project?.weeklyFMSReviewSections,
-            documentSections: project?.documentSections
+        // Ensure API is available before loading
+        if (!apiRef.current && window.DocumentCollectionAPI) {
+            apiRef.current = window.DocumentCollectionAPI;
+            console.log('✅ DocumentCollectionAPI set in loadData useEffect');
+        }
+        
+        if (!apiRef.current) {
+            console.warn('⚠️ DocumentCollectionAPI not available, will retry');
+            // Retry after a short delay
+            const retryTimeout = setTimeout(() => {
+                if (window.DocumentCollectionAPI) {
+                    apiRef.current = window.DocumentCollectionAPI;
+                    console.log('✅ DocumentCollectionAPI set on retry');
+                    loadData();
+                }
+            }, 500);
+            return () => clearTimeout(retryTimeout);
+        }
+        
+        console.log('📥 LoadData useEffect: Calling loadData', { 
+            projectId: project.id, 
+            selectedYear,
+            hasAPI: !!apiRef.current 
         });
-        const projectDataChanged = previousProjectDataRef.current !== currentProjectData;
         
-        if (projectDataChanged) {
-            previousProjectDataRef.current = currentProjectData;
-        }
+        // Small delay to ensure API is initialized
+        const timeoutId = setTimeout(() => {
+            loadData();
+        }, 100);
         
-        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
-        if (isNewProject || (projectDataChanged && !hasUnsavedChanges)) {
-            if (loadFromProjectPropRef.current) {
-                loadFromProjectPropRef.current();
-            }
-        }
-        
-        // Only refresh on new project or when data actually changed
-        if (isNewProject || projectDataChanged) {
-            if (refreshFromDatabaseRef.current) {
-                refreshFromDatabaseRef.current();
-            }
-        }
-    }, [project?.id, project?.weeklyFMSReviewSections, project?.documentSections]);
-    
-    // ============================================================
-    // POLLING - Regularly refresh from database to get updates
-    // ============================================================
-    useEffect(() => {
-        if (!project?.id || !apiRef.current) return;
-        
-        // Poll every 5 seconds to check for database updates
-        const pollInterval = setInterval(() => {
-            if (refreshFromDatabaseRef.current) {
-                refreshFromDatabaseRef.current(false);
-            }
-        }, 5000);
-        
-        return () => {
-            clearInterval(pollInterval);
-        };
-    }, [project?.id]);
+        return () => clearTimeout(timeoutId);
+    }, [project?.id, selectedYear, loadData]); // Include loadData to ensure it runs when dependencies change
     
     // ============================================================
     // Handle navigation with save - ensures data is saved before navigating away
     const handleBackWithSave = useCallback(async () => {
         // Check if there are unsaved changes
-        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+        const currentData = JSON.stringify(sectionsRef.current || {});
+        const hasUnsavedChanges = currentData !== lastSavedDataRef.current;
         
         if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
             // Clear any pending debounced saves
@@ -870,28 +617,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     //
     // Using a function declaration avoids that temporal‑dead‑zone issue while
     // remaining safe because mutable state lives in refs and React state.
-    
-    // Track serialized sections to detect actual changes (not just object reference changes)
-    const sectionsSnapshotRef = useRef('{}');
-    const previousSectionsSnapshotRef = useRef('{}');
-    
-    // Serialize sections for comparison
-    const sectionsSnapshot = React.useMemo(() => {
-        return serializeSections(sectionsByYear);
-    }, [sectionsByYear]);
-    
-    useEffect(() => {
-        sectionsSnapshotRef.current = sectionsSnapshot;
-    }, [sectionsSnapshot]);
-    
     useEffect(() => {
         if (isLoading || !project?.id) return;
-        
-        // Only trigger save if sections actually changed (not just object reference)
-        const hasChanged = sectionsSnapshotRef.current !== previousSectionsSnapshotRef.current;
-        if (!hasChanged) return;
-        
-        previousSectionsSnapshotRef.current = sectionsSnapshotRef.current;
         
         // Clear any pending save
         if (saveTimeoutRef.current) {
@@ -907,116 +634,87 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
-            if (forceSaveTimeoutRef.current) {
-                clearTimeout(forceSaveTimeoutRef.current);
-            }
         };
-    }, [sectionsSnapshot, isLoading, project?.id]);
+    }, [sectionsByYear, isLoading, project?.id]);
     
+    // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
-        if (isSavingRef.current) {
-            return;
-        }
-        // Don't trigger auto-save during deletion - deletion handles its own save
-        if (isDeletingRef.current && !options.allowDuringDeletion) {
-            console.log('⏸️ Auto-save skipped: deletion in progress');
-            return;
-        }
-        if (!project?.id) {
-            console.warn('⚠️ Cannot save: No project ID');
-            return;
-        }
-        if (isLoading) {
+        if (isSavingRef.current || !project?.id || isLoading) {
+            console.log('⏸️ Save skipped:', { 
+                isSaving: isSavingRef.current, 
+                hasProjectId: !!project?.id, 
+                isLoading 
+            });
             return;
         }
 
-        const payload = sectionsRef.current || {};
-        const serialized = serializeSections(payload);
-
-        // Guard against wiping data with an all‑empty payload when we never had data,
-        // but ALLOW saving an empty state when the user has explicitly deleted sections.
-        const hasAnySections = Object.values(payload || {}).some(
-            (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
-        );
-        if (!hasAnySections && serialized === lastSavedSnapshotRef.current) {
+        // Use ref (updated immediately by handlers) or fallback to state
+        // Ref is updated synchronously before state updates, so it has the latest data
+        const payload = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
+            ? sectionsRef.current 
+            : sectionsByYear;
+        const serialized = JSON.stringify(payload);
+        
+        // Skip if data hasn't changed
+        if (lastSavedDataRef.current === serialized) {
+            console.log('⏸️ Save skipped: data unchanged');
             return;
         }
-        if (!hasAnySections && serialized !== lastSavedSnapshotRef.current) {
-        }
+        
+        console.log('💾 Saving weekly FMS review to database...', { 
+            hasData: Object.keys(payload).length > 0,
+            yearKeys: Object.keys(payload),
+            payloadSize: serialized.length
+        });
 
         isSavingRef.current = true;
         
         try {
-            
-            if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
-            } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
-                await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
-            } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                const serialized = serializeSections(payload);
-                const updatePayload = {
-                    weeklyFMSReviewSections: serialized
-                };
-                const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                
-                // Update parent component's project prop if available and not skipping
-                if (!options.skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    const updatedProject = result?.data?.project || result?.project || result?.data;
-                    if (updatedProject) {
-                        window.updateViewingProject({
-                            ...updatedProject,
+            // Use DocumentCollectionAPI if available, fallback to DatabaseAPI
+            let result;
+            if (apiRef.current?.saveWeeklyFMSReviewSections) {
+                // Pass the payload object directly - API will serialize it
+                result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
+                console.log('✅ Saved via DocumentCollectionAPI:', result);
+            } else if (window.DatabaseAPI?.updateProject) {
+                // Fallback: serialize and use DatabaseAPI directly
+                result = await window.DatabaseAPI.updateProject(project.id, {
                             weeklyFMSReviewSections: serialized
                         });
-                    }
-                }
+                console.log('✅ Saved via DatabaseAPI:', result);
             } else {
-                throw new Error('No available API for saving document sections');
+                console.error('❌ No API available:', {
+                    hasDocumentCollectionAPI: !!apiRef.current,
+                    hasSaveMethod: !!apiRef.current?.saveWeeklyFMSReviewSections,
+                    hasDatabaseAPI: !!window.DatabaseAPI,
+                    hasUpdateProject: !!window.DatabaseAPI?.updateProject
+                });
+                throw new Error('No available API for saving weekly FMS review sections');
             }
             
-            lastSavedSnapshotRef.current = serialized;
+            // Mark as saved
+            lastSavedDataRef.current = serialized;
+            console.log('✅ Save completed successfully');
             
-            // Persist a snapshot locally so navigation issues cannot lose user data
+            // Update localStorage backup
             const snapshotKey = getSnapshotKey(project.id);
             if (snapshotKey && window.localStorage) {
                 try {
                     window.localStorage.setItem(snapshotKey, serialized);
                 } catch (storageError) {
-                    console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
+                    console.warn('⚠️ Failed to save snapshot to localStorage:', storageError);
                 }
             }
-            
-            // Refresh from database after save to get any concurrent updates
-            // Use a longer delay and check if user is still making changes
-            // Clear any pending refresh
-            if (refreshTimeoutRef.current) {
-                clearTimeout(refreshTimeoutRef.current);
-            }
-            
-            refreshTimeoutRef.current = setTimeout(() => {
-                // Check if there are unsaved changes or recent changes
-                const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-                const currentSnapshot = serializeSections(sectionsRef.current);
-                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-                
-                // Only refresh if:
-                // 1. No changes in last 15 seconds (longer window after save to prevent overwriting rapid changes), AND
-                // 2. No unsaved changes (everything is saved)
-                // Use false instead of true so it respects all checks in refreshFromDatabase
-                if (timeSinceLastChange > 15000 && !hasUnsavedChanges) {
-                    refreshFromDatabase(false); // Use false to respect all checks
-                } else {
-                    // User is still making changes or has unsaved changes
-                    // Don't refresh - let the periodic refresh handle it when user stops
-                    console.log('⏸️ Post-save refresh skipped: user still making changes', {
-                        timeSinceLastChange: `${timeSinceLastChange}ms`,
-                        hasUnsavedChanges
-                    });
-                }
-            }, 3000); // Increased delay to 3 seconds to give more time for rapid changes
         } catch (error) {
             console.error('❌ Error saving to database:', error);
-            // Don't throw - allow user to continue working; auto‑save will retry on next change
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                projectId: project.id,
+                payloadSize: serialized.length
+            });
+            // Reset saved data ref so it will retry on next change
+            lastSavedDataRef.current = null;
         } finally {
             isSavingRef.current = false;
         }
@@ -1027,8 +725,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         if (!project?.id) return;
         
         const handleBeforeUnload = (event) => {
-            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
-            if (hasUnsavedChanges && !isSavingRef.current) {
+            const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
+            if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save; we can't await during beforeunload
                 saveToDatabase({ skipParentUpdate: true });
                 event.preventDefault();
@@ -1047,25 +745,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         if (!project?.id) return;
 
         return () => {
-            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
-            if (hasUnsavedChanges && !isSavingRef.current) {
-                // CRITICAL: Save synchronously on unmount to prevent data loss during navigation
-                // Use both localStorage (immediate) and fetch with keepalive (continues after navigation)
-                const payload = sectionsRef.current || {};
-                const serialized = serializeSections(payload);
-                
-                // 1. Save to localStorage immediately (synchronous)
-                const snapshotKey = getSnapshotKey(project.id);
-                if (snapshotKey && window.localStorage) {
-                    try {
-                        window.localStorage.setItem(snapshotKey, serialized);
-                        console.log('💾 Saved weekly review snapshot to localStorage on unmount');
-                    } catch (storageError) {
-                        console.warn('⚠️ Failed to save weekly review snapshot to localStorage:', storageError);
-                    }
-                }
-                
-                // 2. Send to API with keepalive (continues after page unloads)
+            const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
+            if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
+                // Fire-and-forget save on unmount
+                saveToDatabase({ skipParentUpdate: true });
+            }
+        };
                 try {
                     const token = window.storage?.getToken?.();
                     if (token && window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
@@ -1438,8 +1123,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setSectionsByYear(updatedSectionsByYear);
         // CRITICAL: Update ref immediately so save has the latest data
         sectionsRef.current = updatedSectionsByYear;
-        // Update timestamp
-        lastChangeTimestampRef.current = Date.now();
         
         setShowSectionModal(false);
         setEditingSection(null);
@@ -1453,7 +1136,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Save immediately with the calculated state - AWAIT to ensure it completes
         if (project?.id && !isSavingRef.current) {
-            const serialized = serializeSections(updatedSectionsByYear);
+            const serialized = JSON.stringify(updatedSectionsByYear);
             
             // CRITICAL: Save to localStorage immediately as backup
             const snapshotKey = getSnapshotKey(project.id);
@@ -1514,7 +1197,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
                 
                 // Update lastSavedSnapshot AFTER successful save
-                lastSavedSnapshotRef.current = serialized;
+                lastSavedDataRef.current = serialized;
             } catch (error) {
                 console.error('❌ Error saving section to database:', error);
             } finally {
@@ -1562,7 +1245,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         
         // Capture the current snapshot before deletion for rollback if needed
-        const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
+        const snapshotBeforeDeletion = JSON.stringify(sectionsRef.current);
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
         // Defer state update to next frame so click handler returns immediately
@@ -1583,8 +1266,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // CRITICAL: Update localStorage snapshot IMMEDIATELY after state update
                 // This prevents refreshFromDatabase from restoring the deleted section
-                const deletedSectionSnapshot = serializeSections(updatedSectionsByYear);
-                lastSavedSnapshotRef.current = deletedSectionSnapshot;
+                const deletedSectionSnapshot = JSON.stringify(updatedSectionsByYear);
+                lastSavedDataRef.current = deletedSectionSnapshot;
                 
                 // Persist snapshot to localStorage immediately (before database save)
                 const snapshotKey = getSnapshotKey(project.id);
@@ -1601,7 +1284,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             });
             
             // Save in background (non-blocking) - UI already updated optimistically
-            const deletedSectionSnapshot = serializeSections(sectionsRef.current);
+            const deletedSectionSnapshot = JSON.stringify(sectionsRef.current);
             isSavingRef.current = true;
             
             // Perform save asynchronously without blocking
@@ -1615,7 +1298,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
                     await apiRef.current.saveDocumentSections(project.id, payload, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    const serialized = serializeSections(payload);
+                    const serialized = JSON.stringify(payload);
                     const updatePayload = {
                         weeklyFMSReviewSections: serialized
                     };
@@ -1636,7 +1319,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
                 
                 // Snapshot already updated above, just confirm it matches
-                lastSavedSnapshotRef.current = deletedSectionSnapshot;
+                lastSavedDataRef.current = deletedSectionSnapshot;
                 
                 console.log('✅ Section deletion saved successfully');
                 
@@ -1655,7 +1338,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         console.log(`⏸️ Deletion flag kept active: ${deletionSectionIdsRef.current.size} deletion(s) still in progress`);
                     }
                     // Trigger a single refresh after flag is cleared to sync state
-                    refreshFromDatabase(false);
+                    // Reload from database after deletion completes
+                    if (apiRef.current) {
+                        loadData();
+                    }
                     // Process next deletion in queue if any
                     processDeletionQueue();
                 }, 3000);
@@ -1894,7 +1580,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setTimeout(async () => {
             try {
                 const currentSectionsByYear = sectionsRef.current;
-                const serialized = serializeSections(currentSectionsByYear);
+                const serialized = JSON.stringify(currentSectionsByYear);
                 
                 // Save to localStorage immediately as backup
                 const snapshotKey = getSnapshotKey(project.id);
@@ -1910,7 +1596,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // Save to database
                 if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
                     await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
-                    lastSavedSnapshotRef.current = serialized;
+                    lastSavedDataRef.current = serialized;
                     console.log('✅ Document deletion saved successfully');
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                     const updatePayload = {
@@ -1928,7 +1614,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             });
                         }
                     }
-                    lastSavedSnapshotRef.current = serialized;
+                    lastSavedDataRef.current = serialized;
                     console.log('✅ Document deletion saved successfully');
                 }
             } catch (error) {
@@ -1976,29 +1662,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const handleUpdateStatus = useCallback((sectionId, documentId, month, weekNumber, status, applyToSelected = false) => {
         // Save scroll positions before update
         saveScrollPositions();
-        
-        // Track when the last change was made to prevent refresh from overwriting rapid changes
-        lastChangeTimestampRef.current = Date.now();
-        
-        // Clear any existing force save timeout
-        if (forceSaveTimeoutRef.current) {
-            clearTimeout(forceSaveTimeoutRef.current);
-        }
-        
-        // Schedule a forced save after 2 seconds of inactivity
-        // This ensures rapid consecutive changes are saved even if debounce keeps resetting
-        forceSaveTimeoutRef.current = setTimeout(() => {
-            const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-            // Only force save if no changes in last 2 seconds (user stopped making changes)
-            if (timeSinceLastChange >= 2000) {
-                const currentSnapshot = serializeSections(sectionsRef.current);
-                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-                if (hasUnsavedChanges && !isSavingRef.current) {
-                    console.log('💾 Force saving after rapid changes stopped');
-                    saveToDatabase();
-                }
-            }
-        }, 2000);
         
         // CRITICAL: For rapid changes, always start from the latest ref value to prevent losing updates
         // This ensures that if multiple status changes happen in quick succession, each one builds on the latest state
@@ -2084,51 +1747,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Save immediately after state update (debounced slightly to batch rapid changes)
         setTimeout(async () => {
-            const currentSectionsByYear = sectionsRef.current;
-            const serialized = serializeSections(currentSectionsByYear);
-            const hasUnsavedChanges = serialized !== lastSavedSnapshotRef.current;
-            
-            if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
-                // Save to localStorage immediately as backup
-                const snapshotKey = getSnapshotKey(project.id);
-                if (snapshotKey && window.localStorage) {
-                    try {
-                        window.localStorage.setItem(snapshotKey, serialized);
-                    } catch (storageError) {
-                        console.warn('⚠️ Failed to save status to localStorage:', storageError);
-                    }
-                }
-                
-                // Save to database
-                isSavingRef.current = true;
-                try {
-                    if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
-                        lastSavedSnapshotRef.current = serialized;
-                    } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                        const updatePayload = {
-                            weeklyFMSReviewSections: serialized
-                        };
-                        const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                        
-                        // Update parent component's project prop
-                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                            const updatedProject = result?.data?.project || result?.project || result?.data;
-                            if (updatedProject) {
-                                window.updateViewingProject({
-                                    ...updatedProject,
-                                    weeklyFMSReviewSections: serialized
-                                });
-                            }
-                        }
-                        lastSavedSnapshotRef.current = serialized;
-                    }
-                } catch (error) {
-                    console.error('❌ Error saving status:', error);
-                } finally {
-                    isSavingRef.current = false;
-                }
-            }
+            // Auto-save will handle saving via the debounced effect
+            // No need for manual save here - the state update will trigger auto-save
         }, 500); // Small debounce to batch rapid status changes
         
         // Restore scroll positions after state update
@@ -2229,7 +1849,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 try {
                     if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
                         await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
-                        lastSavedSnapshotRef.current = serialized;
+                        lastSavedDataRef.current = serialized;
                         console.log('✅ Comment saved successfully');
                     } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                         const updatePayload = {
@@ -2247,7 +1867,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 });
                             }
                         }
-                        lastSavedSnapshotRef.current = serialized;
+                        lastSavedDataRef.current = serialized;
                         console.log('✅ Comment saved successfully');
                     }
                 } catch (error) {

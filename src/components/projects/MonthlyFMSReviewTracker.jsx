@@ -399,6 +399,30 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
             } else {
+                // Check localStorage as backup before initializing empty
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        const stored = window.localStorage.getItem(snapshotKey);
+                        if (stored && stored.trim() && stored !== '{}' && stored !== 'null') {
+                            console.log('📥 Loading from localStorage backup...');
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            console.log('📥 Loaded from localStorage:', { 
+                                yearKeys: Object.keys(normalized),
+                                sectionsCount: normalized[selectedYear]?.length || 0
+                            });
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            return;
+                        }
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to load from localStorage:', storageError);
+                    }
+                }
+                
                 // No data - initialize empty
                 console.log('📭 No data found, initializing empty');
                 setSectionsByYear({});
@@ -1051,7 +1075,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         }
         
         // Capture the current snapshot before deletion for rollback if needed
-        const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
+        const snapshotBeforeDeletion = JSON.stringify(sectionsRef.current);
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
         // Defer state update to next frame so click handler returns immediately
@@ -1089,7 +1113,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             });
             
             // Save in background (non-blocking) - UI already updated optimistically
-            const deletedSectionSnapshot = serializeSections(sectionsRef.current);
+            const deletedSectionSnapshot = JSON.stringify(sectionsRef.current);
             isSavingRef.current = true;
             
             // Perform save asynchronously without blocking
@@ -1097,11 +1121,11 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             try {
                 const payload = sectionsRef.current || {};
                 
-                if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                    await apiRef.current.saveDocumentSections(project.id, payload, false);
+                if (apiRef.current && typeof apiRef.current.saveMonthlyFMSReviewSections === 'function') {
+                    await apiRef.current.saveMonthlyFMSReviewSections(project.id, payload, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                     const updatePayload = {
-                        monthlyFMSReviewSections: serializeSections(payload)
+                        monthlyFMSReviewSections: JSON.stringify(payload)
                     };
                     await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 } else {
