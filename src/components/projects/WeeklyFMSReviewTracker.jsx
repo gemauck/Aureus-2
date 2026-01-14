@@ -573,37 +573,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => clearTimeout(timeoutId);
     }, [project?.id, selectedYear, loadData]); // Include loadData to ensure it runs when dependencies change
     
-    // ============================================================
-    // Handle navigation with save - ensures data is saved before navigating away
-    const handleBackWithSave = useCallback(async () => {
-        // Check if there are unsaved changes
-        const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
-        const hasUnsavedChanges = currentData !== lastSavedDataRef.current;
-        
-        if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
-            // Clear any pending debounced saves
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-                saveTimeoutRef.current = null;
-            }
-            
-            // Save immediately before navigating - WAIT for save to complete
-            console.log('💾 Saving before navigation...');
-            try {
-                await saveToDatabase({ skipParentUpdate: false }); // Update parent so it has latest data
-                console.log('✅ Save complete, navigating...');
-            } catch (error) {
-                console.error('❌ Error saving before navigation:', error);
-                // Still navigate even if save fails - unmount handler will try again
-            }
-        }
-        
-        // Call original onBack handler AFTER save completes
-        if (typeof onBack === 'function') {
-            onBack();
-        }
-    }, [project?.id, onBack, sectionsByYear]);
-    
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
     //
@@ -3695,7 +3664,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <button onClick={handleBackWithSave} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                         <i className="fas fa-arrow-left"></i>
                     </button>
                     <div>
