@@ -596,7 +596,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Debounce save by 1 second
         saveTimeoutRef.current = setTimeout(() => {
-            saveToDatabase();
+            saveToDatabase({ skipParentUpdate: false }); // Update parent so data persists
         }, 1000);
         
         return () => {
@@ -716,8 +716,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => {
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
-                // Fire-and-forget save on unmount
-                saveToDatabase({ skipParentUpdate: true });
+                // Save on unmount - update parent so data persists when navigating back
+                // Use fetch with keepalive to ensure request completes even if page unloads
+                saveToDatabase({ skipParentUpdate: false });
             }
         };
     }, [project?.id]);
