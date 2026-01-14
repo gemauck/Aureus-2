@@ -940,10 +940,9 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
+        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 font-semibold', cellColor: 'bg-white border border-gray-300' },
+        { value: 'checked', label: 'Checked', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
+        { value: 'issue', label: 'Issue', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {
@@ -3173,20 +3172,15 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-medium text-gray-600">Status:</span>
-                    {statusOptions.slice(0, 3).map((option, idx) => (
+                    {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
                             <div className="flex items-center gap-1">
                                 <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
                                 <span className="text-[10px] text-gray-600">{option.label}</span>
                             </div>
-                            {idx < 2 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
                         </React.Fragment>
                     ))}
-                    <span className="text-gray-300 mx-1">|</span>
-                    <div className="flex items-center gap-1">
-                        <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor}`}></div>
-                        <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
-                    </div>
                 </div>
             </div>
             
