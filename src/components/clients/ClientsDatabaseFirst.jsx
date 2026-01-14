@@ -278,14 +278,14 @@ const ClientsDatabaseFirst = () => {
                         setSelectedLead(updatedLeadFromDB);
                     }
                 } else {
-                    // When stayInEditMode is true, update selectedLead in place without reloading
-                    // This preserves the current tab and prevents UI flickering
-                    // Merge the saved data into the existing selectedLead to keep it in sync
-                    setSelectedLead(prev => prev ? {
-                        ...prev,
-                        ...updatedLead,
-                        // Preserve the current tab state by not triggering a full reload
-                    } : prev);
+                    // When stayInEditMode is true, DON'T update selectedLead at all
+                    // This prevents React from re-rendering the modal and resetting the tab
+                    // The modal's internal state already has the updated data from the save
+                    // Only update if the lead ID changed (shouldn't happen for updates)
+                    if (updatedLead.id !== selectedLead.id) {
+                        setSelectedLead(updatedLead);
+                    }
+                    // Otherwise, leave selectedLead unchanged to prevent tab reset
                 }
                 
             } else {

@@ -1071,14 +1071,22 @@ const LeadDetailModal = ({
     };
     
     // Update tab when initialTab prop changes
+    // CRITICAL: Don't reset tab if we're currently auto-saving (e.g., adding comments)
+    // This prevents the tab from resetting to overview when saving comments
     useEffect(() => {
+        // Skip tab update if we're currently auto-saving - preserve current tab
+        if (isAutoSavingRef.current) {
+            return;
+        }
+        
         // If user tries to access proposals tab but is not admin, default to overview
         if (initialTab === 'proposals' && !isAdmin) {
             setActiveTab('overview');
-        } else {
+        } else if (initialTab && initialTab !== activeTab) {
+            // Only update if initialTab actually changed and we're not auto-saving
             setActiveTab(initialTab);
         }
-    }, [initialTab, isAdmin]);
+    }, [initialTab, isAdmin, activeTab]);
     
     // MANUFACTURING PATTERN: Only sync formData when lead ID changes (switching to different lead)
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
