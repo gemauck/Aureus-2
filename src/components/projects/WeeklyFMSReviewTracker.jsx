@@ -751,30 +751,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 saveToDatabase({ skipParentUpdate: true });
             }
         };
-                try {
-                    const token = window.storage?.getToken?.();
-                    if (token && window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                        // Use fetch with keepalive to ensure request continues after navigation
-                        fetch(`/api/projects/${project.id}`, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({
-                                weeklyFMSReviewSections: serialized
-                            }),
-                            keepalive: true // Critical: allows request to continue after page unloads
-                        }).catch(error => {
-                            console.warn('⚠️ Background save on unmount failed (non-critical):', error);
-                        });
-                        console.log('💾 Initiated background save on unmount');
-                    }
-                } catch (error) {
-                    console.warn('⚠️ Failed to initiate background save on unmount:', error);
-                }
-            }
-        };
     }, [project?.id]);
     
     // ============================================================
