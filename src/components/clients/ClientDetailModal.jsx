@@ -2339,7 +2339,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         }
         
-        const updatedComments = [...(formData.comments || []), {
+        const newCommentObj = {
             id: Date.now(),
             text: newComment,
             tags: Array.isArray(newNoteTags) ? newNoteTags : [],
@@ -2348,9 +2348,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             createdBy: currentUser.name,
             createdByEmail: currentUser.email,
             createdById: currentUser.id
-        }];
+        };
         
-        const updatedFormData = {...formData, comments: updatedComments};
+        const updatedComments = [...(formData.comments || []), newCommentObj];
+        
+        // CRITICAL: Build the complete formData with comments and activity log
+        // Do this BEFORE updating state to ensure we have the correct data for saving
+        const activity = {
+            id: Date.now() + 1, // Ensure unique ID
+            type: 'Comment Added',
+            description: `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`,
+            timestamp: new Date().toISOString(),
+            user: currentUser.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
+            relatedId: null
+        };
+        
+        const updatedFormData = {
+            ...formData,
+            comments: updatedComments,
+            activityLog: [...(formData.activityLog || []), activity]
+        };
+        
         // CRITICAL: Update formDataRef immediately so guards and other code see the updated comments
         formDataRef.current = updatedFormData;
         // CRITICAL: Update state immediately so comment appears in UI
@@ -2371,21 +2391,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             );
         }
         
-        // Log activity and get updated formData with activity log, then save everything
-        // NOTE: logActivity will call setFormData again with activity log, but comments are preserved
-        const finalFormData = logActivity(
-            'Comment Added',
-            `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`,
-            null,
-            false,
-            updatedFormData
-        );
-        
         // Save comment changes and activity log immediately - stay in edit mode
-        // CRITICAL: Await the save so we don't navigate or reset tabs before it completes.
+        // CRITICAL: Ensure comments are explicitly included in the save
         isAutoSavingRef.current = true;
         try {
-            await onSave(finalFormData, true);
+            // CRITICAL: Explicitly ensure comments are in the data being saved
+            const dataToSave = {
+                ...updatedFormData,
+                comments: updatedComments // Explicitly include comments
+            };
+            
+            console.log('💾 Saving comment:', {
+                leadId: dataToSave.id,
+                commentsCount: dataToSave.comments?.length || 0,
+                latestComment: dataToSave.comments?.[dataToSave.comments.length - 1]
+            });
+            
+            await onSave(dataToSave, true);
+            
             // After a successful save, ensure we remain on the notes tab
             setActiveTab('notes');
             if (onTabChange) {
@@ -2394,6 +2417,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } catch (error) {
             console.error('❌ Error saving comment:', error);
             alert('Failed to save comment. Please try again.');
+            // Revert the comment addition on error
+            const revertedFormData = {
+                ...formData,
+                comments: formData.comments || []
+            };
+            setFormData(revertedFormData);
+            formDataRef.current = revertedFormData;
         } finally {
             // Clear the flag after a delay to allow API response to propagate
             setTimeout(() => {
@@ -2401,6 +2431,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }, 3000);
         }
         
+        // Clear form fields only after successful save (handled in try block)
         setNewComment('');
         setNewNoteTags([]);
         setNewNoteTagsInput('');
