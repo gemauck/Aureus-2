@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
@@ -27,154 +27,27 @@ const getFacilitiesLabel = (project) => {
     return String(candidate || '').trim();
 };
 
-// Helper function to generate weeks for each month in a year
-// Each month typically has 4-5 weeks
-const generateWeeksForYear = (year) => {
-    const months = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    
-    const weeks = [];
-    
-    months.forEach((month, monthIndex) => {
-        // Get number of days in the month
-        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-        
-        // Calculate number of weeks (typically 4-5 weeks per month)
-        // Weeks are numbered 1-5, with most months having 4-5 weeks
-        const numberOfWeeks = Math.ceil(daysInMonth / 7);
-        const actualWeeks = Math.min(numberOfWeeks, 5); // Cap at 5 weeks
-        
-        for (let weekNumber = 1; weekNumber <= actualWeeks; weekNumber++) {
-            // Calculate date range for this week
-            // Week 1: days 1-7, Week 2: days 8-14, Week 3: days 15-21, Week 4: days 22-28, Week 5: remaining days
-            const startDay = (weekNumber - 1) * 7 + 1;
-            const endDay = Math.min(weekNumber * 7, daysInMonth);
-            
-            // For the first week of January, check if it should start from December
-            // This handles cases like "W1 = 29 December to 4 Jan 2026"
-            let startDate, endDate;
-            if (monthIndex === 0 && weekNumber === 1) {
-                // First week of January - check if we should start from December
-                const daysInPrevMonth = new Date(year - 1, 11, 0).getDate();
-                // If January doesn't start on the 1st of a week, start from December
-                // For simplicity, if week 1 is less than 7 days, extend backwards
-                if (endDay < 7) {
-                    const daysFromPrevMonth = 7 - endDay;
-                    startDate = new Date(year - 1, 11, daysInPrevMonth - daysFromPrevMonth + 1);
-                } else {
-                    startDate = new Date(year, monthIndex, startDay);
-                }
-                endDate = new Date(year, monthIndex, endDay);
-            } else if (monthIndex === 11 && weekNumber === actualWeeks) {
-                // Last week of December - extend into January if needed
-                startDate = new Date(year, monthIndex, startDay);
-                const daysInWeek = endDay - startDay + 1;
-                if (daysInWeek < 7) {
-                    // Extend into January
-                    const daysToExtend = 7 - daysInWeek;
-                    endDate = new Date(year + 1, 0, daysToExtend);
-                } else {
-                    endDate = new Date(year, monthIndex, endDay);
-                }
-            } else {
-                // Regular weeks
-                startDate = new Date(year, monthIndex, startDay);
-                endDate = new Date(year, monthIndex, endDay);
-            }
-            
-            // Determine end month and year
-            let endMonth = months[endDate.getMonth()];
-            let endYear = endDate.getFullYear();
-            
-            // Format dates
-            const formatDate = (date) => {
-                const day = date.getDate();
-                const monthName = months[date.getMonth()];
-                return `${day} ${monthName}`;
-            };
-            
-            const dateRange = startDate.getTime() === endDate.getTime()
-                ? formatDate(startDate)
-                : `${formatDate(startDate)} to ${endDate.getDate()} ${endMonth}${endYear !== year ? ` ${endYear}` : ''}`;
-            
-            weeks.push({
-                month,
-                monthIndex,
-                weekNumber,
-                key: `${month}-Week${weekNumber}-${year}`,
-                display: `W${weekNumber}`,
-                dateRange: dateRange,
-                startDate: startDate,
-                endDate: endDate
-            });
-        }
-    });
-    
-    return weeks;
-};
-
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
-    const currentWeek = Math.ceil(new Date().getDate() / 7); // Approximate current week
     
-    // Calculate working weeks (2 weeks in arrears from current week)
-    const getWorkingWeeks = () => {
-        const weeks = generateWeeksForYear(currentYear);
-        const currentWeekIndex = weeks.findIndex(w => 
-            w.monthIndex === currentMonth && w.weekNumber === currentWeek
-        );
-        
-        if (currentWeekIndex === -1) return [];
-        
-        const twoWeeksBack = Math.max(0, currentWeekIndex - 2);
-        const oneWeekBack = Math.max(0, currentWeekIndex - 1);
-        
-        return [twoWeeksBack, oneWeekBack];
+    // Calculate working months (2 months in arrears from current month)
+    const getWorkingMonths = () => {
+        const twoMonthsBack = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
+        const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
+        return [twoMonthsBack, oneMonthBack];
     };
     
-    const workingWeeks = getWorkingWeeks();
+    const workingMonths = getWorkingMonths();
+    // Simplified refs - only essential ones for debouncing and API reference
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
-    const renderCountRef = useRef(0);
-    const lastLoggedProjectIdRef = useRef(null);
-    
-    // Only log on mount or when project.id changes (not on every render)
-    useEffect(() => {
-        const currentProjectId = project?.id;
-        if (currentProjectId !== lastLoggedProjectIdRef.current) {
-            lastLoggedProjectIdRef.current = currentProjectId;
-            console.log('🚀 WeeklyFMSReviewTracker component mounted/rendered', {
-                projectId: currentProjectId,
-                hasProject: !!project,
-                hasWeeklyFMSReviewSections: !!project?.weeklyFMSReviewSections,
-                renderCount: renderCountRef.current
-            });
-        }
-        renderCountRef.current += 1;
-    }, [project?.id]);
-    const sectionsRef = useRef({});
-    const lastSavedDataRef = useRef(null); // Track last saved data to prevent unnecessary saves
+    const sectionsRef = useRef({}); // Keep ref for immediate access during rapid updates
     const apiRef = useRef(window.DocumentCollectionAPI || null);
-    
-    // Ensure API ref is updated when DocumentCollectionAPI becomes available
-    useEffect(() => {
-        if (window.DocumentCollectionAPI) {
-            apiRef.current = window.DocumentCollectionAPI;
-            console.log('✅ DocumentCollectionAPI initialized for Weekly FMS Review');
-        }
-    }, []);
-    const isDeletingRef = useRef(false);
-    const deletionTimestampRef = useRef(null); // Track when deletion started
+    const lastSavedDataRef = useRef(null); // Track last saved data to prevent unnecessary saves
+    const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
-    const deletionQueueRef = useRef([]); // Queue for consecutive deletions
-    const isProcessingDeletionQueueRef = useRef(false); // Track if we're processing the queue
-    const sectionScrollRefs = useRef({}); // Track scroll containers for each section
-    const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
-    const savedScrollPositionsRef = useRef({}); // Track saved scroll positions per section
-    const hasScrolledToWorkingWeekRef = useRef(false); // Track if we've already scrolled to working week
+    const deletionTimestampRef = useRef(null); // Track when deletion started
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -182,7 +55,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
-    
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
     // Year selection with persistence
@@ -200,90 +72,86 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
-    // Generate weeks for the selected year (must be after selectedYear is declared)
-    const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
-    
-    // Normalize sections to ensure they have required structure
-    const normalizeSectionStructure = (sections) => {
-        if (!Array.isArray(sections)) return [];
-        return sections.map(section => {
-            if (!section || typeof section !== 'object') return section;
-            return {
-                ...section,
-                documents: Array.isArray(section.documents) ? section.documents : [],
-                collectionStatus: section.collectionStatus || {},
-                comments: section.comments || {}
-            };
-        });
-    };
-
-    // Parse documentSections safely (legacy flat array support)
+    // Parse weeklyFMSReviewSections safely (legacy flat array support)
+    // OPTIMIZED: Reduced retry attempts and improved early exit conditions
     const parseSections = (data) => {
         if (!data) return [];
-        let parsed = null;
+        if (Array.isArray(data)) return data;
         
-        if (Array.isArray(data)) {
-            parsed = data;
-        } else {
-            try {
-                if (typeof data === 'string') {
-                    let cleaned = data.trim();
-                    if (!cleaned) return [];
-                    
-                    let attempts = 0;
-                    while (attempts < 10) {
-                        try {
-                            const parsedAttempt = JSON.parse(cleaned);
-                            if (Array.isArray(parsedAttempt)) {
-                                parsed = parsedAttempt;
-                                break;
-                            }
-                            if (typeof parsedAttempt === 'string') {
-                                cleaned = parsedAttempt;
-                                attempts++;
-                                continue;
-                            }
-                            return [];
-                        } catch (parseError) {
-                            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                                cleaned = cleaned.slice(1, -1);
-                            }
-                            cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        try {
+            if (typeof data === 'string') {
+                let cleaned = data.trim();
+                if (!cleaned) return [];
+                
+                // OPTIMIZATION: Try direct parse first (most common case)
+                try {
+                    const directParsed = JSON.parse(cleaned);
+                    if (Array.isArray(directParsed)) return directParsed;
+                    if (typeof directParsed === 'object' && directParsed !== null) {
+                        return directParsed; // Could be year-scoped object
+                    }
+                } catch {
+                    // Continue to cleanup attempts
+                }
+                
+                // OPTIMIZATION: Reduced max attempts from 3 to 1 for better performance
+                // Most data is already valid JSON, so we don't need multiple retries
+                let attempts = 0;
+                const maxAttempts = 1;
+                
+                while (attempts < maxAttempts) {
+                    try {
+                        // Remove surrounding quotes if present
+                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                            cleaned = cleaned.slice(1, -1);
+                        }
+                        
+                        // Unescape common escape sequences (optimized single pass)
+                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                        
+                        const parsed = JSON.parse(cleaned);
+                        if (Array.isArray(parsed)) return parsed;
+                        if (typeof parsed === 'object' && parsed !== null) {
+                            return parsed; // Could be year-scoped object
+                        }
+                        if (typeof parsed === 'string') {
+                            cleaned = parsed;
                             attempts++;
-                            if (attempts >= 10) {
-                                console.warn('Failed to parse documentSections after', attempts, 'attempts');
-                                return [];
-                            }
+                            continue;
+                        }
+                        return [];
+                    } catch (parseError) {
+                        attempts++;
+                        if (attempts >= maxAttempts) {
+                            console.warn('Failed to parse weeklyFMSReviewSections after', attempts, 'attempts');
+                            return [];
                         }
                     }
                 }
-            } catch (e) {
-                console.warn('Failed to parse documentSections:', e);
                 return [];
             }
+        } catch (e) {
+            console.warn('Failed to parse weeklyFMSReviewSections:', e);
+            return [];
         }
-        
-        // Normalize the parsed sections to ensure structure
-        return normalizeSectionStructure(parsed || []);
+        return [];
     };
 
-    // Snapshot serializer for any documentSections shape (array or year map)
+    // Snapshot serializer for any weeklyFMSReviewSections shape (array or year map)
     const serializeSections = (data) => {
         try {
             return JSON.stringify(data ?? {});
         } catch (error) {
-            console.warn('Failed to serialize documentSections snapshot:', error);
+            console.warn('Failed to serialize weeklyFMSReviewSections snapshot:', error);
             return '{}';
         }
     };
 
     const cloneSectionsArray = (sections) => {
         try {
-            const cloned = JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
-            return normalizeSectionStructure(cloned);
+            return JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
         } catch {
-            const cloned = Array.isArray(sections) ? [...sections] : [];
-            return normalizeSectionStructure(cloned);
+            return Array.isArray(sections) ? [...sections] : [];
         }
     };
 
@@ -308,8 +176,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return Array.from(years).sort();
     };
 
+    // PERFORMANCE: Memoize normalization results to avoid re-processing
+    const normalizationCache = useRef(new Map());
+    
     const normalizeSectionsByYear = (rawValue, fallbackYear) => {
+        // Handle empty objects - if it's an empty object, return empty object (don't treat as no data)
         if (!rawValue) return {};
+        if (typeof rawValue === 'object' && !Array.isArray(rawValue) && Object.keys(rawValue).length === 0) {
+            return {}; // Empty object is valid - means no sections for any year
+        }
+
+        // PERFORMANCE: Use cache for identical inputs (common when re-rendering)
+        const cacheKey = `${typeof rawValue === 'string' ? rawValue.substring(0, 100) : JSON.stringify(rawValue).substring(0, 100)}_${fallbackYear || 'default'}`;
+        if (normalizationCache.current.has(cacheKey)) {
+            return normalizationCache.current.get(cacheKey);
+        }
 
         let parsedValue = rawValue;
 
@@ -317,18 +198,32 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const trimmed = rawValue.trim();
             if (!trimmed) return {};
             try {
+                // OPTIMIZATION: Use faster JSON.parse for most cases
                 parsedValue = JSON.parse(trimmed);
             } catch {
+                // Only use slow parseSections if JSON.parse fails
                 parsedValue = parseSections(rawValue);
             }
         }
 
         if (parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)) {
             const result = {};
-            Object.keys(parsedValue).forEach(yearKey => {
+            // OPTIMIZATION: Process in batches to avoid blocking
+            const yearKeys = Object.keys(parsedValue);
+            for (let i = 0; i < yearKeys.length; i++) {
+                const yearKey = yearKeys[i];
                 const value = parsedValue[yearKey];
                 result[yearKey] = Array.isArray(value) ? value : parseSections(value);
-            });
+            }
+            
+            // Cache result
+            normalizationCache.current.set(cacheKey, result);
+            // Limit cache size to prevent memory issues
+            if (normalizationCache.current.size > 50) {
+                const firstKey = normalizationCache.current.keys().next().value;
+                normalizationCache.current.delete(firstKey);
+            }
+            
             return result;
         }
 
@@ -342,9 +237,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return {};
         }
 
-        return {
+        const result = {
             [targetYear]: cloneSectionsArray(baseSections)
         };
+        
+        // Cache result
+        normalizationCache.current.set(cacheKey, result);
+        if (normalizationCache.current.size > 50) {
+            const firstKey = normalizationCache.current.keys().next().value;
+            normalizationCache.current.delete(firstKey);
+        }
+        
+        return result;
     };
     
     // ============================================================
@@ -358,7 +262,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // This ensures that edits (adding sections, documents, comments, etc.)
     // are scoped to a single year instead of affecting every year.
     const sections = React.useMemo(
-        () => normalizeSectionStructure(sectionsByYear[selectedYear] || []),
+        () => sectionsByYear[selectedYear] || [],
         [sectionsByYear, selectedYear]
     );
 
@@ -396,13 +300,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, []);
     
-    
     // Templates state
     const [templates, setTemplates] = useState([]);
 
     const getTemplateDisplayName = (template) => {
         if (!template) return '';
-        const EXXARO_DEFAULT_NAME = 'Exxaro Grootegeluk document collection checklist for 2025';
+        const EXXARO_DEFAULT_NAME = 'Exxaro Grootegeluk weekly FMS review checklist for 2025';
         if (template.name === EXXARO_DEFAULT_NAME || template.isDefault) {
             return 'Default Checklist';
         }
@@ -432,13 +335,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
-    const [commentPopupPointer, setCommentPopupPointer] = useState({ side: 'bottom', offset: 0 });
     const commentPopupContainerRef = useRef(null);
-    const commentCellRef = useRef(null);
-    const [commentAttachments, setCommentAttachments] = useState([]);
-    const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+    const [users, setUsers] = useState([]);
     
-    // Multi-select state: Set of cell keys (sectionId-documentId-month-WeekN)
+    // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
     const selectedCellsRef = useRef(new Set());
     
@@ -448,9 +348,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [selectedCells]);
     
     // ============================================================
-    // LOAD DATA FROM DATABASE - Simple and reliable
+    // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
     // ============================================================
-    // ⚠️ IMPORTANT: Always load from database first (source of truth)
+    // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
     // Simplified loading - load from database, use prop as fallback
     const loadData = useCallback(async () => {
@@ -466,53 +366,63 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         try {
             // ALWAYS load from database first (most reliable, has latest data)
-            if (apiRef.current?.fetchProject) {
-                console.log('📥 Loading weekly FMS review from database...', { 
-                    projectId: project.id,
-                    hasAPI: !!apiRef.current,
-                    hasFetchMethod: !!apiRef.current.fetchProject
-                });
+            if (apiRef.current) {
+                console.log('📥 Loading from database...', { projectId: project.id });
                 const freshProject = await apiRef.current.fetchProject(project.id);
                 console.log('📥 Loaded project from database:', { 
                     hasWeeklyFMSReviewSections: !!freshProject?.weeklyFMSReviewSections,
                     weeklyFMSReviewSectionsType: typeof freshProject?.weeklyFMSReviewSections,
                     weeklyFMSReviewSectionsLength: typeof freshProject?.weeklyFMSReviewSections === 'string' 
                         ? freshProject.weeklyFMSReviewSections.length 
-                        : 'N/A',
-                    isObject: typeof freshProject?.weeklyFMSReviewSections === 'object',
-                    isString: typeof freshProject?.weeklyFMSReviewSections === 'string'
+                        : 'N/A'
                 });
                 
                 if (freshProject?.weeklyFMSReviewSections) {
                     const normalized = normalizeSectionsByYear(freshProject.weeklyFMSReviewSections);
                     console.log('📥 Normalized sections:', { 
                         yearKeys: Object.keys(normalized),
-                        sectionsCount: normalized[selectedYear]?.length || 0,
-                        totalYears: Object.keys(normalized).length
+                        sectionsCount: normalized[selectedYear]?.length || 0
                     });
-            setSectionsByYear(normalized);
+                    setSectionsByYear(normalized);
                     sectionsRef.current = normalized;
-            lastSavedDataRef.current = JSON.stringify(normalized);
-            setIsLoading(false);
-            return;
-                } else {
-                    console.log('⚠️ No weeklyFMSReviewSections in database response');
+                    lastSavedDataRef.current = JSON.stringify(normalized);
+                    setIsLoading(false);
+                    return;
                 }
-                            } else {
-                console.log('⚠️ API not available, using fallback:', {
-                    hasAPI: !!apiRef.current,
-                    hasFetchMethod: !!apiRef.current?.fetchProject
-                });
             }
             
             // Fallback to prop data (only if database load failed)
             console.log('⚠️ Falling back to prop data');
             if (project?.weeklyFMSReviewSections) {
                 const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
-                        setSectionsByYear(normalized);
+                setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
-                    } else {
+            } else {
+                // Check localStorage as backup before initializing empty
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        const stored = window.localStorage.getItem(snapshotKey);
+                        if (stored && stored.trim() && stored !== '{}' && stored !== 'null') {
+                            console.log('📥 Loading from localStorage backup...');
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            console.log('📥 Loaded from localStorage:', { 
+                                yearKeys: Object.keys(normalized),
+                                sectionsCount: normalized[selectedYear]?.length || 0
+                            });
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            return;
+                        }
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to load from localStorage:', storageError);
+                    }
+                }
+                
                 // No data - initialize empty
                 console.log('📭 No data found, initializing empty');
                 setSectionsByYear({});
@@ -540,6 +450,27 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.id, selectedYear, loadData]);
     
+    // Load users for reviewer assignment
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                if (window.DatabaseAPI?.getUsers) {
+                    const usersResponse = await window.DatabaseAPI.getUsers();
+                    const allUsers =
+                        usersResponse?.data?.users ||
+                        usersResponse?.data?.data?.users ||
+                        usersResponse?.users ||
+                        [];
+                    setUsers(allUsers);
+                }
+            } catch (error) {
+                console.error('❌ Error loading users:', error);
+            }
+        };
+        loadUsers();
+    }, []);
+    
+    // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
     //
@@ -597,7 +528,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        console.log('💾 Saving weekly FMS review to database...', { 
+        console.log('💾 Saving to database...', { 
             hasData: Object.keys(payload).length > 0,
             yearKeys: Object.keys(payload),
             payloadSize: serialized.length
@@ -609,22 +540,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             // Use DocumentCollectionAPI if available, fallback to DatabaseAPI
             let result;
             if (apiRef.current?.saveWeeklyFMSReviewSections) {
-                // Pass the payload object directly - API will serialize it
                 result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
                 console.log('✅ Saved via DocumentCollectionAPI:', result);
             } else if (window.DatabaseAPI?.updateProject) {
-                // Fallback: serialize and use DatabaseAPI directly
                 result = await window.DatabaseAPI.updateProject(project.id, {
-                            weeklyFMSReviewSections: serialized
-                        });
+                    weeklyFMSReviewSections: serialized
+                });
                 console.log('✅ Saved via DatabaseAPI:', result);
             } else {
-                console.error('❌ No API available:', {
-                    hasDocumentCollectionAPI: !!apiRef.current,
-                    hasSaveMethod: !!apiRef.current?.saveWeeklyFMSReviewSections,
-                    hasDatabaseAPI: !!window.DatabaseAPI,
-                    hasUpdateProject: !!window.DatabaseAPI?.updateProject
-                });
                 throw new Error('No available API for saving weekly FMS review sections');
             }
             
@@ -705,7 +628,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const response = await fetch('/api/weekly-fms-review-templates', {
+            const response = await fetch('/api/document-collection-templates', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -769,7 +692,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             if (isEditingExisting) {
                 // Update existing template in database
-                const response = await fetch(`/api/weekly-fms-review-templates/${editingTemplate.id}`, {
+                const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -787,7 +710,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
             } else {
                 // Create new template in database
-                const response = await fetch('/api/weekly-fms-review-templates', {
+                const response = await fetch('/api/document-collection-templates', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -807,6 +730,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
             
             // Reload templates from database to get fresh data
+            // Add a small delay to ensure database transaction is committed
+            await new Promise(resolve => setTimeout(resolve, 100));
             await loadTemplates();
             
             setEditingTemplate(null);
@@ -836,7 +761,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
             
             // Delete from database
-            const response = await fetch(`/api/weekly-fms-review-templates/${encodeURIComponent(templateId)}`, {
+            const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -872,6 +797,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             id: Date.now() + Math.random(),
             name: section.name,
             description: section.description || '',
+            reviewer: section.reviewer || '',
             documents: Array.isArray(section.documents) ? section.documents.map(doc => ({
                 id: Date.now() + Math.random(),
                 name: doc.name,
@@ -945,42 +871,67 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // YEAR-BASED DATA HELPERS - Ensure independent lists per year
     // ============================================================
     
-    // Create a week key scoped to the selected year
-    const getWeekKey = (month, weekNumber, year = selectedYear) => {
-        return `${month}-Week${weekNumber}-${year}`;
+    // Create a month key scoped to the selected year
+    // Format: "YYYY-MM" (e.g., "2026-01") to match backend expectations
+    // month can be either a month name (e.g., "January") or a number (1-12)
+    const getMonthKey = (month, year = selectedYear) => {
+        let monthNum;
+        if (typeof month === 'string') {
+            // Convert month name to number (0-indexed, so add 1)
+            const monthIndex = months.indexOf(month);
+            if (monthIndex === -1) {
+                // Try parsing as number string
+                monthNum = parseInt(month, 10);
+                if (isNaN(monthNum)) {
+                    console.error('Invalid month:', month);
+                    return null;
+                }
+            } else {
+                monthNum = monthIndex + 1; // Convert 0-11 to 1-12
+            }
+        } else {
+            monthNum = month;
+        }
+        const monthStr = String(monthNum).padStart(2, '0');
+        return `${year}-${monthStr}`;
     };
     
-    // Get status for a specific week in the selected year only
-    const getStatusForYear = (collectionStatus, month, weekNumber, year = selectedYear) => {
+    // Get status for a specific month in the selected year only
+    const getStatusForYear = (collectionStatus, month, year = selectedYear) => {
         if (!collectionStatus) return null;
-        const weekKey = getWeekKey(month, weekNumber, year);
-        return collectionStatus[weekKey] || null;
+        const monthKey = getMonthKey(month, year);
+        return collectionStatus[monthKey] || null;
     };
     
-    // Get comments for a specific week in the selected year only
-    const getCommentsForYear = (comments, month, weekNumber, year = selectedYear) => {
+    // Get comments for a specific month in the selected year only
+    const getCommentsForYear = (comments, month, year = selectedYear) => {
         if (!comments) return [];
-        const weekKey = getWeekKey(month, weekNumber, year);
-        const result = comments[weekKey];
-        // Ensure we always return an array
-        return Array.isArray(result) ? result : [];
+        const monthKey = getMonthKey(month, year);
+        return comments[monthKey] || [];
     };
     
-    // Set status for a specific week in the selected year only
-    const setStatusForYear = (collectionStatus, month, weekNumber, status, year = selectedYear) => {
-        const weekKey = getWeekKey(month, weekNumber, year);
-        return {
-            ...collectionStatus,
-            [weekKey]: status
-        };
+    // Set status for a specific month in the selected year only
+    // If status is empty/null, remove the key instead of setting it to empty string
+    const setStatusForYear = (collectionStatus, month, status, year = selectedYear) => {
+        const monthKey = getMonthKey(month, year);
+        const newStatus = { ...collectionStatus };
+        
+        // If status is empty/null, remove the key to show white background
+        if (!status || status === '' || status === 'Select Status') {
+            delete newStatus[monthKey];
+        } else {
+            newStatus[monthKey] = status;
+        }
+        
+        return newStatus;
     };
     
-    // Set comments for a specific week in the selected year only
-    const setCommentsForYear = (comments, month, weekNumber, newComments, year = selectedYear) => {
-        const weekKey = getWeekKey(month, weekNumber, year);
+    // Set comments for a specific month in the selected year only
+    const setCommentsForYear = (comments, month, newComments, year = selectedYear) => {
+        const monthKey = getMonthKey(month, year);
         return {
             ...comments,
-            [weekKey]: newComments
+            [monthKey]: newComments
         };
     };
     
@@ -989,14 +940,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const statusOptions = [
-        { value: 'not-checked', label: 'Not Checked', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' },
-        { value: 'acceptable', label: 'Acceptable', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
-        { value: 'issue', label: 'Issue', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-500 shadow-sm' }
+        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 font-semibold', cellColor: 'bg-white border border-gray-300' },
+        { value: 'checked', label: 'Checked', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
+        { value: 'issue', label: 'Issue', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {
-        const safeStatusOptions = statusOptions && Array.isArray(statusOptions) ? statusOptions : [];
-        return safeStatusOptions.find(opt => opt && opt.value === status) || (safeStatusOptions[0] || null);
+        if (!status || status === '' || status === 'Select Status') {
+            return null; // Return null for empty/select status to show white background
+        }
+        return statusOptions.find(opt => opt.value === status) || null;
     };
     
     // ============================================================
@@ -1013,109 +966,73 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setShowSectionModal(true);
     };
     
-    const handleSaveSection = async (sectionData) => {
-        // Calculate the new state before updating
-        let updatedSectionsByYear = { ...sectionsByYear };
-        const currentYearSections = updatedSectionsByYear[selectedYear] || [];
+    const handleSaveSection = (sectionData) => {
+        // Use current state from ref to ensure we have the latest
+        const currentState = sectionsRef.current || {};
+        const currentSections = currentState[selectedYear] || [];
         
         if (editingSection) {
-            updatedSectionsByYear[selectedYear] = currentYearSections.map(s => 
-                s.id === editingSection.id ? { ...s, ...sectionData } : s
+            const updated = currentSections.map(s => 
+                String(s.id) === String(editingSection.id) ? { ...s, ...sectionData } : s
             );
+            const updatedSectionsByYear = {
+                ...currentState,
+                [selectedYear]: updated
+            };
+            sectionsRef.current = updatedSectionsByYear;
+            setSectionsByYear(updatedSectionsByYear);
         } else {
             const newSection = {
-                id: Date.now(),
+                id: Date.now() + Math.random(),
                 ...sectionData,
-                documents: []
+                documents: [],
+                reviewer: sectionData.reviewer || ''
             };
-            updatedSectionsByYear[selectedYear] = [...currentYearSections, newSection];
+            const updated = [...currentSections, newSection];
+            const updatedSectionsByYear = {
+                ...currentState,
+                [selectedYear]: updated
+            };
+            sectionsRef.current = updatedSectionsByYear;
+            setSectionsByYear(updatedSectionsByYear);
         }
-        
-        // Update state
-        setSectionsByYear(updatedSectionsByYear);
-        // CRITICAL: Update ref immediately so save has the latest data
-        sectionsRef.current = updatedSectionsByYear;
         
         setShowSectionModal(false);
         setEditingSection(null);
+    };
+    
+    // Handler to update reviewer for a section
+    const handleUpdateReviewer = (sectionId, reviewerId) => {
+        const currentState = sectionsRef.current || {};
+        const currentSections = currentState[selectedYear] || [];
         
-        // CRITICAL: Force immediate save when adding/editing sections to prevent data loss
-        // Clear any pending debounced save and save immediately
+        const updated = currentSections.map(section => {
+            if (String(section.id) === String(sectionId)) {
+                return {
+                    ...section,
+                    reviewer: reviewerId || ''
+                };
+            }
+            return section;
+        });
+        
+        const updatedSectionsByYear = {
+            ...currentState,
+            [selectedYear]: updated
+        };
+        
+        // Update ref immediately
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Update state (triggers auto-save)
+        setSectionsByYear(updatedSectionsByYear);
+        
+        // Force immediate save
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        
-        // Save immediately with the calculated state - AWAIT to ensure it completes
-        if (project?.id && !isSavingRef.current) {
-            const serialized = JSON.stringify(updatedSectionsByYear);
-            
-            // CRITICAL: Save to localStorage immediately as backup
-            const snapshotKey = getSnapshotKey(project.id);
-            if (snapshotKey && window.localStorage) {
-                try {
-                    window.localStorage.setItem(snapshotKey, serialized);
-                    console.log('💾 Section change saved to localStorage immediately', {
-                        hasData: Object.keys(updatedSectionsByYear).length > 0,
-                        yearKeys: Object.keys(updatedSectionsByYear),
-                        sectionCount: updatedSectionsByYear[selectedYear]?.length || 0
-                    });
-                } catch (storageError) {
-                    console.warn('⚠️ Failed to save section to localStorage:', storageError);
-                }
-            }
-            
-            // Save to database immediately using API service - AWAIT to ensure parent update completes
-            isSavingRef.current = true;
-            try {
-                console.log('💾 Saving weekly review sections to database...', {
-                    projectId: project.id,
-                    serializedLength: serialized.length,
-                    hasData: Object.keys(updatedSectionsByYear).length > 0,
-                    yearKeys: Object.keys(updatedSectionsByYear)
-                });
-                
-                // Use API service first (like Document Collection) - this handles parent updates automatically
-                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                    const result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, updatedSectionsByYear, false);
-                    console.log('✅ Saved via API service (with parent update)', { result: !!result });
-                } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                    // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
-                    // NOTE: This will save to documentSections field, not weeklyFMSReviewSections!
-                    console.warn('⚠️ Using documentSections API fallback - data will be saved to wrong field!');
-                    await apiRef.current.saveDocumentSections(project.id, updatedSectionsByYear, false);
-                    console.log('✅ Saved via documentSections API (fallback)');
-                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    console.log('⚠️ API service not available, using direct DatabaseAPI call');
-                    // Final fallback - direct API call with manual parent update
-                    const updatePayload = {
-                        weeklyFMSReviewSections: serialized
-                    };
-                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                    
-                    // Update parent component's project prop so it has the latest data
-                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                        const updatedProject = result?.data?.project || result?.project || result?.data;
-                        if (updatedProject) {
-                            window.updateViewingProject({
-                                ...updatedProject,
-                                weeklyFMSReviewSections: serialized
-                            });
-                            console.log('✅ Project prop updated with new sections');
-                        }
-                    }
-                } else {
-                    console.error('❌ No available API for saving weekly review sections');
-                }
-                
-                // Update lastSavedSnapshot AFTER successful save
-                lastSavedDataRef.current = serialized;
-            } catch (error) {
-                console.error('❌ Error saving section to database:', error);
-            } finally {
-                isSavingRef.current = false;
-            }
-        }
+        saveToDatabase();
     };
     
     // Actual deletion logic extracted to separate function
@@ -1176,8 +1093,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // Immediately update the ref synchronously
                 sectionsRef.current = updatedSectionsByYear;
                 
-                // CRITICAL: Update localStorage snapshot IMMEDIATELY after state update
-                // This prevents refreshFromDatabase from restoring the deleted section
+                // CRITICAL: Update saved data ref IMMEDIATELY after state update
                 const deletedSectionSnapshot = JSON.stringify(updatedSectionsByYear);
                 lastSavedDataRef.current = deletedSectionSnapshot;
                 
@@ -1188,7 +1104,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         window.localStorage.setItem(snapshotKey, deletedSectionSnapshot);
                         console.log('💾 Deletion snapshot saved to localStorage immediately');
                     } catch (storageError) {
-                        console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
+                        console.warn('⚠️ Failed to save weekly FMS review snapshot to localStorage:', storageError);
                     }
                 }
                 
@@ -1206,40 +1122,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
                     await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
-                } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                    // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
-                    await apiRef.current.saveDocumentSections(project.id, payload, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    const serialized = JSON.stringify(payload);
                     const updatePayload = {
-                        weeklyFMSReviewSections: serialized
+                        weeklyFMSReviewSections: JSON.stringify(payload)
                     };
-                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                    
-                    // Update parent component's project prop
-                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                        const updatedProject = result?.data?.project || result?.project || result?.data;
-                        if (updatedProject) {
-                            window.updateViewingProject({
-                                ...updatedProject,
-                                weeklyFMSReviewSections: serialized
-                            });
-                        }
-                    }
+                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 } else {
                     throw new Error('No available API for saving document sections');
                 }
                 
-                // Snapshot already updated above, just confirm it matches
-                lastSavedDataRef.current = deletedSectionSnapshot;
+                // Update saved data ref to match deleted state
+                const currentStateSnapshot = JSON.stringify(sectionsRef.current);
+                lastSavedDataRef.current = currentStateSnapshot;
                 
                 console.log('✅ Section deletion saved successfully');
                 
-                // Remove from deletion tracking
-                deletionSectionIdsRef.current.delete(normalizedSectionId);
+                // Update localStorage snapshot to match deleted state
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, currentStateSnapshot);
+                        console.log('💾 Deletion snapshot updated in localStorage after successful save');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to update weekly FMS review snapshot in localStorage:', storageError);
+                    }
+                }
                 
                 // Clear the deleting flag after successful save - wait longer to ensure DB save completes
-                // Increased from 500ms to 3000ms to give database more time to persist
+                // Increased from 3000ms to 5000ms to give database more time to persist
                 // Only clear flag if no other deletions are in progress
                 setTimeout(() => {
                     if (deletionSectionIdsRef.current.size === 0) {
@@ -1249,14 +1159,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     } else {
                         console.log(`⏸️ Deletion flag kept active: ${deletionSectionIdsRef.current.size} deletion(s) still in progress`);
                     }
-                    // Trigger a single refresh after flag is cleared to sync state
-                    // Reload from database after deletion completes
-                    if (apiRef.current) {
-                        loadData();
-                    }
+                    // DON'T call refreshFromDatabase immediately after deletion
+                    // The state is already correct, and refresh might restore deleted sections
+                    // if database hasn't fully updated yet. Let the normal polling handle sync.
                     // Process next deletion in queue if any
                     processDeletionQueue();
-                }, 3000);
+                }, 5000);
                 
             } catch (saveError) {
                 console.error('❌ Error saving section deletion:', saveError);
@@ -1385,12 +1293,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         setSections(prev => prev.map(section => {
             if (section.id === editingSectionId) {
-                const documents = section.documents || [];
                 if (editingDocument) {
                     // Update existing document
                     return {
                         ...section,
-                        documents: documents.map(doc => 
+                        documents: section.documents.map(doc => 
                             doc.id === editingDocument.id 
                                 ? { ...doc, ...documentData }
                                 : doc
@@ -1406,7 +1313,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     };
                     return {
                         ...section,
-                        documents: [...documents, newDocument]
+                        documents: [...section.documents, newDocument]
                     };
                 }
             }
@@ -1439,7 +1346,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        const document = (section.documents || []).find(d => String(d.id) === normalizedDocumentId);
+        const document = section.documents.find(d => String(d.id) === normalizedDocumentId);
         if (!document) {
             console.error('❌ Document not found for deletion. Document ID:', documentId, 'Section:', section.name);
             alert(`Error: Document not found. Cannot delete.`);
@@ -1455,12 +1362,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Use functional update with sectionsByYear to ensure we have the latest state
         // Also update sectionsRef immediately to prevent race conditions with auto-save
-        let updatedSectionsByYear;
         setSectionsByYear(prev => {
             const yearSections = prev[selectedYear] || [];
             const updatedSections = yearSections.map(section => {
                 if (String(section.id) === normalizedSectionId) {
-                    const filteredDocuments = (section.documents || []).filter(doc => String(doc.id) !== normalizedDocumentId);
+                    const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
                     return {
                         ...section,
                         documents: filteredDocuments
@@ -1469,115 +1375,33 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return section;
             });
             
-            updatedSectionsByYear = {
+            const updated = {
                 ...prev,
                 [selectedYear]: updatedSections
             };
             
             // Immediately update the ref to prevent race conditions with auto-save
-            sectionsRef.current = updatedSectionsByYear;
+            sectionsRef.current = updated;
             
-            return updatedSectionsByYear;
+            return updated;
         });
         
-        // CRITICAL: Explicitly save document deletion to database
-        // Clear any pending debounced save
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = null;
-        }
-        
-        // Save immediately after state update
-        isSavingRef.current = true;
-        setTimeout(async () => {
-            try {
-                const currentSectionsByYear = sectionsRef.current;
-                const serialized = JSON.stringify(currentSectionsByYear);
-                
-                // Save to localStorage immediately as backup
-                const snapshotKey = getSnapshotKey(project.id);
-                if (snapshotKey && window.localStorage) {
-                    try {
-                        window.localStorage.setItem(snapshotKey, serialized);
-                        console.log('💾 Document deletion snapshot saved to localStorage');
-                    } catch (storageError) {
-                        console.warn('⚠️ Failed to save document deletion to localStorage:', storageError);
-                    }
-                }
-                
-                // Save to database
-                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
-                    lastSavedDataRef.current = serialized;
-                    console.log('✅ Document deletion saved successfully');
-                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    const updatePayload = {
-                        weeklyFMSReviewSections: serialized
-                    };
-                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                    
-                    // Update parent component's project prop
-                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                        const updatedProject = result?.data?.project || result?.project || result?.data;
-                        if (updatedProject) {
-                            window.updateViewingProject({
-                                ...updatedProject,
-                                weeklyFMSReviewSections: serialized
-                            });
-                        }
-                    }
-                    lastSavedDataRef.current = serialized;
-                    console.log('✅ Document deletion saved successfully');
-                }
-            } catch (error) {
-                console.error('❌ Error saving document deletion:', error);
-            } finally {
-                isSavingRef.current = false;
-                // Clear the deleting flag after save completes
-                setTimeout(() => {
-                    isDeletingRef.current = false;
-                }, 500);
-            }
-        }, 100);
+        // Clear the deleting flag after auto-save completes (2 seconds should be enough)
+        setTimeout(() => {
+            isDeletingRef.current = false;
+        }, 2000);
     };
     
     // ============================================================
     // STATUS AND COMMENTS
     // ============================================================
     
-    // Helper function to save current scroll positions
-    const saveScrollPositions = useCallback(() => {
-        Object.entries(sectionScrollRefs.current).forEach(([sectionId, scrollContainer]) => {
-            if (scrollContainer) {
-                savedScrollPositionsRef.current[sectionId] = scrollContainer.scrollLeft;
-            }
-        });
-    }, []);
-    
-    // Helper function to restore scroll positions
-    const restoreScrollPositions = useCallback(() => {
-        // Use requestAnimationFrame to ensure DOM is ready
-        requestAnimationFrame(() => {
-            Object.entries(sectionScrollRefs.current).forEach(([sectionId, scrollContainer]) => {
-                if (scrollContainer && savedScrollPositionsRef.current[sectionId] !== undefined) {
-                    const savedPosition = savedScrollPositionsRef.current[sectionId];
-                    isScrollingRef.current = true;
-                    scrollContainer.scrollLeft = savedPosition;
-                    setTimeout(() => {
-                        isScrollingRef.current = false;
-                    }, 50);
-                }
-            });
-        });
-    }, []);
-    
-    const handleUpdateStatus = useCallback((sectionId, documentId, month, weekNumber, status, applyToSelected = false) => {
-        // Save scroll positions before update
-        saveScrollPositions();
+    const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
         
-        // CRITICAL: For rapid changes, always start from the latest ref value to prevent losing updates
-        // This ensures that if multiple status changes happen in quick succession, each one builds on the latest state
-        const latestSectionsByYear = sectionsRef.current || {};
+        // Use current state (most up-to-date) or fallback to ref
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
+            ? sectionsByYear 
+            : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         // Always use ref to get the latest selectedCells value (avoids stale closure)
@@ -1586,25 +1410,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // If applying to selected cells, get all selected cell keys
         let cellsToUpdate = [];
         if (applyToSelected && currentSelectedCells.size > 0) {
-            // Parse all selected cell keys (format: sectionId-documentId-month-WeekN)
+            // Parse all selected cell keys
             cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
-                const parts = cellKey.split('-');
-                // Find where "Week" appears to split month and week number
-                const weekIndex = parts.findIndex(p => p.startsWith('Week'));
-                if (weekIndex > 0) {
-                    const secId = parts[0];
-                    const docId = parts[1];
-                    const month = parts.slice(2, weekIndex).join('-');
-                    const weekNum = parts[weekIndex].replace('Week', '');
-                    return { sectionId: secId, documentId: docId, month, weekNumber: weekNum };
-                }
-                // Fallback for old format
                 const [secId, docId, mon] = cellKey.split('-');
-                return { sectionId: secId, documentId: docId, month: mon, weekNumber: '1' };
+                return { sectionId: secId, documentId: docId, month: mon };
             });
         } else {
             // Just update the single cell
-            cellsToUpdate = [{ sectionId, documentId, month, weekNumber }];
+            cellsToUpdate = [{ sectionId, documentId, month }];
         }
         
         // Update the sections for the current year
@@ -1617,17 +1430,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             return {
                 ...section,
-                documents: (section.documents || []).map(doc => {
+                documents: section.documents.map(doc => {
                     // Check if this document needs updating for any month
                     const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
                     if (docUpdates.length === 0) {
                         return doc;
                     }
                     
-                    // Apply status to all matching weeks for this document
+                    // Apply status to all matching months for this document
                     let updatedStatus = doc.collectionStatus || {};
                     docUpdates.forEach(cell => {
-                        updatedStatus = setStatusForYear(updatedStatus, cell.month, cell.weekNumber, status, selectedYear);
+                        updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
                     });
                     
                     return {
@@ -1650,23 +1463,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // Now update state (this will trigger auto-save, but ref already has the latest data)
         setSectionsByYear(updatedSectionsByYear);
         
-        // CRITICAL: Explicitly save status changes to database
-        // Clear any pending debounced save
+        // Force immediate save (don't wait for debounce) to ensure persistence
+        // Clear any pending debounced save first
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        
-        // Save immediately after state update (debounced slightly to batch rapid changes)
-        setTimeout(async () => {
-            // Auto-save will handle saving via the debounced effect
-            // No need for manual save here - the state update will trigger auto-save
-        }, 500); // Small debounce to batch rapid status changes
-        
-        // Restore scroll positions after state update
-        setTimeout(() => {
-            restoreScrollPositions();
-        }, 50);
+        // Save immediately
+        saveToDatabase();
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -1676,124 +1480,68 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear, saveScrollPositions, restoreScrollPositions]);
+    }, [selectedYear]);
     
-    const handleAddComment = async (sectionId, documentId, month, weekNumber, commentText) => {
-        if (!commentText.trim() && commentAttachments.length === 0) return;
-        
-        // Save scroll positions before update
-        saveScrollPositions();
+    const handleAddComment = async (sectionId, documentId, month, commentText) => {
+        if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
         const newCommentId = Date.now();
         const newComment = {
             id: newCommentId,
-            text: commentText || '',
+            text: commentText,
             date: new Date().toISOString(),
             author: currentUser.name,
             authorEmail: currentUser.email,
-            authorId: currentUser.id,
-            attachments: commentAttachments.length > 0 ? [...commentAttachments] : []
+            authorId: currentUser.id
         };
         
-        // Update state and ref immediately
-        let updatedSectionsByYear;
-        setSections(prev => {
-            const updated = prev.map(section => {
-                if (section.id === sectionId) {
-                    return {
-                        ...section,
-                        documents: (section.documents || []).map(doc => {
-                            if (doc.id === documentId) {
-                                const existingComments = getCommentsForYear(doc.comments, month, weekNumber, selectedYear);
-                                return {
-                                    ...doc,
-                                    comments: setCommentsForYear(doc.comments || {}, month, weekNumber, [...existingComments, newComment], selectedYear)
-                                };
-                            }
-                            return doc;
-                        })
-                    };
-                }
-                return section;
+        // Use current state (most up-to-date) or fallback to ref
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
+            ? sectionsByYear 
+            : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+            const updated = currentYearSections.map(section => {
+                if (String(section.id) === String(sectionId)) {
+                return {
+                    ...section,
+                    documents: section.documents.map(doc => {
+                            if (String(doc.id) === String(documentId)) {
+                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                            return {
+                                ...doc,
+                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
+                            };
+                        }
+                        return doc;
+                    })
+                };
+            }
+            return section;
             });
             
-            // Calculate updated sectionsByYear structure
-            updatedSectionsByYear = {
-                ...sectionsByYear,
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
                 [selectedYear]: updated
             };
-            
-            // Update ref immediately
-            sectionsRef.current = updatedSectionsByYear;
-            
-            return updated;
-        });
         
-        setQuickComment('');
-        setCommentAttachments([]); // Clear attachments after adding comment
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        sectionsRef.current = updatedSectionsByYear;
         
-        // CRITICAL: Explicitly save comment changes to database
-        // Clear any pending debounced save and save immediately
+        // Now update state (this will trigger auto-save)
+        setSectionsByYear(updatedSectionsByYear);
+        
+        // Force immediate save (don't wait for debounce) to ensure persistence
+        // Clear any pending debounced save first
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
+        // Save immediately
+        saveToDatabase();
         
-        // Save immediately after state update completes
-        setTimeout(async () => {
-            const currentSectionsByYear = sectionsRef.current;
-            const serialized = serializeSections(currentSectionsByYear);
-            
-            // Save to localStorage immediately as backup
-            const snapshotKey = getSnapshotKey(project.id);
-            if (snapshotKey && window.localStorage) {
-                try {
-                    window.localStorage.setItem(snapshotKey, serialized);
-                } catch (storageError) {
-                    console.warn('⚠️ Failed to save comment to localStorage:', storageError);
-                }
-            }
-            
-            // Save to database immediately
-            if (project?.id && !isSavingRef.current) {
-                isSavingRef.current = true;
-                try {
-                    if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, currentSectionsByYear, false);
-                        lastSavedDataRef.current = serialized;
-                        console.log('✅ Comment saved successfully');
-                    } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                        const updatePayload = {
-                            weeklyFMSReviewSections: serialized
-                        };
-                        const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                        
-                        // Update parent component's project prop
-                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                            const updatedProject = result?.data?.project || result?.project || result?.data;
-                            if (updatedProject) {
-                                window.updateViewingProject({
-                                    ...updatedProject,
-                                    weeklyFMSReviewSections: serialized
-                                });
-                            }
-                        }
-                        lastSavedDataRef.current = serialized;
-                        console.log('✅ Comment saved successfully');
-                    }
-                } catch (error) {
-                    console.error('❌ Error saving comment:', error);
-                } finally {
-                    isSavingRef.current = false;
-                }
-            }
-        }, 100);
-        
-        // Restore scroll positions after state update
-        setTimeout(() => {
-            restoreScrollPositions();
-        }, 50);
+        setQuickComment('');
 
         // ========================================================
         // @MENTIONS - Process mentions and create notifications
@@ -1813,19 +1561,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
                     // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?weeklySectionId=${encodeURIComponent(sectionId)}&weeklyDocumentId=${encodeURIComponent(documentId)}&weeklyMonth=${encodeURIComponent(month)}&weeklyWeek=${encodeURIComponent(weekNumber)}&commentId=${encodeURIComponent(newCommentId)}`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
-                        // Include both formats for compatibility with notification API
-                        weeklySectionId: sectionId,
-                        weeklyDocumentId: documentId,
-                        weeklyMonth: month,
-                        weeklyWeek: weekNumber,
-                        sectionId, // Keep for backward compatibility
-                        documentId, // Keep for backward compatibility
-                        month, // Keep for backward compatibility
-                        weekNumber, // Keep for backward compatibility
+                        sectionId,
+                        documentId,
+                        month,
                         commentId: newCommentId
                     };
                     
@@ -1839,7 +1581,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         projectInfo
                     ).then(() => {
                     }).catch(error => {
-                        console.error('❌ Error processing @mentions for document collection comment:', error);
+                        console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
                     });
                 }
             }
@@ -1849,97 +1591,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     };
     
-    const handleFileUpload = async (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
+    const handleDeleteComment = (sectionId, documentId, month, commentId) => {
         
-        setIsUploadingAttachment(true);
-        
-        try {
-            const uploadPromises = files.map(async (file) => {
-                // Check file size (8MB max)
-                const MAX_SIZE = 8 * 1024 * 1024;
-                if (file.size > MAX_SIZE) {
-                    alert(`File "${file.name}" is too large. Maximum size is 8MB.`);
-                    return null;
-                }
-                
-                // Convert file to base64 data URL
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async (event) => {
-                        try {
-                            const dataUrl = event.target.result;
-                            
-                            // Upload to server
-                            const token = window.storage?.getToken?.();
-                            if (!token) {
-                                reject(new Error('Not authenticated'));
-                                return;
-                            }
-                            
-                            const response = await fetch('/api/files', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                },
-                                body: JSON.stringify({
-                                    name: file.name,
-                                    dataUrl: dataUrl,
-                                    folder: 'weekly-fms-comments'
-                                })
-                            });
-                            
-                            if (!response.ok) {
-                                const error = await response.json();
-                                reject(new Error(error.message || 'Upload failed'));
-                                return;
-                            }
-                            
-                            const result = await response.json();
-                            resolve({
-                                id: Date.now() + Math.random(),
-                                name: result.name || file.name,
-                                url: result.url,
-                                size: result.size || file.size,
-                                type: result.mimeType || file.type,
-                                uploadDate: new Date().toISOString()
-                            });
-                        } catch (error) {
-                            reject(error);
-                        }
-                    };
-                    reader.onerror = () => reject(new Error('Failed to read file'));
-                    reader.readAsDataURL(file);
-                });
-            });
-            
-            const uploadedFiles = await Promise.all(uploadPromises);
-            const validFiles = uploadedFiles.filter(f => f !== null);
-            
-            if (validFiles.length > 0) {
-                setCommentAttachments(prev => [...prev, ...validFiles]);
-            }
-        } catch (error) {
-            console.error('❌ Error uploading file:', error);
-            alert(`Failed to upload file: ${error.message}`);
-        } finally {
-            setIsUploadingAttachment(false);
-            // Reset file input
-            e.target.value = '';
-        }
-    };
-    
-    const handleRemoveAttachment = (attachmentId) => {
-        setCommentAttachments(prev => prev.filter(a => a.id !== attachmentId));
-    };
-    
-    const handleDeleteComment = (sectionId, documentId, month, weekNumber, commentId) => {
         const currentUser = getCurrentUser();
-        const section = sections.find(s => s.id === sectionId);
-        const document = section?.documents.find(d => d.id === documentId);
-        const existingComments = getCommentsForYear(document?.comments, month, weekNumber, selectedYear);
+        
+        // Use current state (most up-to-date) or fallback to ref
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
+            ? sectionsByYear 
+            : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        const section = currentYearSections.find(s => String(s.id) === String(sectionId));
+        const document = section?.documents.find(d => String(d.id) === String(documentId));
+        const existingComments = getCommentsForYear(document?.comments, month, selectedYear);
         const comment = existingComments.find(c => c.id === commentId);
         
         const canDelete = comment?.authorId === currentUser.id || 
@@ -1953,19 +1617,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         if (!confirm('Delete this comment?')) return;
         
-        // Save scroll positions before update
-        saveScrollPositions();
-        
-        setSections(prev => prev.map(section => {
-            if (section.id === sectionId) {
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) === String(sectionId)) {
                 return {
                     ...section,
-                    documents: (section.documents || []).map(doc => {
-                        if (doc.id === documentId) {
+                    documents: section.documents.map(doc => {
+                        if (String(doc.id) === String(documentId)) {
                             const updatedComments = existingComments.filter(c => c.id !== commentId);
                             return {
                                 ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, weekNumber, updatedComments, selectedYear)
+                                comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
                             };
                         }
                         return doc;
@@ -1973,20 +1634,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 };
             }
             return section;
-        }));
+        });
         
-        // Restore scroll positions after state update
-        setTimeout(() => {
-            restoreScrollPositions();
-        }, 50);
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
+            [selectedYear]: updated
+        };
+        
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Now update state (this will trigger auto-save)
+        setSectionsByYear(updatedSectionsByYear);
     };
     
-    const getDocumentStatus = (document, month, weekNumber) => {
-        return getStatusForYear(document.collectionStatus, month, weekNumber, selectedYear);
+    const getDocumentStatus = (document, month) => {
+        return getStatusForYear(document.collectionStatus, month, selectedYear);
     };
     
-    const getDocumentComments = (document, month, weekNumber) => {
-        return getCommentsForYear(document.comments, month, weekNumber, selectedYear);
+    const getDocumentComments = (document, month) => {
+        return getCommentsForYear(document.comments, month, selectedYear);
     };
     
     // ============================================================
@@ -2050,9 +1717,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
             
-            weeks.forEach(week => {
-                const weekLabel = `${week.month.slice(0, 3)} ${week.display}`;
-                headerRow1.push(weekLabel, '');
+            months.forEach(month => {
+                const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
+                headerRow1.push(monthYear, '');
                 headerRow2.push('Status', 'Comments');
             });
             
@@ -2060,19 +1727,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < weeks.length * 2; i++) sectionRow.push('');
+                for (let i = 0; i < 24; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 section.documents.forEach(document => {
                     const row = [`  ${document.name}${document.description ? ' - ' + document.description : ''}`];
                     
-                    weeks.forEach(week => {
-                        const status = getStatusForYear(document.collectionStatus, week.month, week.weekNumber, selectedYear);
+                    months.forEach(month => {
+                        const status = getStatusForYear(document.collectionStatus, month, selectedYear);
                         const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
                         row.push(statusLabel || '');
                         
-                        const commentsRaw = getCommentsForYear(document.comments, week.month, week.weekNumber, selectedYear);
-                        const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
+                        const comments = getCommentsForYear(document.comments, month, selectedYear);
                         const commentsText = comments.map(c => {
                             const date = new Date(c.date).toLocaleString('en-ZA', {
                                 year: 'numeric', month: 'short', day: '2-digit',
@@ -2091,14 +1757,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             
             const colWidths = [{ wch: 40 }];
-            for (let i = 0; i < weeks.length; i++) {
+            for (let i = 0; i < 12; i++) {
                 colWidths.push({ wch: 18 }, { wch: 50 });
             }
             ws['!cols'] = colWidths;
             
-            XLSX.utils.book_append_sheet(wb, ws, `Weekly FMS Review ${selectedYear}`);
+            XLSX.utils.book_append_sheet(wb, ws, `Doc Collection ${selectedYear}`);
             
-            const filename = `${project.name}_Weekly_FMS_Review_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const filename = `${project.name}_Document_Collection_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
             
         } catch (error) {
@@ -2110,153 +1776,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     };
     
     // (Per-section tables now scroll independently, so we skip auto-scroll to working months)
-    
-    // Synchronize horizontal scrolling across all sections
-    useEffect(() => {
-        if (sections.length === 0) return;
-        
-        const scrollContainers = Object.values(sectionScrollRefs.current).filter(Boolean);
-        if (scrollContainers.length === 0) return;
-        
-        // Track which container is currently being programmatically scrolled (by us)
-        const syncingContainer = { current: null };
-        
-        // Create a map to store event handlers for proper cleanup
-        const scrollHandlers = new Map();
-        
-        scrollContainers.forEach(sourceContainer => {
-            const handleScroll = () => {
-                // Skip if this container is the one we're currently syncing (prevents infinite loop)
-                if (syncingContainer.current === sourceContainer) return;
-                
-                const scrollLeft = sourceContainer.scrollLeft;
-                
-                // Save scroll position for this container
-                const sectionId = Object.keys(sectionScrollRefs.current).find(
-                    id => sectionScrollRefs.current[id] === sourceContainer
-                );
-                if (sectionId) {
-                    savedScrollPositionsRef.current[sectionId] = scrollLeft;
-                }
-                
-                // Mark that we're syncing from this container
-                syncingContainer.current = sourceContainer;
-                
-                // Sync all other containers immediately for fluid scrolling
-                scrollContainers.forEach(container => {
-                    if (container !== sourceContainer) {
-                        container.scrollLeft = scrollLeft;
-                        // Save position for synced containers
-                        const syncSectionId = Object.keys(sectionScrollRefs.current).find(
-                            id => sectionScrollRefs.current[id] === container
-                        );
-                        if (syncSectionId) {
-                            savedScrollPositionsRef.current[syncSectionId] = scrollLeft;
-                        }
-                    }
-                });
-                
-                // Clear the syncing flag immediately after all containers are updated
-                // Use a microtask to ensure it clears after current execution but before next scroll event
-                Promise.resolve().then(() => {
-                    syncingContainer.current = null;
-                });
-            };
-            
-            scrollHandlers.set(sourceContainer, handleScroll);
-            sourceContainer.addEventListener('scroll', handleScroll, { passive: true });
-        });
-        
-        // Cleanup
-        return () => {
-            scrollHandlers.forEach((handler, container) => {
-                container.removeEventListener('scroll', handler);
-            });
-        };
-    }, [sections.length]);
-    
-    // Scroll to working week on initial load (only once, and only for current year)
-    useEffect(() => {
-        if (isLoading || sections.length === 0) return;
-        
-        // Only scroll if we're viewing the current year and haven't scrolled yet
-        if (selectedYear !== currentYear || hasScrolledToWorkingWeekRef.current) return;
-        
-        // Calculate working week index (2 weeks in arrears from current week)
-        const currentYearWeeks = generateWeeksForYear(currentYear);
-        const currentWeekIndex = currentYearWeeks.findIndex(w => 
-            w.monthIndex === currentMonth && w.weekNumber === currentWeek
-        );
-        
-        if (currentWeekIndex === -1) return;
-        
-        // Target is 2 weeks back (the first working week)
-        const targetWeekIndex = Math.max(0, currentWeekIndex - 2);
-        
-        // Scroll all section scroll containers to the working week
-        const scrollToWorkingWeek = () => {
-            // Save current page scroll position to prevent page-level scrolling
-            const savedPageScrollY = window.scrollY;
-            
-            // Temporarily disable scroll sync to prevent conflicts
-            isScrollingRef.current = true;
-            
-            let scrollSuccessful = false;
-            Object.entries(sectionScrollRefs.current).forEach(([sectionId, scrollContainer]) => {
-                if (scrollContainer) {
-                    // Find the header cell for the target week
-                    const headerCells = scrollContainer.querySelectorAll('thead th');
-                    if (headerCells.length > targetWeekIndex + 1) {
-                        const targetCell = headerCells[targetWeekIndex + 1]; // +1 because first cell is "Document / Data"
-                        if (targetCell) {
-                            // Calculate the scroll position directly instead of using scrollIntoView
-                            // This prevents page-level scrolling
-                            const containerRect = scrollContainer.getBoundingClientRect();
-                            const cellRect = targetCell.getBoundingClientRect();
-                            const scrollLeft = cellRect.left - containerRect.left + scrollContainer.scrollLeft - (containerRect.width / 2);
-                            
-                            // Scroll smoothly using scrollTo to avoid page-level scrolling
-                            scrollContainer.scrollTo({
-                                left: Math.max(0, scrollLeft),
-                                behavior: 'smooth'
-                            });
-                            
-                            // Save the scroll position
-                            savedScrollPositionsRef.current[sectionId] = Math.max(0, scrollLeft);
-                            scrollSuccessful = true;
-                        }
-                    }
-                }
-            });
-            
-            // Restore page scroll position if it changed (prevent jumping to bottom)
-            requestAnimationFrame(() => {
-                if (window.scrollY !== savedPageScrollY) {
-                    window.scrollTo({
-                        top: savedPageScrollY,
-                        behavior: 'instant'
-                    });
-                }
-            });
-            
-            if (scrollSuccessful) {
-                hasScrolledToWorkingWeekRef.current = true;
-            }
-            
-            // Re-enable scroll sync after scrolling completes
-            setTimeout(() => {
-                isScrollingRef.current = false;
-            }, 500);
-        };
-        
-        // Wait a bit for DOM to render
-        setTimeout(scrollToWorkingWeek, 500);
-    }, [isLoading, sections.length, selectedYear, currentYear, currentMonth, currentWeek, weeks, months]);
-    
-    // Reset scroll flag when year changes
-    useEffect(() => {
-        hasScrolledToWorkingWeekRef.current = false;
-    }, [selectedYear]);
     
     // ============================================================
     // COMMENT POPUP MANAGEMENT
@@ -2270,7 +1789,70 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             }, 100);
         }
-    }, [hoverCommentCell, sections]);
+        
+        // Smart positioning for comment popup
+        const updatePopupPosition = () => {
+            if (!hoverCommentCell) {
+                return;
+            }
+            
+            const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            if (!commentButton) {
+                return;
+            }
+            
+            const buttonRect = commentButton.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const popupWidth = 288; // w-72 = 288px
+            const popupHeight = 300; // approximate max height
+            const spacing = 8; // Space between button and popup
+            
+            // Determine if popup should be above or below
+            const spaceBelow = viewportHeight - buttonRect.bottom;
+            const spaceAbove = buttonRect.top;
+            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+            
+            // Calculate popup position
+            let popupTop, popupLeft;
+            
+            if (positionAbove) {
+                // Position above the button
+                popupTop = buttonRect.top - popupHeight - spacing;
+            } else {
+                // Position below the button (default)
+                popupTop = buttonRect.bottom + spacing;
+            }
+            
+            // Align horizontally - prefer aligning with button center, but adjust to stay in viewport
+            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+            let preferredLeft = buttonCenterX - popupWidth / 2;
+            
+            // Ensure popup stays within viewport
+            if (preferredLeft < 10) {
+                preferredLeft = 10;
+            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
+                preferredLeft = viewportWidth - popupWidth - 10;
+            }
+            
+            popupLeft = preferredLeft;
+            
+            // Update popup position
+            setCommentPopupPosition({ top: popupTop, left: popupLeft });
+        };
+        
+        // Update immediately and on resize/scroll
+        if (hoverCommentCell) {
+            setTimeout(updatePopupPosition, 50); // Wait for DOM to update
+            window.addEventListener('resize', updatePopupPosition);
+            window.addEventListener('scroll', updatePopupPosition);
+            
+            return () => {
+                window.removeEventListener('resize', updatePopupPosition);
+                window.removeEventListener('scroll', updatePopupPosition);
+            };
+        }
+    }, [hoverCommentCell, sections, commentPopupPosition]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -2282,7 +1864,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
                 setHoverCommentCell(null);
                 setQuickComment('');
-                setCommentAttachments([]); // Clear attachments when closing popup
             }
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
@@ -2306,102 +1887,163 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
     // immediately see the relevant discussion.
-    useEffect(() => {
+    const checkAndOpenDeepLink = useCallback(() => {
         try {
+            // Only proceed if sections are loaded
+            if (!sections || sections.length === 0) {
+                return;
+            }
+            
+            // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
             let params = null;
             let deepSectionId = null;
             let deepDocumentId = null;
             let deepMonth = null;
-            let deepWeek = '1';
             let deepCommentId = null;
             
-            // First check hash query params (for hash-based routing like #/projects/123?weeklySectionId=...)
+            // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
             const hash = window.location.hash || '';
             if (hash.includes('?')) {
                 const hashParts = hash.split('?');
                 if (hashParts.length > 1) {
                     params = new URLSearchParams(hashParts[1]);
-                    deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
-                    deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
-                    deepMonth = params.get('weeklyMonth') || params.get('docMonth');
-                    deepWeek = params.get('weeklyWeek') || '1';
+                    deepSectionId = params.get('docSectionId');
+                    deepDocumentId = params.get('docDocumentId');
+                    deepMonth = params.get('docMonth');
                     deepCommentId = params.get('commentId');
                 }
             }
             
             // If not found in hash, check window.location.search (for regular URLs)
-            if (!deepSectionId || !deepDocumentId) {
+            if (!deepSectionId || !deepDocumentId || !deepMonth) {
                 const search = window.location.search || '';
                 if (search) {
                     params = new URLSearchParams(search);
-                    if (!deepSectionId) deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
-                    if (!deepDocumentId) deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
-                    if (!deepMonth) deepMonth = params.get('weeklyMonth') || params.get('docMonth');
-                    if (!deepWeek || deepWeek === '1') deepWeek = params.get('weeklyWeek') || '1';
+                    if (!deepSectionId) deepSectionId = params.get('docSectionId');
+                    if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
+                    if (!deepMonth) deepMonth = params.get('docMonth');
                     if (!deepCommentId) deepCommentId = params.get('commentId');
                 }
             }
             
-            if (!deepSectionId || !deepDocumentId || !deepMonth) return;
-            
             if (deepSectionId && deepDocumentId && deepMonth) {
-                const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}-Week${deepWeek}`;
+                const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
+                
+                // Set initial position (will be updated once cell is found)
+                setCommentPopupPosition({
+                    top: Math.max(window.innerHeight / 2 - 160, 60),
+                    left: Math.max(window.innerWidth / 2 - 180, 20)
+                });
+                
+                // Open the popup immediately
                 setHoverCommentCell(cellKey);
                 
-                // Find the cell element and position popup relative to it
-                setTimeout(() => {
-                    const cellElement = document.querySelector(`td[data-cell-key="${cellKey}"]`) ||
-                                      document.querySelector(`[data-comment-cell="${cellKey}"]`)?.closest('td');
-                    if (cellElement) {
-                        commentCellRef.current = cellElement;
-                        const cellRect = cellElement.getBoundingClientRect();
-                        const buttonElement = cellElement.querySelector(`[data-comment-cell="${cellKey}"]`);
-                        const buttonRect = buttonElement?.getBoundingClientRect() || cellRect;
-                        
+                // Find the comment button for this cell and reposition popup near it using smart positioning
+                const positionPopup = () => {
+                    const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    if (commentButton) {
+                        const buttonRect = commentButton.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
                         const popupWidth = 288;
-                        const popupHeight = 200;
+                        const popupHeight = 300;
                         const spacing = 8;
+                        const tailSize = 12;
                         
-                        let top = cellRect.bottom + spacing;
-                        let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
-                        let pointerSide = 'top';
-                        let pointerOffset = buttonRect.left + (buttonRect.width / 2) - cellRect.left;
+                        // Determine if popup should be above or below
+                        const spaceBelow = viewportHeight - buttonRect.bottom;
+                        const spaceAbove = buttonRect.top;
+                        const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
                         
-                        if (top + popupHeight > window.innerHeight - 20) {
-                            top = cellRect.top - popupHeight - spacing;
-                            pointerSide = 'bottom';
-                            if (top < 20) top = 20;
+                        let popupTop, popupLeft;
+                        
+                        if (positionAbove) {
+                            popupTop = buttonRect.top - popupHeight - spacing - tailSize;
+                        } else {
+                            popupTop = buttonRect.bottom + spacing + tailSize;
                         }
                         
-                        if (left < 20) {
-                            left = 20;
-                            pointerOffset = buttonRect.left + (buttonRect.width / 2) - 20;
-                        } else if (left + popupWidth > window.innerWidth - 20) {
-                            left = window.innerWidth - popupWidth - 20;
-                            pointerOffset = buttonRect.left + (buttonRect.width / 2) - left;
+                        // Align horizontally with button center, but stay in viewport
+                        const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+                        let preferredLeft = buttonCenterX - popupWidth / 2;
+                        
+                        if (preferredLeft < 10) {
+                            preferredLeft = 10;
+                        } else if (preferredLeft + popupWidth > viewportWidth - 10) {
+                            preferredLeft = viewportWidth - popupWidth - 10;
                         }
                         
-                        setCommentPopupPosition({ top, left });
-                        setCommentPopupPointer({ 
-                            side: pointerSide, 
-                            offset: Math.max(20, Math.min(pointerOffset, popupWidth - 20))
-                        });
+                        setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
-                        // Fallback to center if cell not found
-                        setCommentPopupPosition({
-                            top: Math.max(window.innerHeight / 2 - 160, 60),
-                            left: Math.max(window.innerWidth / 2 - 180, 20)
-                        });
-                        setCommentPopupPointer({ side: 'top', offset: 144 });
+                        // Fallback: try to find the cell and position relative to it
+                        const cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        if (cell) {
+                            const cellRect = cell.getBoundingClientRect();
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+                            const popupWidth = 288;
+                            const popupHeight = 300;
+                            const spacing = 8;
+                            const tailSize = 12;
+                            
+                            // Determine if popup should be above or below
+                            const spaceBelow = viewportHeight - cellRect.bottom;
+                            const spaceAbove = cellRect.top;
+                            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+                            
+                            let popupTop, popupLeft;
+                            
+                            if (positionAbove) {
+                                popupTop = cellRect.top - popupHeight - spacing - tailSize;
+                            } else {
+                                popupTop = cellRect.bottom + spacing + tailSize;
+                            }
+                            
+                            // Align horizontally with cell center, but stay in viewport
+                            const cellCenterX = cellRect.left + cellRect.width / 2;
+                            let preferredLeft = cellCenterX - popupWidth / 2;
+                            
+                            if (preferredLeft < 10) {
+                                preferredLeft = 10;
+                            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
+                                preferredLeft = viewportWidth - popupWidth - 10;
+                            }
+                            
+                            setCommentPopupPosition({ top: popupTop, left: preferredLeft });
+                        }
                     }
-                }, 100);
+                };
+                
+                // Try to position immediately, then retry a few times if not found
+                positionPopup();
+                let attempts = 0;
+                const maxAttempts = 5;
+                const retryPosition = setInterval(() => {
+                    attempts++;
+                    positionPopup();
+                    if (attempts >= maxAttempts) {
+                        clearInterval(retryPosition);
+                    }
+                }, 200);
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
-                    // Wait for the popup to render and comments to load
-                    setTimeout(() => {
-                        const commentElement = document.querySelector(`[data-comment-id="${deepCommentId}"]`) ||
-                                             document.querySelector(`#comment-${deepCommentId}`);
+                    // Convert commentId to string for comparison (URL params are always strings)
+                    const targetCommentId = String(deepCommentId);
+                    
+                    // Wait for the popup to render and comments to load - use multiple attempts
+                    let attempts = 0;
+                    const maxAttempts = 10; // Try for up to 2 seconds
+                    const findAndScrollToComment = () => {
+                        attempts++;
+                        
+                        // Try multiple selectors to find the comment (handle both string and number IDs)
+                        const commentElement = 
+                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            document.querySelector(`#comment-${targetCommentId}`) ||
+                            document.querySelector(`#comment-${Number(targetCommentId)}`);
+                        
                         if (commentElement && commentPopupContainerRef.current) {
                             // Scroll the comment into view within the popup
                             commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2426,192 +2068,71 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 commentElement.style.boxShadow = '';
                                 commentElement.style.transition = '';
                             }, 2000);
+                            console.log('✅ Deep link: Scrolled to comment', targetCommentId);
+                        } else if (attempts < maxAttempts) {
+                            // Comment not found yet, try again
+                            setTimeout(findAndScrollToComment, 200);
+                        } else {
+                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
                         }
-                    }, 500); // Wait 500ms for popup to render
+                    };
+                    
+                    // Start looking for the comment after a short delay
+                    setTimeout(findAndScrollToComment, 300);
                 }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply weekly FMS review deep-link:', error);
         }
-    }, [project?.id, sections]);
+    }, [sections]);
     
-    // Also listen for hash changes to handle navigation from email links
+    // Check for deep link on mount and when sections load
+    useEffect(() => {
+        // Wait a bit for component to fully render
+        const timer = setTimeout(() => {
+            checkAndOpenDeepLink();
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [checkAndOpenDeepLink]);
+    
+    // Also listen for hash changes in case URL is updated after component mounts
     useEffect(() => {
         const handleHashChange = () => {
-            // Re-run the deep-link logic when hash changes
             setTimeout(() => {
-                try {
-                    let params = null;
-                    let deepSectionId = null;
-                    let deepDocumentId = null;
-                    let deepMonth = null;
-                    let deepWeek = '1';
-                    let deepCommentId = null;
-                    
-                    // First check hash query params (for hash-based routing like #/projects/123?weeklySectionId=...)
-                    const hash = window.location.hash || '';
-                    if (hash.includes('?')) {
-                        const hashParts = hash.split('?');
-                        if (hashParts.length > 1) {
-                            params = new URLSearchParams(hashParts[1]);
-                            deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
-                            deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
-                            deepMonth = params.get('weeklyMonth') || params.get('docMonth');
-                            deepWeek = params.get('weeklyWeek') || '1';
-                            deepCommentId = params.get('commentId');
-                        }
-                    }
-                    
-                    // If not found in hash, check window.location.search (for regular URLs)
-                    if (!deepSectionId || !deepDocumentId) {
-                        const search = window.location.search || '';
-                        if (search) {
-                            params = new URLSearchParams(search);
-                            if (!deepSectionId) deepSectionId = params.get('weeklySectionId') || params.get('docSectionId');
-                            if (!deepDocumentId) deepDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
-                            if (!deepMonth) deepMonth = params.get('weeklyMonth') || params.get('docMonth');
-                            if (!deepWeek || deepWeek === '1') deepWeek = params.get('weeklyWeek') || '1';
-                            if (!deepCommentId) deepCommentId = params.get('commentId');
-                        }
-                    }
-                    
-                    if (deepSectionId && deepDocumentId && deepMonth) {
-                        const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}-Week${deepWeek}`;
-                        setHoverCommentCell(cellKey);
-                        
-                        // Find the cell element and position popup relative to it
-                        setTimeout(() => {
-                            const cellElement = document.querySelector(`td[data-cell-key="${cellKey}"]`) ||
-                                              document.querySelector(`[data-comment-cell="${cellKey}"]`)?.closest('td');
-                            if (cellElement) {
-                                commentCellRef.current = cellElement;
-                                const cellRect = cellElement.getBoundingClientRect();
-                                const buttonElement = cellElement.querySelector(`[data-comment-cell="${cellKey}"]`);
-                                const buttonRect = buttonElement?.getBoundingClientRect() || cellRect;
-                                
-                                const popupWidth = 288;
-                                const popupHeight = 200;
-                                const spacing = 8;
-                                
-                                let top = cellRect.bottom + spacing;
-                                let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
-                                let pointerSide = 'top';
-                                let pointerOffset = buttonRect.left + (buttonRect.width / 2) - cellRect.left;
-                                
-                                if (top + popupHeight > window.innerHeight - 20) {
-                                    top = cellRect.top - popupHeight - spacing;
-                                    pointerSide = 'bottom';
-                                    if (top < 20) top = 20;
-                                }
-                                
-                                if (left < 20) {
-                                    left = 20;
-                                    pointerOffset = buttonRect.left + (buttonRect.width / 2) - 20;
-                                } else if (left + popupWidth > window.innerWidth - 20) {
-                                    left = window.innerWidth - popupWidth - 20;
-                                    pointerOffset = buttonRect.left + (buttonRect.width / 2) - left;
-                                }
-                                
-                                setCommentPopupPosition({ top, left });
-                                setCommentPopupPointer({ 
-                                    side: pointerSide, 
-                                    offset: Math.max(20, Math.min(pointerOffset, popupWidth - 20))
-                                });
-                            } else {
-                                // Fallback to center if cell not found
-                                setCommentPopupPosition({
-                                    top: Math.max(window.innerHeight / 2 - 160, 60),
-                                    left: Math.max(window.innerWidth / 2 - 180, 20)
-                                });
-                                setCommentPopupPointer({ side: 'top', offset: 144 });
-                            }
-                        }, 100);
-                        
-                        // If a specific comment ID is provided, scroll to it after the popup opens
-                        if (deepCommentId) {
-                            setTimeout(() => {
-                                const commentElement = document.querySelector(`[data-comment-id="${deepCommentId}"]`) ||
-                                                     document.querySelector(`#comment-${deepCommentId}`);
-                                if (commentElement && commentPopupContainerRef.current) {
-                                    commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    if (commentPopupContainerRef.current) {
-                                        const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
-                                        const commentRect = commentElement.getBoundingClientRect();
-                                        const scrollTop = commentPopupContainerRef.current.scrollTop;
-                                        const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                        commentPopupContainerRef.current.scrollTo({
-                                            top: commentOffset - 20,
-                                            behavior: 'smooth'
-                                        });
-                                    }
-                                    const originalBg = window.getComputedStyle(commentElement).backgroundColor;
-                                    commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
-                                    commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                                    commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
-                                    setTimeout(() => {
-                                        commentElement.style.backgroundColor = originalBg;
-                                        commentElement.style.boxShadow = '';
-                                        commentElement.style.transition = '';
-                                    }, 2000);
-                                }
-                            }, 500);
-                        }
-                    }
-                } catch (error) {
-                    console.warn('⚠️ Failed to apply weekly FMS review deep-link on hash change:', error);
-                }
+                checkAndOpenDeepLink();
             }, 100);
         };
         
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [project?.id, sections]);
+    }, [checkAndOpenDeepLink]);
     
     // ============================================================
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, document, month, weekNumber) => {
-        // Safety checks: ensure section and document exist
-        if (!section || !document) {
-            return <td className="px-2 py-1 text-xs border-l border-gray-100"></td>;
-        }
-        
-        const status = getDocumentStatus(document, month, weekNumber);
+    const renderStatusCell = (section, document, month) => {
+        const status = getDocumentStatus(document, month);
         const statusConfig = status ? getStatusConfig(status) : null;
-        const comments = getDocumentComments(document, month, weekNumber);
-        // Safety check: ensure comments is always an array
-        const safeComments = Array.isArray(comments) ? comments : [];
-        const hasComments = safeComments.length > 0;
-        const cellKey = `${section.id}-${document.id}-${month}-Week${weekNumber}`;
+        const comments = getDocumentComments(document, month);
+        const hasComments = comments.length > 0;
+        const cellKey = `${section.id}-${document.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
-        const weekIndex = weeks.findIndex(w => w.month === month && w.weekNumber === weekNumber);
-        const isWorkingWeek = workingWeeks.includes(weekIndex) && selectedYear === currentYear;
+        const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
         let cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
-            : (isWorkingWeek ? 'bg-primary-50' : '');
+            : (isWorkingMonth ? 'bg-primary-50' : '');
         
         // Add selection styling (with higher priority)
         if (isSelected) {
             cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
         }
         
-        const textColorClass = (() => {
-            if (!statusConfig || !statusConfig.color || typeof statusConfig.color !== 'string') {
-                return 'text-gray-400';
-            }
-            try {
-                const colorParts = statusConfig.color.split(' ');
-                if (!Array.isArray(colorParts)) return 'text-gray-900';
-                const textClass = colorParts.find(cls => cls && typeof cls === 'string' && cls.startsWith('text-'));
-                return textClass || 'text-gray-900';
-            } catch (e) {
-                console.warn('Error parsing statusConfig.color:', e);
-                return 'text-gray-900';
-            }
-        })();
+        const textColorClass = statusConfig && statusConfig.color 
+            ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
+            : 'text-gray-400';
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -2646,14 +2167,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         return (
             <td 
-                data-cell-key={cellKey}
                 className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
                 <div className="min-w-[160px] relative">
                     <select
-                        value={status || 'not-checked'}
+                        value={status || ''}
                         onChange={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2662,7 +2182,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
                             const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                            handleUpdateStatus(section.id, document.id, month, weekNumber, newStatus, applyToSelected);
+                            handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
@@ -2670,7 +2190,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             if (newStatus !== status) {
                                 const currentSelectedCells = selectedCellsRef.current;
                                 const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                                handleUpdateStatus(section.id, document.id, month, weekNumber, newStatus, applyToSelected);
+                                handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                             }
                         }}
                         onMouseDown={(e) => {
@@ -2698,27 +2218,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 });
                             }
                         }}
-                        aria-label={`Status for ${document.name || 'document'} in ${month} Week ${weekNumber} ${selectedYear}`}
+                        aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
                         role="combobox"
                         aria-haspopup="listbox"
                         data-section-id={section.id}
                         data-document-id={document.id}
                         data-month={month}
-                        data-week={weekNumber}
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
-                        {(statusOptions && Array.isArray(statusOptions) ? statusOptions : []).map(option => {
-                            if (!option || typeof option !== 'object') return null;
-                            const optionValue = option.value != null ? String(option.value) : '';
-                            const optionLabel = option.label != null ? String(option.label) : '';
-                            if (!optionValue) return null; // Skip if no value
-                            return (
-                                <option key={optionValue} value={optionValue}>
-                                    {optionLabel}
-                                </option>
-                            );
-                        })}
+                        <option value="">Select Status</option>
+                        {statusOptions.map(option => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
                     </select>
                     
                     <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
@@ -2730,66 +2244,57 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 
                                 if (isPopupOpen) {
                                     setHoverCommentCell(null);
-                                    commentCellRef.current = null;
-                                    setCommentAttachments([]); // Clear attachments when closing popup
                                 } else {
-                                    // Get the cell (td) element that contains this button
-                                    const cellElement = e.currentTarget.closest('td');
-                                    commentCellRef.current = cellElement;
-                                    
-                                    // Get cell position
-                                    const cellRect = cellElement.getBoundingClientRect();
-                                    const buttonRect = e.currentTarget.getBoundingClientRect();
-                                    
-                                    // Calculate popup position - position it above or below the cell
-                                    const popupWidth = 288; // w-72 = 288px
-                                    const popupHeight = 200; // approximate height
-                                    const spacing = 8; // space between cell and popup
-                                    
-                                    // Try to position below the cell first
-                                    let top = cellRect.bottom + spacing;
-                                    let left = cellRect.left + (cellRect.width / 2) - (popupWidth / 2);
-                                    let pointerSide = 'top';
-                                    
-                                    // Calculate button center position relative to viewport
-                                    const buttonCenterX = buttonRect.left + (buttonRect.width / 2);
-                                    
-                                    // If popup would go off bottom of screen, position above
-                                    if (top + popupHeight > window.innerHeight - 20) {
-                                        top = cellRect.top - popupHeight - spacing;
-                                        pointerSide = 'bottom';
-                                        // Adjust if would go off top
-                                        if (top < 20) {
-                                            top = 20;
-                                        }
-                                    }
-                                    
-                                    // Adjust horizontal position if would go off screen
-                                    if (left < 20) {
-                                        left = 20;
-                                    } else if (left + popupWidth > window.innerWidth - 20) {
-                                        left = window.innerWidth - popupWidth - 20;
-                                    }
-                                    
-                                    // Calculate pointer offset relative to popup's left position
-                                    const pointerOffset = buttonCenterX - left;
-                                    
-                                    setCommentPopupPosition({ top, left });
-                                    setCommentPopupPointer({ 
-                                        side: pointerSide, 
-                                        offset: Math.max(20, Math.min(pointerOffset, popupWidth - 20))
-                                    });
+                                    // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);
+                                    // Trigger position update after state is set
+                                    setTimeout(() => {
+                                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        if (commentButton) {
+                                            const buttonRect = commentButton.getBoundingClientRect();
+                                            const viewportWidth = window.innerWidth;
+                                            const viewportHeight = window.innerHeight;
+                                            const popupWidth = 288;
+                                            const popupHeight = 300;
+                                            const spacing = 8;
+                                            const tailSize = 12;
+                                            
+                                            // Determine if popup should be above or below
+                                            const spaceBelow = viewportHeight - buttonRect.bottom;
+                                            const spaceAbove = buttonRect.top;
+                                            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+                                            
+                                            let popupTop, popupLeft;
+                                            
+                                            if (positionAbove) {
+                                                popupTop = buttonRect.top - popupHeight - spacing - tailSize;
+                                            } else {
+                                                popupTop = buttonRect.bottom + spacing + tailSize;
+                                            }
+                                            
+                                            // Align horizontally with button center, but stay in viewport
+                                            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+                                            let preferredLeft = buttonCenterX - popupWidth / 2;
+                                            
+                                            if (preferredLeft < 10) {
+                                                preferredLeft = 10;
+                                            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
+                                                preferredLeft = viewportWidth - popupWidth - 10;
+                                            }
+                                            
+                                            setCommentPopupPosition({ top: popupTop, left: preferredLeft });
+                                        }
+                                    }, 10);
                                 }
                             }}
                             className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
-                            title={hasComments ? `${safeComments.length} comment(s)` : 'Add comment'}
+                            title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
                             <i className="fas fa-comment text-base"></i>
                             {hasComments && (
                                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                                    {safeComments.length}
+                                    {comments.length}
                                 </span>
                             )}
                         </button>
@@ -2806,16 +2311,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const SectionModal = () => {
         const [formData, setFormData] = useState({
             name: editingSection?.name || '',
-            description: editingSection?.description || ''
+            description: editingSection?.description || '',
+            reviewer: editingSection?.reviewer || ''
         });
         
-        const handleSubmit = async (e) => {
+        useEffect(() => {
+            setFormData({
+                name: editingSection?.name || '',
+                description: editingSection?.description || '',
+                reviewer: editingSection?.reviewer || ''
+            });
+        }, [editingSection]);
+        
+        const handleSubmit = (e) => {
             e.preventDefault();
             if (!formData.name.trim()) {
                 alert('Please enter a section name');
                 return;
             }
-            await handleSaveSection(formData);
+            handleSaveSection(formData);
         };
         
         return (
@@ -2852,6 +2366,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 rows="2"
                                 placeholder="Brief description..."
                             ></textarea>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Reviewer (Optional)</label>
+                            <select
+                                value={formData.reviewer || ''}
+                                onChange={(e) => setFormData({...formData, reviewer: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                            >
+                                <option value="">-- Select Reviewer --</option>
+                                {users.map(user => (
+                                    <option key={user.id} value={user.id}>
+                                        {user.name || user.email}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
@@ -3396,7 +2926,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             <div className="flex items-center justify-center py-12">
                 <div className="text-center">
                     <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-3"></i>
-                    <p className="text-sm text-gray-600">Loading document collection tracker...</p>
+                    <p className="text-sm text-gray-600">Loading weekly FMS review tracker...</p>
                 </div>
             </div>
         );
@@ -3408,75 +2938,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {hoverCommentCell && (() => {
                 // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
                 // Never parseInt them – always compare as strings to ensure we find the right row.
-                // Format: sectionId-documentId-month-WeekN
-                const parts = hoverCommentCell.split('-');
-                const weekIndex = parts.findIndex(p => p.startsWith('Week'));
-                let rawSectionId, rawDocumentId, month, weekNumber;
-                
-                if (weekIndex > 0) {
-                    rawSectionId = parts[0];
-                    rawDocumentId = parts[1];
-                    month = parts.slice(2, weekIndex).join('-');
-                    weekNumber = parts[weekIndex].replace('Week', '');
-                } else {
-                    // Fallback for old format
-                    [rawSectionId, rawDocumentId, month] = parts;
-                    weekNumber = '1';
-                }
-                
+                const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
-                const document = section?.documents?.find(d => String(d.id) === String(rawDocumentId));
-                const commentsRaw = document ? getDocumentComments(document, month, weekNumber) : [];
-                const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
-                const safeCommentsLength = comments.length;
+                const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const comments = document ? getDocumentComments(document, month) : [];
                 
                 return (
-                    <div 
-                        className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999] relative"
-                        style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
-                    >
-                        {/* Speech bubble pointer - points to the comment button */}
-                        {commentPopupPointer.offset > 0 && (
-                            <>
-                                {/* Pointer border (outer) */}
-                                <div 
-                                    className={`absolute ${commentPopupPointer.side === 'top' ? '-top-2.5' : '-bottom-2.5'} w-0 h-0 pointer-events-none`}
-                                    style={{ 
-                                        left: `${commentPopupPointer.offset}px`,
-                                        transform: 'translateX(-50%)',
-                                        borderLeft: '9px solid transparent',
-                                        borderRight: '9px solid transparent',
-                                        ...(commentPopupPointer.side === 'top' 
-                                            ? { borderBottom: '9px solid #d1d5db' }
-                                            : { borderTop: '9px solid #d1d5db' }
-                                        ),
-                                        zIndex: 998
-                                    }}
-                                />
-                                {/* Pointer fill (inner) */}
-                                <div 
-                                    className={`absolute ${commentPopupPointer.side === 'top' ? '-top-2' : '-bottom-2'} w-0 h-0 pointer-events-none`}
-                                    style={{ 
-                                        left: `${commentPopupPointer.offset}px`,
-                                        transform: 'translateX(-50%)',
-                                        borderLeft: '8px solid transparent',
-                                        borderRight: '8px solid transparent',
-                                        ...(commentPopupPointer.side === 'top' 
-                                            ? { borderBottom: '8px solid white' }
-                                            : { borderTop: '8px solid white' }
-                                        ),
-                                        zIndex: 999
-                                    }}
-                                />
-                            </>
+                    <>
+                        {/* Comment Popup */}
+                        <div 
+                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
+                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
+                        >
+                        {/* Show section and document context */}
+                        {section && document && (
+                            <div className="mb-2 pb-2 border-b border-gray-200">
+                                <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
+                                    {section.name || 'Section'}
+                                </div>
+                                <div className="text-[9px] text-gray-500">
+                                    {document.name || 'Document'} • {month}
+                                </div>
+                            </div>
                         )}
-                        {safeCommentsLength > 0 && (
+                        {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                    {comments.map((comment, idx) => {
-                                        if (!comment || typeof comment !== 'object') return null;
-                                        return (
+                                    {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
@@ -3492,29 +2981,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             : (comment.text || '')
                                                 }}
                                             />
-                                            {comment.attachments && comment.attachments.length > 0 && (
-                                                <div className="mt-1.5 space-y-1">
-                                                    {comment.attachments.map((attachment) => (
-                                                        <div key={attachment.id || attachment.url} className="flex items-center gap-1.5 text-[10px]">
-                                                            <i className="fas fa-paperclip text-gray-400"></i>
-                                                            <a
-                                                                href={attachment.url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-primary-600 hover:text-primary-700 hover:underline truncate flex-1"
-                                                                title={attachment.name}
-                                                            >
-                                                                {attachment.name}
-                                                            </a>
-                                                            {attachment.size && (
-                                                                <span className="text-gray-400">
-                                                                    ({(attachment.size / 1024).toFixed(1)} KB)
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
                                                 <span>{new Date(comment.date).toLocaleString('en-ZA', { 
@@ -3532,63 +2998,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
                                         </div>
-                                        );
-                                    })}
+                                    ))}
                                 </div>
                             </div>
                         )}
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            
-                            {/* File attachments preview */}
-                            {commentAttachments.length > 0 && (
-                                <div className="mb-2 space-y-1">
-                                    {commentAttachments.map((attachment) => (
-                                        <div key={attachment.id} className="flex items-center gap-1.5 text-[10px] bg-gray-50 rounded px-2 py-1">
-                                            <i className="fas fa-paperclip text-gray-400"></i>
-                                            <span className="flex-1 truncate text-gray-700" title={attachment.name}>
-                                                {attachment.name}
-                                            </span>
-                                            {attachment.size && (
-                                                <span className="text-gray-400">
-                                                    ({(attachment.size / 1024).toFixed(1)} KB)
-                                                </span>
-                                            )}
-                                            <button
-                                                onClick={() => handleRemoveAttachment(attachment.id)}
-                                                className="text-red-500 hover:text-red-700"
-                                                type="button"
-                                                title="Remove attachment"
-                                            >
-                                                <i className="fas fa-times text-[10px]"></i>
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            
-                            {/* File upload input */}
-                            <div className="mb-1.5">
-                                <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-700">
-                                    <input
-                                        type="file"
-                                        multiple
-                                        onChange={handleFileUpload}
-                                        disabled={isUploadingAttachment}
-                                        className="hidden"
-                                        accept="*/*"
-                                    />
-                                    <i className={`fas ${isUploadingAttachment ? 'fa-spinner fa-spin' : 'fa-paperclip'} text-[10px]`}></i>
-                                    <span>{isUploadingAttachment ? 'Uploading...' : 'Attach file(s)'}</span>
-                                </label>
-                            </div>
-                            
                             {commentInputAvailable && section && document ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim() || commentAttachments.length > 0) {
-                                            handleAddComment(section.id, document.id, month, weekNumber, commentText);
+                                        if (commentText && commentText.trim()) {
+                                            handleAddComment(section.id, document.id, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3603,7 +3024,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                                                handleAddComment(section.id, document.id, month, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3614,9 +3035,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     <button
                                         onClick={() => {
                                             if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, weekNumber, quickComment);
+                                            handleAddComment(section.id, document.id, month, quickComment);
                                         }}
-                                        disabled={!quickComment.trim() && commentAttachments.length === 0}
+                                        disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
                                     >
                                         Add Comment
@@ -3625,6 +3046,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             )}
                         </div>
                     </div>
+                    </>
                 );
             })()}
             
@@ -3750,19 +3172,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="flex items-center gap-3">
                     <span className="text-[10px] font-medium text-gray-600">Status:</span>
-                    {(statusOptions && Array.isArray(statusOptions) ? statusOptions : []).map((option, idx) => {
-                        if (!option || typeof option !== 'object') return null;
-                        const safeStatusOptions = statusOptions && Array.isArray(statusOptions) ? statusOptions : [];
-                        return (
-                            <React.Fragment key={option.value || idx}>
-                                <div className="flex items-center gap-1">
-                                    <div className={`w-3 h-3 rounded ${option.cellColor || ''}`}></div>
-                                    <span className="text-[10px] text-gray-600">{option.label || ''}</span>
-                                </div>
-                                {idx < safeStatusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
-                            </React.Fragment>
-                        );
-                    })}
+                    {statusOptions.map((option, idx) => (
+                        <React.Fragment key={option.value}>
+                            <div className="flex items-center gap-1">
+                                <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
+                                <span className="text-[10px] text-gray-600">{option.label}</span>
+                            </div>
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                        </React.Fragment>
+                    ))}
                 </div>
             </div>
             
@@ -3780,10 +3198,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         </button>
                     </div>
                 ) : (
-                    (sections && Array.isArray(sections) ? sections : []).map((section, sectionIndex) => {
-                        // Safety check: ensure section exists
-                        if (!section) return null;
-                        return (
+                    sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
                             className="bg-white rounded-lg border border-gray-200 overflow-hidden"
@@ -3795,9 +3210,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         >
                             {/* Section header */}
                             <div className="px-3 py-2 bg-gray-100 flex items-center justify-between cursor-grab active:cursor-grabbing">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-1">
                                     <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="font-semibold text-sm text-gray-900">{section.name}</div>
                                         {section.description && (
                                             <div className="text-[10px] text-gray-500">{section.description}</div>
@@ -3805,6 +3220,23 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
+                                        <label className="text-[10px] font-medium text-gray-600">Reviewer:</label>
+                                        <select
+                                            value={section.reviewer || ''}
+                                            onChange={(e) => handleUpdateReviewer(section.id, e.target.value)}
+                                            className="px-2 py-0.5 text-[10px] border border-gray-300 rounded bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="">-- Select --</option>
+                                            {users.map(user => (
+                                                <option key={user.id} value={user.id}>
+                                                    {user.name || user.email}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                     <button
                                         onClick={() => handleAddDocument(section.id)}
                                         className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
@@ -3827,15 +3259,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </div>
                             </div>
 
-                            {/* Scrollable week/document grid for this section only */}
-                            <div 
-                                ref={(el) => {
-                                    if (el) {
-                                        sectionScrollRefs.current[section.id] = el;
-                                    }
-                                }}
-                                className="border-t border-gray-200 overflow-x-auto"
-                            >
+                            {/* Scrollable month/document grid for this section only */}
+                            <div className="border-t border-gray-200 overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
@@ -3845,59 +3270,38 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             >
                                                 Document / Data
                                             </th>
-                                            {(weeks && Array.isArray(weeks) ? weeks : []).map((week, idx) => {
-                                                // Group weeks by month - show month header when month changes
-                                                const safeWeeks = weeks && Array.isArray(weeks) ? weeks : [];
-                                                const prevWeek = idx > 0 ? safeWeeks[idx - 1] : null;
-                                                const showMonthHeader = !prevWeek || prevWeek.month !== week.month;
-                                                
-                                                return (
-                                                    <th
-                                                        key={week.key}
-                                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
-                                                            workingWeeks.includes(idx) && selectedYear === currentYear
-                                                                ? 'bg-primary-50 text-primary-700'
-                                                                : 'text-gray-600'
-                                                        }`}
-                                                        title={`${week.month} Week ${week.weekNumber}: ${week.dateRange}`}
-                                                    >
-                                                        {showMonthHeader && idx > 0 ? (
-                                                            <div>
-                                                                <div className="text-[9px] font-bold text-gray-500">{week.month.slice(0, 3)}</div>
-                                                                <div className="text-[9px]">{week.display}</div>
-                                                                <div className="text-[8px] font-normal text-gray-500 mt-0.5 leading-tight">{week.dateRange}</div>
-                                                            </div>
-                                                        ) : (
-                                                            <div>
-                                                                <div>{week.display}</div>
-                                                                <div className="text-[8px] font-normal text-gray-500 mt-0.5 leading-tight">{week.dateRange}</div>
-                                                            </div>
-                                                        )}
-                                                    </th>
-                                                );
-                                            })}
+                                            {months.map((month, idx) => (
+                                                <th
+                                                    key={month}
+                                                    className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
+                                                        workingMonths.includes(idx) && selectedYear === currentYear
+                                                            ? 'bg-primary-50 text-primary-700'
+                                                            : 'text-gray-600'
+                                                    }`}
+                                                >
+                                                    {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
+                                                </th>
+                                            ))}
                                             <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
                                                 Actions
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {(!section || !section.documents || !Array.isArray(section.documents) || section.documents.length === 0) ? (
+                                        {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={(weeks && Array.isArray(weeks) ? weeks.length : 0) + 2} className="px-8 py-4 text-center text-gray-400">
+                                                <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
                                                     <p className="text-xs">No documents in this section</p>
-                                                    {section && (
-                                                        <button
-                                                            onClick={() => handleAddDocument(section.id)}
-                                                            className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                                        >
-                                                            <i className="fas fa-plus mr-1"></i>Add Document
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => handleAddDocument(section.id)}
+                                                        className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                                    >
+                                                        <i className="fas fa-plus mr-1"></i>Add Document
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ) : (
-                                            (section.documents || []).map((document) => (
+                                            section.documents.map((document) => (
                                                 <tr key={document.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
@@ -3910,14 +3314,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    {(weeks && Array.isArray(weeks) ? weeks : []).map((week) => {
-                                                        if (!week || typeof week !== 'object') return null;
-                                                        return (
-                                                            <React.Fragment key={`${document.id}-${week.key}`}>
-                                                                {renderStatusCell(section, document, week.month, week.weekNumber)}
-                                                            </React.Fragment>
-                                                        );
-                                                    })}
+                                                    {months.map((month) => (
+                                                        <React.Fragment key={`${document.id}-${month}`}>
+                                                            {renderStatusCell(section, document, month)}
+                                                        </React.Fragment>
+                                                    ))}
                                                     <td className="px-2.5 py-1.5 border-l border-gray-200">
                                                         <div className="flex items-center gap-1">
                                                             <button
@@ -3942,8 +3343,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </table>
                             </div>
                         </div>
-                        );
-                    })
+                    ))
                 )}
             </div>
             

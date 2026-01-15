@@ -596,23 +596,22 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                 year,
                 name: section.name || '',
                 description: section.description || '',
+                reviewer: section.reviewer || '',
                 order: i,
                 items: {
                   create: (section.documents || []).map((doc, docIdx) => {
                     const statuses = []
                     if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
                       for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                        // Parse "2024-01-W1" format
-                        const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
-                        if (match) {
-                          const year = parseInt(match[1], 10)
-                          const month = parseInt(match[2], 10)
-                          const week = parseInt(match[3], 10)
-                          if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                        // Parse "2024-01" format (monthly, no week)
+                        const parts = key.split('-')
+                        if (parts.length >= 2) {
+                          const year = parseInt(parts[0], 10)
+                          const month = parseInt(parts[1], 10)
+                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
                             statuses.push({
                               year,
                               month,
-                              week,
                               status: String(status || 'pending')
                             })
                           }
@@ -623,19 +622,17 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                     const comments = []
                     if (doc.comments && typeof doc.comments === 'object') {
                       for (const [key, commentArray] of Object.entries(doc.comments)) {
-                        const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
-                        if (match) {
-                          const year = parseInt(match[1], 10)
-                          const month = parseInt(match[2], 10)
-                          const week = parseInt(match[3], 10)
-                          if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                        const parts = key.split('-')
+                        if (parts.length >= 2) {
+                          const year = parseInt(parts[0], 10)
+                          const month = parseInt(parts[1], 10)
+                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
                             const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                             for (const comment of commentList) {
                               if (comment && (comment.text || comment)) {
                                 comments.push({
                                   year,
                                   month,
-                                  week,
                                   text: comment.text || String(comment),
                                   author: comment.author || comment.authorName || '',
                                   authorId: comment.authorId || null
@@ -687,23 +684,22 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
               year: currentYear,
               name: section.name || '',
               description: section.description || '',
+              reviewer: section.reviewer || '',
               order: i,
               items: {
                 create: (section.documents || []).map((doc, docIdx) => {
                   const statuses = []
                   if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
                     for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                      // Parse "2024-01-W1" format
-                      const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
-                      if (match) {
-                        const year = parseInt(match[1], 10)
-                        const month = parseInt(match[2], 10)
-                        const week = parseInt(match[3], 10)
-                        if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                      // Parse "2024-01" format (monthly, no week)
+                      const parts = key.split('-')
+                      if (parts.length >= 2) {
+                        const year = parseInt(parts[0], 10)
+                        const month = parseInt(parts[1], 10)
+                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
                           statuses.push({
                             year,
                             month,
-                            week,
                             status: String(status || 'pending')
                           })
                         }
@@ -714,19 +710,17 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                   const comments = []
                   if (doc.comments && typeof doc.comments === 'object') {
                     for (const [key, commentArray] of Object.entries(doc.comments)) {
-                      const match = key.match(/^(\d{4})-(\d{1,2})-W(\d+)$/)
-                      if (match) {
-                        const year = parseInt(match[1], 10)
-                        const month = parseInt(match[2], 10)
-                        const week = parseInt(match[3], 10)
-                        if (!isNaN(year) && !isNaN(month) && !isNaN(week) && month >= 1 && month <= 12 && week >= 1 && week <= 5) {
+                      const parts = key.split('-')
+                      if (parts.length >= 2) {
+                        const year = parseInt(parts[0], 10)
+                        const month = parseInt(parts[1], 10)
+                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
                               comments.push({
                                 year,
                                 month,
-                                week,
                                 text: comment.text || String(comment),
                                 author: comment.author || comment.authorName || '',
                                 authorId: comment.authorId || null

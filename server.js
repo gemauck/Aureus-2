@@ -1461,54 +1461,8 @@ app.all('/api/document-collection-templates/:id', async (req, res, next) => {
   }
 })
 
-// Explicit mapping for weekly-fms-review-templates list and create operations (GET, POST /api/weekly-fms-review-templates)
-app.all('/api/weekly-fms-review-templates', async (req, res, next) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'weekly-fms-review-templates.js'))
-    if (!handler) {
-      console.error('❌ Weekly FMS review templates handler not found')
-      return res.status(404).json({ error: 'API endpoint not found' })
-    }
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ Error in weekly-fms-review-templates handler:', e)
-    // Ensure JSON is returned even on error
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
-        timestamp: new Date().toISOString()
-      })
-    }
-    return next(e)
-  }
-})
-
-// Explicit mapping for weekly-fms-review-templates operations with ID (GET, PUT, DELETE /api/weekly-fms-review-templates/:id)
-app.all('/api/weekly-fms-review-templates/:id', async (req, res, next) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'weekly-fms-review-templates', '[id].js'))
-    if (!handler) {
-      console.error('❌ Weekly FMS review templates [id] handler not found')
-      return res.status(404).json({ error: 'API endpoint not found' })
-    }
-    // Ensure req.params.id is set for the handler
-    req.params = req.params || {}
-    req.params.id = req.params.id || req.url.split('/').pop()
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ Error in weekly-fms-review-templates [id] handler:', e)
-    // Ensure JSON is returned even on error
-    if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
-        timestamp: new Date().toISOString()
-      })
-    }
-    return next(e)
-  }
-})
+// Weekly FMS Review now uses document-collection-templates (same as Monthly FMS Review)
+// Removed weekly-fms-review-templates routes - they are no longer needed
 
 // Explicit mapping for user tasks list and create operations (GET, POST /api/user-tasks)
 app.all('/api/user-tasks', async (req, res, next) => {

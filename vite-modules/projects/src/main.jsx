@@ -1,10 +1,11 @@
 import React, { ReactDOM } from './react-window.js';
-import ProjectsModule, { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker } from './ProjectsModule';
+import ProjectsModule, { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker } from './ProjectsModule';
 import '../../../src/styles/main.css';  // Use existing Tailwind
 
-// CRITICAL: Only expose MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker to avoid conflicts with newer components
+// CRITICAL: Only expose MonthlyDocumentCollectionTracker to avoid conflicts with newer components
 // The old Projects, ProjectDetail, and ProjectModal should NOT be exposed as they conflict
 // with the newer versions in src/components/projects/
+// WeeklyFMSReviewTracker is loaded from src/components/projects/ separately
 if (typeof window !== 'undefined') {
   // Only expose MonthlyDocumentCollectionTracker if it's not already available
   // This prevents the old Vite module from overwriting newer components
@@ -15,9 +16,8 @@ if (typeof window !== 'undefined') {
     console.log('✅ Vite module: MonthlyDocumentCollectionTracker already available from main source, skipping');
   }
   
-  // Expose WeeklyFMSReviewTracker - ALWAYS override to ensure latest version is used
-  window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
-  console.log('✅ Vite module: WeeklyFMSReviewTracker exposed to window (overriding any existing version)');
+  // WeeklyFMSReviewTracker is loaded from src/components/projects/WeeklyFMSReviewTracker.jsx separately
+  // Don't expose it here to avoid conflicts
   
   // DO NOT expose old Projects components - they conflict with newer versions
   // Only expose if they don't exist (fallback for edge cases)
@@ -34,15 +34,14 @@ if (typeof window !== 'undefined') {
   
   window.ViteProjects = ProjectsModule;
   
-  // Dispatch event to notify that MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker are ready
+  // Dispatch event to notify that MonthlyDocumentCollectionTracker is ready
   if (typeof window.dispatchEvent === 'function') {
     window.dispatchEvent(new CustomEvent('viteProjectsReady', {
       detail: { 
-        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
-        WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
+        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker
       }
     }));
-    console.log('📢 Dispatched viteProjectsReady event (MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker)');
+    console.log('📢 Dispatched viteProjectsReady event (MonthlyDocumentCollectionTracker)');
   }
 }
 

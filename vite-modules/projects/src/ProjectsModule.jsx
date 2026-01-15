@@ -3,7 +3,7 @@ import Projects from './components/Projects';
 import ProjectDetail from './components/ProjectDetail';
 import ProjectModal from './components/ProjectModal';
 import MonthlyDocumentCollectionTracker from './components/MonthlyDocumentCollectionTracker';
-import WeeklyFMSReviewTracker from './components/WeeklyFMSReviewTracker';
+// WeeklyFMSReviewTracker is in src/components/projects/, not in vite-modules - import from window if needed
 import MonthlyFMSReviewTracker from './components/MonthlyFMSReviewTracker';
 // Import API service to ensure it's included in the build and registers on window
 import './services/documentCollectionAPI.js';
@@ -21,7 +21,8 @@ const ProjectsModule = () => {
 };
 
 // Export components for use in other modules
-export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, MonthlyFMSReviewTracker };
+// Note: WeeklyFMSReviewTracker is not exported here as it's in src/components/projects/ and loaded separately
+export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, MonthlyFMSReviewTracker };
 
 // Also expose to window for backwards compatibility
 // NOTE: MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker, and MonthlyFMSReviewTracker should be exposed here
@@ -34,9 +35,8 @@ if (typeof window !== 'undefined') {
     console.log('✅ ProjectsModule: MonthlyDocumentCollectionTracker exposed to window');
   }
   
-  // Expose WeeklyFMSReviewTracker - ALWAYS override to ensure latest version
-  window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
-  console.log('✅ ProjectsModule: WeeklyFMSReviewTracker exposed to window (overriding any existing version)');
+  // WeeklyFMSReviewTracker is loaded from src/components/projects/WeeklyFMSReviewTracker.jsx separately
+  // Don't expose it here to avoid conflicts
   
   // Expose MonthlyFMSReviewTracker - ALWAYS override to ensure latest version
   window.MonthlyFMSReviewTracker = MonthlyFMSReviewTracker;

@@ -656,13 +656,14 @@ model DocumentItemComment {
   @@index([createdAt])
 }
 
-// Weekly FMS Review Tables
+// Weekly FMS Review Tables (duplicated from Monthly FMS Review)
 model WeeklyFMSReviewSection {
   id          String   @id @default(cuid())
   projectId   String
   year        Int // Year (e.g., 2024)
   name        String
   description String   @default("")
+  reviewer    String?  @default("") // Optional reviewer name
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -698,16 +699,15 @@ model WeeklyFMSReviewItemStatus {
   itemId    String
   year      Int // Year (e.g., 2024)
   month     Int // Month (1-12)
-  week      Int // Week number (1-5)
   status    String   @default("pending") // pending, completed, not_applicable, etc.
   updatedBy String? // User ID
   updatedAt DateTime @default(now())
 
   item WeeklyFMSReviewItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  @@unique([itemId, year, month, week])
+  @@unique([itemId, year, month])
   @@index([itemId])
-  @@index([year, month, week])
+  @@index([year, month])
 }
 
 model WeeklyFMSReviewItemComment {
@@ -715,7 +715,6 @@ model WeeklyFMSReviewItemComment {
   itemId    String
   year      Int
   month     Int
-  week      Int
   text      String
   authorId  String?
   author    String // Denormalized author name
@@ -726,7 +725,7 @@ model WeeklyFMSReviewItemComment {
   authorUser User?               @relation("WeeklyFMSCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([itemId])
-  @@index([itemId, year, month, week])
+  @@index([itemId, year, month])
   @@index([createdAt])
 }
 
