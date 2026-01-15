@@ -194,17 +194,10 @@ const CommentInputWithMentions = ({
     const handleSubmit = async () => {
         if (!comment.trim()) return;
         
-        // Process @mentions if MentionHelper is available
-        if (window.MentionHelper && window.MentionHelper.hasMentions(comment)) {
-            const currentUser = window.storage?.getUserInfo() || {};
-            await window.MentionHelper.processMentions(
-                comment,
-                taskTitle || 'a comment',
-                taskLink || '#',
-                currentUser.name || currentUser.email || 'Unknown',
-                allUsers
-            );
-        }
+        // NOTE: Mention processing is now handled by parent components
+        // (e.g., MonthlyDocumentCollectionTracker, MonthlyFMSReviewTracker)
+        // which have better context (project info, deep links, etc.)
+        // This prevents duplicate notifications from being sent.
         
         onSubmit(comment);
         setComment('');
