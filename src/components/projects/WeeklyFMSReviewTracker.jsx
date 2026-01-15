@@ -2257,13 +2257,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const comments = getDocumentComments(document, week);
         const hasComments = comments.length > 0;
         // Use week number for cell key (more reliable than label which contains special chars)
+        // Use week number for cell key (more reliable than label which contains special chars)
         const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
         const weekLabel = typeof week === 'object' ? week.label : week;
         const cellKey = `${section.id}-${document.id}-W${String(weekNumber).padStart(2, '0')}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
-        const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.replace(/W?/i, '')) : week);
         const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
         let cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
