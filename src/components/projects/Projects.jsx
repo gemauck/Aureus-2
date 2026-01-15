@@ -61,12 +61,8 @@ const useAuthSafe = () => {
 };
 
 const Projects = () => {
-    console.log('🚀 Projects: Component rendering/mounting', { 
-        currentUrl: window.location.href,
-        hash: window.location.hash,
-        pathname: window.location.pathname,
-        search: window.location.search 
-    });
+    // Removed verbose mount/render log to reduce console noise.
+    // For detailed diagnostics, prefer using window.debug.log when needed.
     // CRITICAL: Always call useAuthSafe() unconditionally at the top level
     // This ensures hooks are always called in the same order on every render
     const { logout } = useAuthSafe();
