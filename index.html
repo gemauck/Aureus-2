@@ -80,14 +80,14 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1768469698846'; // Updated by build process
+        window.BUILD_VERSION = '1768470313940'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
     <!-- VERSION: 20251215-remove-simple-v2 - Update this when deploying new changes -->
     <script>
         (function() {
-            var APP_VERSION = '1768469698846';
+            var APP_VERSION = '1768470313940';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -1062,8 +1062,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1768469698846" as="script">
-    <script defer src="/dist/core-bundle.js?v=1768469698846"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1768470313940" as="script">
+    <script defer src="/dist/core-bundle.js?v=1768470313940"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1416,8 +1416,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260108-deep-link-fix-v1 -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1768469698846" as="script">
-    <script defer src="/lazy-load-components.js?v=1768469698846"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1768470313940" as="script">
+    <script defer src="/lazy-load-components.js?v=1768470313940"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

@@ -632,7 +632,8 @@ const Projects = () => {
             
             // If we found a project ID in the URL, handle it immediately
             if (projectId) {
-                console.log('✅ Projects: Detected project ID from URL directly:', { projectId, taskId, urlPath });
+                // Debug log removed to prevent noisy console output in production.
+                // Use window.debug.log if detailed routing diagnostics are needed.
                 // Create a route-like object
                 const route = {
                     page: 'projects',
