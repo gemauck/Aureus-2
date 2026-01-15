@@ -2061,6 +2061,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
 };
 
 window.Pipeline = Pipeline;
+// Also set PipelineView for compatibility with Clients.jsx
+window.PipelineView = Pipeline;
 
 try {
     window.dispatchEvent(new Event('pipeline:component-ready'));

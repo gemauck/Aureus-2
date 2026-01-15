@@ -8572,13 +8572,13 @@ const Clients = React.memo(() => {
                 )
             )}
             {viewMode === 'pipeline' && (
-                window.PipelineView ? (
-                    <window.PipelineView
-                        clients={clients}
-                        leads={leads}
-                        onOpenLead={openLeadFromPipeline}
-                        onOpenOpportunity={openOpportunityFromPipeline}
-                    />
+                (window.Pipeline || window.PipelineView) ? (
+                    React.createElement(window.Pipeline || window.PipelineView, {
+                        clients: clients,
+                        leads: leads,
+                        onOpenLead: openLeadFromPipeline,
+                        onOpenOpportunity: openOpportunityFromPipeline
+                    })
                 ) : (
                     <LegacyPipelineView />
                 )
