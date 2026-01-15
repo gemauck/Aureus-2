@@ -3957,12 +3957,13 @@ const Clients = React.memo(() => {
                             notes: notesToSave // Ensure notes is always a string, never undefined
                         };
                         
-                        // CRITICAL: Log what we're sending to verify comments are included
-                        console.log('💾 [handleSaveLead] Sending lead data with comments:', {
+                        // CRITICAL: Log what we're sending to verify comments and followUps are included
+                        console.log('💾 [handleSaveLead] Sending lead data:', {
                             leadId: leadDataToSend.id,
                             commentsCount: Array.isArray(leadDataToSend.comments) ? leadDataToSend.comments.length : 0,
-                            comments: leadDataToSend.comments,
-                            hasComments: leadDataToSend.comments !== undefined
+                            followUpsCount: Array.isArray(leadDataToSend.followUps) ? leadDataToSend.followUps.length : 0,
+                            hasComments: leadDataToSend.comments !== undefined,
+                            hasFollowUps: leadDataToSend.followUps !== undefined
                         });
                         
                         const apiResponse = await window.api.updateLead(leadDataToSend.id, leadDataToSend);

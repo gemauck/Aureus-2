@@ -2204,9 +2204,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const finalFormData = logActivity('Follow-up Added', `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`, null, false, updatedFormData);
         
         // Save follow-up changes and activity log immediately - stay in edit mode
+        // CRITICAL: Explicitly ensure followUps are in the data being saved
+        const dataToSave = {
+            ...finalFormData,
+            followUps: updatedFollowUps // Explicitly include followUps
+        };
+        
+        console.log('💾 Saving follow-up:', {
+            leadId: dataToSave.id,
+            followUpsCount: dataToSave.followUps?.length || 0,
+            latestFollowUp: dataToSave.followUps?.[dataToSave.followUps.length - 1]
+        });
+        
         isAutoSavingRef.current = true;
-        onSave(finalFormData, true).finally(() => {
-            isAutoSavingRef.current = false;
+        onSave(dataToSave, true).then(() => {
+            // After a successful save, ensure we remain on the calendar tab
+            setTimeout(() => {
+                handleTabChange('calendar');
+            }, 0);
+        }).finally(() => {
+            // Clear the flag after a delay to allow API response to propagate
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+            }, 3000);
         });
         
         setNewFollowUp({
@@ -2233,15 +2253,43 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const finalFormData = logActivity('Follow-up Completed', `Completed: ${followUp.description}`, null, false, updatedFormData);
             
             // Save follow-up toggle and activity log immediately - stay in edit mode
+            // CRITICAL: Explicitly ensure followUps are in the data being saved
+            const dataToSave = {
+                ...finalFormData,
+                followUps: updatedFollowUps // Explicitly include followUps
+            };
+            
             isAutoSavingRef.current = true;
-            onSave(finalFormData, true).finally(() => {
-                isAutoSavingRef.current = false;
+            onSave(dataToSave, true).then(() => {
+                // After a successful save, ensure we remain on the calendar tab
+                setTimeout(() => {
+                    handleTabChange('calendar');
+                }, 0);
+            }).finally(() => {
+                // Clear the flag after a delay to allow API response to propagate
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, 3000);
             });
         } else {
             // Just save the follow-up toggle (no activity log needed for uncompleting)
+            // CRITICAL: Explicitly ensure followUps are in the data being saved
+            const dataToSave = {
+                ...updatedFormData,
+                followUps: updatedFollowUps // Explicitly include followUps
+            };
+            
             isAutoSavingRef.current = true;
-            onSave(updatedFormData, true).finally(() => {
-                isAutoSavingRef.current = false;
+            onSave(dataToSave, true).then(() => {
+                // After a successful save, ensure we remain on the calendar tab
+                setTimeout(() => {
+                    handleTabChange('calendar');
+                }, 0);
+            }).finally(() => {
+                // Clear the flag after a delay to allow API response to propagate
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, 3000);
             });
         }
     };
@@ -2259,9 +2307,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const finalFormData = logActivity('Follow-up Deleted', `Deleted follow-up: ${followUp?.description || followUp?.type || 'Unknown'}`, null, false, updatedFormData);
             
             // Save follow-up deletion and activity log immediately - stay in edit mode
+            // CRITICAL: Explicitly ensure followUps are in the data being saved
+            const dataToSave = {
+                ...finalFormData,
+                followUps: updatedFormData.followUps // Explicitly include followUps
+            };
+            
             isAutoSavingRef.current = true;
-            onSave(finalFormData, true).finally(() => {
-                isAutoSavingRef.current = false;
+            onSave(dataToSave, true).then(() => {
+                // After a successful save, ensure we remain on the calendar tab
+                setTimeout(() => {
+                    handleTabChange('calendar');
+                }, 0);
+            }).finally(() => {
+                // Clear the flag after a delay to allow API response to propagate
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, 3000);
             });
         }
     };
@@ -4999,7 +5061,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <div className="flex justify-end mt-3">
                                         <button
                                             type="button"
-                                            onClick={handleAddFollowUp}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleAddFollowUp();
+                                            }}
                                             className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                                         >
                                             <i className="fas fa-plus mr-1.5"></i>

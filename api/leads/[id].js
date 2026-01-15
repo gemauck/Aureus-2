@@ -345,6 +345,13 @@ async function handler(req, res) {
           : JSON.stringify(Array.isArray(body.comments) ? body.comments : [])
         console.log(`📝 [LEADS ID] Updating comments JSON field for lead ${id}, count: ${Array.isArray(body.comments) ? body.comments.length : 0}`)
       }
+      // CRITICAL: Update followUps JSON field in Client table
+      if (body.followUps !== undefined) {
+        updateData.followUps = typeof body.followUps === 'string' 
+          ? body.followUps 
+          : JSON.stringify(Array.isArray(body.followUps) ? body.followUps : [])
+        console.log(`📝 [LEADS ID] Updating followUps JSON field for lead ${id}, count: ${Array.isArray(body.followUps) ? body.followUps.length : 0}`)
+      }
       
       // CRITICAL: Preserve lead type - always set type to 'lead' to prevent accidental conversion
       updateData.type = 'lead'
@@ -830,9 +837,12 @@ async function handler(req, res) {
             try {
               followUpsArray = JSON.parse(body.followUps)
             } catch (e) {
+              console.error('❌ [LEADS ID] Failed to parse followUps JSON:', e.message)
               followUpsArray = []
             }
           }
+          
+          console.log(`📝 [LEADS ID] Processing ${followUpsArray.length} followUps for lead ${id}`)
           
           try {
             const existingFollowUps = await prisma.clientFollowUp.findMany({
@@ -859,12 +869,14 @@ async function handler(req, res) {
                   data: followUpData
                 })
                 followUpsToKeep.add(followUp.id)
+                console.log(`✅ [LEADS ID] Updated followUp ${followUp.id} for lead ${id}`)
               } else if (followUp.id) {
                 try {
                   await prisma.clientFollowUp.create({
                     data: { id: followUp.id, ...followUpData }
                   })
                   followUpsToKeep.add(followUp.id)
+                  console.log(`✅ [LEADS ID] Created followUp ${followUp.id} for lead ${id}`)
                 } catch (createError) {
                   if (createError.code === 'P2002') {
                     await prisma.clientFollowUp.update({
@@ -872,13 +884,16 @@ async function handler(req, res) {
                       data: followUpData
                     })
                     followUpsToKeep.add(followUp.id)
+                    console.log(`✅ [LEADS ID] Updated followUp ${followUp.id} after ID conflict for lead ${id}`)
                   } else {
+                    console.error(`❌ [LEADS ID] Failed to create followUp ${followUp.id}:`, createError.message)
                     throw createError
                   }
                 }
               } else {
                 const created = await prisma.clientFollowUp.create({ data: followUpData })
                 followUpsToKeep.add(created.id)
+                console.log(`✅ [LEADS ID] Created new followUp ${created.id} for lead ${id}`)
               }
             }
             
@@ -888,8 +903,17 @@ async function handler(req, res) {
                 NOT: { id: { in: Array.from(followUpsToKeep) } }
               }
             })
+            
+            console.log(`✅ [LEADS ID] Successfully synced ${followUpsArray.length} followUps to normalized table for lead ${id}`)
           } catch (followUpSyncError) {
-            console.warn('⚠️ Failed to sync followUps to normalized table:', followUpSyncError.message)
+            console.error('❌ [LEADS ID] Failed to sync followUps to normalized table:', followUpSyncError.message)
+            console.error('❌ [LEADS ID] FollowUp sync error details:', {
+              message: followUpSyncError.message,
+              code: followUpSyncError.code,
+              stack: followUpSyncError.stack
+            })
+            // Don't throw - allow lead update to succeed even if followUp sync fails
+            // The JSON field will still be updated above
           }
         }
         
