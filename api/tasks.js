@@ -324,6 +324,15 @@ async function handler(req, res) {
         
         console.log('📋 Loading project tasks for dashboard:', { userId, isLightweight });
         
+        // Debug: Check if any tasks exist at all
+        const totalTasks = await prisma.task.count({
+          where: { parentTaskId: null }
+        });
+        const assignedToUser = await prisma.task.count({
+          where: { assigneeId: userId, parentTaskId: null }
+        });
+        console.log('📊 Task counts:', { totalTasks, assignedToUser, userId });
+        
         // First, fetch tasks where user is assignee (most common case)
         const assigneeTasks = await prisma.task.findMany({
           where: {

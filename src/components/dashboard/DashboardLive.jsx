@@ -276,10 +276,13 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
 
     // Combine and sort tasks
     const allTasks = React.useMemo(() => {
+        console.log('🔄 Combining tasks - projectTasks:', projectTasks.length, 'userTasks:', userTasks.length);
         const combined = [
             ...projectTasks.map(t => ({ ...t, type: 'project' })),
             ...userTasks.map(t => ({ ...t, type: 'user', id: t.id || `user-task-${Date.now()}-${Math.random()}` }))
         ];
+        
+        console.log('🔄 Combined tasks:', combined.length, combined);
         
         // Sort by due date (overdue first, then by date)
         return combined.sort((a, b) => {
@@ -416,7 +419,13 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             ) : error ? (
                 <div className={`text-sm ${subText} text-center py-2 flex-shrink-0`}>{error}</div>
             ) : allTasks.length === 0 ? (
-                <div className={`text-sm ${subText} text-center py-2 flex-shrink-0`}>No tasks assigned to you.</div>
+                <div className={`text-sm ${subText} text-center py-2 flex-shrink-0`}>
+                    No tasks assigned to you.
+                    <br />
+                    <span className="text-xs opacity-75">
+                        (Project: {projectTasks.length}, User: {userTasks.length})
+                    </span>
+                </div>
             ) : (
                 <div className="flex-1 overflow-hidden flex flex-col">
                     <div className="space-y-2 overflow-y-auto pr-1 flex-1" style={{ maxHeight: '400px', scrollbarWidth: 'thin' }}>
