@@ -2648,12 +2648,23 @@ const LeadDetailModal = ({
             
             // Save comment deletion immediately - stay in edit mode
             isAutoSavingRef.current = true;
-            onSave(updatedFormData, true);
             
-            // Clear the flag after a delay to allow API response to propagate
-            setTimeout(() => {
-                isAutoSavingRef.current = false;
-            }, 3000);
+            // Ensure we remain on the notes tab after save
+            const savePromise = onSave && typeof onSave === 'function' 
+                ? Promise.resolve(onSave(updatedFormData, true))
+                : Promise.resolve();
+            
+            savePromise.then(() => {
+                // After a successful save, ensure we remain on the notes tab
+                setTimeout(() => {
+                    handleTabChange('notes');
+                }, 0);
+            }).finally(() => {
+                // Clear the flag after a delay to allow API response to propagate
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, 3000);
+            });
             
         }
     };
