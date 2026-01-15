@@ -1118,14 +1118,19 @@ async function handler(req, res) {
         })
         
         if (!projectExists) {
-          console.error('❌ Project not found for deletion:', {
+          // Treat missing project as a successful, idempotent delete
+          // so the UI doesn't show errors when the project was already removed.
+          console.warn('⚠️ Project not found for deletion (treating as already deleted):', {
             id,
             idType: typeof id,
             idLength: id?.length,
             reqParams: req.params,
             url: req.url
           })
-          return notFound(res, 'Project not found')
+          return ok(res, {
+            deleted: false,
+            message: 'Project not found – it may have already been deleted'
+          })
         }
         
         // Ensure referential integrity by removing dependents first, then the project
@@ -1178,9 +1183,13 @@ async function handler(req, res) {
           code: dbError.code,
           meta: dbError.meta
         })
-        // Check if it's a "record not found" error (P2025)
+        // If it's a "record not found" error (P2025), treat as already deleted
         if (dbError.code === 'P2025') {
-          return notFound(res, 'Project not found')
+          console.warn('⚠️ P2025 during project delete – treating as already deleted:', { id })
+          return ok(res, {
+            deleted: false,
+            message: 'Project not found – it may have already been deleted'
+          })
         }
         return serverError(res, 'Failed to delete project', dbError.message)
       }
