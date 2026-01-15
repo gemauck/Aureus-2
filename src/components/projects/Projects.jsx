@@ -82,7 +82,15 @@ const Projects = () => {
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    // Load view mode from localStorage, defaulting to 'list' if not set
+    const [viewMode, setViewMode] = useState(() => {
+        try {
+            const saved = localStorage.getItem('projectsViewMode');
+            return saved === 'grid' || saved === 'list' ? saved : 'list';
+        } catch (e) {
+            return 'list';
+        }
+    });
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
@@ -3417,7 +3425,14 @@ const Projects = () => {
                     {/* View Toggle */}
                     <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0" role="group" aria-label="View mode selector">
                         <button
-                            onClick={() => setViewMode('grid')}
+                            onClick={() => {
+                                setViewMode('grid');
+                                try {
+                                    localStorage.setItem('projectsViewMode', 'grid');
+                                } catch (e) {
+                                    console.warn('Failed to save view mode preference:', e);
+                                }
+                            }}
                             className={`px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
                                 viewMode === 'grid'
                                     ? 'bg-primary-600 text-white'
@@ -3430,7 +3445,14 @@ const Projects = () => {
                             <i className="fas fa-th" aria-hidden="true"></i>
                         </button>
                         <button
-                            onClick={() => setViewMode('list')}
+                            onClick={() => {
+                                setViewMode('list');
+                                try {
+                                    localStorage.setItem('projectsViewMode', 'list');
+                                } catch (e) {
+                                    console.warn('Failed to save view mode preference:', e);
+                                }
+                            }}
                             className={`px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 ${
                                 viewMode === 'list'
                                     ? 'bg-primary-600 text-white'
