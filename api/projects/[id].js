@@ -1158,13 +1158,21 @@ async function handler(req, res) {
           // Project custom field definitions (cascade should handle)
           await tx.projectCustomFieldDefinition.deleteMany({ where: { projectId: id } });
           
+          // Explicitly remove document and FMS review sections that reference this project.
+          // While the DB schema is configured with cascade deletes, existing data or
+          // mismatched constraints (especially for the seeded "initial" project) can
+          // still cause foreign key violations if we rely solely on cascade behavior.
+          await tx.documentSection.deleteMany({ where: { projectId: id } });
+          await tx.weeklyFMSReviewSection.deleteMany({ where: { projectId: id } });
+          await tx.monthlyFMSReviewSection.deleteMany({ where: { projectId: id } });
+          
           // Delete invoices
           await tx.invoice.deleteMany({ where: { projectId: id } });
           
           // Delete time entries
           await tx.timeEntry.deleteMany({ where: { projectId: id } });
           
-          // Delete the project (cascade should handle document sections and weekly FMS sections)
+          // Finally delete the project itself
           await tx.project.delete({ where: { id } });
         })
         
