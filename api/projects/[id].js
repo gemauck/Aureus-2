@@ -1140,23 +1140,8 @@ async function handler(req, res) {
           });
           await tx.task.deleteMany({ where: { projectId: id } });
           
-          // Project comments (cascade should handle)
-          await tx.projectComment.deleteMany({ where: { projectId: id } });
-          
-          // Project activity logs (cascade should handle)
-          await tx.projectActivityLog.deleteMany({ where: { projectId: id } });
-          
-          // Project documents (cascade should handle)
-          await tx.projectDocument.deleteMany({ where: { projectId: id } });
-          
-          // Project team members (cascade should handle)
-          await tx.projectTeamMember.deleteMany({ where: { projectId: id } });
-          
-          // Project task lists (cascade should handle)
-          await tx.projectTaskList.deleteMany({ where: { projectId: id } });
-          
-          // Project custom field definitions (cascade should handle)
-          await tx.projectCustomFieldDefinition.deleteMany({ where: { projectId: id } });
+          // Task comments (cascade should handle)
+          await tx.taskComment.deleteMany({ where: { projectId: id } });
           
           // Explicitly remove document and FMS review sections that reference this project.
           // While the DB schema is configured with cascade deletes, existing data or
@@ -1171,6 +1156,12 @@ async function handler(req, res) {
           
           // Delete time entries
           await tx.timeEntry.deleteMany({ where: { projectId: id } });
+          
+          // Delete tickets
+          await tx.ticket.deleteMany({ where: { projectId: id } });
+          
+          // Delete user tasks
+          await tx.userTask.deleteMany({ where: { projectId: id } });
           
           // Finally delete the project itself
           await tx.project.delete({ where: { id } });
