@@ -1095,16 +1095,19 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             (async () => {
             try {
                 const payload = sectionsRef.current || {};
-                
-                if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                    await apiRef.current.saveDocumentSections(project.id, payload, false);
-                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+
+                // Use the same API shape as the main saveToDatabase helper to avoid
+                // environment-specific mismatches (e.g. DocumentCollectionAPI only
+                // exposes saveMonthlyFMSReviewSections and not saveDocumentSections).
+                if (apiRef.current?.saveMonthlyFMSReviewSections) {
+                    await apiRef.current.saveMonthlyFMSReviewSections(project.id, payload, true);
+                } else if (window.DatabaseAPI?.updateProject) {
                     const updatePayload = {
                         monthlyFMSReviewSections: serializeSections(payload)
                     };
                     await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 } else {
-                    throw new Error('No available API for saving document sections');
+                    throw new Error('No available API for saving monthly FMS review sections');
                 }
                 
                 // Update saved data ref to match deleted state
