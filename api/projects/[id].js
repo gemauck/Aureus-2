@@ -329,6 +329,13 @@ async function handler(req, res) {
           }
         }
         
+        // Log if optimized endpoint is being used
+        if (onlyFields && onlyFields.length > 0) {
+          console.log('⚡ OPTIMIZED ENDPOINT: Loading only fields:', onlyFields, 'for project:', id);
+        } else {
+          console.log('🐌 FULL ENDPOINT: Loading all project data for:', id);
+        }
+        
         // If only specific fields are requested, use optimized loading
         if (onlyFields && onlyFields.length > 0) {
           const hasMonthlyFMS = onlyFields.includes('monthlyFMSReviewSections');
@@ -359,9 +366,13 @@ async function handler(req, res) {
             let result = { id: basicProject.id, name: basicProject.name };
             
             // Load the requested field from table (more reliable than JSON field)
+            // PERFORMANCE: Use optimized version that skips loading comments
             if (hasMonthlyFMS) {
               try {
-                const monthlyFMSJson = await monthlyFMSReviewSectionsToJson(id);
+                const startTime = Date.now();
+                const monthlyFMSJson = await monthlyFMSReviewSectionsToJson(id, { skipComments: true });
+                const loadTime = Date.now() - startTime;
+                console.log(`⚡ Loaded monthlyFMSReviewSections in ${loadTime}ms`);
                 result.monthlyFMSReviewSections = monthlyFMSJson || 
                   (basicProject.monthlyFMSReviewSections ? 
                     (typeof basicProject.monthlyFMSReviewSections === 'string' ? 
@@ -376,7 +387,10 @@ async function handler(req, res) {
             
             if (hasWeeklyFMS) {
               try {
-                const weeklyFMSJson = await weeklyFMSReviewSectionsToJson(id);
+                const startTime = Date.now();
+                const weeklyFMSJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: true });
+                const loadTime = Date.now() - startTime;
+                console.log(`⚡ Loaded weeklyFMSReviewSections in ${loadTime}ms`);
                 result.weeklyFMSReviewSections = weeklyFMSJson || 
                   (basicProject.weeklyFMSReviewSections ? 
                     (typeof basicProject.weeklyFMSReviewSections === 'string' ? 
@@ -391,7 +405,10 @@ async function handler(req, res) {
             
             if (hasDocumentSections) {
               try {
-                const docSectionsJson = await documentSectionsToJson(id);
+                const startTime = Date.now();
+                const docSectionsJson = await documentSectionsToJson(id, { skipComments: true });
+                const loadTime = Date.now() - startTime;
+                console.log(`⚡ Loaded documentSections in ${loadTime}ms`);
                 result.documentSections = docSectionsJson || 
                   (basicProject.documentSections ? 
                     (typeof basicProject.documentSections === 'string' ? 

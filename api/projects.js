@@ -10,7 +10,7 @@ import { isConnectionError } from './_lib/dbErrorHandler.js'
 /**
  * Convert DocumentSection table data to JSON format (for backward compatibility)
  */
-async function documentSectionsToJson(projectId) {
+async function documentSectionsToJson(projectId, options = {}) {
   try {
     // Check if table exists (for environments that haven't migrated yet)
     try {
@@ -20,13 +20,14 @@ async function documentSectionsToJson(projectId) {
       return null
     }
 
+    const includeComments = !options.skipComments;
     const sections = await prisma.documentSection.findMany({
       where: { projectId: projectId },
       include: {
         documents: {
           include: {
             statuses: true,
-            comments: true
+            ...(includeComments ? { comments: true } : {})
           },
           orderBy: { order: 'asc' }
         }
@@ -59,19 +60,21 @@ async function documentSectionsToJson(projectId) {
 
           // Build comments object: { "2024-01": [...], ... }
           const comments = {}
-          for (const comment of doc.comments) {
-            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
-            if (!comments[key]) {
-              comments[key] = []
+          if (includeComments && doc.comments) {
+            for (const comment of doc.comments) {
+              const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
+              if (!comments[key]) {
+                comments[key] = []
+              }
+              comments[key].push({
+                id: comment.id,
+                text: comment.text,
+                author: comment.author,
+                authorId: comment.authorId,
+                authorName: comment.author,
+                createdAt: comment.createdAt
+              })
             }
-            comments[key].push({
-              id: comment.id,
-              text: comment.text,
-              author: comment.author,
-              authorId: comment.authorId,
-              authorName: comment.author,
-              createdAt: comment.createdAt
-            })
           }
 
           return {
@@ -80,7 +83,7 @@ async function documentSectionsToJson(projectId) {
             description: doc.description || '',
             required: doc.required || false,
             collectionStatus,
-            comments
+            ...(includeComments ? { comments } : { comments: {} })
           }
         })
       }
@@ -101,7 +104,7 @@ async function documentSectionsToJson(projectId) {
 /**
  * Convert MonthlyFMSReviewSection table data to JSON format (for backward compatibility)
  */
-async function monthlyFMSReviewSectionsToJson(projectId) {
+async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
   try {
     // Check if table exists (for environments that haven't migrated yet)
     try {
@@ -111,13 +114,14 @@ async function monthlyFMSReviewSectionsToJson(projectId) {
       return null
     }
 
+    const includeComments = !options.skipComments;
     const sections = await prisma.monthlyFMSReviewSection.findMany({
       where: { projectId },
       include: {
         items: {
           include: {
             statuses: true,
-            comments: true
+            ...(includeComments ? { comments: true } : {})
           },
           orderBy: { order: 'asc' }
         }
@@ -151,19 +155,21 @@ async function monthlyFMSReviewSectionsToJson(projectId) {
 
           // Build comments object: { "2024-01": [...], ... }
           const comments = {}
-          for (const comment of item.comments) {
-            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
-            if (!comments[key]) {
-              comments[key] = []
+          if (includeComments && item.comments) {
+            for (const comment of item.comments) {
+              const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
+              if (!comments[key]) {
+                comments[key] = []
+              }
+              comments[key].push({
+                id: comment.id,
+                text: comment.text,
+                author: comment.author,
+                authorId: comment.authorId,
+                authorName: comment.author,
+                createdAt: comment.createdAt
+              })
             }
-            comments[key].push({
-              id: comment.id,
-              text: comment.text,
-              author: comment.author,
-              authorId: comment.authorId,
-              authorName: comment.author,
-              createdAt: comment.createdAt
-            })
           }
 
           return {
@@ -172,7 +178,7 @@ async function monthlyFMSReviewSectionsToJson(projectId) {
             description: item.description || '',
             required: item.required || false,
             collectionStatus,
-            comments
+            ...(includeComments ? { comments } : { comments: {} })
           }
         })
       }
@@ -190,7 +196,7 @@ async function monthlyFMSReviewSectionsToJson(projectId) {
 /**
  * Convert WeeklyFMSReviewSection table data to JSON format (for backward compatibility)
  */
-async function weeklyFMSReviewSectionsToJson(projectId) {
+async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
   try {
     // Check if table exists (for environments that haven't migrated yet)
     try {
@@ -200,13 +206,14 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
       return null
     }
 
+    const includeComments = !options.skipComments;
     const sections = await prisma.weeklyFMSReviewSection.findMany({
       where: { projectId },
       include: {
         items: {
           include: {
             statuses: true,
-            comments: true
+            ...(includeComments ? { comments: true } : {})
           },
           orderBy: { order: 'asc' }
         }
@@ -240,20 +247,22 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
 
           // Build comments object: { "2024-01": [...], ... } (monthly format, no week)
           const comments = {}
-          for (const comment of item.comments) {
-            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
-            if (!comments[key]) {
-              comments[key] = []
+          if (includeComments && item.comments) {
+            for (const comment of item.comments) {
+              const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
+              if (!comments[key]) {
+                comments[key] = []
+              }
+              comments[key].push({
+                id: comment.id,
+                text: comment.text,
+                author: comment.author,
+                authorId: comment.authorId,
+                authorName: comment.author,
+                date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
+                createdAt: comment.createdAt
+              })
             }
-            comments[key].push({
-              id: comment.id,
-              text: comment.text,
-              author: comment.author,
-              authorId: comment.authorId,
-              authorName: comment.author,
-              date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
-              createdAt: comment.createdAt
-            })
           }
 
           return {
@@ -262,7 +271,7 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
             description: item.description || '',
             required: item.required || false,
             collectionStatus,
-            comments
+            ...(includeComments ? { comments } : { comments: {} })
           }
         })
       }
