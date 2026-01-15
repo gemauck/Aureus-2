@@ -1049,17 +1049,72 @@ function initializeProjectDetail() {
     }
     
     // Tab navigation state
-    // Always default to the Overview tab when opening a project.
-    // We intentionally do NOT restore the last viewed tab from storage anymore,
-    // as per product decision to keep the entry point consistent.
-    const [activeSection, setActiveSection] = useState('overview');
+    // Check URL for deep link parameters first (e.g., docSectionId for Document Collection)
+    // If found, start with the appropriate tab; otherwise default to Overview
+    const getInitialActiveSection = () => {
+        // Check for document collection deep link parameters
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        
+        let params = null;
+        let hasDocCollectionParams = false;
+        
+        // Check hash first (for hash-based routing)
+        if (hash.includes('?') && hash.includes('docSectionId=')) {
+            const hashParts = hash.split('?');
+            if (hashParts.length > 1) {
+                params = new URLSearchParams(hashParts[1]);
+                hasDocCollectionParams = !!params.get('docSectionId');
+            }
+        }
+        
+        // Check search params as fallback
+        if (!hasDocCollectionParams && search.includes('docSectionId=')) {
+            params = new URLSearchParams(search);
+            hasDocCollectionParams = !!params.get('docSectionId');
+        }
+        
+        // Check for weekly FMS review params
+        let hasWeeklyFMSParams = false;
+        if (!hasDocCollectionParams) {
+            if (hash.includes('?') && hash.includes('weeklySectionId=')) {
+                const hashParts = hash.split('?');
+                if (hashParts.length > 1) {
+                    params = new URLSearchParams(hashParts[1]);
+                    hasWeeklyFMSParams = !!params.get('weeklySectionId');
+                }
+            }
+            if (!hasWeeklyFMSParams && search.includes('weeklySectionId=')) {
+                params = new URLSearchParams(search);
+                hasWeeklyFMSParams = !!params.get('weeklySectionId');
+            }
+        }
+        
+        if (hasDocCollectionParams) {
+            return 'documentCollection';
+        } else if (hasWeeklyFMSParams) {
+            return 'weeklyFMSReview';
+        }
+        return 'overview';
+    };
+    
+    const [activeSection, setActiveSection] = useState(getInitialActiveSection);
     
     // Wrapper function to update both section state and URL
     const switchSection = useCallback((section, options = {}) => {
         setActiveSection(section);
         
         // Update URL if updateProjectUrl function is available
-        if (window.updateProjectUrl && project?.id) {
+        // BUT: Don't overwrite hash-based deep link parameters (docSectionId, etc.)
+        // These should be preserved for document collection tracker navigation
+        const hash = window.location.hash || '';
+        const hasDeepLinkParams = hash.includes('docSectionId=') || 
+                                   hash.includes('weeklySectionId=') ||
+                                   hash.includes('docDocumentId=') ||
+                                   hash.includes('weeklyDocumentId=');
+        
+        if (window.updateProjectUrl && project?.id && !hasDeepLinkParams) {
+            // Only update URL if there are no deep link params to preserve
             window.updateProjectUrl({
                 tab: section,
                 section: options.section,
