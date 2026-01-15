@@ -591,7 +591,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
         
         try {
-            const freshProject = await apiRef.current.fetchProject(project.id);
+            // PERFORMANCE: Only fetch the specific field we need
+            const freshProject = await apiRef.current.fetchProject(project.id, ['documentSections']);
             const snapshotKey = getSnapshotKey(project.id);
             const normalizedFromDb = normalizeSectionsByYear(freshProject?.documentSections);
             let normalized = normalizedFromDb;

@@ -194,13 +194,24 @@ class DocumentCollectionAPI {
 
     /**
      * Fetch fresh project data from database
+     * @param {string} projectId - Project ID
+     * @param {string[]} fields - Optional array of specific fields to fetch (for performance)
      */
-    async fetchProject(projectId) {
+    async fetchProject(projectId, fields = null) {
         if (!projectId) {
             throw new Error('Project ID is required');
         }
 
         try {
+            // If specific fields requested, use optimized endpoint
+            if (fields && Array.isArray(fields) && fields.length > 0) {
+                const fieldsParam = fields.join(',');
+                const endpoint = `/projects/${projectId}?fields=${encodeURIComponent(fieldsParam)}`;
+                const response = await window.DatabaseAPI.makeRequest(endpoint, { method: 'GET' });
+                return response?.data?.project || response?.project || response?.data || response;
+            }
+            
+            // Otherwise use full project fetch
             const result = await window.DatabaseAPI.getProject(projectId);
             return result?.data?.project || result?.project || result?.data || result;
         } catch (error) {

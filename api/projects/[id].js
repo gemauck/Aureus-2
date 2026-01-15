@@ -312,6 +312,102 @@ async function handler(req, res) {
           }
         }
         
+        // PERFORMANCE OPTIMIZATION: Check query parameters for selective loading
+        let onlyFields = null;
+        try {
+          // Try to parse query params from URL
+          const urlString = req.url || '';
+          const queryString = urlString.includes('?') ? urlString.split('?')[1] : '';
+          const urlParams = new URLSearchParams(queryString);
+          const fields = urlParams.get('fields');
+          onlyFields = fields ? fields.split(',').map(f => f.trim()) : null;
+        } catch (urlError) {
+          // If URL parsing fails, check req.query (Express-style)
+          if (req.query?.fields) {
+            const fields = typeof req.query.fields === 'string' ? req.query.fields : String(req.query.fields);
+            onlyFields = fields.split(',').map(f => f.trim());
+          }
+        }
+        
+        // If only specific fields are requested, use optimized loading
+        if (onlyFields && onlyFields.length > 0) {
+          const hasMonthlyFMS = onlyFields.includes('monthlyFMSReviewSections');
+          const hasWeeklyFMS = onlyFields.includes('weeklyFMSReviewSections');
+          const hasDocumentSections = onlyFields.includes('documentSections');
+          
+          // If only requesting one of these specific fields, use optimized endpoint
+          if ((hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections) ||
+              (hasWeeklyFMS && !hasMonthlyFMS && !hasDocumentSections) ||
+              (hasDocumentSections && !hasMonthlyFMS && !hasWeeklyFMS)) {
+            
+            // Load only basic project info + the requested field
+            const basicProject = await prisma.project.findUnique({
+              where: { id },
+              select: {
+                id: true,
+                name: true,
+                monthlyFMSReviewSections: hasMonthlyFMS,
+                weeklyFMSReviewSections: hasWeeklyFMS,
+                documentSections: hasDocumentSections
+              }
+            });
+            
+            if (!basicProject) {
+              return notFound(res);
+            }
+            
+            let result = { id: basicProject.id, name: basicProject.name };
+            
+            // Load the requested field from table (more reliable than JSON field)
+            if (hasMonthlyFMS) {
+              try {
+                const monthlyFMSJson = await monthlyFMSReviewSectionsToJson(id);
+                result.monthlyFMSReviewSections = monthlyFMSJson || 
+                  (basicProject.monthlyFMSReviewSections ? 
+                    (typeof basicProject.monthlyFMSReviewSections === 'string' ? 
+                      JSON.parse(basicProject.monthlyFMSReviewSections) : 
+                      basicProject.monthlyFMSReviewSections) : 
+                    {});
+              } catch (e) {
+                console.error('❌ Error loading monthlyFMSReviewSections:', e);
+                result.monthlyFMSReviewSections = {};
+              }
+            }
+            
+            if (hasWeeklyFMS) {
+              try {
+                const weeklyFMSJson = await weeklyFMSReviewSectionsToJson(id);
+                result.weeklyFMSReviewSections = weeklyFMSJson || 
+                  (basicProject.weeklyFMSReviewSections ? 
+                    (typeof basicProject.weeklyFMSReviewSections === 'string' ? 
+                      JSON.parse(basicProject.weeklyFMSReviewSections) : 
+                      basicProject.weeklyFMSReviewSections) : 
+                    {});
+              } catch (e) {
+                console.error('❌ Error loading weeklyFMSReviewSections:', e);
+                result.weeklyFMSReviewSections = {};
+              }
+            }
+            
+            if (hasDocumentSections) {
+              try {
+                const docSectionsJson = await documentSectionsToJson(id);
+                result.documentSections = docSectionsJson || 
+                  (basicProject.documentSections ? 
+                    (typeof basicProject.documentSections === 'string' ? 
+                      JSON.parse(basicProject.documentSections) : 
+                      basicProject.documentSections) : 
+                    {});
+              } catch (e) {
+                console.error('❌ Error loading documentSections:', e);
+                result.documentSections = {};
+              }
+            }
+            
+            return ok(res, { project: result });
+          }
+        }
+        
         // Load project with all related data from tables using safe loader
         let project;
         try {

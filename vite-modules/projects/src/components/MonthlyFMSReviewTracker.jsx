@@ -368,9 +368,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         
         try {
             // ALWAYS load from database first (most reliable, has latest data)
+            // PERFORMANCE: Only fetch the specific field we need
             if (apiRef.current) {
-                console.log('📥 Loading from database...', { projectId: project.id });
-                const freshProject = await apiRef.current.fetchProject(project.id);
+                console.log('📥 Loading from database (optimized)...', { projectId: project.id });
+                const freshProject = await apiRef.current.fetchProject(project.id, ['monthlyFMSReviewSections']);
                 console.log('📥 Loaded project from database:', { 
                     hasMonthlyFMSReviewSections: !!freshProject?.monthlyFMSReviewSections,
                     monthlyFMSReviewSectionsType: typeof freshProject?.monthlyFMSReviewSections,
@@ -421,12 +422,15 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.id, project?.monthlyFMSReviewSections, selectedYear]);
     
-    // Load data on mount and when project/year changes
+    // Load data on mount and when project changes
+    // OPTIMIZATION: Don't reload when only year changes - data is already loaded for all years
+    const lastProjectIdRef = useRef(null);
     useEffect(() => {
-        if (project?.id) {
+        if (project?.id && project.id !== lastProjectIdRef.current) {
+            lastProjectIdRef.current = project.id;
             loadData();
         }
-    }, [project?.id, selectedYear, loadData]);
+    }, [project?.id, loadData]);
     
     // Load users for reviewer assignment
     useEffect(() => {
