@@ -1214,9 +1214,14 @@ function initializeProjectDetail() {
             ]
     );
 
-    // Initialize tasks with project-specific data
+    // Initialize tasks with project-specific data - SYNCHRONOUS for instant load
     // NOTE: API returns tasks in tasksList field (from Task table), not tasks field
-    const initialTasks = project.tasksList || project.tasks || [];
+    // CRITICAL: Always use project prop tasks immediately - no async loading
+    const getTasksFromProject = (proj) => {
+        if (!proj) return [];
+        return proj.tasksList || proj.tasks || [];
+    };
+    const initialTasks = getTasksFromProject(project);
     const [tasks, setTasks] = useState(initialTasks);
     const [viewingTask, setViewingTask] = useState(null);
     const [viewingTaskParent, setViewingTaskParent] = useState(null);
@@ -1226,6 +1231,29 @@ function initializeProjectDetail() {
     useEffect(() => {
         tasksRef.current = tasks;
     }, [tasks]);
+    
+    // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
+    // This runs synchronously in useEffect to ensure tasks are available instantly
+    const previousProjectIdRef = useRef(project?.id);
+    useEffect(() => {
+        if (project?.id !== previousProjectIdRef.current) {
+            previousProjectIdRef.current = project?.id;
+            const newTasks = getTasksFromProject(project);
+            // Update immediately - no async operations
+            setTasks(newTasks);
+            tasksRef.current = newTasks;
+            console.log('✅ ProjectDetail: Tasks updated from project prop (instant):', newTasks.length);
+        } else {
+            // Same project, but tasks might have changed in project prop
+            const newTasks = getTasksFromProject(project);
+            const currentTaskIds = (tasks || []).map(t => t?.id).filter(Boolean).sort().join(',');
+            const newTaskIds = newTasks.map(t => t?.id).filter(Boolean).sort().join(',');
+            if (currentTaskIds !== newTaskIds || newTasks.length !== (tasks || []).length) {
+                setTasks(newTasks);
+                tasksRef.current = newTasks;
+            }
+        }
+    }, [project?.id, project?.tasksList, project?.tasks]); // Only depend on project data, not tasks state
     const [taskFilters, setTaskFilters] = useState({
         search: '',
         status: 'all',
@@ -1264,142 +1292,9 @@ function initializeProjectDetail() {
         }
     }, []);
 
-    // Sync tasks when project prop changes (e.g., after reload or navigation)
-    // Use a ref to track previous project ID to prevent infinite loops
-    const previousProjectIdRef = useRef(null);
-    // Track if we've loaded tasks for the current project (prevents showing zero on initial load)
-    const hasLoadedTasksRef = useRef(false);
-    // Track URL/route to detect navigation back to the same project
-    const [routeKey, setRouteKey] = useState(() => {
-        // Initialize with current URL to detect changes
-        if (typeof window !== 'undefined' && window.location) {
-            return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        }
-        return '';
-    });
-    // Track previous routeKey to detect navigation back
-    const previousRouteKeyRef = useRef(routeKey);
-    
-    // Listen for route/URL changes to detect navigation back
-    useEffect(() => {
-        const updateRouteKey = () => {
-            if (typeof window !== 'undefined' && window.location) {
-                const newRouteKey = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-                setRouteKey(prev => {
-                    if (prev !== newRouteKey) {
-                        console.log('🔄 ProjectDetail: Route changed', { from: prev, to: newRouteKey });
-                        // Check if we navigated away from the project page
-                        const isProjectPage = project?.id && window.location?.pathname?.includes(`/projects/${project.id}`);
-                        const wasProjectPage = project?.id && prev?.includes(`/projects/${project.id}`);
-                        
-                        // If we navigated away from project page, reset hasLoadedTasksRef so tasks reload when we come back
-                        if (wasProjectPage && !isProjectPage && hasLoadedTasksRef.current) {
-                            console.log('🔄 ProjectDetail: Navigated away from project, resetting hasLoadedTasksRef');
-                            hasLoadedTasksRef.current = false;
-                        }
-                        return newRouteKey;
-                    }
-                    return prev;
-                });
-            }
-        };
-        
-        // Listen for route changes
-        if (window.RouteState && typeof window.RouteState.subscribe === 'function') {
-            const unsubscribe = window.RouteState.subscribe(() => {
-                updateRouteKey();
-            });
-            return unsubscribe;
-        }
-        
-        // Fallback: listen for hashchange and popstate
-        window.addEventListener('hashchange', updateRouteKey);
-        window.addEventListener('popstate', updateRouteKey);
-        
-        return () => {
-            window.removeEventListener('hashchange', updateRouteKey);
-            window.removeEventListener('popstate', updateRouteKey);
-        };
-    }, [project?.id]);
-    
-    useEffect(() => {
-        // OPTIMIZATION: Use tasks from project prop immediately for instant load
-        // The project already includes tasks from /api/projects/[id], so no need to wait for API call
-        const projectIdChanged = project?.id !== previousProjectIdRef.current;
-        const routeChanged = routeKey !== previousRouteKeyRef.current;
-        
-        if (projectIdChanged) {
-            previousProjectIdRef.current = project?.id;
-            hasLoadedTasksRef.current = false; // Reset flag when project changes
-        }
-        
-        // Update previous routeKey after checking
-        if (routeChanged) {
-            previousRouteKeyRef.current = routeKey;
-        }
-        
-        // Check if we're currently on the project page
-        const isOnProjectPage = project?.id && (
-            window.location?.pathname?.includes(`/projects/${project.id}`) ||
-            (window.RouteState?.getRoute?.()?.page === 'projects' && 
-             window.RouteState.getRoute()?.segments?.[0] === String(project.id))
-        );
-        
-        // IMMEDIATE: Use tasks from project prop if available (instant load)
-        const tasksFromProject = project?.tasksList || project?.tasks || [];
-        const hasTasksInProject = Array.isArray(tasksFromProject) && tasksFromProject.length >= 0; // Allow empty arrays
-        
-        if (projectIdChanged && hasTasksInProject) {
-            // Project changed and has tasks - use them immediately
-            setTasks(tasksFromProject);
-            tasksRef.current = tasksFromProject;
-            hasLoadedTasksRef.current = true;
-            console.log('✅ ProjectDetail: Using tasks from project prop (instant):', tasksFromProject.length);
-        } else if (!hasLoadedTasksRef.current && hasTasksInProject) {
-            // Initial load - use tasks from project prop immediately
-            setTasks(tasksFromProject);
-            tasksRef.current = tasksFromProject;
-            hasLoadedTasksRef.current = true;
-            console.log('✅ ProjectDetail: Using tasks from project prop (instant):', tasksFromProject.length);
-        } else if (!project?.id) {
-            // No project ID, use tasksList from project prop
-            setTasks(tasksFromProject);
-            tasksRef.current = tasksFromProject;
-        }
-        
-        // BACKGROUND REFRESH: Refresh from API in the background to ensure we have latest data
-        // This runs asynchronously and doesn't block the UI
-        const shouldRefreshInBackground = project?.id && (
-            projectIdChanged || 
-            !hasLoadedTasksRef.current ||
-            (isOnProjectPage && routeChanged)
-        );
-        
-        if (shouldRefreshInBackground) {
-            // Mark as loaded to prevent duplicate calls
-            if (!hasLoadedTasksRef.current) {
-                hasLoadedTasksRef.current = true;
-            }
-            
-            // Refresh in background (non-blocking)
-            loadTasksFromAPI(project.id).then(apiTasks => {
-                if (apiTasks !== null && Array.isArray(apiTasks)) {
-                    // Only update if we got valid tasks and they're different
-                    const currentTaskIds = (tasksRef.current || []).map(t => t.id).sort().join(',');
-                    const apiTaskIds = apiTasks.map(t => t.id).sort().join(',');
-                    
-                    if (currentTaskIds !== apiTaskIds || apiTasks.length !== (tasksRef.current || []).length) {
-                        setTasks(apiTasks);
-                        tasksRef.current = apiTasks;
-                        console.log('✅ ProjectDetail: Tasks refreshed from API (background):', apiTasks.length);
-                    }
-                }
-            }).catch(error => {
-                // Silently fail - we already have tasks from project prop
-                console.debug('⚠️ ProjectDetail: Background task refresh failed (using project prop tasks):', error.message);
-            });
-        }
-    }, [project?.id, project?.tasksList, project?.tasks, loadTasksFromAPI, routeKey]); // Include project tasks in deps
+    // REMOVED: All async task loading logic
+    // Tasks are now loaded synchronously from project prop only
+    // Background refresh removed - tasks update only when project prop changes or after mutations
     
     // CRITICAL: Initialize default taskLists when project loads with empty taskLists
     // This ensures default lists are shown even if project.taskLists is an empty array from the database
