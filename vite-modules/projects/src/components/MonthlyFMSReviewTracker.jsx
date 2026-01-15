@@ -1637,6 +1637,20 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleSectionDragStart = (e, section, index) => {
+        // Prevent drag if clicking on a button or interactive element
+        const target = e.target;
+        if (
+            target.tagName === 'BUTTON' ||
+            target.closest('button') ||
+            target.tagName === 'SELECT' ||
+            target.closest('select') ||
+            target.tagName === 'INPUT' ||
+            target.closest('input')
+        ) {
+            e.preventDefault();
+            return;
+        }
+
         setDraggedSection({ section, index });
         e.dataTransfer.effectAllowed = 'move';
         setTimeout(() => {
@@ -3214,19 +3228,34 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                         </select>
                                     </div>
                                     <button
-                                        onClick={() => handleAddDocument(section.id)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleAddDocument(section.id);
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        draggable="false"
                                         className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
                                     >
                                         <i className="fas fa-plus mr-1"></i>Add Document
                                     </button>
                                     <button
-                                        onClick={() => handleEditSection(section)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditSection(section);
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        draggable="false"
                                         className="text-gray-600 hover:text-primary-600 p-1"
                                     >
                                         <i className="fas fa-edit text-xs"></i>
                                     </button>
                                     <button
-                                        onClick={(e) => handleDeleteSection(section.id, e)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteSection(section.id, e);
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        draggable="false"
                                         className="text-gray-600 hover:text-red-600 p-1"
                                         type="button"
                                     >
