@@ -48,6 +48,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionTimestampRef = useRef(null); // Track when deletion started
+    const deletionQueueRef = useRef([]); // Queue for pending deletions when one is already in progress
+    const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
