@@ -31,42 +31,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentDate = new Date();
     
-    // Calculate working weeks (2 weeks in arrears from current week)
-    const getWorkingWeeks = () => {
-        const today = new Date();
-        const currentWeekStart = new Date(today);
-        const dayOfWeek = currentWeekStart.getDay();
-        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        currentWeekStart.setDate(currentWeekStart.getDate() + daysToMonday);
-        
-        // Calculate 2 weeks ago
-        const twoWeeksAgo = new Date(currentWeekStart);
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-        
-        // Calculate 1 week ago
-        const oneWeekAgo = new Date(currentWeekStart);
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        
-        // Find corresponding week numbers in the weeks array
-        const weekNumbers = [];
-        weeks.forEach((week, idx) => {
-            const weekStart = new Date(week.startDate);
-            weekStart.setHours(0, 0, 0, 0);
-            const twoWeeksAgoStart = new Date(twoWeeksAgo);
-            twoWeeksAgoStart.setHours(0, 0, 0, 0);
-            const oneWeekAgoStart = new Date(oneWeekAgo);
-            oneWeekAgoStart.setHours(0, 0, 0, 0);
-            
-            if (weekStart.getTime() === twoWeeksAgoStart.getTime() || 
-                weekStart.getTime() === oneWeekAgoStart.getTime()) {
-                weekNumbers.push(week.number);
-            }
-        });
-        
-        return weekNumbers;
-    };
-    
-    const workingWeeks = React.useMemo(() => getWorkingWeeks(), [weeks, currentYear]);
     // Simplified refs - only essential ones for debouncing and API reference
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
@@ -78,6 +42,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const deletionTimestampRef = useRef(null); // Track when deletion started
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
+
+    // Year selection with persistence
+    const YEAR_STORAGE_PREFIX = 'weeklyFMSReviewSelectedYear_';
+    const getInitialSelectedYear = () => {
+        if (typeof window !== 'undefined' && project?.id) {
+            const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
+            const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
+            if (!Number.isNaN(parsedYear)) {
+                return parsedYear;
+            }
+        }
+        return currentYear;
+    };
+    
+    const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
 
     // Generate all weeks for a given year
     const generateWeeksForYear = (year) => {
@@ -138,22 +117,44 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Generate weeks for the selected year (recalculate when year changes)
     const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     
-    const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
-
-    // Year selection with persistence
-    const YEAR_STORAGE_PREFIX = 'weeklyFMSReviewSelectedYear_';
-    const getInitialSelectedYear = () => {
-        if (typeof window !== 'undefined' && project?.id) {
-            const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
-            const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
-            if (!Number.isNaN(parsedYear)) {
-                return parsedYear;
+    // Calculate working weeks (2 weeks in arrears from current week)
+    const getWorkingWeeks = () => {
+        const today = new Date();
+        const currentWeekStart = new Date(today);
+        const dayOfWeek = currentWeekStart.getDay();
+        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        currentWeekStart.setDate(currentWeekStart.getDate() + daysToMonday);
+        
+        // Calculate 2 weeks ago
+        const twoWeeksAgo = new Date(currentWeekStart);
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        
+        // Calculate 1 week ago
+        const oneWeekAgo = new Date(currentWeekStart);
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        // Find corresponding week numbers in the weeks array
+        const weekNumbers = [];
+        weeks.forEach((week, idx) => {
+            const weekStart = new Date(week.startDate);
+            weekStart.setHours(0, 0, 0, 0);
+            const twoWeeksAgoStart = new Date(twoWeeksAgo);
+            twoWeeksAgoStart.setHours(0, 0, 0, 0);
+            const oneWeekAgoStart = new Date(oneWeekAgo);
+            oneWeekAgoStart.setHours(0, 0, 0, 0);
+            
+            if (weekStart.getTime() === twoWeeksAgoStart.getTime() || 
+                weekStart.getTime() === oneWeekAgoStart.getTime()) {
+                weekNumbers.push(week.number);
             }
-        }
-        return currentYear;
+        });
+        
+        return weekNumbers;
     };
     
-    const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
+    const workingWeeks = React.useMemo(() => getWorkingWeeks(), [weeks, currentYear]);
+    
+    const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
     
     // Parse weeklyFMSReviewSections safely (legacy flat array support)
     // OPTIMIZED: Reduced retry attempts and improved early exit conditions

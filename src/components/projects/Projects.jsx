@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const { useState, useEffect, useRef, useMemo, useCallback, useContext } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
@@ -18,45 +18,59 @@ const getStatusColorClasses = (status) => {
 };
 
 // Safe useAuth wrapper - always returns a consistent hook result
-// CRITICAL FIX for React error #300: Always call hooks in the same order
-// The issue was that window.useAuth might not be available on first render but becomes available later,
-// causing React to see different numbers of hooks between renders.
-// Solution: Always call window.useAuth() if it exists, ensuring consistent hook calls
+// CRITICAL FIX for React error #321: Must always call hooks unconditionally
+// The issue: conditionally calling window.useAuth() causes different hook counts between renders
+// Solution: Always call window.useAuth() unconditionally (following App.jsx pattern)
+// React tracks hook calls consistently - if useAuth throws, we catch and return default
 const useAuthSafe = () => {
-    // CRITICAL: Always attempt to call window.useAuth() if it exists
-    // This ensures React sees the same number of hooks on every render
-    // We must never conditionally skip calling a hook - that violates React's rules
+    // CRITICAL: Always call window.useAuth() unconditionally - no conditional checks
+    // This ensures React sees the same hook call pattern on every render
+    // Following the pattern from App.jsx which always calls useAuth in try-catch
     
-    // Check if useAuth exists and is callable
-    const useAuthHook = window.useAuth && typeof window.useAuth === 'function' ? window.useAuth : null;
+    let user = null;
+    let logout = () => {
+        console.warn('⚠️ Projects: useAuth not available, cannot logout');
+        window.location.hash = '#/login';
+    };
+    let loading = false;
+    let refreshUser = async () => null;
     
-    // Always call the hook if it exists - this is the key fix for React error #300
-    // If it doesn't exist, we'll return a default object, but we must always attempt the call
-    // when the hook is available to maintain consistent hook order
-    if (useAuthHook) {
-        try {
-            // Always call the hook - never skip this call conditionally
-            const authResult = useAuthHook();
-            // Validate the result is an object with expected properties
-            if (authResult && typeof authResult === 'object') {
-                return authResult;
-            }
-        } catch (error) {
-            console.warn('⚠️ Projects: useAuth hook threw an error:', error);
-            // Fall through to return default object
+    try {
+        // Always call window.useAuth() - React tracks this consistently
+        // If it doesn't exist, this will throw ReferenceError, which we catch
+        // If context isn't available, it will throw React error #321, which we also catch
+        const authState = window.useAuth();
+        if (authState && typeof authState === 'object') {
+            user = authState.user || null;
+            logout = authState.logout || logout;
+            loading = authState.loading !== undefined ? authState.loading : false;
+            refreshUser = authState.refreshUser || refreshUser;
         }
+    } catch (error) {
+        // React error #321/#300 means context not found - expected if AuthProvider isn't ready
+        // ReferenceError means window.useAuth doesn't exist yet
+        // Both are recoverable - component will re-render when provider/useAuth is ready
+        const isContextError = error.message && (
+            error.message.includes('321') || 
+            error.message.includes('300') ||
+            error.message.includes('Context')
+        );
+        const isReferenceError = error.name === 'ReferenceError' || 
+            (error.message && error.message.includes('useAuth'));
+        
+        // Only log if it's an unexpected error
+        if (!isContextError && !isReferenceError) {
+            console.warn('⚠️ Projects: useAuth hook threw an error:', error);
+        }
+        // Fall through to use default values
     }
     
-    // Return a default object if useAuth is not available or threw an error
-    // This ensures we always return the same structure
+    // Always return the same structure - ensures consistent return value
     return {
-        user: null,
-        logout: () => {
-            console.warn('⚠️ Projects: useAuth not available, cannot logout');
-            window.location.hash = '#/login';
-        },
-        loading: false,
-        refreshUser: async () => null
+        user,
+        logout,
+        loading,
+        refreshUser
     };
 };
 
