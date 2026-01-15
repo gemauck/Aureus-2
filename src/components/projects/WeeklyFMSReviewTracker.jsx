@@ -29,16 +29,44 @@ const getFacilitiesLabel = (project) => {
 
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth(); // 0-11
+    const currentDate = new Date();
     
-    // Calculate working months (2 months in arrears from current month)
-    const getWorkingMonths = () => {
-        const twoMonthsBack = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
-        const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
-        return [twoMonthsBack, oneMonthBack];
+    // Calculate working weeks (2 weeks in arrears from current week)
+    const getWorkingWeeks = () => {
+        const today = new Date();
+        const currentWeekStart = new Date(today);
+        const dayOfWeek = currentWeekStart.getDay();
+        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        currentWeekStart.setDate(currentWeekStart.getDate() + daysToMonday);
+        
+        // Calculate 2 weeks ago
+        const twoWeeksAgo = new Date(currentWeekStart);
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        
+        // Calculate 1 week ago
+        const oneWeekAgo = new Date(currentWeekStart);
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        // Find corresponding week numbers in the weeks array
+        const weekNumbers = [];
+        weeks.forEach((week, idx) => {
+            const weekStart = new Date(week.startDate);
+            weekStart.setHours(0, 0, 0, 0);
+            const twoWeeksAgoStart = new Date(twoWeeksAgo);
+            twoWeeksAgoStart.setHours(0, 0, 0, 0);
+            const oneWeekAgoStart = new Date(oneWeekAgo);
+            oneWeekAgoStart.setHours(0, 0, 0, 0);
+            
+            if (weekStart.getTime() === twoWeeksAgoStart.getTime() || 
+                weekStart.getTime() === oneWeekAgoStart.getTime()) {
+                weekNumbers.push(week.number);
+            }
+        });
+        
+        return weekNumbers;
     };
     
-    const workingMonths = getWorkingMonths();
+    const workingWeeks = React.useMemo(() => getWorkingWeeks(), [weeks, currentYear]);
     // Simplified refs - only essential ones for debouncing and API reference
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
@@ -51,10 +79,65 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
-    const months = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-    ];
+    // Generate all weeks for a given year
+    const generateWeeksForYear = (year) => {
+        const weeks = [];
+        // Get January 1st of the year
+        const startDate = new Date(year, 0, 1);
+        // Adjust to the start of the week (Monday)
+        const dayOfWeek = startDate.getDay();
+        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // If Sunday, go back 6 days
+        startDate.setDate(startDate.getDate() + daysToMonday);
+        
+        // Generate weeks until we've covered the entire year
+        let currentDate = new Date(startDate);
+        let weekNum = 1;
+        
+        // Generate up to 53 weeks to cover the full year
+        while (weeks.length < 53) {
+            const weekStart = new Date(currentDate);
+            const weekEnd = new Date(currentDate);
+            weekEnd.setDate(weekEnd.getDate() + 6); // Sunday
+            
+            // Stop if we've passed the end of the year significantly
+            if (weekStart.getFullYear() > year && weekStart.getMonth() > 0) {
+                break;
+            }
+            
+            // Format dates with month abbreviations (e.g., "Dec 29 - Jan 5")
+            const monthAbbreviations = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const startMonthAbbr = monthAbbreviations[weekStart.getMonth()];
+            const startDay = weekStart.getDate();
+            const endMonthAbbr = monthAbbreviations[weekEnd.getMonth()];
+            const endDay = weekEnd.getDate();
+            
+            // Create the date range string
+            const dateRange = `${startMonthAbbr} ${startDay} - ${endMonthAbbr} ${endDay}`;
+            
+            weeks.push({
+                number: weekNum,
+                startDate: weekStart,
+                endDate: weekEnd,
+                label: `Week ${weekNum} (${dateRange})`,
+                dateRange: dateRange
+            });
+            
+            // Move to next week
+            currentDate.setDate(currentDate.getDate() + 7);
+            weekNum++;
+            
+            // Safety check: if we've gone past the year, break
+            if (currentDate.getFullYear() > year) {
+                break;
+            }
+        }
+        
+        return weeks;
+    };
+    
+    // Generate weeks for the selected year (recalculate when year changes)
+    const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
+    
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
     // Year selection with persistence
@@ -338,7 +421,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const commentPopupContainerRef = useRef(null);
     const [users, setUsers] = useState([]);
     
-    // Multi-select state: Set of cell keys (sectionId-documentId-month)
+    // Multi-select state: Set of cell keys (sectionId-documentId-weekLabel)
     const [selectedCells, setSelectedCells] = useState(new Set());
     const selectedCellsRef = useRef(new Set());
     
@@ -871,67 +954,82 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // YEAR-BASED DATA HELPERS - Ensure independent lists per year
     // ============================================================
     
-    // Create a month key scoped to the selected year
-    // Format: "YYYY-MM" (e.g., "2026-01") to match backend expectations
-    // month can be either a month name (e.g., "January") or a number (1-12)
-    const getMonthKey = (month, year = selectedYear) => {
-        let monthNum;
-        if (typeof month === 'string') {
-            // Convert month name to number (0-indexed, so add 1)
-            const monthIndex = months.indexOf(month);
-            if (monthIndex === -1) {
-                // Try parsing as number string
-                monthNum = parseInt(month, 10);
-                if (isNaN(monthNum)) {
-                    console.error('Invalid month:', month);
-                    return null;
-                }
+    // Create a week key scoped to the selected year
+    // Format: "YYYY-W##" (e.g., "2026-W01") to match backend expectations
+    // week can be either a week object (with number property), a week number, or a string like "W01"
+    const getWeekKey = (week, year = selectedYear) => {
+        let weekNum;
+        if (typeof week === 'object' && week.number) {
+            // If it's a week object, use its number
+            weekNum = week.number;
+        } else if (typeof week === 'number') {
+            weekNum = week;
+        } else if (typeof week === 'string') {
+            // Try to extract week number from string like "Week 1 (Dec 29 - Jan 5)" or "W01" or "1"
+            // First try the new format: "Week X"
+            let match = week.match(/Week\s+(\d+)/i);
+            if (match) {
+                weekNum = parseInt(match[1], 10);
             } else {
-                monthNum = monthIndex + 1; // Convert 0-11 to 1-12
+                // Try old format: "W01" or just "1"
+                match = week.match(/W?(\d+)/i);
+                if (match) {
+                    weekNum = parseInt(match[1], 10);
+                } else {
+                    // Try finding by label in weeks array
+                    const weekObj = weeks.find(w => w.label === week || w.dateRange === week);
+                    if (weekObj) {
+                        weekNum = weekObj.number;
+                    } else {
+                        console.error('Invalid week:', week);
+                        return null;
+                    }
+                }
             }
         } else {
-            monthNum = month;
+            console.error('Invalid week:', week);
+            return null;
         }
-        const monthStr = String(monthNum).padStart(2, '0');
-        return `${year}-${monthStr}`;
+        const weekStr = String(weekNum).padStart(2, '0');
+        return `${year}-W${weekStr}`;
     };
     
-    // Get status for a specific month in the selected year only
-    const getStatusForYear = (collectionStatus, month, year = selectedYear) => {
+    // Get status for a specific week in the selected year only
+    const getStatusForYear = (collectionStatus, week, year = selectedYear) => {
         if (!collectionStatus) return null;
-        const monthKey = getMonthKey(month, year);
-        return collectionStatus[monthKey] || null;
+        const weekKey = getWeekKey(week, year);
+        return collectionStatus[weekKey] || null;
     };
     
-    // Get comments for a specific month in the selected year only
-    const getCommentsForYear = (comments, month, year = selectedYear) => {
+    // Get comments for a specific week in the selected year only
+    const getCommentsForYear = (comments, week, year = selectedYear) => {
         if (!comments) return [];
-        const monthKey = getMonthKey(month, year);
-        return comments[monthKey] || [];
+        const weekKey = getWeekKey(week, year);
+        return comments[weekKey] || [];
     };
     
-    // Set status for a specific month in the selected year only
+    // Set status for a specific week in the selected year only
     // If status is empty/null, remove the key instead of setting it to empty string
-    const setStatusForYear = (collectionStatus, month, status, year = selectedYear) => {
-        const monthKey = getMonthKey(month, year);
+    const setStatusForYear = (collectionStatus, week, status, year = selectedYear) => {
+        const weekKey = getWeekKey(week, year);
         const newStatus = { ...collectionStatus };
         
         // If status is empty/null, remove the key to show white background
         if (!status || status === '' || status === 'Select Status') {
-            delete newStatus[monthKey];
+            delete newStatus[weekKey];
         } else {
-            newStatus[monthKey] = status;
+            newStatus[weekKey] = status;
         }
         
         return newStatus;
     };
     
-    // Set comments for a specific month in the selected year only
-    const setCommentsForYear = (comments, month, newComments, year = selectedYear) => {
-        const monthKey = getMonthKey(month, year);
+    // Set comments for a specific week in the selected year only
+    const setCommentsForYear = (comments, week, newComments, year = selectedYear) => {
+        const weekKey = getWeekKey(week, year);
         return {
             ...comments,
-            [monthKey]: newComments
+            [weekKey]: newComments
         };
     };
     
@@ -1396,7 +1494,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // STATUS AND COMMENTS
     // ============================================================
     
-    const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
+    const handleUpdateStatus = useCallback((sectionId, documentId, week, status, applyToSelected = false) => {
         
         // Use current state (most up-to-date) or fallback to ref
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
@@ -1410,14 +1508,31 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // If applying to selected cells, get all selected cell keys
         let cellsToUpdate = [];
         if (applyToSelected && currentSelectedCells.size > 0) {
-            // Parse all selected cell keys
+            // Parse all selected cell keys (format: sectionId-documentId-W##)
             cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
-                const [secId, docId, mon] = cellKey.split('-');
-                return { sectionId: secId, documentId: docId, month: mon };
+                // Cell key format: "sectionId-documentId-W##" (e.g., "section1-doc1-W01")
+                const parts = cellKey.split('-');
+                if (parts.length >= 3) {
+                    const weekPart = parts.slice(-1)[0]; // Last part is week (e.g., "W01")
+                    const documentId = parts[parts.length - 2];
+                    const sectionId = parts.slice(0, -2).join('-'); // Everything before last two parts
+                    // Extract week number from "W01" format and find the week object
+                    const weekMatch = weekPart.match(/W(\d+)/i);
+                    const weekNum = weekMatch ? parseInt(weekMatch[1], 10) : null;
+                    const weekObj = weekNum ? weeks.find(w => w.number === weekNum) : null;
+                    return { sectionId, documentId, week: weekObj || weekNum || weekPart };
+                }
+                // Fallback for old format (shouldn't happen but handle it)
+                const [secId, docId, ...weekParts] = parts;
+                const weekPart = weekParts.join('-');
+                const weekMatch = weekPart.match(/W(\d+)/i);
+                const weekNum = weekMatch ? parseInt(weekMatch[1], 10) : null;
+                const weekObj = weekNum ? weeks.find(w => w.number === weekNum) : null;
+                return { sectionId: secId, documentId: docId, week: weekObj || weekNum || weekPart };
             });
         } else {
             // Just update the single cell
-            cellsToUpdate = [{ sectionId, documentId, month }];
+            cellsToUpdate = [{ sectionId, documentId, week }];
         }
         
         // Update the sections for the current year
@@ -1431,16 +1546,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return {
                 ...section,
                 documents: section.documents.map(doc => {
-                    // Check if this document needs updating for any month
+                    // Check if this document needs updating for any week
                     const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
                     if (docUpdates.length === 0) {
                         return doc;
                     }
                     
-                    // Apply status to all matching months for this document
+                    // Apply status to all matching weeks for this document
                     let updatedStatus = doc.collectionStatus || {};
                     docUpdates.forEach(cell => {
-                        updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
+                        updatedStatus = setStatusForYear(updatedStatus, cell.week, status, selectedYear);
                     });
                     
                     return {
@@ -1482,7 +1597,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [selectedYear]);
     
-    const handleAddComment = async (sectionId, documentId, month, commentText) => {
+    const handleAddComment = async (sectionId, documentId, week, commentText) => {
         if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
@@ -1508,10 +1623,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     ...section,
                     documents: section.documents.map(doc => {
                             if (String(doc.id) === String(documentId)) {
-                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                            const existingComments = getCommentsForYear(doc.comments, week, selectedYear);
                             return {
                                 ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
+                                comments: setCommentsForYear(doc.comments || {}, week, [...existingComments, newComment], selectedYear)
                             };
                         }
                         return doc;
@@ -1559,15 +1674,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         usersResponse?.users ||
                         [];
                     
+                    const weekLabel = typeof week === 'object' ? week.label : week;
                     const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
                     // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docWeek=${encodeURIComponent(weekLabel)}&commentId=${encodeURIComponent(newCommentId)}`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
                         sectionId,
                         documentId,
-                        month,
+                        week: weekLabel,
                         commentId: newCommentId
                     };
                     
@@ -1591,7 +1707,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     };
     
-    const handleDeleteComment = (sectionId, documentId, month, commentId) => {
+    const handleDeleteComment = (sectionId, documentId, week, commentId) => {
         
         const currentUser = getCurrentUser();
         
@@ -1603,7 +1719,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
         const document = section?.documents.find(d => String(d.id) === String(documentId));
-        const existingComments = getCommentsForYear(document?.comments, month, selectedYear);
+        const existingComments = getCommentsForYear(document?.comments, week, selectedYear);
         const comment = existingComments.find(c => c.id === commentId);
         
         const canDelete = comment?.authorId === currentUser.id || 
@@ -1626,7 +1742,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const updatedComments = existingComments.filter(c => c.id !== commentId);
                             return {
                                 ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
+                                comments: setCommentsForYear(doc.comments || {}, week, updatedComments, selectedYear)
                             };
                         }
                         return doc;
@@ -1648,12 +1764,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setSectionsByYear(updatedSectionsByYear);
     };
     
-    const getDocumentStatus = (document, month) => {
-        return getStatusForYear(document.collectionStatus, month, selectedYear);
+    const getDocumentStatus = (document, week) => {
+        return getStatusForYear(document.collectionStatus, week, selectedYear);
     };
     
-    const getDocumentComments = (document, month) => {
-        return getCommentsForYear(document.comments, month, selectedYear);
+    const getDocumentComments = (document, week) => {
+        return getCommentsForYear(document.comments, week, selectedYear);
     };
     
     // ============================================================
@@ -1717,9 +1833,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
             
-            months.forEach(month => {
-                const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
-                headerRow1.push(monthYear, '');
+            weeks.forEach(week => {
+                headerRow1.push(week.label, '');
                 headerRow2.push('Status', 'Comments');
             });
             
@@ -1727,18 +1842,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < 24; i++) sectionRow.push('');
+                for (let i = 0; i < weeks.length * 2; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 section.documents.forEach(document => {
                     const row = [`  ${document.name}${document.description ? ' - ' + document.description : ''}`];
                     
-                    months.forEach(month => {
-                        const status = getStatusForYear(document.collectionStatus, month, selectedYear);
+                    weeks.forEach(week => {
+                        const status = getStatusForYear(document.collectionStatus, week, selectedYear);
                         const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
                         row.push(statusLabel || '');
                         
-                        const comments = getCommentsForYear(document.comments, month, selectedYear);
+                        const comments = getCommentsForYear(document.comments, week, selectedYear);
                         const commentsText = comments.map(c => {
                             const date = new Date(c.date).toLocaleString('en-ZA', {
                                 year: 'numeric', month: 'short', day: '2-digit',
@@ -1757,7 +1872,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             
             const colWidths = [{ wch: 40 }];
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < weeks.length; i++) {
                 colWidths.push({ wch: 18 }, { wch: 50 });
             }
             ws['!cols'] = colWidths;
@@ -1898,7 +2013,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             let params = null;
             let deepSectionId = null;
             let deepDocumentId = null;
-            let deepMonth = null;
+            let deepWeek = null;
             let deepCommentId = null;
             
             // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
@@ -1909,25 +2024,41 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     params = new URLSearchParams(hashParts[1]);
                     deepSectionId = params.get('docSectionId');
                     deepDocumentId = params.get('docDocumentId');
-                    deepMonth = params.get('docMonth');
+                    // Support both docWeek (new) and docMonth (legacy) for backward compatibility
+                    deepWeek = params.get('docWeek') || params.get('docMonth');
                     deepCommentId = params.get('commentId');
                 }
             }
             
             // If not found in hash, check window.location.search (for regular URLs)
-            if (!deepSectionId || !deepDocumentId || !deepMonth) {
+            if (!deepSectionId || !deepDocumentId || !deepWeek) {
                 const search = window.location.search || '';
                 if (search) {
                     params = new URLSearchParams(search);
                     if (!deepSectionId) deepSectionId = params.get('docSectionId');
                     if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
-                    if (!deepMonth) deepMonth = params.get('docMonth');
+                    // Support both docWeek (new) and docMonth (legacy) for backward compatibility
+                    if (!deepWeek) deepWeek = params.get('docWeek') || params.get('docMonth');
                     if (!deepCommentId) deepCommentId = params.get('commentId');
                 }
             }
             
-            if (deepSectionId && deepDocumentId && deepMonth) {
-                const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
+            if (deepSectionId && deepDocumentId && deepWeek) {
+                // Convert deepWeek to week number format for cell key
+                // deepWeek might be "Week 1 (Dec 29 - Jan 5)" or "W01" or "1"
+                let weekNum = null;
+                const weekMatch = String(deepWeek).match(/Week\s+(\d+)/i) || String(deepWeek).match(/W(\d+)/i) || String(deepWeek).match(/^(\d+)$/);
+                if (weekMatch) {
+                    weekNum = parseInt(weekMatch[1], 10);
+                } else {
+                    // Try to find by label
+                    const weekObj = weeks.find(w => w.label === deepWeek || w.dateRange === deepWeek);
+                    if (weekObj) {
+                        weekNum = weekObj.number;
+                    }
+                }
+                const weekKey = weekNum ? `W${String(weekNum).padStart(2, '0')}` : deepWeek;
+                const cellKey = `${deepSectionId}-${deepDocumentId}-${weekKey}`;
                 
                 // Set initial position (will be updated once cell is found)
                 setCommentPopupPosition({
@@ -1976,7 +2107,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
                         // Fallback: try to find the cell and position relative to it
-                        const cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        // deepWeek might be a week label or week number, try both
+                        let cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-week-label="${deepWeek}"]`);
+                        if (!cell) {
+                            // Try by week number if deepWeek is a number or week label
+                            const weekMatch = String(deepWeek).match(/Week\s+(\d+)/i) || String(deepWeek).match(/W(\d+)/i) || String(deepWeek).match(/(\d+)/);
+                            const weekNum = weekMatch ? weekMatch[1] : null;
+                            if (weekNum) {
+                                cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-week="${weekNum}"]`);
+                            }
+                        }
                         if (cell) {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2111,19 +2251,23 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, document, month) => {
-        const status = getDocumentStatus(document, month);
+    const renderStatusCell = (section, document, week) => {
+        const status = getDocumentStatus(document, week);
         const statusConfig = status ? getStatusConfig(status) : null;
-        const comments = getDocumentComments(document, month);
+        const comments = getDocumentComments(document, week);
         const hasComments = comments.length > 0;
-        const cellKey = `${section.id}-${document.id}-${month}`;
+        // Use week number for cell key (more reliable than label which contains special chars)
+        const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
+        const weekLabel = typeof week === 'object' ? week.label : week;
+        const cellKey = `${section.id}-${document.id}-W${String(weekNumber).padStart(2, '0')}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
-        const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
+        const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.replace(/W?/i, '')) : week);
+        const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
         let cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
-            : (isWorkingMonth ? 'bg-primary-50' : '');
+            : (isWorkingWeek ? 'bg-primary-50' : '');
         
         // Add selection styling (with higher priority)
         if (isSelected) {
@@ -2182,7 +2326,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
                             const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                            handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
+                            handleUpdateStatus(section.id, document.id, week, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
@@ -2190,7 +2334,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             if (newStatus !== status) {
                                 const currentSelectedCells = selectedCellsRef.current;
                                 const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                                handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
+                                handleUpdateStatus(section.id, document.id, week, newStatus, applyToSelected);
                             }
                         }}
                         onMouseDown={(e) => {
@@ -2218,12 +2362,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 });
                             }
                         }}
-                        aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
+                        aria-label={`Status for ${document.name || 'document'} in ${weekLabel} ${selectedYear}`}
                         role="combobox"
                         aria-haspopup="listbox"
                         data-section-id={section.id}
                         data-document-id={document.id}
-                        data-month={month}
+                        data-week={weekNumber}
+                        data-week-label={weekLabel}
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
@@ -2938,10 +3083,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {hoverCommentCell && (() => {
                 // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
                 // Never parseInt them – always compare as strings to ensure we find the right row.
-                const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
-                const section = sections.find(s => String(s.id) === String(rawSectionId));
-                const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-                const comments = document ? getDocumentComments(document, month) : [];
+                // Cell key format: "sectionId-documentId-W##" (e.g., "section1-doc1-W01")
+                const parts = hoverCommentCell.split('-');
+                const weekPart = parts.slice(-1)[0]; // Last part is week (e.g., "W01")
+                const documentId = parts[parts.length - 2];
+                const sectionId = parts.slice(0, -2).join('-'); // Everything before last two parts
+                
+                const section = sections.find(s => String(s.id) === String(sectionId));
+                const document = section?.documents.find(d => String(d.id) === String(documentId));
+                
+                // Extract week number from "W01" format and find the week object
+                const weekMatch = weekPart.match(/W(\d+)/i);
+                const weekNum = weekMatch ? parseInt(weekMatch[1], 10) : null;
+                const weekObj = weekNum ? weeks.find(w => w.number === weekNum) : null;
+                const comments = document && weekObj ? getDocumentComments(document, weekObj) : [];
                 
                 return (
                     <>
@@ -2957,7 +3112,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     {section.name || 'Section'}
                                 </div>
                                 <div className="text-[9px] text-gray-500">
-                                    {document.name || 'Document'} • {month}
+                                    {document.name || 'Document'} • {weekObj ? `${weekObj.label} (${weekObj.dateRange})` : weekLabel}
                                 </div>
                             </div>
                         )}
@@ -2989,8 +3144,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    if (!section || !document) return;
-                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                    if (!section || !document || !weekObj) return;
+                                                    handleDeleteComment(section.id, document.id, weekObj, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
@@ -3005,11 +3160,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && section && document ? (
+                            {commentInputAvailable && section && document && weekObj ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, document.id, month, commentText);
+                                            handleAddComment(section.id, document.id, weekObj, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3023,8 +3178,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, quickComment);
+                                            if (e.key === 'Enter' && e.ctrlKey && section && document && weekObj) {
+                                                handleAddComment(section.id, document.id, weekObj, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3034,8 +3189,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, quickComment);
+                                            if (!section || !document || !weekObj) return;
+                                            handleAddComment(section.id, document.id, weekObj, quickComment);
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
@@ -3259,7 +3414,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </div>
                             </div>
 
-                            {/* Scrollable month/document grid for this section only */}
+                            {/* Scrollable week/document grid for this section only */}
                             <div className="border-t border-gray-200 overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
@@ -3270,16 +3425,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             >
                                                 Document / Data
                                             </th>
-                                            {months.map((month, idx) => (
+                                            {weeks.map((week) => (
                                                 <th
-                                                    key={month}
-                                                    className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
-                                                        workingMonths.includes(idx) && selectedYear === currentYear
+                                                    key={week.label}
+                                                    className={`px-1.5 py-1.5 text-center text-[10px] font-semibold border-l border-gray-200 ${
+                                                        workingWeeks.includes(week.number) && selectedYear === currentYear
                                                             ? 'bg-primary-50 text-primary-700'
                                                             : 'text-gray-600'
                                                     }`}
+                                                    title={week.dateRange}
                                                 >
-                                                    {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
+                                                    <div className="flex flex-col items-center">
+                                                        <span>{week.label}</span>
+                                                    </div>
                                                 </th>
                                             ))}
                                             <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
@@ -3290,7 +3448,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
+                                                <td colSpan={weeks.length + 2} className="px-8 py-4 text-center text-gray-400">
                                                     <p className="text-xs">No documents in this section</p>
                                                     <button
                                                         onClick={() => handleAddDocument(section.id)}
@@ -3314,9 +3472,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    {months.map((month) => (
-                                                        <React.Fragment key={`${document.id}-${month}`}>
-                                                            {renderStatusCell(section, document, month)}
+                                                    {weeks.map((week) => (
+                                                        <React.Fragment key={`${document.id}-${week.label}`}>
+                                                            {renderStatusCell(section, document, week)}
                                                         </React.Fragment>
                                                     ))}
                                                     <td className="px-2.5 py-1.5 border-l border-gray-200">
