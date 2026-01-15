@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from '../react-window.js';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from '../react-window.js';
 
 // For now, we'll still use window dependencies until we migrate services
 const storage = typeof window !== 'undefined' ? window.storage : null;
@@ -708,7 +708,7 @@ export function Projects({ onProjectClick }) {
     }, []); // Only run once on mount
 
     // BULLETPROOF ProjectDetail loader with multiple strategies and retries
-    const loadProjectDetail = async (retryCount = 0) => {
+    const loadProjectDetail = useCallback(async (retryCount = 0) => {
         const maxRetries = 3;
         
         if (window.ProjectDetail) {
@@ -892,7 +892,7 @@ export function Projects({ onProjectClick }) {
         
         console.error('❌ All ProjectDetail loading strategies exhausted');
         return false;
-    };
+    }, []);
     
     // Wait for ProjectDetail component to load if it's not available yet
     useEffect(() => {
@@ -1128,7 +1128,7 @@ export function Projects({ onProjectClick }) {
         }
     };
 
-    const handleViewProject = async (project) => {
+    const handleViewProject = useCallback(async (project) => {
         console.log('Viewing project:', project);
         console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'type:', typeof window.ProjectDetail);
         console.log('🔍 ProjectDetail initialization state:', {
@@ -1407,7 +1407,7 @@ export function Projects({ onProjectClick }) {
             console.error('Error setting viewingProject:', error);
             alert('Error opening project: ' + error.message);
         }
-    };
+    }, [projectDetailAvailable, loadProjectDetail]);
 
     const handleSaveProject = async (projectData) => {
         console.log('💾 handleSaveProject called:');
