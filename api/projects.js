@@ -1751,24 +1751,89 @@ async function handler(req, res) {
           }
           
           // Ensure referential integrity by removing dependents first, then the project
+          // Order matters: delete deepest nested records first to avoid foreign key constraint violations
           await prisma.$transaction(async (tx) => {
-            // First, handle task hierarchy - set parentTaskId to null for all tasks
-            // This prevents foreign key constraint issues with self-referential tasks
-            const tasksUpdated = await tx.task.updateMany({ 
+            // 1. Delete nested items and their children first (deepest level)
+            // Get all section IDs for this project
+            const documentSectionIds = (await tx.documentSection.findMany({ 
+              where: { projectId: id }, 
+              select: { id: true } 
+            })).map(s => s.id);
+            
+            const weeklySectionIds = (await tx.weeklyFMSReviewSection.findMany({ 
+              where: { projectId: id }, 
+              select: { id: true } 
+            })).map(s => s.id);
+            
+            const monthlySectionIds = (await tx.monthlyFMSReviewSection.findMany({ 
+              where: { projectId: id }, 
+              select: { id: true } 
+            })).map(s => s.id);
+            
+            // Delete DocumentItem children (statuses and comments) for all sections at once
+            if (documentSectionIds.length > 0) {
+              const documentItemIds = (await tx.documentItem.findMany({ 
+                where: { sectionId: { in: documentSectionIds } }, 
+                select: { id: true } 
+              })).map(i => i.id);
+              
+              if (documentItemIds.length > 0) {
+                await tx.documentItemStatus.deleteMany({ where: { itemId: { in: documentItemIds } } });
+                await tx.documentItemComment.deleteMany({ where: { itemId: { in: documentItemIds } } });
+              }
+              await tx.documentItem.deleteMany({ where: { sectionId: { in: documentSectionIds } } });
+            }
+            
+            // Delete WeeklyFMSReviewItem children
+            if (weeklySectionIds.length > 0) {
+              const weeklyItemIds = (await tx.weeklyFMSReviewItem.findMany({ 
+                where: { sectionId: { in: weeklySectionIds } }, 
+                select: { id: true } 
+              })).map(i => i.id);
+              
+              if (weeklyItemIds.length > 0) {
+                await tx.weeklyFMSReviewItemStatus.deleteMany({ where: { itemId: { in: weeklyItemIds } } });
+                await tx.weeklyFMSReviewItemComment.deleteMany({ where: { itemId: { in: weeklyItemIds } } });
+              }
+              await tx.weeklyFMSReviewItem.deleteMany({ where: { sectionId: { in: weeklySectionIds } } });
+            }
+            
+            // Delete MonthlyFMSReviewItem children
+            if (monthlySectionIds.length > 0) {
+              const monthlyItemIds = (await tx.monthlyFMSReviewItem.findMany({ 
+                where: { sectionId: { in: monthlySectionIds } }, 
+                select: { id: true } 
+              })).map(i => i.id);
+              
+              if (monthlyItemIds.length > 0) {
+                await tx.monthlyFMSReviewItemStatus.deleteMany({ where: { itemId: { in: monthlyItemIds } } });
+                await tx.monthlyFMSReviewItemComment.deleteMany({ where: { itemId: { in: monthlyItemIds } } });
+              }
+              await tx.monthlyFMSReviewItem.deleteMany({ where: { sectionId: { in: monthlySectionIds } } });
+            }
+            
+            // 2. Delete sections (after their items are deleted)
+            await tx.documentSection.deleteMany({ where: { projectId: id } });
+            await tx.weeklyFMSReviewSection.deleteMany({ where: { projectId: id } });
+            await tx.monthlyFMSReviewSection.deleteMany({ where: { projectId: id } });
+            
+            // 3. Delete tasks (handle self-referential hierarchy first)
+            await tx.task.updateMany({ 
               where: { projectId: id },
               data: { parentTaskId: null }
-            })
+            });
+            await tx.task.deleteMany({ where: { projectId: id } });
             
-            // Now delete all tasks (they no longer have parent references)
-            const tasksDeleted = await tx.task.deleteMany({ where: { projectId: id } })
+            // 4. Delete task comments
+            await tx.taskComment.deleteMany({ where: { projectId: id } });
             
-            // Delete invoices
-            const invoicesDeleted = await tx.invoice.deleteMany({ where: { projectId: id } })
+            // 5. Delete other related records
+            await tx.invoice.deleteMany({ where: { projectId: id } });
+            await tx.timeEntry.deleteMany({ where: { projectId: id } });
+            await tx.ticket.deleteMany({ where: { projectId: id } });
+            await tx.userTask.deleteMany({ where: { projectId: id } });
             
-            // Delete time entries
-            const timeEntriesDeleted = await tx.timeEntry.deleteMany({ where: { projectId: id } })
-            
-            // Delete the project
+            // 6. Finally delete the project itself
             await tx.project.delete({ where: { id } })
           })
           return ok(res, { deleted: true, message: 'Project deleted successfully' })
