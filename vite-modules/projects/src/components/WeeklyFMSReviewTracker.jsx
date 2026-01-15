@@ -3358,3 +3358,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
 // Make available globally
 window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
+
+// Export as default for ES6 modules
+export default WeeklyFMSReviewTracker;

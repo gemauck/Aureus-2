@@ -3254,7 +3254,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                             e.stopPropagation();
                                             handleAddDocument(section.id);
                                         }}
-                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                        }}
                                         draggable="false"
                                         className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
                                     >
@@ -3265,7 +3268,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                             e.stopPropagation();
                                             handleEditSection(section);
                                         }}
-                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                        }}
                                         draggable="false"
                                         className="text-gray-600 hover:text-primary-600 p-1"
                                     >
@@ -3276,7 +3282,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                             e.stopPropagation();
                                             handleDeleteSection(section.id, e);
                                         }}
-                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                        }}
                                         draggable="false"
                                         className="text-gray-600 hover:text-red-600 p-1"
                                         type="button"

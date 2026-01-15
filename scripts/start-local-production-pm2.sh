@@ -82,8 +82,8 @@ EOFPM2
 echo "🚀 Starting local production server with PM2..."
 echo ""
 
-# Stop existing PM2 process if running
-pm2 delete abcotronics-erp-local 2>/dev/null || true
+# Stop existing PM2 process if running (safe stop without delete)
+pm2 stop abcotronics-erp-local 2>/dev/null || true
 
 # Start with PM2
 pm2 start ecosystem.local.mjs
@@ -99,7 +99,6 @@ echo "   pm2 logs abcotronics-erp-local"
 echo ""
 echo "🛑 Stop server:"
 echo "   pm2 stop abcotronics-erp-local"
-echo "   pm2 delete abcotronics-erp-local"
 echo ""
 echo "🌐 Server should be available at: http://localhost:${PORT:-3000}"
 

@@ -1,5 +1,5 @@
 import React, { ReactDOM } from './react-window.js';
-import ProjectsModule, { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker } from './ProjectsModule';
+import ProjectsModule, { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker } from './ProjectsModule';
 import '../../../src/styles/main.css';  // Use existing Tailwind
 
 // CRITICAL: Only expose MonthlyDocumentCollectionTracker to avoid conflicts with newer components
@@ -16,8 +16,9 @@ if (typeof window !== 'undefined') {
     console.log('✅ Vite module: MonthlyDocumentCollectionTracker already available from main source, skipping');
   }
   
-  // WeeklyFMSReviewTracker is loaded from src/components/projects/WeeklyFMSReviewTracker.jsx separately
-  // Don't expose it here to avoid conflicts
+  // Expose WeeklyFMSReviewTracker - ALWAYS override to ensure latest version
+  window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
+  console.log('✅ Vite module: WeeklyFMSReviewTracker exposed to window (overriding any existing version)');
   
   // DO NOT expose old Projects components - they conflict with newer versions
   // Only expose if they don't exist (fallback for edge cases)
@@ -38,10 +39,11 @@ if (typeof window !== 'undefined') {
   if (typeof window.dispatchEvent === 'function') {
     window.dispatchEvent(new CustomEvent('viteProjectsReady', {
       detail: { 
-        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker
+        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker,
+        WeeklyFMSReviewTracker: window.WeeklyFMSReviewTracker
       }
     }));
-    console.log('📢 Dispatched viteProjectsReady event (MonthlyDocumentCollectionTracker)');
+    console.log('📢 Dispatched viteProjectsReady event (MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker)');
   }
 }
 

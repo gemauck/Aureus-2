@@ -139,11 +139,13 @@ else
     fi
 fi
 
-# Run Prisma migrations
+# Run Prisma migrations via safe wrapper
 echo ""
-echo "🗄️  Running Prisma migrations..."
+echo "🗄️  Running Prisma migrations via safe wrapper..."
 if command -v npx &> /dev/null && [ -f prisma/schema.prisma ]; then
-    npx prisma migrate deploy || echo "⚠️  Prisma migrate deploy failed, continuing anyway..."
+    if ! bash ./scripts/safe-db-migration.sh npx prisma migrate deploy; then
+        echo "⚠️  Safe migration wrapper reported an error, continuing without further migrations"
+    fi
 fi
 
 # Clear Prisma cache and regenerate

@@ -229,18 +229,19 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
         id: section.id,
         name: section.name,
         description: section.description || '',
+        reviewer: section.reviewer || '',
         documents: section.items.map(item => {
-          // Build collectionStatus object: { "2024-01-W1": "completed", ... }
+          // Build collectionStatus object: { "2024-01": "completed", ... } (monthly format, no week)
           const collectionStatus = {}
           for (const status of item.statuses) {
-            const key = `${status.year}-${String(status.month).padStart(2, '0')}-W${status.week}`
+            const key = `${status.year}-${String(status.month).padStart(2, '0')}`
             collectionStatus[key] = status.status
           }
 
-          // Build comments object: { "2024-01-W1": [...], ... }
+          // Build comments object: { "2024-01": [...], ... } (monthly format, no week)
           const comments = {}
           for (const comment of item.comments) {
-            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}-W${comment.week}`
+            const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
             if (!comments[key]) {
               comments[key] = []
             }
@@ -250,6 +251,7 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
               author: comment.author,
               authorId: comment.authorId,
               authorName: comment.author,
+              date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
               createdAt: comment.createdAt
             })
           }

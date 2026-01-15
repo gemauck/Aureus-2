@@ -21,10 +21,9 @@ fi
 
 echo "📦 Creating Ticket table..."
 
-# Use Prisma db push as it's safer than raw SQL
-echo "🔄 Running Prisma db push..."
-npx prisma db push --accept-data-loss --skip-generate || {
-    echo "⚠️  Prisma db push failed, trying SQL approach..."
+echo "🔄 Applying Prisma migrations for Ticket table via safe migration wrapper..."
+if ! bash ./scripts/safe-db-migration.sh npx prisma migrate deploy --schema=./prisma/schema.prisma; then
+    echo "⚠️  Safe migration wrapper failed or no migrations found, trying SQL approach..."
     
     # Fallback: Use SQL directly
     psql $DATABASE_URL << 'SQL'

@@ -224,8 +224,11 @@ rm -rf node_modules/.prisma 2>/dev/null || true
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
 echo ""
-echo "🗄️  Applying database schema changes..."
-npx prisma db push --accept-data-loss || echo "⚠️  Database migration skipped - schema may already be up to date"
+echo "🗄️  Applying database schema changes via safe migration wrapper..."
+if ! bash ./scripts/safe-db-migration.sh npx prisma migrate deploy; then
+    echo "⚠️  Safe migration wrapper reported an error or no migrations to apply"
+    echo "   Skipping additional schema changes to avoid data loss"
+fi
 
 echo ""
 echo "🔄 Restarting application with updated environment..."
