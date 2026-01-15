@@ -2172,8 +2172,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // immediately see the relevant discussion.
     const checkAndOpenDeepLink = useCallback(() => {
         try {
-            // Only proceed if sections are loaded
+            // Check if URL has deep link parameters first
+            const urlHash = window.location.hash || '';
+            const urlSearch = window.location.search || '';
+            const hasDeepLinkParams = urlHash.includes('docSectionId=') || urlSearch.includes('docSectionId=');
+            
+            if (!hasDeepLinkParams) {
+                return; // No deep link params, exit early
+            }
+            
+            // If sections aren't loaded yet, wait and retry (for email link navigation)
             if (!sections || sections.length === 0) {
+                // Retry after a delay if we have deep link params but no sections yet
+                setTimeout(() => {
+                    checkAndOpenDeepLink();
+                }, 500);
                 return;
             }
             
@@ -2185,9 +2198,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             let deepCommentId = null;
             
             // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
-            const hash = window.location.hash || '';
-            if (hash.includes('?')) {
-                const hashParts = hash.split('?');
+            if (urlHash.includes('?')) {
+                const hashParts = urlHash.split('?');
                 if (hashParts.length > 1) {
                     params = new URLSearchParams(hashParts[1]);
                     deepSectionId = params.get('docSectionId');
@@ -2199,9 +2211,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // If not found in hash, check window.location.search (for regular URLs)
             if (!deepSectionId || !deepDocumentId || !deepMonth) {
-                const search = window.location.search || '';
-                if (search) {
-                    params = new URLSearchParams(search);
+                if (urlSearch) {
+                    params = new URLSearchParams(urlSearch);
                     if (!deepSectionId) deepSectionId = params.get('docSectionId');
                     if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
                     if (!deepMonth) deepMonth = params.get('docMonth');
@@ -2369,25 +2380,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [sections]);
     
-    // Check for deep link on mount and when sections load
+    // Check for deep link on mount, when sections load, and when URL changes
     useEffect(() => {
-        // Wait a bit for component to fully render
+        // Wait a bit for component to fully render and sections to load
         const timer = setTimeout(() => {
             checkAndOpenDeepLink();
-        }, 300);
+        }, 500); // Increased delay to ensure sections are loaded
         return () => clearTimeout(timer);
-    }, [checkAndOpenDeepLink]);
+    }, [checkAndOpenDeepLink, sections]); // Also depend on sections so it re-runs when sections load
     
     // Also listen for hash changes in case URL is updated after component mounts
     useEffect(() => {
         const handleHashChange = () => {
             setTimeout(() => {
                 checkAndOpenDeepLink();
-            }, 100);
+            }, 200); // Increased delay to ensure DOM is ready
         };
         
+        // Also check on initial load (in case hashchange doesn't fire for initial navigation)
+        const checkOnLoad = () => {
+            setTimeout(() => {
+                checkAndOpenDeepLink();
+            }, 300);
+        };
+        
+        // Check immediately if hash params exist
+        if (window.location.hash.includes('docSectionId=') || window.location.search.includes('docSectionId=')) {
+            checkOnLoad();
+        }
+        
         window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
+        window.addEventListener('load', checkOnLoad);
+        
+        return () => {
+            window.removeEventListener('hashchange', handleHashChange);
+            window.removeEventListener('load', checkOnLoad);
+        };
     }, [checkAndOpenDeepLink]);
     
     // ============================================================
