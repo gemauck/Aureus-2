@@ -455,6 +455,9 @@ const Projects = () => {
             if (route?.page === 'projects') {
                 // If there are no segments, reset selected project
                 if (!route.segments || route.segments.length === 0) {
+                    // Clear sessionStorage to prevent auto-opening a project
+                    sessionStorage.removeItem('openProjectId');
+                    sessionStorage.removeItem('openTaskId');
                     if (selectedProject || viewingProject) {
                         setSelectedProject(null);
                         setViewingProject(null);
@@ -724,6 +727,9 @@ const Projects = () => {
     // Listen for explicit navigation to projects list (e.g., clicking "Projects" in sidebar while already on projects page)
     useEffect(() => {
         const handleNavigateToProjectsList = (event) => {
+            // Clear sessionStorage to prevent auto-opening a project
+            sessionStorage.removeItem('openProjectId');
+            sessionStorage.removeItem('openTaskId');
             // Clear the project detail view when explicitly navigating to projects list
             if (viewingProject) {
                 setViewingProject(null);
@@ -992,9 +998,15 @@ const Projects = () => {
                     });
                     
                     // Check if there's a project to open immediately after loading
+                    // Only open from sessionStorage if the current route has segments (i.e., we're navigating to a specific project)
+                    const currentRoute = window.RouteState?.getRoute();
+                    const shouldOpenFromStorage = currentRoute?.page === 'projects' && 
+                                                 currentRoute.segments && 
+                                                 currentRoute.segments.length > 0;
+                    
                     const projectIdToOpen = sessionStorage.getItem('openProjectId');
                     const taskIdToOpen = sessionStorage.getItem('openTaskId');
-                    if (projectIdToOpen) {
+                    if (projectIdToOpen && shouldOpenFromStorage) {
                         console.log('🔍 Projects: Checking sessionStorage for project to open:', projectIdToOpen);
                         let project = apiProjects.find(p => String(p.id) === String(projectIdToOpen));
                         
@@ -1084,6 +1096,11 @@ const Projects = () => {
                             sessionStorage.removeItem('openProjectId');
                             sessionStorage.removeItem('openTaskId');
                         }
+                    } else if (projectIdToOpen && !shouldOpenFromStorage) {
+                        // We're on the projects list but sessionStorage has a project ID - clear it
+                        console.log('🧹 Projects: Clearing sessionStorage project ID - navigating to projects list');
+                        sessionStorage.removeItem('openProjectId');
+                        sessionStorage.removeItem('openTaskId');
                     }
                     
                 }
