@@ -1203,6 +1203,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     
     // Public handler that queues deletions
     const handleDeleteSection = async (sectionId, event) => {
+        console.log('🗑️ handleDeleteSection called with sectionId:', sectionId, 'event:', event);
         try {
             // Prevent event propagation to avoid interfering with other handlers
             if (event) {
@@ -3265,12 +3266,29 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     </button>
                                     <button
                                         onClick={(e) => {
+                                            console.log('🗑️ Delete button clicked for section:', section.id);
                                             e.stopPropagation();
+                                            e.preventDefault();
                                             handleDeleteSection(section.id, e);
+                                        }}
+                                        onMouseDown={(e) => {
+                                            console.log('🗑️ Delete button mousedown for section:', section.id);
+                                            e.stopPropagation();
+                                            // Don't preventDefault - let click fire
+                                        }}
+                                        onMouseUp={(e) => {
+                                            console.log('🗑️ Delete button mouseup for section:', section.id);
+                                            e.stopPropagation();
+                                        }}
+                                        onDragStart={(e) => {
+                                            console.log('🗑️ Delete button dragstart prevented');
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                         }}
                                         draggable="false"
                                         className="text-gray-600 hover:text-red-600 p-1"
                                         type="button"
+                                        style={{ pointerEvents: 'auto' }}
                                     >
                                         <i className="fas fa-trash text-xs"></i>
                                     </button>
