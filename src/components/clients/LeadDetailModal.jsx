@@ -2578,12 +2578,22 @@ const LeadDetailModal = ({
             if (onSave && typeof onSave === 'function') {
                 await onSave(finalFormData, true); // true = stay in edit mode
             }
+            
+            // CRITICAL: After a successful save, ensure we remain on the notes tab
+            // Use setTimeout to ensure this happens after any potential re-renders
+            // Use handleTabChange to ensure it persists to localStorage
+            setTimeout(() => {
+                handleTabChange('notes');
+            }, 0);
         } catch (error) {
             console.error('❌ Error saving comment:', error);
             alert('Failed to save comment. Please try again.');
         } finally {
-            // Clear the flag after save completes
-            isAutoSavingRef.current = false;
+            // Clear the flag after a delay to allow API response to propagate
+            // This delay ensures any effects that check isAutoSavingRef won't reset the tab
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+            }, 3000);
         }
         
         // Clear form fields only after successful save

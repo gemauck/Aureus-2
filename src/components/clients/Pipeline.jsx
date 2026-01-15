@@ -108,6 +108,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         status: 'All',
         source: 'All'
     });
+    const [showStarredOnly, setShowStarredOnly] = useState(false);
     const [sortBy, setSortBy] = useState('value-desc');
     const [viewMode, setViewMode] = useState('list'); // list only
     const [refreshKey, setRefreshKey] = useState(0);
@@ -775,7 +776,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 isStarred: Boolean(lead.isStarred),
                 value: lead.value || 0,
                 createdDate: lead.createdDate || new Date().toISOString(),
-                expectedCloseDate: lead.expectedCloseDate || null
+                expectedCloseDate: lead.expectedCloseDate || null,
+                raw: lead // Store raw lead data for search
             };
         });
 
@@ -823,7 +825,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         value: Number(opp.value) || 0,
                         createdDate: opp.createdAt || opp.createdDate || new Date().toISOString(), // render Opportunity.createdAt as createdDate
                         expectedCloseDate: opp.expectedCloseDate || null,
-                        industry: opp.industry || client.industry || 'Other'
+                        industry: opp.industry || client.industry || 'Other',
+                        raw: { ...opp, client } // Store raw opportunity and client data for search
                     });
                 });
             } else {
@@ -845,16 +848,60 @@ function doesOpportunityBelongToClient(opportunity, client) {
     const getFilteredItems = () => {
         let items = getPipelineItems();
 
-        // Search filter
+        // Search filter - enhanced to match Clients/Leads search
         if (filters.search) {
             const searchLower = filters.search.toLowerCase();
+            const searchTerm = filters.search;
             items = items.filter(item => {
-                const matchesName = item.name.toLowerCase().includes(searchLower);
-                const matchesClientName = item.clientName && item.clientName.toLowerCase().includes(searchLower);
-                // Only search contacts for opportunities, not leads
-                const matchesContact = item.type !== 'lead' && item.contacts && item.contacts[0]?.name.toLowerCase().includes(searchLower);
-                return matchesName || matchesClientName || matchesContact;
+                const matchesName = item.name?.toLowerCase().includes(searchLower) || false;
+                const matchesClientName = item.clientName?.toLowerCase().includes(searchLower) || false;
+                const matchesCompany = item.company?.toLowerCase().includes(searchLower) || false;
+                const matchesIndustry = item.industry?.toLowerCase().includes(searchLower) || false;
+                
+                // Search in contacts (for opportunities and leads)
+                let matchesContact = false;
+                const raw = item.raw || {};
+                // Check item.contacts first, then raw.contacts, then raw.client?.contacts
+                const contacts = item.contacts || raw.contacts || (raw.client?.contacts) || [];
+                if (Array.isArray(contacts) && contacts.length > 0) {
+                    matchesContact = contacts.some(contact => 
+                        contact?.name?.toLowerCase().includes(searchLower) ||
+                        contact?.email?.toLowerCase().includes(searchLower) ||
+                        contact?.phone?.includes(searchTerm)
+                    );
+                }
+                
+                // Search in raw data for additional fields
+                const matchesNotes = raw.notes?.toLowerCase().includes(searchLower) || false;
+                const matchesWebsite = raw.website?.toLowerCase().includes(searchLower) || false;
+                const matchesAddress = raw.address?.toLowerCase().includes(searchLower) || false;
+                
+                // Search in client data (for opportunities)
+                const clientData = raw.client || {};
+                const matchesClientNotes = clientData.notes?.toLowerCase().includes(searchLower) || false;
+                const matchesClientWebsite = clientData.website?.toLowerCase().includes(searchLower) || false;
+                const matchesClientAddress = clientData.address?.toLowerCase().includes(searchLower) || false;
+                
+                // Search in services (if available) - check both item and client
+                let matchesServices = false;
+                const services = raw.services || clientData.services || [];
+                if (Array.isArray(services) && services.length > 0) {
+                    matchesServices = services.some(service => {
+                        const serviceStr = typeof service === 'string' ? service : 
+                                         (service?.name || service?.id || service?.description || JSON.stringify(service));
+                        return serviceStr?.toLowerCase().includes(searchLower);
+                    });
+                }
+                
+                return matchesName || matchesClientName || matchesCompany || matchesIndustry || 
+                       matchesContact || matchesNotes || matchesWebsite || matchesAddress || 
+                       matchesClientNotes || matchesClientWebsite || matchesClientAddress || matchesServices;
             });
+        }
+        
+        // Starred filter
+        if (showStarredOnly) {
+            items = items.filter(item => item.isStarred === true);
         }
 
         // Value filters
@@ -1799,98 +1846,144 @@ function doesOpportunityBelongToClient(opportunity, client) {
             )}
 
             {/* View Toggle & Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
-                {/* View Mode - List only */}
-                <div className="flex items-center justify-between">
-
-                    {/* Sort By */}
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                        <option value="value-desc">Value: High to Low</option>
-                        <option value="value-asc">Value: Low to High</option>
-                        <option value="date-desc">Newest First</option>
-                        <option value="date-asc">Oldest First</option>
-                        <option value="name-asc">Name: A to Z</option>
-                        <option value="name-desc">Name: Z to A</option>
-                    </select>
-                </div>
-
-                {/* Filters */}
-                <div className="grid grid-cols-5 gap-3">
-                    <div className="relative">
-                        <input
-                            type="text"
-                            placeholder="Search deals..."
-                            value={filters.search}
-                            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
-                        />
-                        <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
+                {/* Search and Filters */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-5">
+                    {/* Search Bar */}
+                    <div className="sm:col-span-2 lg:col-span-1">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search by name, industry, contact, or services..."
+                                value={filters.search}
+                                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                                className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                            />
+                            <i className="fas fa-search absolute left-3 top-3.5 text-sm text-gray-400"></i>
+                            {filters.search && (
+                                <button
+                                    onClick={() => setFilters({ ...filters, search: '' })}
+                                    className="absolute right-3 top-3.5 transition-colors text-gray-400 hover:text-gray-600"
+                                    title="Clear search"
+                                >
+                                    <i className="fas fa-times text-sm"></i>
+                                </button>
+                            )}
+                        </div>
                     </div>
                     
-                    <input
-                        type="number"
-                        placeholder="Min Value"
-                        value={filters.minValue}
-                        onChange={(e) => setFilters({ ...filters, minValue: e.target.value })}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
+                    {/* Industry Filter */}
+                    <div>
+                        <select
+                            value={filters.industry}
+                            onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                        >
+                            <option value="All">All Industries</option>
+                            <option value="Mining">Mining</option>
+                            <option value="Mining Contractor">Mining Contractor</option>
+                            <option value="Forestry">Forestry</option>
+                            <option value="Agriculture">Agriculture</option>
+                            <option value="Diesel Supply">Diesel Supply</option>
+                            <option value="Logistics">Logistics</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
                     
-                    <input
-                        type="number"
-                        placeholder="Max Value"
-                        value={filters.maxValue}
-                        onChange={(e) => setFilters({ ...filters, maxValue: e.target.value })}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
+                    {/* Status Filter */}
+                    <div>
+                        <select
+                            value={filters.status}
+                            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                        >
+                            <option value="All">All Status</option>
+                            {statusOptions.map(status => (
+                                <option key={status} value={status}>{status}</option>
+                            ))}
+                        </select>
+                    </div>
                     
-                    <select
-                        value={filters.industry}
-                        onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                        <option value="All">All Industries</option>
-                        <option value="Mining">Mining</option>
-                        <option value="Mining Contractor">Mining Contractor</option>
-                        <option value="Forestry">Forestry</option>
-                        <option value="Agriculture">Agriculture</option>
-                        <option value="Diesel Supply">Diesel Supply</option>
-                        <option value="Logistics">Logistics</option>
-                        <option value="Other">Other</option>
-                    </select>
+                    {/* Value Range Filters */}
+                    <div className="flex gap-2">
+                        <input
+                            type="number"
+                            placeholder="Min Value"
+                            value={filters.minValue}
+                            onChange={(e) => setFilters({ ...filters, minValue: e.target.value })}
+                            className="flex-1 px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white"
+                        />
+                        <input
+                            type="number"
+                            placeholder="Max Value"
+                            value={filters.maxValue}
+                            onChange={(e) => setFilters({ ...filters, maxValue: e.target.value })}
+                            className="flex-1 px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white"
+                        />
+                    </div>
                     
-                    <select
-                        value={filters.status}
-                        onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                        <option value="All">All Status</option>
-                        {statusOptions.map(status => (
-                            <option key={status} value={status}>{status}</option>
-                        ))}
-                    </select>
+                    {/* Starred Only Checkbox */}
+                    <div className="flex items-center">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showStarredOnly}
+                                onChange={(e) => setShowStarredOnly(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">
+                                <i className="fas fa-star text-yellow-500 mr-1"></i>
+                                Starred Only
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                {/* Sort By */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Sort by:</span>
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="value-desc">Value: High to Low</option>
+                            <option value="value-asc">Value: Low to High</option>
+                            <option value="date-desc">Newest First</option>
+                            <option value="date-asc">Oldest First</option>
+                            <option value="name-asc">Name: A to Z</option>
+                            <option value="name-desc">Name: Z to A</option>
+                        </select>
+                    </div>
                 </div>
 
                 {/* Active Filters Count */}
                 {(filters.search || filters.minValue || filters.maxValue || 
-                  filters.industry !== 'All' || filters.status !== 'All') && (
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                        <span className="text-sm text-gray-600">
-                            {filteredItems.length} of {getPipelineItems().length} deals shown
-                        </span>
+                  filters.industry !== 'All' || filters.status !== 'All' || showStarredOnly) && (
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span>
+                                {(() => {
+                                    const searchSuffix = filters.search ? ` matching "${filters.search}"` : '';
+                                    return `Showing ${filteredItems.length} of ${getPipelineItems().length} deals${searchSuffix}`;
+                                })()}
+                            </span>
+                        </div>
                         <button
-                            onClick={() => setFilters({
-                                search: '',
-                                minValue: '',
-                                maxValue: '',
-                                industry: 'All',
-                                status: 'All',
-                                source: 'All'
-                            })}
-                            className="text-sm text-primary-600 hover:text-primary-700"
+                            onClick={() => {
+                                setFilters({
+                                    search: '',
+                                    minValue: '',
+                                    maxValue: '',
+                                    industry: 'All',
+                                    status: 'All',
+                                    source: 'All'
+                                });
+                                setShowStarredOnly(false);
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                         >
                             Clear all filters
                         </button>

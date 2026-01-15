@@ -137,11 +137,20 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 throw new Error(`HTTP ${response.status}: ${errorText}`);
                             }
                             const data = await response.json();
+                            console.log('📋 Project tasks API response:', { 
+                                hasData: !!data, 
+                                hasDataData: !!data?.data, 
+                                hasDataDataTasks: !!data?.data?.tasks,
+                                hasDataTasks: !!data?.tasks,
+                                dataKeys: Object.keys(data || {}),
+                                dataDataKeys: data?.data ? Object.keys(data.data) : []
+                            });
                             const tasks = Array.isArray(data?.data?.tasks)
                                 ? data.data.tasks
                                 : Array.isArray(data?.tasks)
                                     ? data.tasks
                                     : [];
+                            console.log('📋 Parsed project tasks:', tasks.length, tasks);
                             // Save to localStorage for offline use
                             if (tasks.length > 0) {
                                 try {
@@ -149,9 +158,12 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                     const userId = user?.id || user?.email || 'anonymous';
                                     const projectTasksKey = `offline_project_tasks_${userId}`;
                                     localStorage.setItem(projectTasksKey, JSON.stringify(tasks));
+                                    console.log('💾 Saved project tasks to localStorage:', tasks.length);
                                 } catch (e) {
                                     console.warn('Error saving project tasks to localStorage:', e);
                                 }
+                            } else {
+                                console.warn('⚠️ No project tasks found in API response');
                             }
                             
                             return {
@@ -160,11 +172,17 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                             };
                         })
                         .catch(err => {
-                            console.warn('Error loading project tasks:', err.message || err);
+                            console.error('❌ Error loading project tasks:', {
+                                message: err.message,
+                                error: err,
+                                stack: err.stack
+                            });
                             // Use cached project tasks if API fails (for local development)
                             if (cachedProjectTasks.length > 0) {
+                                console.log('📦 Using cached project tasks:', cachedProjectTasks.length);
                                 return { type: 'project', data: cachedProjectTasks };
                             }
+                            console.warn('⚠️ No cached project tasks available, returning empty array');
                             return { type: 'project', data: [] };
                         }),
                     10000 // 10 second timeout (increased for database issues)
@@ -217,17 +235,27 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             // If we already have cached data, this runs in the background
             // If we don't have cached data, this will update when complete
             Promise.allSettled(loadPromises).then((results) => {
+                console.log('📊 Task loading results:', results.map(r => ({
+                    status: r.status,
+                    type: r.status === 'fulfilled' ? r.value?.type : 'error',
+                    taskCount: r.status === 'fulfilled' ? r.value?.data?.length : 0,
+                    error: r.status === 'rejected' ? r.reason?.message : null
+                })));
                 results.forEach(result => {
                     if (result.status === 'fulfilled') {
                         const { type, data } = result.value;
                         if (type === 'project') {
+                            console.log('✅ Setting project tasks:', data.length);
                             setProjectTasks(data);
                         } else if (type === 'user') {
                             // Only update if we got fresh data (not just cached)
                             if (data.length > 0 || cachedUserTasks.length === 0) {
+                                console.log('✅ Setting user tasks:', data.length);
                                 setUserTasks(data);
                             }
                         }
+                    } else {
+                        console.error('❌ Task loading failed:', result.reason);
                     }
                 });
                 // Only set loading to false here if we didn't have cached data

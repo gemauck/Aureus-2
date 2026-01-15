@@ -322,8 +322,10 @@ async function handler(req, res) {
           return badRequest(res, 'User not authenticated');
         }
         
-        // Optimized query: use select for better performance, include project for dashboard
-        const tasks = await prisma.task.findMany({
+        console.log('📋 Loading project tasks for dashboard:', { userId, isLightweight });
+        
+        // First, fetch tasks where user is assignee (most common case)
+        const assigneeTasks = await prisma.task.findMany({
           where: {
             assigneeId: userId,
             parentTaskId: null // Only top-level tasks
@@ -369,11 +371,86 @@ async function handler(req, res) {
           take: 50 // Limit results for performance
         });
 
+        // Also fetch tasks where user might be a subscriber (if we have room)
+        // Since subscribers is stored as JSON, we need to fetch and filter
+        let subscriberTasks = [];
+        if (assigneeTasks.length < 50) {
+          try {
+            const tasksWithSubscribers = await prisma.task.findMany({
+              where: {
+                subscribers: { not: null },
+                parentTaskId: null,
+                assigneeId: { not: userId } // Exclude tasks already fetched
+              },
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                status: true,
+                priority: true,
+                assignee: true,
+                assigneeId: true,
+                dueDate: true,
+                projectId: true,
+                listId: true,
+                estimatedHours: true,
+                actualHours: true,
+                blockedBy: true,
+                tags: true,
+                attachments: true,
+                checklist: true,
+                dependencies: true,
+                subscribers: true,
+                customFields: true,
+                createdAt: true,
+                updatedAt: true,
+                assigneeUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                },
+                project: {
+                  select: {
+                    id: true,
+                    name: true,
+                    clientName: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 100 // Fetch more to filter
+            });
+
+            // Filter tasks where user is in subscribers array
+            subscriberTasks = tasksWithSubscribers.filter(task => {
+              try {
+                const subscribers = safeParseJson(task.subscribers, []);
+                return Array.isArray(subscribers) && subscribers.includes(userId);
+              } catch (e) {
+                return false;
+              }
+            }).slice(0, 50 - assigneeTasks.length); // Only take what we need
+          } catch (e) {
+            console.warn('⚠️ Error fetching subscriber tasks:', e.message);
+          }
+        }
+
+        // Combine assignee and subscriber tasks
+        const tasks = [...assigneeTasks, ...subscriberTasks].slice(0, 50);
+
+        console.log('📋 Found project tasks:', tasks.length, '(assignee:', assigneeTasks.length, ', subscriber:', subscriberTasks.length, ') for userId:', userId);
+        
+        const transformedTasks = tasks.map(task => transformTask(task, { 
+          includeComments: false, 
+          includeSubtasks: false 
+        }));
+        
+        console.log('📋 Transformed project tasks:', transformedTasks.length);
+        
         return ok(res, { 
-          tasks: tasks.map(task => transformTask(task, { 
-            includeComments: false, 
-            includeSubtasks: false 
-          }))
+          tasks: transformedTasks
         });
       }
       
