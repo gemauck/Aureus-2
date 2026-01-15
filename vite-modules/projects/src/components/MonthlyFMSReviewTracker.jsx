@@ -1340,14 +1340,14 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        const document = section.documents.find(d => String(d.id) === normalizedDocumentId);
-        if (!document) {
+        const doc = section.documents.find(d => String(d.id) === normalizedDocumentId);
+        if (!doc) {
             console.error('❌ Document not found for deletion. Document ID:', documentId, 'Section:', section.name);
             alert(`Error: Document not found. Cannot delete.`);
             return;
         }
         
-        if (!confirm(`Delete document "${document.name}"?`)) {
+        if (!confirm(`Delete document "${doc.name}"?`)) {
             return;
         }
         
@@ -1596,8 +1596,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
-        const document = section?.documents.find(d => String(d.id) === String(documentId));
-        const existingComments = getCommentsForYear(document?.comments, month, selectedYear);
+        const doc = section?.documents.find(d => String(d.id) === String(documentId));
+        const existingComments = getCommentsForYear(doc?.comments, month, selectedYear);
         const comment = existingComments.find(c => c.id === commentId);
         
         const canDelete = comment?.authorId === currentUser.id || 
@@ -1738,15 +1738,15 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 for (let i = 0; i < 24; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
-                section.documents.forEach(document => {
-                    const row = [`  ${document.name}${document.description ? ' - ' + document.description : ''}`];
+                section.documents.forEach(doc => {
+                    const row = [`  ${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
                     
                     months.forEach(month => {
-                        const status = getStatusForYear(document.collectionStatus, month, selectedYear);
+                        const status = getStatusForYear(doc.collectionStatus, month, selectedYear);
                         const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
                         row.push(statusLabel || '');
                         
-                        const comments = getCommentsForYear(document.comments, month, selectedYear);
+                        const comments = getCommentsForYear(doc.comments, month, selectedYear);
                         const commentsText = comments.map(c => {
                             const date = new Date(c.date).toLocaleString('en-ZA', {
                                 year: 'numeric', month: 'short', day: '2-digit',
@@ -2948,8 +2948,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 // Never parseInt them – always compare as strings to ensure we find the right row.
                 const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
-                const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-                const comments = document ? getDocumentComments(document, month) : [];
+                const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const comments = doc ? getDocumentComments(doc, month) : [];
                 
                 return (
                     <>
@@ -2959,13 +2959,13 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
                         {/* Show section and document context */}
-                        {section && document && (
+                        {section && doc && (
                             <div className="mb-2 pb-2 border-b border-gray-200">
                                 <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
                                     {section.name || 'Section'}
                                 </div>
                                 <div className="text-[9px] text-gray-500">
-                                    {document.name || 'Document'} • {month}
+                                    {doc.name || 'Document'} • {month}
                                 </div>
                             </div>
                         )}
