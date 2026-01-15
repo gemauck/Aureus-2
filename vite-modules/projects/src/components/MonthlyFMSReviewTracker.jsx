@@ -1203,45 +1203,50 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     
     // Public handler that queues deletions
     const handleDeleteSection = async (sectionId, event) => {
-        // Prevent event propagation to avoid interfering with other handlers
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
+        try {
+            // Prevent event propagation to avoid interfering with other handlers
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            // Normalize IDs to strings for comparison
+            const normalizedSectionId = String(sectionId);
+            
+            // Use sectionsByYear directly to get the most up-to-date state
+            const currentSections = sectionsByYear[selectedYear] || [];
+            const section = currentSections.find(s => String(s.id) === normalizedSectionId);
+            
+            if (!section) {
+                console.error('❌ Section not found for deletion. ID:', sectionId, 'Available sections:', currentSections.map(s => ({ id: s.id, name: s.name })));
+                alert(`Error: Section not found. Cannot delete.`);
+                return;
+            }
+            
+            // Show confirmation dialog
+            if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
+                return;
+            }
+            
+            // If a deletion is already in progress, queue this one
+            if (isDeletingRef.current || isProcessingDeletionQueueRef.current) {
+                console.log('📋 Queuing deletion request:', normalizedSectionId);
+                deletionQueueRef.current.push({ sectionId, event });
+                // Start processing queue if not already processing
+                setTimeout(() => {
+                    if (!isProcessingDeletionQueueRef.current) {
+                        processDeletionQueue();
+                    }
+                }, 0);
+                return;
+            }
+            
+            // No deletion in progress, process immediately
+            await performDeletion(sectionId, event);
+        } catch (error) {
+            console.error('❌ Error in handleDeleteSection:', error);
+            alert(`Failed to delete section: ${error.message || 'Unknown error'}`);
         }
-        
-        // Normalize IDs to strings for comparison
-        const normalizedSectionId = String(sectionId);
-        
-        // Use sectionsByYear directly to get the most up-to-date state
-        const currentSections = sectionsByYear[selectedYear] || [];
-        const section = currentSections.find(s => String(s.id) === normalizedSectionId);
-        
-        if (!section) {
-            console.error('❌ Section not found for deletion. ID:', sectionId, 'Available sections:', currentSections.map(s => ({ id: s.id, name: s.name })));
-            alert(`Error: Section not found. Cannot delete.`);
-            return;
-        }
-        
-        // Show confirmation dialog
-        if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
-            return;
-        }
-        
-        // If a deletion is already in progress, queue this one
-        if (isDeletingRef.current || isProcessingDeletionQueueRef.current) {
-            console.log('📋 Queuing deletion request:', normalizedSectionId);
-            deletionQueueRef.current.push({ sectionId, event });
-            // Start processing queue if not already processing
-            setTimeout(() => {
-                if (!isProcessingDeletionQueueRef.current) {
-                    processDeletionQueue();
-                }
-            }, 0);
-            return;
-        }
-        
-        // No deletion in progress, process immediately
-        await performDeletion(sectionId, event);
     };
     
     // ============================================================
@@ -3262,10 +3267,6 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             handleDeleteSection(section.id, e);
-                                        }}
-                                        onMouseDown={(e) => {
-                                            e.stopPropagation();
-                                            e.preventDefault();
                                         }}
                                         draggable="false"
                                         className="text-gray-600 hover:text-red-600 p-1"
