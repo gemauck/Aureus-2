@@ -660,14 +660,25 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                       }
                     }
 
-                    return {
+                    // Build item data, only include statuses/comments if they have data
+                    const itemData = {
                       name: doc.name || '',
                       description: doc.description || '',
                       required: doc.required || false,
-                      order: docIdx,
-                      statuses: { create: statuses },
-                      comments: { create: comments }
+                      order: docIdx
                     }
+                    
+                    // Only add statuses if array is not empty
+                    if (statuses.length > 0) {
+                      itemData.statuses = { create: statuses }
+                    }
+                    
+                    // Only add comments if array is not empty
+                    if (comments.length > 0) {
+                      itemData.comments = { create: comments }
+                    }
+                    
+                    return itemData
                   })
                 }
               }
@@ -762,14 +773,25 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                     }
                   }
 
-                  return {
+                  // Build item data, only include statuses/comments if they have data
+                  const itemData = {
                     name: doc.name || '',
                     description: doc.description || '',
                     required: doc.required || false,
-                    order: docIdx,
-                    statuses: { create: statuses },
-                    comments: { create: comments }
+                    order: docIdx
                   }
+                  
+                  // Only add statuses if array is not empty
+                  if (statuses.length > 0) {
+                    itemData.statuses = { create: statuses }
+                  }
+                  
+                  // Only add comments if array is not empty
+                  if (comments.length > 0) {
+                    itemData.comments = { create: comments }
+                  }
+                  
+                  return itemData
                 })
               }
             }
@@ -944,14 +966,25 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                       }
                     }
 
-                    return {
+                    // Build item data, only include statuses/comments if they have data
+                    const itemData = {
                       name: doc.name || '',
                       description: doc.description || '',
                       required: doc.required || false,
-                      order: docIdx,
-                      statuses: { create: statuses },
-                      comments: { create: comments }
+                      order: docIdx
                     }
+                    
+                    // Only add statuses if array is not empty
+                    if (statuses.length > 0) {
+                      itemData.statuses = { create: statuses }
+                    }
+                    
+                    // Only add comments if array is not empty
+                    if (comments.length > 0) {
+                      itemData.comments = { create: comments }
+                    }
+                    
+                    return itemData
                   })
                 }
               }
@@ -1037,14 +1070,25 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                     }
                   }
 
-                  return {
+                  // Build item data, only include statuses/comments if they have data
+                  const itemData = {
                     name: doc.name || '',
                     description: doc.description || '',
                     required: doc.required || false,
-                    order: docIdx,
-                    statuses: { create: statuses },
-                    comments: { create: comments }
+                    order: docIdx
                   }
+                  
+                  // Only add statuses if array is not empty
+                  if (statuses.length > 0) {
+                    itemData.statuses = { create: statuses }
+                  }
+                  
+                  // Only add comments if array is not empty
+                  if (comments.length > 0) {
+                    itemData.comments = { create: comments }
+                  }
+                  
+                  return itemData
                 })
               }
             }
