@@ -1678,6 +1678,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         statusOptions,
         onItemClick,
         onItemDragStart,
+        onItemDragEnd,
         onItemDrop,
         onToggleStar,
         normalizeStageToAida,
@@ -1685,7 +1686,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
         formatCurrency,
         getLifecycleBadgeColor,
         draggedItem,
-        draggedOverStage
+        draggedOverStage,
+        setDraggedOverStage
     }) => {
         // Determine columns based on groupBy
         const columns = useMemo(() => {
@@ -1810,6 +1812,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-200 ${
                                         isDraggedOver ? 'border-blue-400 shadow-lg' : 'border-transparent'
                                     }`}
+                                    onDragOver={(e) => handleDragOver(e, column.name)}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={(e) => handleDrop(e, column.name)}
                                 >
                                     {columnItems.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400">
@@ -1829,19 +1834,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             return (
                                                 <div
                                                     key={`${itemType}-${item.id}`}
-                                                    draggable
+                                                    draggable={true}
                                                     onDragStart={(e) => {
+                                                        e.stopPropagation();
                                                         if (onItemDragStart) {
                                                             onItemDragStart(e, item, itemType);
                                                         }
                                                     }}
-                                                    onDragEnd={handleDragEnd}
-                                                    onClick={() => {
-                                                        if (!isDragging && onItemClick) {
+                                                    onDragEnd={(e) => {
+                                                        e.stopPropagation();
+                                                        if (onItemDragEnd) {
+                                                            onItemDragEnd(e);
+                                                        }
+                                                    }}
+                                                    onClick={(e) => {
+                                                        // Prevent click if we just dragged
+                                                        if (isDragging) {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            return;
+                                                        }
+                                                        if (onItemClick) {
                                                             onItemClick(item);
                                                         }
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-pointer transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
+                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
                                                         isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
                                                     }`}
                                                 >
@@ -1858,8 +1875,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             )}
                                                         </div>
                                                         <button
+                                                            type="button"
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onDragStart={(e) => e.stopPropagation()}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
+                                                                e.preventDefault();
                                                                 if (onToggleStar) {
                                                                     onToggleStar(e, item);
                                                                 }
@@ -2394,6 +2415,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     statusOptions={statusOptions}
                     onItemClick={openDealDetail}
                     onItemDragStart={handleDragStart}
+                    onItemDragEnd={handleDragEnd}
                     onItemDrop={handleKanbanDrop}
                     onToggleStar={handleToggleStar}
                     normalizeStageToAida={normalizeStageToAida}
@@ -2402,6 +2424,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     getLifecycleBadgeColor={getLifecycleBadgeColor}
                     draggedItem={draggedItem}
                     draggedOverStage={draggedOverStage}
+                    setDraggedOverStage={setDraggedOverStage}
                 />
             )}
 
