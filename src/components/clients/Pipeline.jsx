@@ -111,7 +111,8 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     });
     const [showStarredOnly, setShowStarredOnly] = useState(false);
     const [sortBy, setSortBy] = useState('value-desc');
-    const [viewMode, setViewMode] = useState('list'); // list only
+    const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+    const [kanbanGroupBy, setKanbanGroupBy] = useState('stage'); // 'stage' (AIDA) or 'status'
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
