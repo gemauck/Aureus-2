@@ -1444,6 +1444,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
+        
+        // CRITICAL: Clear lastSavedDataRef to force save (prevents "data unchanged" skip)
+        // The new comment must be saved, so we bypass the unchanged check
+        lastSavedDataRef.current = null;
+        
+        // Debug: Log comment being added
+        console.log('💬 Adding comment:', {
+            sectionId,
+            documentId,
+            month,
+            commentText: commentText.substring(0, 50) + (commentText.length > 50 ? '...' : ''),
+            commentId: newCommentId
+        });
+        
         // Save immediately
         saveToDatabase();
         
