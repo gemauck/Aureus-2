@@ -530,9 +530,11 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     );
 
     // Initialize tasks with project-specific data
-    const [tasks, setTasks] = useState(project.tasks || []);
+    // Safety check: ensure tasks is always an array
+    const initialTasks = Array.isArray(project.tasks) ? project.tasks : [];
+    const [tasks, setTasks] = useState(initialTasks);
     // Use a ref to store current tasks value to avoid TDZ issues in closures
-    const tasksRef = useRef(project.tasks || []);
+    const tasksRef = useRef(initialTasks);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;

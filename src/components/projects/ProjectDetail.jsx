@@ -1300,10 +1300,14 @@ function initializeProjectDetail() {
     // CRITICAL: Always use project prop tasks immediately - no async loading
     const getTasksFromProject = (proj) => {
         if (!proj) return [];
-        return proj.tasksList || proj.tasks || [];
+        // Ensure we always return an array - check if values are actually arrays
+        const tasksList = Array.isArray(proj.tasksList) ? proj.tasksList : null;
+        const tasks = Array.isArray(proj.tasks) ? proj.tasks : null;
+        return tasksList || tasks || [];
     };
     const initialTasks = getTasksFromProject(project);
-    const [tasks, setTasks] = useState(initialTasks);
+    // Safety check: ensure initialTasks is always an array
+    const [tasks, setTasks] = useState(Array.isArray(initialTasks) ? initialTasks : []);
     const [viewingTask, setViewingTask] = useState(null);
     const [viewingTaskParent, setViewingTaskParent] = useState(null);
     // Use a ref to store current tasks value to avoid TDZ issues in closures
@@ -1320,18 +1324,22 @@ function initializeProjectDetail() {
         if (project?.id !== previousProjectIdRef.current) {
             previousProjectIdRef.current = project?.id;
             const newTasks = getTasksFromProject(project);
+            // Safety check: ensure newTasks is always an array
+            const safeNewTasks = Array.isArray(newTasks) ? newTasks : [];
             // Update immediately - no async operations
-            setTasks(newTasks);
-            tasksRef.current = newTasks;
-            console.log('✅ ProjectDetail: Tasks updated from project prop (instant):', newTasks.length);
+            setTasks(safeNewTasks);
+            tasksRef.current = safeNewTasks;
+            console.log('✅ ProjectDetail: Tasks updated from project prop (instant):', safeNewTasks.length);
         } else {
             // Same project, but tasks might have changed in project prop
             const newTasks = getTasksFromProject(project);
+            // Safety check: ensure newTasks is always an array
+            const safeNewTasks = Array.isArray(newTasks) ? newTasks : [];
             const currentTaskIds = (tasks || []).map(t => t?.id).filter(Boolean).sort().join(',');
-            const newTaskIds = newTasks.map(t => t?.id).filter(Boolean).sort().join(',');
-            if (currentTaskIds !== newTaskIds || newTasks.length !== (tasks || []).length) {
-                setTasks(newTasks);
-                tasksRef.current = newTasks;
+            const newTaskIds = safeNewTasks.map(t => t?.id).filter(Boolean).sort().join(',');
+            if (currentTaskIds !== newTaskIds || safeNewTasks.length !== (tasks || []).length) {
+                setTasks(safeNewTasks);
+                tasksRef.current = safeNewTasks;
             }
         }
     }, [project?.id, project?.tasksList, project?.tasks]); // Only depend on project data, not tasks state
@@ -2898,8 +2906,10 @@ function initializeProjectDetail() {
 
     // Overview Section
     const OverviewSection = () => {
-        const totalTasks = tasks.length;
-        const completedTasks = tasks.filter(t => t.status === 'Done').length;
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        const totalTasks = safeTasks.length;
+        const completedTasks = safeTasks.filter(t => t.status === 'Done').length;
         const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
         const activeUsers = users.filter(u => u.status === 'Active');
 
@@ -3197,11 +3207,13 @@ function initializeProjectDetail() {
         };
 
         const findTaskById = () => {
+            // CRITICAL: Ensure tasks is always an array
+            const safeTasks = Array.isArray(tasks) ? tasks : [];
             if (isSubtask) {
-                const parentTask = tasks.find(t => t.id === parentId);
+                const parentTask = safeTasks.find(t => t.id === parentId);
                 return parentTask?.subtasks?.find(st => st.id === taskId) || null;
             }
-            return tasks.find(t => t.id === taskId) || null;
+            return safeTasks.find(t => t.id === taskId) || null;
         };
 
         const originalTask = findTaskById();
@@ -3220,7 +3232,9 @@ function initializeProjectDetail() {
         ])).filter(Boolean);
 
         let updatedTargetTask = null;
-        const updatedTasks = tasks.map(task => {
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        const updatedTasks = safeTasks.map(task => {
             if (isSubtask) {
                 if (task.id !== parentId) {
                     return task;
@@ -3415,7 +3429,9 @@ function initializeProjectDetail() {
 
         ['To Do', 'In Progress', 'Done', 'Blocked', 'Review'].forEach(addStatus);
 
-        tasks.forEach(task => {
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        safeTasks.forEach(task => {
             addStatus(task.status || 'To Do');
             (task.subtasks || []).forEach(subtask => addStatus(subtask.status || ''));
         });
@@ -3429,7 +3445,9 @@ function initializeProjectDetail() {
             map.set(priority.toLowerCase(), priority);
         });
 
-        tasks.forEach(task => {
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        safeTasks.forEach(task => {
             if (task.priority) {
                 map.set(String(task.priority).toLowerCase(), task.priority);
             }
@@ -3446,7 +3464,9 @@ function initializeProjectDetail() {
     const assigneeOptions = useMemo(() => {
         const map = new Map();
 
-        tasks.forEach(task => {
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        safeTasks.forEach(task => {
             const key = getAssigneeKey(task);
             if (key) {
                 map.set(key, getAssigneeLabel(task));
@@ -3539,12 +3559,14 @@ function initializeProjectDetail() {
 
     const filteredTaskLists = useMemo(() => {
         const includeSubtasks = taskFilters.includeSubtasks;
+        // CRITICAL: Ensure tasks is always an array to prevent .map() errors
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
 
         return taskLists
             .filter(list => taskFilters.list === 'all' || String(list.id) === taskFilters.list)
             .map(list => {
                 // CRITICAL: Use String() comparison to handle type mismatch (number vs string)
-                const tasksForList = tasks
+                const tasksForList = safeTasks
                     .filter(task => String(task.listId) === String(list.id))
                     .map(task => {
                         const taskMatches = matchesTaskFilters(task, list.id);
@@ -3593,10 +3615,12 @@ function initializeProjectDetail() {
     }, [taskFilters]);
 
     const filteredTopLevelTasks = useMemo(() => {
+        // CRITICAL: Ensure tasks is always an array to prevent .filter() errors
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
         if (filteredTaskIdSet.size === 0) {
-            return taskFilters.list === 'all' && !hasActiveTaskFilters ? tasks : [];
+            return taskFilters.list === 'all' && !hasActiveTaskFilters ? safeTasks : [];
         }
-        return tasks.filter(task => filteredTaskIdSet.has(task.id));
+        return safeTasks.filter(task => filteredTaskIdSet.has(task.id));
     }, [tasks, filteredTaskIdSet, taskFilters.list, hasActiveTaskFilters]);
 
     const filteredSubtasksMap = useMemo(() => {
@@ -3610,7 +3634,7 @@ function initializeProjectDetail() {
     }, [filteredTaskLists]);
 
     const visibleTaskCount = filteredTopLevelTasks.length;
-    const totalTaskCount = tasks.length;
+    const totalTaskCount = Array.isArray(tasks) ? tasks.length : 0;
 
     const resetTaskFilters = useCallback(() => {
         setTaskFilters({
@@ -3771,7 +3795,9 @@ function initializeProjectDetail() {
         // Find the first remaining list (that's not the one being deleted)
         const remainingList = taskLists.find(l => l.id !== listId);
         const listToDelete = taskLists.find(l => l.id === listId);
-        const tasksInList = tasks.filter(t => t.listId === listId);
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        const tasksInList = safeTasks.filter(t => t.listId === listId);
 
         const message = tasksInList.length > 0 
             ? `Delete "${listToDelete.name}"? ${tasksInList.length} task(s) will be moved to "${remainingList.name}".`
@@ -3802,7 +3828,9 @@ function initializeProjectDetail() {
                 }
                 
                 // Update local state after successful save
-                setTasks(tasks.map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
+                // CRITICAL: Ensure tasks is always an array
+                const safeTasks = Array.isArray(tasks) ? tasks : [];
+                setTasks(safeTasks.map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
                 setTaskLists(taskLists.filter(l => l.id !== listId));
             } catch (error) {
                 console.error('❌ Error deleting list:', error);
@@ -4191,13 +4219,15 @@ function initializeProjectDetail() {
     const handleUpdateTaskFromDetail = async (updatedTaskData, options = {}) => {
         const { closeModal = true } = options; // Default to closing modal unless explicitly set to false
         
+        // CRITICAL: Ensure tasks is always an array
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
         // Check if this is a new task by looking for it in existing tasks
         // A task is new if:
         // 1. It has no ID (very rare, but possible), OR
         // 2. It has an ID but doesn't exist in the tasks array (or in any subtasks)
         // Note: Temporary IDs from Date.now() are fine - they won't match existing tasks
-        const existingTask = tasks.find(t => t.id === updatedTaskData.id);
-        const existingSubtask = tasks.find(t => 
+        const existingTask = safeTasks.find(t => t.id === updatedTaskData.id);
+        const existingSubtask = safeTasks.find(t => 
             Array.isArray(t.subtasks) && t.subtasks.find(st => st.id === updatedTaskData.id)
         );
         const isNewTask = !updatedTaskData.id || (!existingTask && !existingSubtask);
@@ -4404,6 +4434,8 @@ function initializeProjectDetail() {
             // Use the ID from updatedTaskData if it exists (set by handleSave), otherwise generate one
             const tempTaskId = updatedTaskData.id || Date.now();
             
+            // CRITICAL: Ensure tasks is always an array
+            const safeTasks = Array.isArray(tasks) ? tasks : [];
             if (viewingTaskParent) {
                 const newSubtask = {
                     ...updatedTaskData,
@@ -4412,7 +4444,7 @@ function initializeProjectDetail() {
                     subtasks: [],
                     status: updatedTaskData.status || 'To Do'
                 };
-                updatedTasks = tasks.map(t => {
+                updatedTasks = safeTasks.map(t => {
                     if (t.id === viewingTaskParent.id) {
                         return {
                             ...t,
@@ -4433,14 +4465,14 @@ function initializeProjectDetail() {
                     title: newTask.title,
                     status: newTask.status,
                     listId: newTask.listId,
-                    currentTasksCount: tasks.length
+                    currentTasksCount: safeTasks.length
                 });
-                updatedTasks = [...tasks, newTask];
+                updatedTasks = [...safeTasks, newTask];
                 console.log('✅ New task added to array. Updated tasks count:', updatedTasks.length);
             }
         } else {
             if (viewingTaskParent) {
-                updatedTasks = tasks.map(t => {
+                updatedTasks = safeTasks.map(t => {
                     if (t.id === viewingTaskParent.id) {
                         // Find the original subtask to preserve all fields
                         const originalSubtask = (t.subtasks || []).find(st => st.id === updatedTaskData.id);
@@ -4485,7 +4517,7 @@ function initializeProjectDetail() {
                 });
             } else {
                 // Find the original task to preserve all fields
-                const originalTask = tasks.find(t => t.id === updatedTaskData.id);
+                const originalTask = safeTasks.find(t => t.id === updatedTaskData.id);
                 
                 // CRITICAL: Explicitly preserve comments array to ensure comments persist
                 // FIXED: Always merge comments - never lose existing comments
@@ -4529,7 +4561,7 @@ function initializeProjectDetail() {
                     mergedTask.comments = [];
                 }
                 
-                updatedTasks = tasks.map(t => 
+                updatedTasks = safeTasks.map(t => 
                     t.id === updatedTaskData.id 
                         ? mergedTask
                         : t
@@ -4876,7 +4908,9 @@ function initializeProjectDetail() {
             
             // Filter out the task and all its subtasks from local state using functional update to avoid stale closure
             setTasks(prevTasks => {
-                const updatedTasks = prevTasks.filter(t => t.id !== taskId);
+                // CRITICAL: Ensure prevTasks is always an array
+                const safePrevTasks = Array.isArray(prevTasks) ? prevTasks : [];
+                const updatedTasks = safePrevTasks.filter(t => t.id !== taskId);
                 tasksRef.current = updatedTasks; // Update ref with same data
                 return updatedTasks;
             });
@@ -4910,7 +4944,9 @@ function initializeProjectDetail() {
                                    taskApiError?.message?.includes('Task not found') ? 404 : null);
                 if (errorStatus === 404) {
                     // Task not found - might already be deleted, so just update local state
-                    const updatedTasks = tasks.filter(t => t.id !== taskId);
+                    // CRITICAL: Ensure tasks is always an array
+                    const safeTasks = Array.isArray(tasks) ? tasks : [];
+                    const updatedTasks = safeTasks.filter(t => t.id !== taskId);
                     setTasks(updatedTasks);
                     tasksRef.current = updatedTasks;
                     
@@ -4951,7 +4987,9 @@ function initializeProjectDetail() {
             }
             
             // Confirmation is handled by the modal UI, so we proceed directly
-            const updatedTasks = tasks.map(t => {
+            // CRITICAL: Ensure tasks is always an array
+            const safeTasks = Array.isArray(tasks) ? tasks : [];
+            const updatedTasks = safeTasks.map(t => {
                 if (t.id === parentTaskId) {
                     return {
                         ...t,
