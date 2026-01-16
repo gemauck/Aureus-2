@@ -1877,13 +1877,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     key={`${itemType}-${item.id}`}
                                                     draggable="true"
                                                     onMouseDown={(e) => {
-                                                        // Ensure drag works even when clicking on child elements
                                                         // Don't interfere with button clicks
                                                         if (e.target.closest('button')) {
                                                             return;
                                                         }
-                                                        // Make sure the card itself is draggable
-                                                        e.currentTarget.setAttribute('draggable', 'true');
+                                                        // Store that we're starting a potential drag
+                                                        e.currentTarget.dataset.dragStartTime = Date.now();
                                                     }}
                                                     onDragStart={(e) => {
                                                         console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target, currentTarget: e.currentTarget });
@@ -1913,13 +1912,24 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         }
                                                     }}
                                                     onDragEnd={(e) => {
+                                                        // Clear drag start time
+                                                        if (e.currentTarget.dataset.dragStartTime) {
+                                                            delete e.currentTarget.dataset.dragStartTime;
+                                                        }
                                                         if (onItemDragEnd) {
                                                             onItemDragEnd(e);
                                                         }
                                                     }}
                                                     onClick={(e) => {
-                                                        // Don't trigger card click if clicking button
+                                                        // Don't trigger card click if:
+                                                        // 1. Clicking button
+                                                        // 2. This was a drag operation (check if drag started recently)
                                                         if (e.target.closest('button')) {
+                                                            return;
+                                                        }
+                                                        const dragStartTime = e.currentTarget.dataset.dragStartTime;
+                                                        if (dragStartTime && (Date.now() - parseInt(dragStartTime)) < 300) {
+                                                            // This was likely a drag, not a click
                                                             return;
                                                         }
                                                         if (onItemClick) {
