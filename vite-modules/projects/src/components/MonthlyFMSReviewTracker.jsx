@@ -1570,24 +1570,30 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             
             console.log('💾 Updating sectionsByYear...', { year: selectedYear, sectionsCount: updated.length });
             
+            // Serialize the new data to check against what we're about to save
+            const newSerialized = JSON.stringify(updatedSectionsByYear);
+            console.log('📊 Serialized data size:', newSerialized.length);
+            
             // Update ref IMMEDIATELY before state update to prevent race conditions
             sectionsRef.current = updatedSectionsByYear;
             
-            // Reset the last saved data ref so saveToDatabase knows data has changed
-            lastSavedDataRef.current = null;
-            
-            // Now update state (this will trigger auto-save)
-            setSectionsByYear(updatedSectionsByYear);
-            
-            // Force immediate save (don't wait for debounce) to ensure persistence
             // Clear any pending debounced save first
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
                 saveTimeoutRef.current = null;
             }
             
-            // Save immediately
+            // Reset the last saved data ref so saveToDatabase knows data has changed
+            // Do this AFTER updating the ref but BEFORE calling saveToDatabase
+            lastSavedDataRef.current = null;
+            
+            // Now update state (this will trigger auto-save, but we'll save immediately anyway)
+            setSectionsByYear(updatedSectionsByYear);
+            
+            // Save immediately with a small delay to ensure ref is fully set
             console.log('💾 Calling saveToDatabase...');
+            // Use setTimeout to ensure the ref update has fully propagated
+            await new Promise(resolve => setTimeout(resolve, 10));
             await saveToDatabase();
             
             setQuickComment('');
@@ -3025,10 +3031,32 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             {hoverCommentCell && (() => {
                 // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
                 // Never parseInt them – always compare as strings to ensure we find the right row.
-                const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
+                // Split hoverCommentCell: format is "sectionId-documentId-month"
+                // Month is always the last part, section and doc IDs can contain hyphens
+                const parts = hoverCommentCell.split('-');
+                const month = parts[parts.length - 1]; // Last part is always the month
+                const rawDocumentId = parts.slice(1, -1).join('-'); // Everything between first and last
+                const rawSectionId = parts[0]; // First part is section ID
+                
+                console.log('🔍 Parsing hoverCommentCell:', { 
+                    hoverCommentCell, 
+                    rawSectionId, 
+                    rawDocumentId, 
+                    month,
+                    parts 
+                });
+                
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
                 const comments = doc ? getDocumentComments(doc, month) : [];
+                
+                console.log('🔍 Found section/doc:', { 
+                    sectionFound: !!section, 
+                    docFound: !!doc,
+                    sectionId: section?.id,
+                    docId: doc?.id,
+                    commentsCount: comments.length
+                });
                 
                 return (
                     <>
