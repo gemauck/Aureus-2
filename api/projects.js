@@ -612,6 +612,7 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                 items: {
                   create: (section.documents || []).map((doc, docIdx) => {
                     const statuses = []
+                    const statusMap = new Map() // Deduplicate by year-month to prevent unique constraint violations
                     if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
                       for (const [key, status] of Object.entries(doc.collectionStatus)) {
                         // Parse "2024-01" format (monthly, no week)
@@ -620,7 +621,9 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                           const year = parseInt(parts[0], 10)
                           const month = parseInt(parts[1], 10)
                           if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            statuses.push({
+                            const statusKey = `${year}-${month}`
+                            // Deduplicate: if same year-month exists, use the latest status value
+                            statusMap.set(statusKey, {
                               year,
                               month,
                               status: String(status || 'pending')
@@ -629,6 +632,8 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                         }
                       }
                     }
+                    // Convert map values to array (automatically deduplicated)
+                    statuses.push(...Array.from(statusMap.values()))
 
                     const comments = []
                     if (doc.comments && typeof doc.comments === 'object') {
@@ -709,6 +714,7 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
               items: {
                 create: (section.documents || []).map((doc, docIdx) => {
                   const statuses = []
+                  const statusMap = new Map() // Deduplicate by year-month to prevent unique constraint violations
                   if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
                     for (const [key, status] of Object.entries(doc.collectionStatus)) {
                       // Parse "2024-01" format (monthly, no week)
@@ -717,7 +723,9 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                         const year = parseInt(parts[0], 10)
                         const month = parseInt(parts[1], 10)
                         if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                          statuses.push({
+                          const statusKey = `${year}-${month}`
+                          // Deduplicate: if same year-month exists, use the latest status value
+                          statusMap.set(statusKey, {
                             year,
                             month,
                             status: String(status || 'pending')
@@ -726,6 +734,8 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                       }
                     }
                   }
+                  // Convert map values to array (automatically deduplicated)
+                  statuses.push(...Array.from(statusMap.values()))
 
                   const comments = []
                   if (doc.comments && typeof doc.comments === 'object') {
@@ -886,6 +896,7 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                 items: {
                   create: (section.documents || []).map((doc, docIdx) => {
                     const statuses = []
+                    const statusMap = new Map() // Deduplicate by year-month to prevent unique constraint violations
                     if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
                       for (const [key, status] of Object.entries(doc.collectionStatus)) {
                         // Parse "2024-01" format (monthly, no week)
@@ -894,7 +905,9 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                           const year = parseInt(parts[0], 10)
                           const month = parseInt(parts[1], 10)
                           if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            statuses.push({
+                            const statusKey = `${year}-${month}`
+                            // Deduplicate: if same year-month exists, use the latest status value
+                            statusMap.set(statusKey, {
                               year,
                               month,
                               status: String(status || 'pending')
@@ -903,6 +916,8 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                         }
                       }
                     }
+                    // Convert map values to array (automatically deduplicated)
+                    statuses.push(...Array.from(statusMap.values()))
 
                     const comments = []
                     if (doc.comments && typeof doc.comments === 'object') {
@@ -974,6 +989,7 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
               items: {
                 create: (section.documents || []).map((doc, docIdx) => {
                   const statuses = []
+                  const statusMap = new Map() // Deduplicate by year-month to prevent unique constraint violations
                   if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
                     for (const [key, status] of Object.entries(doc.collectionStatus)) {
                       // Parse "2024-01" format (monthly, no week)
@@ -982,7 +998,9 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                         const year = parseInt(parts[0], 10)
                         const month = parseInt(parts[1], 10)
                         if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                          statuses.push({
+                          const statusKey = `${year}-${month}`
+                          // Deduplicate: if same year-month exists, use the latest status value
+                          statusMap.set(statusKey, {
                             year,
                             month,
                             status: String(status || 'pending')
@@ -991,6 +1009,8 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                       }
                     }
                   }
+                  // Convert map values to array (automatically deduplicated)
+                  statuses.push(...Array.from(statusMap.values()))
 
                   const comments = []
                   if (doc.comments && typeof doc.comments === 'object') {
