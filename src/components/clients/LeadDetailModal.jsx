@@ -212,6 +212,20 @@ const LeadDetailModal = ({
         const currentLeadId = String(lead.id);
         const isDifferentLead = lastProcessedLeadIdRef.current !== currentLeadId;
         
+        // CRITICAL: Don't overwrite formData if user is currently editing/typing
+        // This prevents form from refreshing and losing user input
+        if (isEditingRef.current && !isDifferentLead) {
+            console.log('⏸️ Skipping formData update - user is currently typing/editing');
+            return;
+        }
+        
+        // CRITICAL: Don't overwrite formData if user has started typing (even if not currently typing)
+        // This preserves user input that hasn't been saved yet
+        if (userHasStartedTypingRef.current && !isDifferentLead) {
+            console.log('⏸️ Skipping formData update - user has unsaved changes');
+            return;
+        }
+        
         // CRITICAL: Don't overwrite formData if we're currently auto-saving status or stage
         // This prevents race conditions where API response comes back during auto-save
         if (isAutoSavingRef.current && !isDifferentLead) {
@@ -2826,6 +2840,19 @@ const LeadDetailModal = ({
                 <div className={`px-6 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     <nav className="flex items-center space-x-2 text-sm">
                         <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (onClose) {
+                                    onClose();
+                                }
+                            }}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 mr-2`}
+                            title="Go back"
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <button
                             onClick={() => navigateToPage('dashboard')}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                         >
@@ -3600,6 +3627,28 @@ const LeadDetailModal = ({
                                         rows="3"
                                         placeholder="General information about this lead..."
                                     ></textarea>
+                                </div>
+
+                                {/* Go Back Button */}
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (onClose) {
+                                                onClose();
+                                            }
+                                        }}
+                                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                                            isDark 
+                                                ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' 
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        <i className="fas fa-arrow-left"></i>
+                                        Go back
+                                    </button>
                                 </div>
 
                                 {/* RSS News Feed Subscription */}
