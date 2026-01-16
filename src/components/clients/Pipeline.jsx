@@ -1185,26 +1185,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
         // Otherwise, let the drop handler clear state in its finally block
     };
 
-    const handleKanbanDrop = async (e, targetColumn, groupBy) => {
+    const handleKanbanDrop = async (e, targetColumn, groupBy, itemToMove = null) => {
         e.preventDefault();
         e.stopPropagation();
         
-        // Try to get item from dataTransfer as fallback
-        const itemIdFromTransfer = e.dataTransfer?.getData('pipelineItemId');
-        const itemTypeFromTransfer = e.dataTransfer?.getData('pipelineItemType');
+        // Use provided item, or try to get from state, or from dataTransfer
+        let item = itemToMove || draggedItem;
+        let itemType = draggedType;
         
-        // Use draggedItem from state, or try to find it from dataTransfer
-        let itemToMove = draggedItem;
-        let itemTypeToMove = draggedType;
-        
-        if (!itemToMove && itemIdFromTransfer) {
-            // Try to find the item from filteredItems
-            itemToMove = filteredItems.find(item => String(item.id) === itemIdFromTransfer);
-            itemTypeToMove = itemTypeFromTransfer || itemToMove?.type;
+        if (!item) {
+            // Try to get from dataTransfer
+            const itemIdFromTransfer = e.dataTransfer?.getData('pipelineItemId');
+            const itemTypeFromTransfer = e.dataTransfer?.getData('pipelineItemType');
+            
+            if (itemIdFromTransfer) {
+                item = filteredItems.find(i => String(i.id) === itemIdFromTransfer);
+                itemType = itemTypeFromTransfer || item?.type;
+            }
         }
         
-        if (!itemToMove || !targetColumn) {
-            console.log('❌ Kanban drop: Missing item or target', { itemToMove, targetColumn, draggedItem, itemIdFromTransfer });
+        if (!item || !targetColumn) {
+            console.log('❌ Kanban drop: Missing item or target', { item, targetColumn, draggedItem });
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
@@ -1212,57 +1213,57 @@ function doesOpportunityBelongToClient(opportunity, client) {
             return;
         }
         
-        console.log('✅ Kanban drop:', { itemToMove: itemToMove.name || itemToMove.company, targetColumn, groupBy });
+        console.log('✅ Kanban drop:', { item: item.name || item.company, targetColumn, groupBy });
 
         const token = storage.getToken();
-        const itemType = itemTypeToMove || itemToMove.type;
+        const finalItemType = itemType || item.type;
         
         try {
             if (groupBy === 'stage') {
                 // Update AIDA stage
                 const newStage = targetColumn;
                 
-                if (itemType === 'lead') {
+                if (finalItemType === 'lead') {
                     if (token && window.DatabaseAPI) {
-                        await window.DatabaseAPI.updateLead(itemToMove.id, { stage: newStage });
-                        updateLeadStageOptimistically(itemToMove.id, newStage);
+                        await window.DatabaseAPI.updateLead(item.id, { stage: newStage });
+                        updateLeadStageOptimistically(item.id, newStage);
                     } else {
-                        updateLeadStageOptimistically(itemToMove.id, newStage);
+                        updateLeadStageOptimistically(item.id, newStage);
                     }
-                } else if (itemType === 'opportunity') {
+                } else if (finalItemType === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
-                        await window.api.updateOpportunity(itemToMove.id, { stage: newStage });
+                        await window.api.updateOpportunity(item.id, { stage: newStage });
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        await window.DatabaseAPI.updateOpportunity(itemToMove.id, { stage: newStage });
+                        await window.DatabaseAPI.updateOpportunity(item.id, { stage: newStage });
                     }
-                    updateOpportunityStageOptimistically(itemToMove.clientId, itemToMove.id, newStage);
+                    updateOpportunityStageOptimistically(item.clientId, item.id, newStage);
                 }
             } else if (groupBy === 'status') {
                 // Update status
                 const newStatus = targetColumn;
                 
-                if (itemType === 'lead') {
+                if (finalItemType === 'lead') {
                     if (token && window.DatabaseAPI) {
-                        await window.DatabaseAPI.updateLead(itemToMove.id, { status: newStatus });
+                        await window.DatabaseAPI.updateLead(item.id, { status: newStatus });
                         setLeads(prevLeads => {
                             const updated = prevLeads.map(lead =>
-                                lead.id === itemToMove.id ? { ...lead, status: newStatus } : lead
+                                lead.id === item.id ? { ...lead, status: newStatus } : lead
                             );
                             storage.setLeads(updated);
                             return updated;
                         });
                     }
-                } else if (itemType === 'opportunity') {
+                } else if (finalItemType === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
-                        await window.api.updateOpportunity(itemToMove.id, { status: newStatus });
+                        await window.api.updateOpportunity(item.id, { status: newStatus });
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        await window.DatabaseAPI.updateOpportunity(itemToMove.id, { status: newStatus });
+                        await window.DatabaseAPI.updateOpportunity(item.id, { status: newStatus });
                     }
                     setClients(prevClients => {
                         const updated = prevClients.map(client => {
-                            if (client.id === itemToMove.clientId) {
+                            if (client.id === item.clientId) {
                                 const updatedOpportunities = client.opportunities.map(opp =>
-                                    opp.id === itemToMove.id ? { ...opp, status: newStatus } : opp
+                                    opp.id === item.id ? { ...opp, status: newStatus } : opp
                                 );
                                 return { ...client, opportunities: updatedOpportunities };
                             }
@@ -1745,28 +1746,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
             });
         }, [columns, items, groupBy, normalizeStageToAida, normalizeLifecycleStage]);
 
-        const handleDragOver = (e, columnName) => {
+        const handleDragOver = (e) => {
             e.preventDefault();
-            e.stopPropagation();
             if (e?.dataTransfer) {
                 e.dataTransfer.dropEffect = 'move';
-            }
-            if (setDraggedOverStage) {
-                setDraggedOverStage(columnName);
-            }
-        };
-
-        const handleDragEnter = (e, columnName) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (setDraggedOverStage) {
-                setDraggedOverStage(columnName);
             }
         };
 
         const handleDragLeave = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
             // Only clear if we're actually leaving the column
             const relatedTarget = e.relatedTarget;
             if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
@@ -1778,12 +1765,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         const handleDrop = (e, columnName) => {
             e.preventDefault();
-            e.stopPropagation();
             if (setDraggedOverStage) {
                 setDraggedOverStage(null);
             }
+            
+            // Get item data from dataTransfer (like working KanbanView)
+            const itemIdStr = e.dataTransfer.getData('pipelineItemId');
+            const itemTypeStr = e.dataTransfer.getData('pipelineItemType');
+            
+            if (!itemIdStr || !columnName) {
+                console.log('❌ Kanban drop: Missing data', { itemIdStr, columnName });
+                return;
+            }
+            
+            // Find the item from the items array
+            const itemToMove = items.find(item => String(item.id) === itemIdStr);
+            if (!itemToMove) {
+                console.log('❌ Kanban drop: Item not found', { itemIdStr, items: items.length });
+                return;
+            }
+            
+            console.log('✅ Kanban drop:', { item: itemToMove.name || itemToMove.company, targetColumn: columnName, groupBy });
+            
+            // Call the drop handler with the item
             if (onItemDrop) {
-                onItemDrop(e, columnName, groupBy);
+                onItemDrop(e, columnName, groupBy, itemToMove);
             }
         };
 
@@ -1841,8 +1847,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-200 ${
                                         isDraggedOver ? 'border-blue-400 shadow-lg' : 'border-transparent'
                                     }`}
-                                    onDragEnter={(e) => handleDragEnter(e, column.name)}
-                                    onDragOver={(e) => handleDragOver(e, column.name)}
+                                    onDragEnter={(e) => {
+                                        e.preventDefault();
+                                        if (setDraggedOverStage) {
+                                            setDraggedOverStage(column.name);
+                                        }
+                                    }}
+                                    onDragOver={handleDragOver}
                                     onDragLeave={handleDragLeave}
                                     onDrop={(e) => handleDrop(e, column.name)}
                                 >
@@ -1866,7 +1877,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     key={`${itemType}-${item.id}`}
                                                     draggable={true}
                                                     onDragStart={(e) => {
-                                                        // Don't stop propagation - let it bubble
+                                                        // Set dataTransfer data (like working KanbanView)
+                                                        e.dataTransfer.setData('pipelineItemId', String(item.id));
+                                                        e.dataTransfer.setData('pipelineItemType', String(itemType));
+                                                        e.dataTransfer.effectAllowed = 'move';
+                                                        
+                                                        // Also call the handler for state management
                                                         if (onItemDragStart) {
                                                             onItemDragStart(e, item, itemType);
                                                         }
