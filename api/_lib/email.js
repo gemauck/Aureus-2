@@ -763,9 +763,80 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             linkText = 'View Task';
         }
         
+        // Format due date if available
+        let formattedDueDate = null;
+        if (taskDueDate) {
+            try {
+                const dueDate = new Date(taskDueDate);
+                formattedDueDate = dueDate.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+            } catch (e) {
+                formattedDueDate = taskDueDate;
+            }
+        }
+        
+        // Determine priority color
+        let priorityColor = '#6c757d'; // Default gray
+        if (taskPriority) {
+            const priorityLower = taskPriority.toLowerCase();
+            if (priorityLower === 'high') priorityColor = '#dc3545'; // Red
+            else if (priorityLower === 'medium') priorityColor = '#ffc107'; // Yellow/Orange
+            else if (priorityLower === 'low') priorityColor = '#28a745'; // Green
+        }
+        
+        // Determine status color
+        let statusColor = '#6c757d'; // Default gray
+        if (taskStatus) {
+            const statusLower = taskStatus.toLowerCase();
+            if (statusLower.includes('done') || statusLower.includes('completed')) statusColor = '#28a745'; // Green
+            else if (statusLower.includes('progress')) statusColor = '#007bff'; // Blue
+            else if (statusLower.includes('blocked')) statusColor = '#dc3545'; // Red
+            else if (statusLower.includes('review')) statusColor = '#ffc107'; // Yellow
+        }
+        
         projectInfoHtml = `
             <div style="background: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                ${(projectDescription || clientDescription) ? `
+                ${taskTitle ? `
+                    <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 18px;">📋 Task Details</h3>
+                    <div style="background: white; border-radius: 4px; padding: 15px; margin-bottom: 15px;">
+                        <h4 style="color: #333; margin-top: 0; margin-bottom: 10px; font-size: 16px;">${escapeHtml(taskTitle)}</h4>
+                        ${taskDescription ? `
+                            <div style="margin-bottom: 12px;">
+                                <p style="color: #555; margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(taskDescription)}</p>
+                            </div>
+                        ` : ''}
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 12px;">
+                            ${taskStatus ? `
+                                <div>
+                                    <strong style="color: #555; font-size: 12px; text-transform: uppercase; display: block; margin-bottom: 4px;">Status:</strong>
+                                    <span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 3px; font-size: 13px; font-weight: bold;">${escapeHtml(taskStatus)}</span>
+                                </div>
+                            ` : ''}
+                            ${taskPriority ? `
+                                <div>
+                                    <strong style="color: #555; font-size: 12px; text-transform: uppercase; display: block; margin-bottom: 4px;">Priority:</strong>
+                                    <span style="background: ${priorityColor}; color: white; padding: 4px 10px; border-radius: 3px; font-size: 13px; font-weight: bold;">${escapeHtml(taskPriority)}</span>
+                                </div>
+                            ` : ''}
+                            ${formattedDueDate ? `
+                                <div>
+                                    <strong style="color: #555; font-size: 12px; text-transform: uppercase; display: block; margin-bottom: 4px;">Due Date:</strong>
+                                    <span style="color: #333; font-size: 13px;">${escapeHtml(formattedDueDate)}</span>
+                                </div>
+                            ` : ''}
+                            ${taskListName ? `
+                                <div>
+                                    <strong style="color: #555; font-size: 12px; text-transform: uppercase; display: block; margin-bottom: 4px;">Location:</strong>
+                                    <span style="color: #333; font-size: 13px;">${escapeHtml(taskListName)}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                ` : ''}
+                ${(projectDescription || clientDescription) && !taskTitle ? `
                     <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px;">📋 Additional Information</h3>
                     ${clientDescription ? `
                         <div style="margin-bottom: 12px;">
@@ -779,9 +850,25 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                             <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(projectDescription)}</p>
                         </div>
                     ` : ''}
+                ` : (projectDescription || clientDescription) ? `
+                    <div style="margin-top: 15px;">
+                        <h4 style="color: #333; margin-top: 0; margin-bottom: 10px; font-size: 14px;">📌 Project Context</h4>
+                        ${clientDescription ? `
+                            <div style="margin-bottom: 12px;">
+                                <strong style="color: #555; display: block; margin-bottom: 5px;">Client Notes:</strong>
+                                <p style="color: #666; margin: 0; line-height: 1.5; font-size: 13px;">${escapeHtml(clientDescription)}</p>
+                            </div>
+                        ` : ''}
+                        ${projectDescription ? `
+                            <div style="margin-bottom: 12px;">
+                                <strong style="color: #555; display: block; margin-bottom: 5px;">Project Description:</strong>
+                                <p style="color: #666; margin: 0; line-height: 1.5; font-size: 13px;">${escapeHtml(projectDescription)}</p>
+                            </div>
+                        ` : ''}
+                    </div>
                 ` : ''}
                 ${fullCommentLink ? `
-                    <div style="margin-top: ${(projectDescription || clientDescription) ? '15px' : '0'};">
+                    <div style="margin-top: ${(taskTitle || projectDescription || clientDescription) ? '15px' : '0'};">
                         <a href="${fullCommentLink}" 
                            style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
                             ${linkText}
@@ -835,6 +922,37 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             
             // Add message content (strip HTML)
             text += message.replace(/<[^>]*>/g, '');
+            
+            // Add task details if available
+            if (taskTitle) {
+                text += '\n\n--- Task Details ---\n';
+                text += `Title: ${taskTitle}\n`;
+                if (taskDescription) {
+                    text += `Description: ${taskDescription.replace(/<[^>]*>/g, '')}\n`;
+                }
+                if (taskStatus) {
+                    text += `Status: ${taskStatus}\n`;
+                }
+                if (taskPriority) {
+                    text += `Priority: ${taskPriority}\n`;
+                }
+                if (taskDueDate) {
+                    try {
+                        const dueDate = new Date(taskDueDate);
+                        const formattedDueDate = dueDate.toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                        });
+                        text += `Due Date: ${formattedDueDate}\n`;
+                    } catch (e) {
+                        text += `Due Date: ${taskDueDate}\n`;
+                    }
+                }
+                if (taskListName) {
+                    text += `Location: ${taskListName}\n`;
+                }
+            }
             
             // Add comment text if available
             if (commentText) {

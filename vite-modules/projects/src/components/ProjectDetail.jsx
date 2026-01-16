@@ -1831,6 +1831,9 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             taskTitle: updatedTaskData.title
                         });
                         
+                        // Get task list name for location context (if available)
+                        const taskListName = lists?.find(list => list.id === updatedTaskData.listId)?.name || null;
+                        
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -1842,8 +1845,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                 metadata: {
                                     taskId: updatedTaskData.id,
                                     taskTitle: updatedTaskData.title,
+                                    taskDescription: updatedTaskData.description || null,
+                                    taskStatus: updatedTaskData.status || 'To Do',
+                                    taskPriority: updatedTaskData.priority || 'Medium',
+                                    taskDueDate: updatedTaskData.dueDate || null,
+                                    taskListId: updatedTaskData.listId || null,
+                                    taskListName: taskListName,
                                     projectId: project.id,
                                     projectName: project.name,
+                                    clientId: project.clientId || null,
                                     assignedBy: currentUser.name
                                 }
                             })
@@ -1897,6 +1907,9 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             taskTitle: updatedTaskData.title
                         });
                         
+                        // Get task list name for location context (if available)
+                        const taskListName = lists?.find(list => list.id === updatedTaskData.listId)?.name || null;
+                        
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -1908,8 +1921,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                 metadata: {
                                     taskId: updatedTaskData.id,
                                     taskTitle: updatedTaskData.title,
+                                    taskDescription: updatedTaskData.description || null,
+                                    taskStatus: updatedTaskData.status || 'To Do',
+                                    taskPriority: updatedTaskData.priority || 'Medium',
+                                    taskDueDate: updatedTaskData.dueDate || null,
+                                    taskListId: updatedTaskData.listId || null,
+                                    taskListName: taskListName,
                                     projectId: project.id,
                                     projectName: project.name,
+                                    clientId: project.clientId || null,
                                     assignedBy: currentUser.name
                                 }
                             })

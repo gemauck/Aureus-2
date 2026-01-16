@@ -2618,8 +2618,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Check for deep link on mount, when sections load, and when URL changes
     useEffect(() => {
+        console.log('🔄 MonthlyDocumentCollectionTracker: useEffect triggered', {
+            sectionsCount: sections?.length || 0,
+            urlHash: window.location.hash,
+            urlSearch: window.location.search
+        });
+        
         // Wait a bit for component to fully render and sections to load
         const timer = setTimeout(() => {
+            console.log('⏰ MonthlyDocumentCollectionTracker: Timer fired, calling checkAndOpenDeepLink');
             checkAndOpenDeepLink();
         }, 500); // Increased delay to ensure sections are loaded
         return () => clearTimeout(timer);
