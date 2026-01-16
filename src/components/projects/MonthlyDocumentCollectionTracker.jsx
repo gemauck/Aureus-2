@@ -2927,7 +2927,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, document.id, month, commentText);
+                                            handleAddComment(section.id, doc.id, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
