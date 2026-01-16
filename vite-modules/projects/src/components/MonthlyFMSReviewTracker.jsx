@@ -338,6 +338,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const hasAutoScrolledRef = useRef(false);
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -1536,6 +1537,15 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         saveToDatabase();
         
         setQuickComment('');
+        
+        // Scroll to show the new comment (reset auto-scroll flag to allow scrolling)
+        setTimeout(() => {
+            if (commentPopupContainerRef.current) {
+                hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
+                commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                hasAutoScrolledRef.current = true; // Set flag again after scrolling
+            }
+        }, 100);
 
         // ========================================================
         // @MENTIONS - Process mentions and create notifications
@@ -1789,15 +1799,23 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
+    // Auto-scroll to bottom only when popup first opens (not on position updates)
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current) {
+        if (hoverCommentCell && commentPopupContainerRef.current && !hasAutoScrolledRef.current) {
             setTimeout(() => {
                 if (commentPopupContainerRef.current) {
                     commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                    hasAutoScrolledRef.current = true;
                 }
             }, 100);
+        } else if (!hoverCommentCell) {
+            // Reset flag when popup closes
+            hasAutoScrolledRef.current = false;
         }
-        
+    }, [hoverCommentCell]); // Only depend on hoverCommentCell, not position updates
+    
+    // Smart positioning for comment popup (separate effect)
+    useEffect(() => {
         // Smart positioning for comment popup
         const updatePopupPosition = () => {
             if (!hoverCommentCell) {
@@ -1860,7 +1878,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 window.removeEventListener('scroll', updatePopupPosition);
             };
         }
-    }, [hoverCommentCell, sections, commentPopupPosition]);
+    }, [hoverCommentCell, sections]); // Removed commentPopupPosition to prevent re-triggering on position updates
     
     useEffect(() => {
         const handleClickOutside = (event) => {

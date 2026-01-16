@@ -1074,9 +1074,31 @@ function initializeProjectDetail() {
             hasDocCollectionParams = !!params.get('docSectionId');
         }
         
+        // Check if commentId exists but other params don't (might be document collection comment)
+        let hasCommentIdOnly = false;
+        if (!hasDocCollectionParams) {
+            if (!params) {
+                // Parse params if not already done
+                if (hash.includes('?')) {
+                    const hashParts = hash.split('?');
+                    if (hashParts.length > 1) {
+                        params = new URLSearchParams(hashParts[1]);
+                    }
+                } else if (search) {
+                    params = new URLSearchParams(search);
+                }
+            }
+            if (params) {
+                hasCommentIdOnly = !!params.get('commentId') && 
+                                  !params.get('docSectionId') && 
+                                  !params.get('task') && 
+                                  !params.get('weeklySectionId');
+            }
+        }
+        
         // Check for weekly FMS review params
         let hasWeeklyFMSParams = false;
-        if (!hasDocCollectionParams) {
+        if (!hasDocCollectionParams && !hasCommentIdOnly) {
             if (hash.includes('?') && hash.includes('weeklySectionId=')) {
                 const hashParts = hash.split('?');
                 if (hashParts.length > 1) {
@@ -1094,6 +1116,10 @@ function initializeProjectDetail() {
             return 'documentCollection';
         } else if (hasWeeklyFMSParams) {
             return 'weeklyFMSReview';
+        } else if (hasCommentIdOnly) {
+            // If only commentId is present, default to document collection tab
+            // The tracker will search for the comment across all sections
+            return 'documentCollection';
         }
         return 'overview';
     };
@@ -1868,6 +1894,7 @@ function initializeProjectDetail() {
                 let deepSectionId = null;
                 let deepDocumentId = null;
                 let deepMonth = null;
+                let deepCommentId = null;
                 
                 // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
                 const hash = window.location.hash || '';
@@ -1878,23 +1905,42 @@ function initializeProjectDetail() {
                         deepSectionId = params.get('docSectionId');
                         deepDocumentId = params.get('docDocumentId');
                         deepMonth = params.get('docMonth');
+                        deepCommentId = params.get('commentId');
                     }
                 }
                 
                 // If not found in hash, check window.location.search (for regular URLs)
-                if (!deepSectionId || !deepDocumentId || !deepMonth) {
+                if (!deepSectionId && !deepDocumentId && !deepMonth) {
                     const search = window.location.search || '';
                     if (search) {
                         params = new URLSearchParams(search);
                         if (!deepSectionId) deepSectionId = params.get('docSectionId');
                         if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
                         if (!deepMonth) deepMonth = params.get('docMonth');
+                        if (!deepCommentId) deepCommentId = params.get('commentId');
                     }
                 }
                 
+                // If we have full params, switch to document collection tab
                 if (deepSectionId && deepDocumentId && deepMonth) {
                     // Only switch if not already on document collection tab
                     if (activeSection !== 'documentCollection') {
+                        switchSection('documentCollection');
+                    }
+                } 
+                // Fallback: If we only have commentId (missing section/doc/month), 
+                // still switch to document collection tab and let MonthlyDocumentCollectionTracker search for it
+                else if (deepCommentId && !deepSectionId && !deepDocumentId && !deepMonth) {
+                    // Check if project has document collection process
+                    const projectHasDocCollection = project?.hasDocumentCollectionProcess === true || 
+                                                   project?.hasDocumentCollectionProcess === 'true' ||
+                                                   project?.hasDocumentCollectionProcess === 1 ||
+                                                   (typeof project?.hasDocumentCollectionProcess === 'string' && 
+                                                    project?.hasDocumentCollectionProcess?.toLowerCase() === 'true');
+                    
+                    if (projectHasDocCollection && activeSection !== 'documentCollection') {
+                        // Switch to document collection tab - the tracker will search for the comment
+                        console.log('📧 ProjectDetail: Switching to document collection tab to search for comment:', deepCommentId);
                         switchSection('documentCollection');
                     }
                 }

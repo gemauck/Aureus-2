@@ -2220,6 +2220,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
+            // If we have full params, open the specific cell
+            // OR if we only have commentId, search for it across all sections
             if (deepSectionId && deepDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
                 
@@ -2374,11 +2376,153 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // Start looking for the comment after a short delay
                     setTimeout(findAndScrollToComment, 300);
                 }
+            } 
+            // Fallback: If we only have commentId (missing section/doc/month), search for it
+            else if (deepCommentId && !deepSectionId && !deepDocumentId && !deepMonth) {
+                console.log('📧 MonthlyDocumentCollectionTracker: Searching for comment with ID:', deepCommentId);
+                
+                // Search through all sections and documents to find the comment
+                let foundComment = null;
+                let foundSectionId = null;
+                let foundDocumentId = null;
+                let foundMonth = null;
+                
+                for (const section of sections) {
+                    for (const document of section.documents || []) {
+                        // Get all months from comments object
+                        const commentsByYear = document.comments || {};
+                        const yearComments = commentsByYear[selectedYear] || {};
+                        
+                        // Search through all months
+                        for (const monthKey in yearComments) {
+                            const monthComments = getCommentsForYear(document.comments, monthKey, selectedYear);
+                            const comment = monthComments.find(c => String(c.id) === String(deepCommentId));
+                            
+                            if (comment) {
+                                foundComment = comment;
+                                foundSectionId = section.id;
+                                foundDocumentId = document.id;
+                                foundMonth = monthKey;
+                                break;
+                            }
+                        }
+                        if (foundComment) break;
+                    }
+                    if (foundComment) break;
+                }
+                
+                if (foundComment && foundSectionId && foundDocumentId && foundMonth) {
+                    // Found the comment! Open the popup for that cell
+                    const cellKey = `${foundSectionId}-${foundDocumentId}-${foundMonth}`;
+                    
+                    // Set initial position
+                    setCommentPopupPosition({
+                        top: Math.max(window.innerHeight / 2 - 160, 60),
+                        left: Math.max(window.innerWidth / 2 - 180, 20)
+                    });
+                    
+                    // Open the popup
+                    setHoverCommentCell(cellKey);
+                    
+                    // Position popup near the cell
+                    const positionPopup = () => {
+                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                        if (commentButton) {
+                            const buttonRect = commentButton.getBoundingClientRect();
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+                            const popupWidth = 288;
+                            const popupHeight = 300;
+                            const spacing = 8;
+                            const tailSize = 12;
+                            
+                            const spaceBelow = viewportHeight - buttonRect.bottom;
+                            const spaceAbove = buttonRect.top;
+                            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+                            
+                            let popupTop, popupLeft;
+                            
+                            if (positionAbove) {
+                                popupTop = buttonRect.top - popupHeight - spacing - tailSize;
+                            } else {
+                                popupTop = buttonRect.bottom + spacing + tailSize;
+                            }
+                            
+                            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+                            let preferredLeft = buttonCenterX - popupWidth / 2;
+                            
+                            if (preferredLeft < 10) {
+                                preferredLeft = 10;
+                            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
+                                preferredLeft = viewportWidth - popupWidth - 10;
+                            }
+                            
+                            setCommentPopupPosition({ top: popupTop, left: preferredLeft });
+                        }
+                    };
+                    
+                    // Try to position immediately, then retry a few times
+                    positionPopup();
+                    let attempts = 0;
+                    const maxAttempts = 5;
+                    const retryPosition = setInterval(() => {
+                        attempts++;
+                        positionPopup();
+                        if (attempts >= maxAttempts) {
+                            clearInterval(retryPosition);
+                        }
+                    }, 200);
+                    
+                    // Scroll to the comment
+                    const targetCommentId = String(deepCommentId);
+                    let scrollAttempts = 0;
+                    const maxScrollAttempts = 10;
+                    const findAndScrollToComment = () => {
+                        scrollAttempts++;
+                        
+                        const commentElement = 
+                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            document.querySelector(`#comment-${targetCommentId}`);
+                        
+                        if (commentElement && commentPopupContainerRef.current) {
+                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            if (commentPopupContainerRef.current) {
+                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
+                                const commentRect = commentElement.getBoundingClientRect();
+                                const scrollTop = commentPopupContainerRef.current.scrollTop;
+                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                commentPopupContainerRef.current.scrollTo({
+                                    top: commentOffset - 20,
+                                    behavior: 'smooth'
+                                });
+                            }
+                            // Highlight the comment
+                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
+                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
+                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+                            setTimeout(() => {
+                                commentElement.style.backgroundColor = originalBg;
+                                commentElement.style.boxShadow = '';
+                                commentElement.style.transition = '';
+                            }, 2000);
+                            console.log('✅ Deep link: Found and scrolled to comment', targetCommentId);
+                        } else if (scrollAttempts < maxScrollAttempts) {
+                            setTimeout(findAndScrollToComment, 200);
+                        } else {
+                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId);
+                        }
+                    };
+                    
+                    setTimeout(findAndScrollToComment, 300);
+                } else {
+                    console.warn('⚠️ Deep link: Could not find comment with ID', deepCommentId, 'in any section');
+                }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);
         }
-    }, [sections]);
+    }, [sections, selectedYear]);
     
     // Check for deep link on mount, when sections load, and when URL changes
     useEffect(() => {
