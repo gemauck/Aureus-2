@@ -106,6 +106,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         maxValue: '',
         industry: 'All',
         status: 'All',
+        stage: 'All',
         source: 'All'
     });
     const [showStarredOnly, setShowStarredOnly] = useState(false);
@@ -309,12 +310,20 @@ function normalizeStageToAida(rawStage) {
         return fallbackStage;
     }
 
-    const matchingStage = pipelineStages.find(
-        (stage) => stage.name.toLowerCase() === lower || stage.id === lower
-    );
-
-    if (matchingStage) {
-        return matchingStage.name;
+    // AIDA stages
+    const aidaStages = ['Awareness', 'Interest', 'Desire', 'Action'];
+    const aidaStageIds = ['awareness', 'interest', 'desire', 'action'];
+    
+    // Check if it matches a stage name exactly
+    const exactMatch = aidaStages.find(stage => stage.toLowerCase() === lower);
+    if (exactMatch) {
+        return exactMatch;
+    }
+    
+    // Check if it matches a stage ID
+    const idIndex = aidaStageIds.indexOf(lower);
+    if (idIndex !== -1) {
+        return aidaStages[idIndex];
     }
 
     return fallbackStage;
@@ -919,6 +928,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
             items = items.filter(item => {
                 const normalizedStatus = normalizeLifecycleStage(item.status || 'Potential');
                 return normalizedStatus === filters.status;
+            });
+        }
+
+        // AIDA Stage filter
+        if (filters.stage !== 'All') {
+            items = items.filter(item => {
+                const normalizedStage = normalizeStageToAida(item.stage);
+                return normalizedStage === filters.stage;
             });
         }
 
@@ -1896,6 +1913,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </select>
                     </div>
                     
+                    {/* AIDA Stage Filter */}
+                    <div>
+                        <select
+                            value={filters.stage}
+                            onChange={(e) => setFilters({ ...filters, stage: e.target.value })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                        >
+                            <option value="All">All Stages</option>
+                            <option value="Awareness">Awareness</option>
+                            <option value="Interest">Interest</option>
+                            <option value="Desire">Desire</option>
+                            <option value="Action">Action</option>
+                        </select>
+                    </div>
+                    
                     {/* Starred Only Checkbox */}
                     <div className="flex items-center">
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -1934,7 +1966,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                 {/* Active Filters Count */}
                 {(filters.search || 
-                  filters.industry !== 'All' || filters.status !== 'All' || showStarredOnly) && (
+                  filters.industry !== 'All' || filters.status !== 'All' || filters.stage !== 'All' || showStarredOnly) && (
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -1953,6 +1985,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     maxValue: '',
                                     industry: 'All',
                                     status: 'All',
+                                    stage: 'All',
                                     source: 'All'
                                 });
                                 setShowStarredOnly(false);
