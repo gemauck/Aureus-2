@@ -192,14 +192,29 @@ const CommentInputWithMentions = ({
     };
     
     const handleSubmit = async () => {
-        if (!comment.trim()) return;
+        console.log('💬 CommentInputWithMentions: handleSubmit called', { 
+            commentLength: comment.length, 
+            hasOnSubmit: typeof onSubmit === 'function',
+            commentPreview: comment.substring(0, 50)
+        });
+        
+        if (!comment.trim()) {
+            console.log('⏸️ CommentInputWithMentions: Comment is empty, returning');
+            return;
+        }
         
         // NOTE: Mention processing is now handled by parent components
         // (e.g., MonthlyDocumentCollectionTracker, MonthlyFMSReviewTracker)
         // which have better context (project info, deep links, etc.)
         // This prevents duplicate notifications from being sent.
         
-        onSubmit(comment);
+        console.log('📤 CommentInputWithMentions: Calling onSubmit with comment');
+        try {
+            onSubmit(comment);
+            console.log('✅ CommentInputWithMentions: onSubmit called successfully');
+        } catch (error) {
+            console.error('❌ CommentInputWithMentions: Error calling onSubmit:', error);
+        }
         setComment('');
     };
     
