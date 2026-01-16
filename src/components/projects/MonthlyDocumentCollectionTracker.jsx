@@ -1687,13 +1687,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
+    // Get comments for current hover cell to track changes for scrolling
+    const currentComments = React.useMemo(() => {
+        if (!hoverCommentCell) return [];
+        const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
+        const section = sections.find(s => String(s.id) === String(rawSectionId));
+        const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+        return doc ? getDocumentComments(doc, month) : [];
+    }, [hoverCommentCell, sections, selectedYear]);
+    
     useEffect(() => {
         if (hoverCommentCell && commentPopupContainerRef.current) {
-            setTimeout(() => {
+            // Scroll to bottom when popup opens or comments update
+            const scrollToBottom = () => {
                 if (commentPopupContainerRef.current) {
                     commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
                 }
-            }, 100);
+            };
+            
+            // Multiple attempts to ensure scrolling works
+            setTimeout(scrollToBottom, 50);
+            setTimeout(scrollToBottom, 100);
+            setTimeout(scrollToBottom, 200);
         }
         
         // Smart positioning for comment popup
@@ -1758,7 +1773,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 window.removeEventListener('scroll', updatePopupPosition);
             };
         }
-    }, [hoverCommentCell, sections, commentPopupPosition]);
+    }, [hoverCommentCell, sections, commentPopupPosition, currentComments.length]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -2832,20 +2847,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
                         {/* Show section and document context */}
-                        {section && document && (
+                        {section && doc && (
                             <div className="mb-2 pb-2 border-b border-gray-200">
                                 <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
                                     {section.name || 'Section'}
                                 </div>
                                 <div className="text-[9px] text-gray-500">
-                                    {document.name || 'Document'} • {month}
+                                    {doc.name || 'Document'} • {month}
                                 </div>
                             </div>
                         )}
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
+                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto overflow-x-hidden space-y-2 mb-2 pr-1" style={{ scrollBehavior: 'smooth' }}>
                                     {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
@@ -2864,14 +2879,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             />
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
-                                                <span>{new Date(comment.date).toLocaleString('en-ZA', { 
-                                                    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                })}</span>
+                                                <span>{comment.date ? (() => {
+                                                    try {
+                                                        const date = new Date(comment.date);
+                                                        if (isNaN(date.getTime())) return 'Invalid Date';
+                                                        return date.toLocaleString('en-ZA', { 
+                                                            month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                        });
+                                                    } catch (e) {
+                                                        return 'Invalid Date';
+                                                    }
+                                                })() : 'No date'}</span>
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    if (!section || !document) return;
-                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                    if (!section || !doc) return;
+                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
@@ -2886,7 +2909,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && section && document ? (
+                            {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
@@ -2904,8 +2927,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, quickComment);
+                                            if (e.key === 'Enter' && e.ctrlKey && section && doc) {
+                                                handleAddComment(section.id, doc.id, month, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -2915,8 +2938,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, quickComment);
+                                            if (!section || !doc) return;
+                                            handleAddComment(section.id, doc.id, month, quickComment);
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"

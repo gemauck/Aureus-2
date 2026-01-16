@@ -1119,95 +1119,120 @@ async function handler(req, res) {
       }
       
       try {
-        const project = await prisma.project.update({ 
-          where: { id }, 
-          data: updateData 
+        // Use a transaction to ensure atomicity - if table save fails, project update is rolled back
+        const result = await prisma.$transaction(async (tx) => {
+          // First update the project
+          const project = await tx.project.update({ 
+            where: { id }, 
+            data: updateData 
+          });
+          
+          // CRITICAL: Save documentSections and weeklyFMSReviewSections to tables
+          // The GET endpoint reads from tables, so we must save to tables for persistence
+          // Pass the original body value (could be string or object) - save functions handle both
+          if (body.documentSections !== undefined && body.documentSections !== null) {
+            try {
+              console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', {
+                projectId: id,
+                type: typeof body.documentSections,
+                isString: typeof body.documentSections === 'string',
+                length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
+                preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : JSON.stringify(body.documentSections).substring(0, 200)
+              });
+              // Note: saveDocumentSectionsToTable uses prisma directly, not tx
+              // This is a limitation - we'll need to refactor those functions to accept a transaction client
+              // For now, we'll catch errors and provide better error messages
+              await saveDocumentSectionsToTable(id, body.documentSections)
+              console.log('✅ PUT /api/projects/[id]: Successfully saved documentSections to table');
+            } catch (tableError) {
+              console.error('❌ CRITICAL: Error saving documentSections to table:', {
+                error: tableError.message,
+                stack: tableError.stack,
+                code: tableError.code,
+                meta: tableError.meta,
+                projectId: id,
+                dataType: typeof body.documentSections
+              });
+              // Re-throw with detailed error message
+              throw new Error(`Failed to save documentSections to table: ${tableError.message}${tableError.code ? ` (Code: ${tableError.code})` : ''}`);
+            }
+          }
+          
+          if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+            try {
+              console.log('💾 PUT /api/projects/[id]: Saving weeklyFMSReviewSections to table', {
+                projectId: id,
+                type: typeof body.weeklyFMSReviewSections,
+                isString: typeof body.weeklyFMSReviewSections === 'string',
+                length: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 'N/A',
+                preview: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.substring(0, 200) : JSON.stringify(body.weeklyFMSReviewSections).substring(0, 200)
+              });
+              // Note: saveWeeklyFMSReviewSectionsToTable uses prisma directly, not tx
+              // This is a limitation - we'll need to refactor those functions to accept a transaction client
+              // For now, we'll catch errors and provide better error messages
+              await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
+              console.log('✅ PUT /api/projects/[id]: Successfully saved weeklyFMSReviewSections to table');
+            } catch (tableError) {
+              console.error('❌ CRITICAL: Error saving weeklyFMSReviewSections to table:', {
+                error: tableError.message,
+                stack: tableError.stack,
+                code: tableError.code,
+                meta: tableError.meta,
+                projectId: id,
+                dataType: typeof body.weeklyFMSReviewSections
+              });
+              // Re-throw with detailed error message including Prisma error code if available
+              const errorMessage = `Failed to save weeklyFMSReviewSections to table: ${tableError.message}${tableError.code ? ` (Code: ${tableError.code})` : ''}${tableError.meta ? ` (Meta: ${JSON.stringify(tableError.meta)})` : ''}`;
+              throw new Error(errorMessage);
+            }
+          }
+          
+          if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
+            try {
+              console.log('💾 PUT /api/projects/[id]: Saving monthlyFMSReviewSections to table', {
+                projectId: id,
+                type: typeof body.monthlyFMSReviewSections,
+                isString: typeof body.monthlyFMSReviewSections === 'string',
+                length: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.length : 'N/A',
+                preview: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.substring(0, 200) : JSON.stringify(body.monthlyFMSReviewSections).substring(0, 200)
+              });
+              // Note: saveMonthlyFMSReviewSectionsToTable uses prisma directly, not tx
+              // Don't fail the request if table save fails - JSON field is already saved above
+              await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections)
+              console.log('✅ PUT /api/projects/[id]: Successfully saved monthlyFMSReviewSections to table');
+            } catch (tableError) {
+              console.error('⚠️ WARNING: Error saving monthlyFMSReviewSections to table (JSON field already saved):', {
+                error: tableError.message,
+                stack: tableError.stack,
+                code: tableError.code,
+                meta: tableError.meta,
+                projectId: id,
+                dataType: typeof body.monthlyFMSReviewSections
+              });
+              // Don't fail the request - JSON field is already saved, table save is optional
+              // This allows data to persist even if table doesn't exist yet
+            }
+          }
+          
+          return project;
         });
         
-        // CRITICAL: Save documentSections and weeklyFMSReviewSections to tables
-        // The GET endpoint reads from tables, so we must save to tables for persistence
-        // Pass the original body value (could be string or object) - save functions handle both
-        if (body.documentSections !== undefined && body.documentSections !== null) {
-          try {
-            console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', {
-              projectId: id,
-              type: typeof body.documentSections,
-              isString: typeof body.documentSections === 'string',
-              length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
-              preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : JSON.stringify(body.documentSections).substring(0, 200)
-            });
-            // Pass the original body value - saveDocumentSectionsToTable handles string parsing
-            await saveDocumentSectionsToTable(id, body.documentSections)
-            console.log('✅ PUT /api/projects/[id]: Successfully saved documentSections to table');
-          } catch (tableError) {
-            console.error('❌ CRITICAL: Error saving documentSections to table:', {
-              error: tableError.message,
-              stack: tableError.stack,
-              projectId: id,
-              dataType: typeof body.documentSections
-            });
-            // Re-throw to fail the request - table save is critical for persistence
-            throw new Error(`Failed to save documentSections to table: ${tableError.message}`);
-          }
-        }
-        
-        if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
-          try {
-            console.log('💾 PUT /api/projects/[id]: Saving weeklyFMSReviewSections to table', {
-              projectId: id,
-              type: typeof body.weeklyFMSReviewSections,
-              isString: typeof body.weeklyFMSReviewSections === 'string',
-              length: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 'N/A',
-              preview: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.substring(0, 200) : JSON.stringify(body.weeklyFMSReviewSections).substring(0, 200)
-            });
-            // Pass the original body value - saveWeeklyFMSReviewSectionsToTable handles string parsing
-            await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
-            console.log('✅ PUT /api/projects/[id]: Successfully saved weeklyFMSReviewSections to table');
-          } catch (tableError) {
-            console.error('❌ CRITICAL: Error saving weeklyFMSReviewSections to table:', {
-              error: tableError.message,
-              stack: tableError.stack,
-              projectId: id,
-              dataType: typeof body.weeklyFMSReviewSections
-            });
-            // Re-throw to fail the request - table save is critical for persistence
-            throw new Error(`Failed to save weeklyFMSReviewSections to table: ${tableError.message}`);
-          }
-        }
-        
-        if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
-          try {
-            console.log('💾 PUT /api/projects/[id]: Saving monthlyFMSReviewSections to table', {
-              projectId: id,
-              type: typeof body.monthlyFMSReviewSections,
-              isString: typeof body.monthlyFMSReviewSections === 'string',
-              length: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.length : 'N/A',
-              preview: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.substring(0, 200) : JSON.stringify(body.monthlyFMSReviewSections).substring(0, 200)
-            });
-            // Pass the original body value - saveMonthlyFMSReviewSectionsToTable handles string parsing
-            // Don't fail the request if table save fails - JSON field is already saved above
-            await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections)
-            console.log('✅ PUT /api/projects/[id]: Successfully saved monthlyFMSReviewSections to table');
-          } catch (tableError) {
-            console.error('⚠️ WARNING: Error saving monthlyFMSReviewSections to table (JSON field already saved):', {
-              error: tableError.message,
-              stack: tableError.stack,
-              projectId: id,
-              dataType: typeof body.monthlyFMSReviewSections
-            });
-            // Don't fail the request - JSON field is already saved, table save is optional
-            // This allows data to persist even if table doesn't exist yet
-          }
-        }
-        
-        return ok(res, { project })
+        return ok(res, { project: result })
       } catch (dbError) {
-        console.error('❌ Database error updating project:', dbError)
+        console.error('❌ Database error updating project:', {
+          message: dbError.message,
+          stack: dbError.stack,
+          code: dbError.code,
+          meta: dbError.meta,
+          projectId: id
+        })
         // Check if it's a "record not found" error (P2025)
         if (dbError.code === 'P2025') {
           return notFound(res, 'Project not found')
         }
-        return serverError(res, 'Failed to update project', dbError.message)
+        // Return more detailed error message to help with debugging
+        const errorMessage = dbError.message || 'Failed to update project';
+        return serverError(res, errorMessage, dbError.message)
       }
     }
 

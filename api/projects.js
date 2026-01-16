@@ -669,8 +669,17 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
             });
             totalSectionsCreated++;
           } catch (createError) {
-            console.error(`❌ Error creating weekly FMS review section "${section.name}" for year ${year}:`, createError);
-            throw createError;
+            console.error(`❌ Error creating weekly FMS review section "${section.name}" for year ${year}:`, {
+              error: createError.message,
+              stack: createError.stack,
+              code: createError.code,
+              meta: createError.meta,
+              sectionName: section.name,
+              year: year,
+              projectId: projectId
+            });
+            // Re-throw with more context
+            throw new Error(`Failed to create weekly FMS review section "${section.name}" for year ${year}: ${createError.message}${createError.code ? ` (Code: ${createError.code})` : ''}`);
           }
         }
       }
@@ -757,8 +766,16 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
           });
           totalSectionsCreated++;
         } catch (createError) {
-          console.error(`❌ Error creating weekly FMS review section "${section.name}":`, createError);
-          throw createError;
+          console.error(`❌ Error creating weekly FMS review section "${section.name}":`, {
+            error: createError.message,
+            stack: createError.stack,
+            code: createError.code,
+            meta: createError.meta,
+            sectionName: section.name,
+            projectId: projectId
+          });
+          // Re-throw with more context
+          throw new Error(`Failed to create weekly FMS review section "${section.name}": ${createError.message}${createError.code ? ` (Code: ${createError.code})` : ''}`);
         }
       }
       console.log(`✅ saveWeeklyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
@@ -770,10 +787,19 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
     console.error('❌ Error saving weeklyFMSReviewSections to table:', {
       error: error.message,
       stack: error.stack,
+      code: error.code,
+      meta: error.meta,
       projectId,
       jsonDataType: typeof jsonData
     });
-    // Re-throw the error so the caller knows it failed
+    // Re-throw the error so the caller knows it failed, but preserve original error details
+    if (error.code || error.meta) {
+      // If it's a Prisma error, include code and meta in the message
+      const enhancedError = new Error(`Failed to save weeklyFMSReviewSections: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}${error.meta ? ` (Meta: ${JSON.stringify(error.meta)})` : ''}`);
+      enhancedError.code = error.code;
+      enhancedError.meta = error.meta;
+      throw enhancedError;
+    }
     throw error;
   }
 }
