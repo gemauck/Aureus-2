@@ -345,11 +345,17 @@ async function handler(req, res) {
                     let commentText = null;
                     let commentLink = link || null;
                     let taskTitle = null;
+                    let taskDescription = null;
+                    let taskStatus = null;
+                    let taskPriority = null;
+                    let taskDueDate = null;
+                    let taskListName = null;
                     
                     if (metadata && (type === 'comment' || type === 'mention' || type === 'task')) {
                         try {
                             const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
                             const projectId = metadataObj?.projectId;
+                            const taskId = metadataObj?.taskId;
                             
                             // Extract comment text from metadata
                             if (metadataObj?.commentText) {
@@ -358,9 +364,50 @@ async function handler(req, res) {
                                 commentText = metadataObj.fullComment;
                             }
                             
-                            // Extract task title from metadata
+                            // Extract task information from metadata (if available)
                             if (metadataObj?.taskTitle) {
                                 taskTitle = metadataObj.taskTitle;
+                            }
+                            if (metadataObj?.taskDescription) {
+                                taskDescription = metadataObj.taskDescription;
+                            }
+                            if (metadataObj?.taskStatus) {
+                                taskStatus = metadataObj.taskStatus;
+                            }
+                            if (metadataObj?.taskPriority) {
+                                taskPriority = metadataObj.taskPriority;
+                            }
+                            if (metadataObj?.taskDueDate) {
+                                taskDueDate = metadataObj.taskDueDate;
+                            }
+                            if (metadataObj?.taskListName) {
+                                taskListName = metadataObj.taskListName;
+                            }
+                            
+                            // If we have a taskId but missing task details, fetch from database
+                            if (taskId && (!taskDescription || !taskStatus || !taskPriority)) {
+                                try {
+                                    const task = await prisma.task.findUnique({
+                                        where: { id: taskId },
+                                        include: {
+                                            list: {
+                                                select: { name: true }
+                                            }
+                                        }
+                                    });
+                                    
+                                    if (task) {
+                                        if (!taskTitle) taskTitle = task.title || null;
+                                        if (!taskDescription) taskDescription = task.description || null;
+                                        if (!taskStatus) taskStatus = task.status || 'To Do';
+                                        if (!taskPriority) taskPriority = task.priority || 'Medium';
+                                        if (!taskDueDate) taskDueDate = task.dueDate ? task.dueDate.toISOString() : null;
+                                        if (!taskListName && task.list) taskListName = task.list.name || null;
+                                    }
+                                } catch (taskFetchError) {
+                                    console.warn('⚠️ Could not fetch task details from database:', taskFetchError.message);
+                                    // Continue with metadata values only
+                                }
                             }
                             
                             if (projectId) {
@@ -532,6 +579,11 @@ async function handler(req, res) {
                             commentText,
                             commentLink,
                             taskTitle,
+                            taskDescription,
+                            taskStatus,
+                            taskPriority,
+                            taskDueDate,
+                            taskListName,
                             isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task')),
                             skipNotificationCreation: true // Skip because notification is already created above
                         }

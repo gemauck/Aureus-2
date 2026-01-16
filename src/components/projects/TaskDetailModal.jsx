@@ -1127,10 +1127,16 @@ const TaskDetailModal = ({
                                 metadata: {
                                     taskId: taskId,
                                     taskTitle: taskTitle,
+                                    taskDescription: editedTask.description || task?.description || null,
+                                    taskStatus: editedTask.status || task?.status || 'To Do',
+                                    taskPriority: editedTask.priority || task?.priority || 'Medium',
+                                    taskDueDate: editedTask.dueDate || task?.dueDate || null,
                                     projectId: project?.id,
                                     projectName: projectName,
+                                    clientId: project?.clientId || null,
                                     commentAuthor: currentUser.name,
-                                    commentText: newComment
+                                    commentText: newComment,
+                                    commentId: commentId
                                 }
                             })
                         });
@@ -1167,10 +1173,16 @@ const TaskDetailModal = ({
                                     metadata: {
                                         taskId: taskId,
                                         taskTitle: taskTitle,
+                                        taskDescription: editedTask.description || task?.description || null,
+                                        taskStatus: editedTask.status || task?.status || 'To Do',
+                                        taskPriority: editedTask.priority || task?.priority || 'Medium',
+                                        taskDueDate: editedTask.dueDate || task?.dueDate || null,
                                         projectId: project?.id,
                                         projectName: projectName,
+                                        clientId: project?.clientId || null,
                                         commentAuthor: currentUser.name,
-                                        commentText: newComment
+                                        commentText: newComment,
+                                        commentId: commentId
                                     }
                                 })
                             });

@@ -577,6 +577,11 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         commentText, 
         commentLink, 
         taskTitle,
+        taskDescription,
+        taskStatus,
+        taskPriority,
+        taskDueDate,
+        taskListName,
         isProjectRelated,
         // Notification creation parameters (if userId provided, create in-app notification)
         userId,

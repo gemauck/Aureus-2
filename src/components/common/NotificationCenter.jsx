@@ -11,7 +11,7 @@ const NotificationCenter = () => {
     const consecutiveFailuresRef = useRef(0);
     const pollingIntervalRef = useRef(null);
     const isPollingPausedRef = useRef(false);
-    const pollingDelayRef = useRef(120000); // Start with 120 seconds (2 minutes), will increase on rate limits
+    const pollingDelayRef = useRef(15000); // Start with 15 seconds for near real-time updates, will increase on rate limits
     
     // Helper function to restart polling - will be defined after loadNotifications
     const restartPollingRef = useRef(null);
@@ -95,7 +95,7 @@ const NotificationCenter = () => {
             const waitTime = waitSeconds * 1000;
             setTimeout(() => {
                 isPollingPausedRef.current = false;
-                pollingDelayRef.current = 120000; // Reset to 2 minutes
+                pollingDelayRef.current = 15000; // Reset to 15 seconds
                 if (restartPollingRef.current) restartPollingRef.current();
             }, waitTime);
             return;
@@ -138,14 +138,14 @@ const NotificationCenter = () => {
                 // Reset failure counter on success
                 if (consecutiveFailuresRef.current > 0) {
                     consecutiveFailuresRef.current = 0;
-                    // Reset polling delay to normal (120 seconds / 2 minutes)
-                    pollingDelayRef.current = 120000;
+                    // Reset polling delay to normal (15 seconds)
+                    pollingDelayRef.current = 15000;
                     // Resume polling if it was paused
                     if (isPollingPausedRef.current) {
                         isPollingPausedRef.current = false;
                         // Restart polling with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
-                    } else if (pollingDelayRef.current !== 120000) {
+                    } else if (pollingDelayRef.current !== 15000) {
                         // If delay was increased due to rate limiting, restart with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
                     }
@@ -171,7 +171,7 @@ const NotificationCenter = () => {
                     // Schedule restart after rate limit expires
                     setTimeout(() => {
                         isPollingPausedRef.current = false;
-                        pollingDelayRef.current = 120000; // Reset to 2 minutes
+                        pollingDelayRef.current = 15000; // Reset to 15 seconds
                         consecutiveFailuresRef.current = 0; // Reset failure counter
                         if (restartPollingRef.current) restartPollingRef.current();
                     }, waitSeconds * 1000);
@@ -248,12 +248,21 @@ const NotificationCenter = () => {
         setTimeout(() => {
             loadNotifications();
             restartPollingRef.current();
-        }, 2000); // Small 2-second delay to avoid immediate requests on page load
+        }, 1000); // Small 1-second delay to avoid immediate requests on page load
+        
+        // Reload notifications when window regains focus (user returns to tab)
+        const handleFocus = () => {
+            if (!isPollingPausedRef.current) {
+                loadNotifications();
+            }
+        };
+        window.addEventListener('focus', handleFocus);
         
         return () => {
             if (pollingIntervalRef.current) {
                 clearInterval(pollingIntervalRef.current);
             }
+            window.removeEventListener('focus', handleFocus);
         };
     }, []);
     

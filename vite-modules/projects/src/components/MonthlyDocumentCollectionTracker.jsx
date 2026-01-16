@@ -2640,8 +2640,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }, 300);
         };
         
-        // Check immediately if hash params exist
-        if (window.location.hash.includes('docSectionId=') || window.location.search.includes('docSectionId=')) {
+        // Check immediately if hash params or commentId exist
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        if (hash.includes('docSectionId=') || search.includes('docSectionId=') || 
+            hash.includes('commentId=') || search.includes('commentId=')) {
+            console.log('🔍 MonthlyDocumentCollectionTracker: Found deep link params on load, will check');
             checkOnLoad();
         }
         

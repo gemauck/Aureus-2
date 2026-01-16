@@ -3317,6 +3317,9 @@ function initializeProjectDetail() {
                 });
             }
             
+            // Get task details for enhanced notification
+            const task = tasks.find(t => t.id === finalTaskId);
+            
             await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -3328,8 +3331,14 @@ function initializeProjectDetail() {
                     metadata: {
                         taskId: finalTaskId,
                         taskTitle,
+                        taskDescription: task?.description || null,
+                        taskStatus: task?.status || 'To Do',
+                        taskPriority: task?.priority || 'Medium',
+                        taskDueDate: task?.dueDate || null,
+                        taskListId: task?.listId || null,
                         projectId: project?.id,
                         projectName,
+                        clientId: project?.clientId || null,
                         commentAuthor: currentUser.name,
                         commentText,
                         context: contextLabel
@@ -4266,6 +4275,9 @@ function initializeProjectDetail() {
                         // Build task-specific link with query parameter for direct navigation to task
                         const taskLink = updatedTaskData.id ? `${projectLink}?task=${updatedTaskData.id}` : projectLink;
                         
+                        // Get task list name for location context (if available)
+                        const taskListName = lists?.find(list => list.id === updatedTaskData.listId)?.name || null;
+                        
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -4277,8 +4289,15 @@ function initializeProjectDetail() {
                                 metadata: {
                                     taskId: updatedTaskData.id,
                                     taskTitle: updatedTaskData.title,
+                                    taskDescription: updatedTaskData.description || null,
+                                    taskStatus: updatedTaskData.status || 'To Do',
+                                    taskPriority: updatedTaskData.priority || 'Medium',
+                                    taskDueDate: updatedTaskData.dueDate || null,
+                                    taskListId: updatedTaskData.listId || null,
+                                    taskListName: taskListName,
                                     projectId: project.id,
                                     projectName: project.name,
+                                    clientId: project.clientId || null,
                                     assignedBy: currentUser.name
                                 }
                             })
@@ -4316,6 +4335,9 @@ function initializeProjectDetail() {
                         // Build task-specific link with query parameter for direct navigation to task
                         const taskLink = updatedTaskData.id ? `${projectLink}?task=${updatedTaskData.id}` : projectLink;
                         
+                        // Get task list name for location context (if available)
+                        const taskListName = lists?.find(list => list.id === updatedTaskData.listId)?.name || null;
+                        
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -4327,8 +4349,15 @@ function initializeProjectDetail() {
                                 metadata: {
                                     taskId: updatedTaskData.id,
                                     taskTitle: updatedTaskData.title,
+                                    taskDescription: updatedTaskData.description || null,
+                                    taskStatus: updatedTaskData.status || 'To Do',
+                                    taskPriority: updatedTaskData.priority || 'Medium',
+                                    taskDueDate: updatedTaskData.dueDate || null,
+                                    taskListId: updatedTaskData.listId || null,
+                                    taskListName: taskListName,
                                     projectId: project.id,
                                     projectName: project.name,
+                                    clientId: project.clientId || null,
                                     assignedBy: currentUser.name
                                 }
                             })
