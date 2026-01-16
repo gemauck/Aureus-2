@@ -1185,6 +1185,93 @@ function doesOpportunityBelongToClient(opportunity, client) {
         // Otherwise, let the drop handler clear state in its finally block
     };
 
+    const handleKanbanDrop = async (e, targetColumn, groupBy) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (!draggedItem || !targetColumn) {
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
+            return;
+        }
+
+        const token = storage.getToken();
+        const itemType = draggedType || draggedItem.type;
+        
+        try {
+            if (groupBy === 'stage') {
+                // Update AIDA stage
+                const newStage = targetColumn;
+                
+                if (itemType === 'lead') {
+                    if (token && window.DatabaseAPI) {
+                        await window.DatabaseAPI.updateLead(draggedItem.id, { stage: newStage });
+                        updateLeadStageOptimistically(draggedItem.id, newStage);
+                    } else {
+                        updateLeadStageOptimistically(draggedItem.id, newStage);
+                    }
+                } else if (itemType === 'opportunity') {
+                    if (token && window.api?.updateOpportunity) {
+                        await window.api.updateOpportunity(draggedItem.id, { stage: newStage });
+                    } else if (token && window.DatabaseAPI?.updateOpportunity) {
+                        await window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: newStage });
+                    }
+                    updateOpportunityStageOptimistically(draggedItem.clientId, draggedItem.id, newStage);
+                }
+            } else if (groupBy === 'status') {
+                // Update status
+                const newStatus = targetColumn;
+                
+                if (itemType === 'lead') {
+                    if (token && window.DatabaseAPI) {
+                        await window.DatabaseAPI.updateLead(draggedItem.id, { status: newStatus });
+                        setLeads(prevLeads => {
+                            const updated = prevLeads.map(lead =>
+                                lead.id === draggedItem.id ? { ...lead, status: newStatus } : lead
+                            );
+                            storage.setLeads(updated);
+                            return updated;
+                        });
+                    }
+                } else if (itemType === 'opportunity') {
+                    if (token && window.api?.updateOpportunity) {
+                        await window.api.updateOpportunity(draggedItem.id, { status: newStatus });
+                    } else if (token && window.DatabaseAPI?.updateOpportunity) {
+                        await window.DatabaseAPI.updateOpportunity(draggedItem.id, { status: newStatus });
+                    }
+                    setClients(prevClients => {
+                        const updated = prevClients.map(client => {
+                            if (client.id === draggedItem.clientId) {
+                                const updatedOpportunities = client.opportunities.map(opp =>
+                                    opp.id === draggedItem.id ? { ...opp, status: newStatus } : opp
+                                );
+                                return { ...client, opportunities: updatedOpportunities };
+                            }
+                            return client;
+                        });
+                        storage.setClients(updated);
+                        return updated;
+                    });
+                }
+            }
+            
+            // Refresh data after a short delay
+            setTimeout(() => {
+                setRefreshKey(k => k + 1);
+            }, 500);
+        } catch (error) {
+            console.error('❌ Pipeline: Failed to update item in Kanban:', error);
+            alert('Failed to save change. Please try again.');
+        } finally {
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
+        }
+    };
+
     // Mobile touch drag handlers - use document-level listeners for better mobile support
     const handleTouchStart = (e, item, type) => {
         if (e.touches.length !== 1) return; // Only handle single touch
@@ -1583,6 +1670,261 @@ function doesOpportunityBelongToClient(opportunity, client) {
     const OpportunityDetailModalComponent = window.OpportunityDetailModal;
     const availableProjects = storage?.getProjects?.() || [];
 
+    // Kanban View Component
+    const KanbanView = ({ 
+        items, 
+        groupBy, 
+        pipelineStages, 
+        statusOptions,
+        onItemClick,
+        onItemDragStart,
+        onItemDrop,
+        onToggleStar,
+        normalizeStageToAida,
+        normalizeLifecycleStage,
+        formatCurrency,
+        getLifecycleBadgeColor,
+        draggedItem,
+        draggedOverStage
+    }) => {
+        // Determine columns based on groupBy
+        const columns = useMemo(() => {
+            if (groupBy === 'stage') {
+                return pipelineStages.map(stage => ({
+                    id: stage.id,
+                    name: stage.name,
+                    color: stage.color,
+                    icon: stage.icon
+                }));
+            } else {
+                // Group by status
+                return statusOptions.map(status => ({
+                    id: status.toLowerCase().replace(/\s+/g, '-'),
+                    name: status,
+                    color: 'blue',
+                    icon: 'fa-circle'
+                }));
+            }
+        }, [groupBy, pipelineStages, statusOptions]);
+
+        // Group items by column
+        const itemsByColumn = useMemo(() => {
+            return columns.map(column => {
+                const columnItems = items.filter(item => {
+                    if (groupBy === 'stage') {
+                        const normalizedStage = normalizeStageToAida(item.stage);
+                        return normalizedStage === column.name;
+                    } else {
+                        const normalizedStatus = normalizeLifecycleStage(item.status || 'Potential');
+                        return normalizedStatus === column.name;
+                    }
+                });
+                return {
+                    column,
+                    items: columnItems
+                };
+            });
+        }, [columns, items, groupBy, normalizeStageToAida, normalizeLifecycleStage]);
+
+        const handleDragOver = (e, columnName) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e?.dataTransfer) {
+                e.dataTransfer.dropEffect = 'move';
+            }
+            setDraggedOverStage(columnName);
+        };
+
+        const handleDragLeave = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Only clear if we're actually leaving the column
+            const relatedTarget = e.relatedTarget;
+            if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+                setDraggedOverStage(null);
+            }
+        };
+
+        const handleDrop = (e, columnName) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (onItemDrop) {
+                onItemDrop(e, columnName, groupBy);
+            }
+        };
+
+        const getColumnColorClasses = (color) => {
+            const colorMap = {
+                gray: 'bg-gray-50 border-gray-200',
+                blue: 'bg-blue-50 border-blue-200',
+                yellow: 'bg-yellow-50 border-yellow-200',
+                green: 'bg-green-50 border-green-200'
+            };
+            return colorMap[color] || colorMap.gray;
+        };
+
+        const getColumnHeaderColorClasses = (color) => {
+            const colorMap = {
+                gray: 'bg-gray-100 text-gray-800 border-gray-300',
+                blue: 'bg-blue-100 text-blue-800 border-blue-300',
+                yellow: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                green: 'bg-green-100 text-green-800 border-green-300'
+            };
+            return colorMap[color] || colorMap.gray;
+        };
+
+        return (
+            <div className="w-full overflow-x-auto pb-4">
+                <div className="flex gap-4 min-w-max px-1">
+                    {itemsByColumn.map(({ column, items: columnItems }) => {
+                        const isDraggedOver = draggedOverStage === column.name;
+                        const columnColorClasses = getColumnColorClasses(column.color);
+                        const headerColorClasses = getColumnHeaderColorClasses(column.color);
+                        
+                        return (
+                            <div
+                                key={column.id}
+                                data-pipeline-stage={column.name}
+                                className={`flex-shrink-0 w-72 sm:w-80 transition-all duration-200 ${
+                                    isDraggedOver ? 'scale-105' : ''
+                                }`}
+                                onDragOver={(e) => handleDragOver(e, column.name)}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, column.name)}
+                            >
+                                {/* Column Header */}
+                                <div className={`${headerColorClasses} rounded-t-lg px-4 py-3 border-b-2 mb-2`}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <i className={`fas ${column.icon} text-sm`}></i>
+                                            <h3 className="text-sm font-semibold">{column.name}</h3>
+                                            <span className="px-2 py-0.5 text-xs rounded-full bg-white/70 font-medium">
+                                                {columnItems.length}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Column Cards */}
+                                <div 
+                                    className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-200 ${
+                                        isDraggedOver ? 'border-blue-400 shadow-lg' : 'border-transparent'
+                                    }`}
+                                >
+                                    {columnItems.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-400">
+                                            <i className="fas fa-inbox text-2xl mb-2"></i>
+                                            <p className="text-xs">No items</p>
+                                        </div>
+                                    ) : (
+                                        columnItems.map(item => {
+                                            const isDragging = draggedItem?.id === item.id;
+                                            const itemType = item.type || 'lead';
+                                            const itemName = item.name || item.company || item.clientName || 'Unnamed';
+                                            const itemValue = item.value || 0;
+                                            const itemIndustry = item.industry || '';
+                                            const itemStatus = item.status || 'Potential';
+                                            const itemStage = normalizeStageToAida(item.stage);
+                                            
+                                            return (
+                                                <div
+                                                    key={`${itemType}-${item.id}`}
+                                                    draggable
+                                                    onDragStart={(e) => {
+                                                        if (onItemDragStart) {
+                                                            onItemDragStart(e, item, itemType);
+                                                        }
+                                                    }}
+                                                    onDragEnd={handleDragEnd}
+                                                    onClick={() => {
+                                                        if (!isDragging && onItemClick) {
+                                                            onItemClick(item);
+                                                        }
+                                                    }}
+                                                    className={`bg-white rounded-lg p-3 cursor-pointer transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
+                                                        isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
+                                                    }`}
+                                                >
+                                                    {/* Card Header */}
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-sm font-semibold text-gray-900 truncate">
+                                                                {itemName}
+                                                            </h4>
+                                                            {itemIndustry && (
+                                                                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                                                                    {itemIndustry}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (onToggleStar) {
+                                                                    onToggleStar(e, item);
+                                                                }
+                                                            }}
+                                                            className={`ml-2 flex-shrink-0 transition-colors ${
+                                                                item.isStarred 
+                                                                    ? 'text-yellow-500' 
+                                                                    : 'text-gray-300 hover:text-yellow-400'
+                                                            }`}
+                                                        >
+                                                            <i className={`fas fa-star text-sm ${item.isStarred ? 'fas' : 'far'}`}></i>
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Card Body - Minimal Info */}
+                                                    <div className="space-y-1.5">
+                                                        {/* Value */}
+                                                        {itemValue > 0 && (
+                                                            <div className="text-xs font-semibold text-blue-600">
+                                                                {formatCurrency(itemValue)}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Type Badge */}
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <span className={`px-2 py-0.5 text-[10px] rounded-full font-medium ${
+                                                                itemType === 'lead' 
+                                                                    ? 'bg-blue-100 text-blue-700' 
+                                                                    : 'bg-purple-100 text-purple-700'
+                                                            }`}>
+                                                                {itemType === 'lead' ? 'Lead' : 'Opportunity'}
+                                                            </span>
+                                                            
+                                                            {/* Show opposite grouping as badge */}
+                                                            {groupBy === 'stage' && (
+                                                                <span className={`px-2 py-0.5 text-[10px] rounded-full ${getLifecycleBadgeColor(itemStatus)}`}>
+                                                                    {normalizeLifecycleStage(itemStatus)}
+                                                                </span>
+                                                            )}
+                                                            {groupBy === 'status' && (
+                                                                <span className={`px-2 py-0.5 text-[10px] rounded-full ${
+                                                                    itemStage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
+                                                                    itemStage === 'Interest' ? 'bg-blue-100 text-blue-800' :
+                                                                    itemStage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
+                                                                    itemStage === 'Action' ? 'bg-green-100 text-green-800' :
+                                                                    'bg-gray-100 text-gray-800'
+                                                                }`}>
+                                                                    {itemStage}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
     // Render pipeline card
     const PipelineCard = ({ item }) => {
         const age = getDealAge(item.createdDate);
@@ -1946,23 +2288,65 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </div>
                 </div>
 
-                {/* Sort By */}
-                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                {/* View Toggle & Kanban Options */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200 flex-wrap gap-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Sort by:</span>
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="value-desc">Value: High to Low</option>
-                            <option value="value-asc">Value: Low to High</option>
-                            <option value="date-desc">Newest First</option>
-                            <option value="date-asc">Oldest First</option>
-                            <option value="name-asc">Name: A to Z</option>
-                            <option value="name-desc">Name: Z to A</option>
-                        </select>
+                        <span className="text-sm text-gray-600">View:</span>
+                        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                    viewMode === 'list'
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                            >
+                                <i className="fas fa-list mr-1.5"></i>
+                                List
+                            </button>
+                            <button
+                                onClick={() => setViewMode('kanban')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                    viewMode === 'kanban'
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                            >
+                                <i className="fas fa-columns mr-1.5"></i>
+                                Kanban
+                            </button>
+                        </div>
+                        {viewMode === 'kanban' && (
+                            <div className="flex items-center gap-2 ml-4">
+                                <span className="text-sm text-gray-600">Group by:</span>
+                                <select
+                                    value={kanbanGroupBy}
+                                    onChange={(e) => setKanbanGroupBy(e.target.value)}
+                                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="stage">AIDA Stage</option>
+                                    <option value="status">Status</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
+                    {viewMode === 'list' && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">Sort by:</span>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="value-desc">Value: High to Low</option>
+                                <option value="value-asc">Value: Low to High</option>
+                                <option value="date-desc">Newest First</option>
+                                <option value="date-asc">Oldest First</option>
+                                <option value="name-asc">Name: A to Z</option>
+                                <option value="name-desc">Name: Z to A</option>
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 {/* Active Filters Count */}
@@ -1999,8 +2383,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 )}
             </div>
 
-            {/* Main Content - List View Only */}
-            <ListView />
+            {/* Main Content - List or Kanban View */}
+            {viewMode === 'list' ? (
+                <ListView />
+            ) : (
+                <KanbanView 
+                    items={filteredItems}
+                    groupBy={kanbanGroupBy}
+                    pipelineStages={pipelineStages}
+                    statusOptions={statusOptions}
+                    onItemClick={openDealDetail}
+                    onItemDragStart={handleDragStart}
+                    onItemDrop={handleKanbanDrop}
+                    onToggleStar={handleToggleStar}
+                    normalizeStageToAida={normalizeStageToAida}
+                    normalizeLifecycleStage={normalizeLifecycleStage}
+                    formatCurrency={formatCurrency}
+                    getLifecycleBadgeColor={getLifecycleBadgeColor}
+                    draggedItem={draggedItem}
+                    draggedOverStage={draggedOverStage}
+                />
+            )}
 
             {/* Fallback detail modals when integration callbacks are unavailable */}
             {!onOpenLead && fallbackDeal?.type === 'lead' && LeadDetailModalComponent && (
