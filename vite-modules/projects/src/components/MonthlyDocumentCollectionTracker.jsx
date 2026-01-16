@@ -2391,6 +2391,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             else if (deepCommentId && !deepSectionId && !deepDocumentId && !deepMonth) {
                 console.log('📧 MonthlyDocumentCollectionTracker: Searching for comment with ID:', deepCommentId);
                 
+                // If sections aren't loaded yet, wait and retry
+                if (!sections || sections.length === 0) {
+                    console.log('⏳ Sections not loaded yet, will retry in 500ms');
+                    setTimeout(() => {
+                        checkAndOpenDeepLink();
+                    }, 500);
+                    return;
+                }
+                
                 // Search through all sections and documents to find the comment
                 let foundComment = null;
                 let foundSectionId = null;
