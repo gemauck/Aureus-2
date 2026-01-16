@@ -1321,6 +1321,10 @@ const DatabaseAPI = {
         const params = [];
         if (status) params.push(`status=${encodeURIComponent(status)}`);
         if (projectId) params.push(`projectId=${encodeURIComponent(projectId)}`);
+        // If no parameters provided, use lightweight mode to get user's tasks
+        if (params.length === 0) {
+            params.push('lightweight=true');
+        }
         if (params.length > 0) {
             endpoint += `?${params.join('&')}`;
         }
