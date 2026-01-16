@@ -1931,6 +1931,11 @@ function initializeProjectDetail() {
                 // Fallback: If we only have commentId (missing section/doc/month), 
                 // still switch to document collection tab and let MonthlyDocumentCollectionTracker search for it
                 else if (deepCommentId && !deepSectionId && !deepDocumentId && !deepMonth) {
+                    console.log('📧 ProjectDetail: Found commentId-only deep link:', deepCommentId, {
+                        activeSection,
+                        hasDocCollection: project?.hasDocumentCollectionProcess
+                    });
+                    
                     // Check if project has document collection process
                     const projectHasDocCollection = project?.hasDocumentCollectionProcess === true || 
                                                    project?.hasDocumentCollectionProcess === 'true' ||
@@ -1938,10 +1943,16 @@ function initializeProjectDetail() {
                                                    (typeof project?.hasDocumentCollectionProcess === 'string' && 
                                                     project?.hasDocumentCollectionProcess?.toLowerCase() === 'true');
                     
+                    console.log('📧 ProjectDetail: projectHasDocCollection:', projectHasDocCollection);
+                    
                     if (projectHasDocCollection && activeSection !== 'documentCollection') {
                         // Switch to document collection tab - the tracker will search for the comment
                         console.log('📧 ProjectDetail: Switching to document collection tab to search for comment:', deepCommentId);
                         switchSection('documentCollection');
+                    } else if (projectHasDocCollection && activeSection === 'documentCollection') {
+                        console.log('📧 ProjectDetail: Already on document collection tab, comment search should run in tracker');
+                    } else {
+                        console.log('⚠️ ProjectDetail: Cannot switch - projectHasDocCollection:', projectHasDocCollection, 'activeSection:', activeSection);
                     }
                 }
             } catch (error) {
