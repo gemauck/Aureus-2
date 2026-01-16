@@ -356,12 +356,20 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
     // Simplified loading - load from database, use prop as fallback
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (retryCount = 0) => {
         if (!project?.id) return;
         
-        // Don't reload if we're currently saving - wait for save to complete
+        // Don't reload if we're currently saving - wait for save to complete, then retry
         if (isSavingRef.current) {
-            console.log('⏸️ Load skipped: save in progress');
+            console.log('⏸️ Load skipped: save in progress, will retry...');
+            // Retry after a short delay (max 3 retries)
+            if (retryCount < 3) {
+                setTimeout(() => {
+                    loadData(retryCount + 1);
+                }, 500);
+            } else {
+                console.warn('⚠️ Load failed after retries: save still in progress');
+            }
             return;
         }
         
@@ -385,7 +393,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     const normalized = normalizeSectionsByYear(freshProject.monthlyFMSReviewSections);
                     console.log('📥 Normalized sections:', { 
                         yearKeys: Object.keys(normalized),
-                        sectionsCount: normalized[selectedYear]?.length || 0
+                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
                     });
                     setSectionsByYear(normalized);
                     sectionsRef.current = normalized;
@@ -421,15 +429,20 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.monthlyFMSReviewSections, selectedYear]);
+    }, [project?.id, project?.monthlyFMSReviewSections]);
     
     // Load data on mount and when project changes
     // OPTIMIZATION: Don't reload when only year changes - data is already loaded for all years
     const lastProjectIdRef = useRef(null);
+    const hasLoadedRef = useRef(false);
     useEffect(() => {
-        if (project?.id && project.id !== lastProjectIdRef.current) {
-            lastProjectIdRef.current = project.id;
-            loadData();
+        if (project?.id) {
+            // Load on initial mount or when project ID changes
+            if (project.id !== lastProjectIdRef.current || !hasLoadedRef.current) {
+                lastProjectIdRef.current = project.id;
+                hasLoadedRef.current = true;
+                loadData();
+            }
         }
     }, [project?.id, loadData]);
     
@@ -1480,23 +1493,31 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
-        const currentUser = getCurrentUser();
-        const newCommentId = Date.now();
-        const newComment = {
-            id: newCommentId,
-            text: commentText,
-            date: new Date().toISOString(),
-            author: currentUser.name,
-            authorEmail: currentUser.email,
-            authorId: currentUser.id
-        };
-        
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        
+        try {
+            const currentUser = getCurrentUser();
+            const newCommentId = Date.now();
+            const newComment = {
+                id: newCommentId,
+                text: commentText,
+                date: new Date().toISOString(),
+                author: currentUser.name,
+                authorEmail: currentUser.email,
+                authorId: currentUser.id
+            };
+            
+            // Validate inputs
+            if (!sectionId || !documentId || !month) {
+                console.error('❌ Missing required fields for comment:', { sectionId, documentId, month });
+                alert('Error: Missing required information. Please try again.');
+                return;
+            }
+            
+            // Use current state (most up-to-date) or fallback to ref
+            const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
+                ? sectionsByYear 
+                : (sectionsRef.current || {});
+            const currentYearSections = latestSectionsByYear[selectedYear] || [];
+            
             const updated = currentYearSections.map(section => {
                 if (String(section.id) === String(sectionId)) {
                 return {
@@ -1516,36 +1537,42 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             return section;
             });
             
-        const updatedSectionsByYear = {
-            ...latestSectionsByYear,
-                [selectedYear]: updated
-            };
-        
-        // Update ref IMMEDIATELY before state update to prevent race conditions
-        sectionsRef.current = updatedSectionsByYear;
-        
-        // Now update state (this will trigger auto-save)
-        setSectionsByYear(updatedSectionsByYear);
-        
-        // Force immediate save (don't wait for debounce) to ensure persistence
-        // Clear any pending debounced save first
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = null;
-        }
-        // Save immediately
-        saveToDatabase();
-        
-        setQuickComment('');
-        
-        // Scroll to show the new comment (reset auto-scroll flag to allow scrolling)
-        setTimeout(() => {
-            if (commentPopupContainerRef.current) {
-                hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
-                commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                hasAutoScrolledRef.current = true; // Set flag again after scrolling
+            const updatedSectionsByYear = {
+                ...latestSectionsByYear,
+                    [selectedYear]: updated
+                };
+            
+            // Update ref IMMEDIATELY before state update to prevent race conditions
+            sectionsRef.current = updatedSectionsByYear;
+            
+            // Now update state (this will trigger auto-save)
+            setSectionsByYear(updatedSectionsByYear);
+            
+            // Force immediate save (don't wait for debounce) to ensure persistence
+            // Clear any pending debounced save first
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
             }
-        }, 100);
+            // Save immediately
+            await saveToDatabase();
+            
+            setQuickComment('');
+            
+            // Scroll to show the new comment (reset auto-scroll flag to allow scrolling)
+            setTimeout(() => {
+                if (commentPopupContainerRef.current) {
+                    hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
+                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                    hasAutoScrolledRef.current = true; // Set flag again after scrolling
+                }
+            }, 100);
+            
+            console.log('✅ Comment added successfully:', { sectionId, documentId, month, commentId: newCommentId });
+        } catch (error) {
+            console.error('❌ Error adding comment:', error);
+            alert('Failed to save comment. Please try again.');
+        }
 
         // ========================================================
         // @MENTIONS - Process mentions and create notifications
@@ -3015,8 +3042,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    if (!section || !document) return;
-                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                    if (!section || !doc) return;
+                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
@@ -3031,11 +3058,11 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && section && document ? (
+                            {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, document.id, month, commentText);
+                                            handleAddComment(section.id, doc.id, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3049,8 +3076,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, quickComment);
+                                            if (e.key === 'Enter' && e.ctrlKey && section && doc) {
+                                                handleAddComment(section.id, doc.id, month, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3060,8 +3087,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, quickComment);
+                                            if (!section || !doc) return;
+                                            handleAddComment(section.id, doc.id, month, quickComment);
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"

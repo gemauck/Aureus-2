@@ -355,12 +355,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
     // Simplified loading - load from database, use prop as fallback
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (retryCount = 0) => {
         if (!project?.id) return;
         
-        // Don't reload if we're currently saving - wait for save to complete
+        // Don't reload if we're currently saving - wait for save to complete, then retry
         if (isSavingRef.current) {
-            console.log('⏸️ Load skipped: save in progress');
+            console.log('⏸️ Load skipped: save in progress, will retry...');
+            // Retry after a short delay (max 3 retries)
+            if (retryCount < 3) {
+                setTimeout(() => {
+                    loadData(retryCount + 1);
+                }, 500);
+            } else {
+                console.warn('⚠️ Load failed after retries: save still in progress');
+            }
             return;
         }
         
@@ -384,7 +392,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     const normalized = normalizeSectionsByYear(freshProject.weeklyFMSReviewSections);
                     console.log('📥 Normalized sections:', { 
                         yearKeys: Object.keys(normalized),
-                        sectionsCount: normalized[selectedYear]?.length || 0
+                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
                     });
                     setSectionsByYear(normalized);
                     sectionsRef.current = normalized;
@@ -413,7 +421,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const normalized = normalizeSectionsByYear(parsed);
                             console.log('📥 Loaded from localStorage:', { 
                                 yearKeys: Object.keys(normalized),
-                                sectionsCount: normalized[selectedYear]?.length || 0
+                                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
                             });
                             setSectionsByYear(normalized);
                             sectionsRef.current = normalized;
@@ -444,15 +452,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.weeklyFMSReviewSections, selectedYear]);
+    }, [project?.id, project?.weeklyFMSReviewSections]);
     
     // Load data on mount and when project changes
     // OPTIMIZATION: Don't reload when only year changes - data is already loaded for all years
     const lastProjectIdRef = useRef(null);
+    const hasLoadedRef = useRef(false);
     useEffect(() => {
-        if (project?.id && project.id !== lastProjectIdRef.current) {
-            lastProjectIdRef.current = project.id;
-            loadData();
+        if (project?.id) {
+            // Load on initial mount or when project ID changes
+            if (project.id !== lastProjectIdRef.current || !hasLoadedRef.current) {
+                lastProjectIdRef.current = project.id;
+                hasLoadedRef.current = true;
+                loadData();
+            }
         }
     }, [project?.id, loadData]);
     
@@ -612,11 +625,32 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => {
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
-                // Fire-and-forget save on unmount
-                saveToDatabase({ skipParentUpdate: true });
+                // Save pending changes on unmount
+                // Note: We can't await in cleanup, but we ensure saves are awaited in handlers
+                // This is a fallback for any edge cases where handlers didn't complete
+                const payload = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
+                    ? sectionsRef.current 
+                    : sectionsByYear;
+                const serialized = JSON.stringify(payload);
+                
+                // Save to localStorage immediately as backup
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, serialized);
+                        console.log('✅ Saved to localStorage on unmount (backup)');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save snapshot to localStorage:', storageError);
+                    }
+                }
+                
+                // Attempt async save (may not complete if page is closing, but localStorage backup helps)
+                saveToDatabase({ skipParentUpdate: true }).catch(error => {
+                    console.error('❌ Error saving on unmount:', error);
+                });
             }
         };
-    }, [project?.id]);
+    }, [project?.id, sectionsByYear]);
     
     // ============================================================
     // TEMPLATE MANAGEMENT - Database storage only
@@ -1402,7 +1436,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // STATUS AND COMMENTS
     // ============================================================
     
-    const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
+    const handleUpdateStatus = useCallback(async (sectionId, documentId, month, status, applyToSelected = false) => {
         
         // Use current state (most up-to-date) or fallback to ref
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
@@ -1475,8 +1509,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately
-        saveToDatabase();
+        // Save immediately and await to ensure it completes before any navigation
+        try {
+            await saveToDatabase();
+        } catch (error) {
+            console.error('❌ Error saving status change:', error);
+        }
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -1486,7 +1524,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear]);
+    }, [selectedYear, sectionsByYear]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
@@ -1544,8 +1582,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately
-        saveToDatabase();
+        // Save immediately and await to ensure it completes before any navigation
+        await saveToDatabase().catch(error => {
+            console.error('❌ Error saving comment:', error);
+        });
         
         setQuickComment('');
 
