@@ -1189,16 +1189,33 @@ function doesOpportunityBelongToClient(opportunity, client) {
         e.preventDefault();
         e.stopPropagation();
         
-        if (!draggedItem || !targetColumn) {
+        // Try to get item from dataTransfer as fallback
+        const itemIdFromTransfer = e.dataTransfer?.getData('pipelineItemId');
+        const itemTypeFromTransfer = e.dataTransfer?.getData('pipelineItemType');
+        
+        // Use draggedItem from state, or try to find it from dataTransfer
+        let itemToMove = draggedItem;
+        let itemTypeToMove = draggedType;
+        
+        if (!itemToMove && itemIdFromTransfer) {
+            // Try to find the item from filteredItems
+            itemToMove = filteredItems.find(item => String(item.id) === itemIdFromTransfer);
+            itemTypeToMove = itemTypeFromTransfer || itemToMove?.type;
+        }
+        
+        if (!itemToMove || !targetColumn) {
+            console.log('❌ Kanban drop: Missing item or target', { itemToMove, targetColumn, draggedItem, itemIdFromTransfer });
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
             setDraggedOverStage(null);
             return;
         }
+        
+        console.log('✅ Kanban drop:', { itemToMove: itemToMove.name || itemToMove.company, targetColumn, groupBy });
 
         const token = storage.getToken();
-        const itemType = draggedType || draggedItem.type;
+        const itemType = itemTypeToMove || itemToMove.type;
         
         try {
             if (groupBy === 'stage') {
@@ -1207,18 +1224,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 
                 if (itemType === 'lead') {
                     if (token && window.DatabaseAPI) {
-                        await window.DatabaseAPI.updateLead(draggedItem.id, { stage: newStage });
-                        updateLeadStageOptimistically(draggedItem.id, newStage);
+                        await window.DatabaseAPI.updateLead(itemToMove.id, { stage: newStage });
+                        updateLeadStageOptimistically(itemToMove.id, newStage);
                     } else {
-                        updateLeadStageOptimistically(draggedItem.id, newStage);
+                        updateLeadStageOptimistically(itemToMove.id, newStage);
                     }
                 } else if (itemType === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
-                        await window.api.updateOpportunity(draggedItem.id, { stage: newStage });
+                        await window.api.updateOpportunity(itemToMove.id, { stage: newStage });
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        await window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: newStage });
+                        await window.DatabaseAPI.updateOpportunity(itemToMove.id, { stage: newStage });
                     }
-                    updateOpportunityStageOptimistically(draggedItem.clientId, draggedItem.id, newStage);
+                    updateOpportunityStageOptimistically(itemToMove.clientId, itemToMove.id, newStage);
                 }
             } else if (groupBy === 'status') {
                 // Update status
@@ -1226,10 +1243,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 
                 if (itemType === 'lead') {
                     if (token && window.DatabaseAPI) {
-                        await window.DatabaseAPI.updateLead(draggedItem.id, { status: newStatus });
+                        await window.DatabaseAPI.updateLead(itemToMove.id, { status: newStatus });
                         setLeads(prevLeads => {
                             const updated = prevLeads.map(lead =>
-                                lead.id === draggedItem.id ? { ...lead, status: newStatus } : lead
+                                lead.id === itemToMove.id ? { ...lead, status: newStatus } : lead
                             );
                             storage.setLeads(updated);
                             return updated;
@@ -1237,15 +1254,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     }
                 } else if (itemType === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
-                        await window.api.updateOpportunity(draggedItem.id, { status: newStatus });
+                        await window.api.updateOpportunity(itemToMove.id, { status: newStatus });
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        await window.DatabaseAPI.updateOpportunity(draggedItem.id, { status: newStatus });
+                        await window.DatabaseAPI.updateOpportunity(itemToMove.id, { status: newStatus });
                     }
                     setClients(prevClients => {
                         const updated = prevClients.map(client => {
-                            if (client.id === draggedItem.clientId) {
+                            if (client.id === itemToMove.clientId) {
                                 const updatedOpportunities = client.opportunities.map(opp =>
-                                    opp.id === draggedItem.id ? { ...opp, status: newStatus } : opp
+                                    opp.id === itemToMove.id ? { ...opp, status: newStatus } : opp
                                 );
                                 return { ...client, opportunities: updatedOpportunities };
                             }
@@ -1734,7 +1751,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
             if (e?.dataTransfer) {
                 e.dataTransfer.dropEffect = 'move';
             }
-            setDraggedOverStage(columnName);
+            if (setDraggedOverStage) {
+                setDraggedOverStage(columnName);
+            }
+        };
+
+        const handleDragEnter = (e, columnName) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (setDraggedOverStage) {
+                setDraggedOverStage(columnName);
+            }
         };
 
         const handleDragLeave = (e) => {
@@ -1743,13 +1770,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
             // Only clear if we're actually leaving the column
             const relatedTarget = e.relatedTarget;
             if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-                setDraggedOverStage(null);
+                if (setDraggedOverStage) {
+                    setDraggedOverStage(null);
+                }
             }
         };
 
         const handleDrop = (e, columnName) => {
             e.preventDefault();
             e.stopPropagation();
+            if (setDraggedOverStage) {
+                setDraggedOverStage(null);
+            }
             if (onItemDrop) {
                 onItemDrop(e, columnName, groupBy);
             }
@@ -1790,9 +1822,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 className={`flex-shrink-0 w-72 sm:w-80 transition-all duration-200 ${
                                     isDraggedOver ? 'scale-105' : ''
                                 }`}
-                                onDragOver={(e) => handleDragOver(e, column.name)}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, column.name)}
                             >
                                 {/* Column Header */}
                                 <div className={`${headerColorClasses} rounded-t-lg px-4 py-3 border-b-2 mb-2`}>
@@ -1812,6 +1841,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-200 ${
                                         isDraggedOver ? 'border-blue-400 shadow-lg' : 'border-transparent'
                                     }`}
+                                    onDragEnter={(e) => handleDragEnter(e, column.name)}
                                     onDragOver={(e) => handleDragOver(e, column.name)}
                                     onDragLeave={handleDragLeave}
                                     onDrop={(e) => handleDrop(e, column.name)}
@@ -1836,13 +1866,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     key={`${itemType}-${item.id}`}
                                                     draggable={true}
                                                     onDragStart={(e) => {
-                                                        e.stopPropagation();
+                                                        // Don't stop propagation - let it bubble
                                                         if (onItemDragStart) {
                                                             onItemDragStart(e, item, itemType);
                                                         }
                                                     }}
                                                     onDragEnd={(e) => {
-                                                        e.stopPropagation();
                                                         if (onItemDragEnd) {
                                                             onItemDragEnd(e);
                                                         }
@@ -1861,6 +1890,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
                                                         isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
                                                     }`}
+                                                    style={{ touchAction: 'none' }}
                                                 >
                                                     {/* Card Header */}
                                                     <div className="flex items-start justify-between mb-2">
