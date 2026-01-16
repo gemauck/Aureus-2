@@ -1877,12 +1877,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     key={`${itemType}-${item.id}`}
                                                     draggable
                                                     onDragStart={(e) => {
-                                                        console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target });
+                                                        console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target, currentTarget: e.currentTarget });
                                                         
-                                                        // Prevent drag if clicking on button
-                                                        if (e.target.closest('button')) {
-                                                            console.log('❌ Drag prevented - clicked on button');
+                                                        // Prevent drag if clicking directly on button (not just if button is ancestor)
+                                                        if (e.target.tagName === 'BUTTON' || e.target.closest('button') === e.target) {
+                                                            console.log('❌ Drag prevented - clicked directly on button');
                                                             e.preventDefault();
+                                                            e.stopPropagation();
                                                             return false;
                                                         }
                                                         
@@ -1894,7 +1895,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         console.log('✅ Drag data set', { 
                                                             itemId: item.id, 
                                                             itemType,
-                                                            dataTransferTypes: e.dataTransfer.types 
+                                                            dataTransferTypes: Array.from(e.dataTransfer.types)
                                                         });
                                                         
                                                         // Also call the handler for state management
@@ -1921,13 +1922,25 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     }`}
                                                 >
                                                     {/* Card Header */}
-                                                    <div className="flex items-start justify-between mb-2">
-                                                        <div className="flex-1 min-w-0">
-                                                            <h4 className="text-sm font-semibold text-gray-900 truncate">
+                                                    <div 
+                                                        className="flex items-start justify-between mb-2"
+                                                        draggable="false"
+                                                        onDragStart={(e) => e.preventDefault()}
+                                                    >
+                                                        <div className="flex-1 min-w-0" draggable="false" onDragStart={(e) => e.preventDefault()}>
+                                                            <h4 
+                                                                className="text-sm font-semibold text-gray-900 truncate"
+                                                                draggable="false"
+                                                                onDragStart={(e) => e.preventDefault()}
+                                                            >
                                                                 {itemName}
                                                             </h4>
                                                             {itemIndustry && (
-                                                                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                                                                <p 
+                                                                    className="text-xs text-gray-500 mt-0.5 truncate"
+                                                                    draggable="false"
+                                                                    onDragStart={(e) => e.preventDefault()}
+                                                                >
                                                                     {itemIndustry}
                                                                 </p>
                                                             )}
@@ -1958,7 +1971,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     </div>
 
                                                     {/* Card Body - Minimal Info */}
-                                                    <div className="space-y-1.5">
+                                                    <div 
+                                                        className="space-y-1.5"
+                                                        draggable="false"
+                                                        onDragStart={(e) => e.preventDefault()}
+                                                    >
                                                         {/* Value */}
                                                         {itemValue > 0 && (
                                                             <div className="text-xs font-semibold text-blue-600">
