@@ -1493,6 +1493,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
+        console.log('💬 handleAddComment called:', { sectionId, documentId, month, commentText: commentText.substring(0, 50) });
+        
         try {
             const currentUser = getCurrentUser();
             const newCommentId = Date.now();
@@ -1518,32 +1520,61 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 : (sectionsRef.current || {});
             const currentYearSections = latestSectionsByYear[selectedYear] || [];
             
+            console.log('🔍 Looking for section:', { sectionId, selectedYear, sectionsCount: currentYearSections.length });
+            
+            let sectionFound = false;
+            let documentFound = false;
+            
             const updated = currentYearSections.map(section => {
                 if (String(section.id) === String(sectionId)) {
-                return {
-                    ...section,
-                    documents: section.documents.map(doc => {
+                    sectionFound = true;
+                    console.log('✅ Found section:', section.name || section.id);
+                    return {
+                        ...section,
+                        documents: section.documents.map(doc => {
                             if (String(doc.id) === String(documentId)) {
-                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
-                            return {
-                                ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
-                };
-            }
-            return section;
+                                documentFound = true;
+                                console.log('✅ Found document:', doc.name || doc.id);
+                                const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                                console.log('📝 Existing comments:', existingComments.length);
+                                const updatedComments = [...existingComments, newComment];
+                                console.log('📝 Updated comments:', updatedComments.length);
+                                return {
+                                    ...doc,
+                                    comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
+                                };
+                            }
+                            return doc;
+                        })
+                    };
+                }
+                return section;
             });
+            
+            if (!sectionFound) {
+                console.error('❌ Section not found:', { sectionId, availableSections: currentYearSections.map(s => ({ id: s.id, name: s.name })) });
+                alert(`Error: Could not find section "${sectionId}". Please refresh the page and try again.`);
+                return;
+            }
+            
+            if (!documentFound) {
+                console.error('❌ Document not found:', { documentId, sectionId });
+                alert(`Error: Could not find document "${documentId}" in section "${sectionId}". Please refresh the page and try again.`);
+                return;
+            }
             
             const updatedSectionsByYear = {
                 ...latestSectionsByYear,
                     [selectedYear]: updated
                 };
             
+            console.log('💾 Updating sectionsByYear...', { year: selectedYear, sectionsCount: updated.length });
+            
             // Update ref IMMEDIATELY before state update to prevent race conditions
             sectionsRef.current = updatedSectionsByYear;
+            
+            // Reset the last saved data ref so saveToDatabase knows data has changed
+            lastSavedDataRef.current = null;
             
             // Now update state (this will trigger auto-save)
             setSectionsByYear(updatedSectionsByYear);
@@ -1554,7 +1585,9 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 clearTimeout(saveTimeoutRef.current);
                 saveTimeoutRef.current = null;
             }
+            
             // Save immediately
+            console.log('💾 Calling saveToDatabase...');
             await saveToDatabase();
             
             setQuickComment('');
@@ -1571,7 +1604,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             console.log('✅ Comment added successfully:', { sectionId, documentId, month, commentId: newCommentId });
         } catch (error) {
             console.error('❌ Error adding comment:', error);
-            alert('Failed to save comment. Please try again.');
+            console.error('❌ Error stack:', error.stack);
+            alert('Failed to save comment: ' + (error.message || 'Unknown error'));
         }
 
         // ========================================================
