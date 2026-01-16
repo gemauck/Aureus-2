@@ -2074,15 +2074,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
+    // Auto-scroll to bottom only when popup first opens (not on position updates)
+    // Skip auto-scroll if there's a deep-link comment ID (let deep-link scrolling handle it)
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current) {
-            setTimeout(() => {
-                if (commentPopupContainerRef.current) {
-                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                }
-            }, 100);
+        if (hoverCommentCell && commentPopupContainerRef.current && !hasAutoScrolledRef.current) {
+            // Check if there's a commentId in the URL (deep-link scenario)
+            const urlHash = window.location.hash || '';
+            const urlSearch = window.location.search || '';
+            const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
+            
+            // Only auto-scroll to bottom if there's no deep-link comment ID
+            // If there's a commentId, the deep-link logic will handle scrolling
+            if (!hasCommentId) {
+                setTimeout(() => {
+                    if (commentPopupContainerRef.current && !hasAutoScrolledRef.current) {
+                        commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                        hasAutoScrolledRef.current = true;
+                    }
+                }, 100);
+            } else {
+                // If there's a commentId, set the flag to true but don't auto-scroll
+                // This prevents conflicts with deep-link scrolling
+                hasAutoScrolledRef.current = true;
+            }
+        } else if (!hoverCommentCell) {
+            // Reset flag when popup closes
+            hasAutoScrolledRef.current = false;
         }
-        
+    }, [hoverCommentCell]); // Only depend on hoverCommentCell, not position updates
+    
+    // Smart positioning for comment popup (separate effect)
+    useEffect(() => {
         // Smart positioning for comment popup
         const updatePopupPosition = () => {
             if (!hoverCommentCell) {
@@ -2338,6 +2360,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
+                    // Set flag immediately to prevent auto-scroll from interfering
+                    hasAutoScrolledRef.current = true;
+                    
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
                     
@@ -2507,6 +2532,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             clearInterval(retryPosition);
                         }
                     }, 200);
+                    
+                    // Set flag immediately to prevent auto-scroll from interfering
+                    hasAutoScrolledRef.current = true;
                     
                     // Scroll to the comment within the popup
                     const targetCommentId = String(deepCommentId);
