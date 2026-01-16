@@ -2495,30 +2495,38 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                     }, 200);
                     
-                    // Scroll to the comment
+                    // Scroll to the comment within the popup
                     const targetCommentId = String(deepCommentId);
                     let scrollAttempts = 0;
-                    const maxScrollAttempts = 10;
+                    const maxScrollAttempts = 20; // Increased attempts to wait longer for popup to render
                     const findAndScrollToComment = () => {
                         scrollAttempts++;
+                        console.log(`🔍 Attempt ${scrollAttempts}/${maxScrollAttempts} to find comment element with ID:`, targetCommentId);
                         
+                        // Try multiple selectors to find the comment element
                         const commentElement = 
                             document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            document.querySelector(`#comment-${targetCommentId}`);
+                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            document.querySelector(`#comment-${targetCommentId}`) ||
+                            document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
-                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            console.log('✅ Found comment element, scrolling into view');
+                            // Scroll the comment into view within the popup container
+                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                            
                             if (commentPopupContainerRef.current) {
                                 const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
                                 const commentRect = commentElement.getBoundingClientRect();
                                 const scrollTop = commentPopupContainerRef.current.scrollTop;
                                 const commentOffset = commentRect.top - containerRect.top + scrollTop;
                                 commentPopupContainerRef.current.scrollTo({
-                                    top: commentOffset - 20,
+                                    top: Math.max(0, commentOffset - 20),
                                     behavior: 'smooth'
                                 });
                             }
-                            // Highlight the comment
+                            
+                            // Highlight the comment with a blue background
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
                             commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
                             commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
@@ -2527,16 +2535,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 commentElement.style.backgroundColor = originalBg;
                                 commentElement.style.boxShadow = '';
                                 commentElement.style.transition = '';
-                            }, 2000);
-                            console.log('✅ Deep link: Found and scrolled to comment', targetCommentId);
-                        } else if (scrollAttempts < maxScrollAttempts) {
-                            setTimeout(findAndScrollToComment, 200);
+                            }, 3000); // Increased highlight duration
+                            console.log('✅ Deep link: Successfully scrolled to and highlighted comment', targetCommentId);
+                            return; // Exit once found
                         } else {
-                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId);
+                            console.log(`⚠️ Comment element not found yet. Popup container exists:`, !!commentPopupContainerRef.current);
+                        }
+                        
+                        if (scrollAttempts < maxScrollAttempts) {
+                            // Wait a bit longer between attempts to allow popup to render
+                            setTimeout(findAndScrollToComment, 300);
+                        } else {
+                            console.warn('⚠️ Deep link: Could not find comment element with ID', targetCommentId, 'after', maxScrollAttempts, 'attempts');
+                            console.warn('🔍 Debug: Popup container ref:', commentPopupContainerRef.current);
+                            console.warn('🔍 Debug: All comment elements in popup:', document.querySelectorAll('[data-comment-id]'));
                         }
                     };
                     
-                    setTimeout(findAndScrollToComment, 300);
+                    // Wait a bit longer before starting to search (popup needs time to render)
+                    setTimeout(findAndScrollToComment, 500);
                 } else {
                     console.warn('⚠️ Deep link: Could not find comment with ID', deepCommentId, 'in any section');
                 }

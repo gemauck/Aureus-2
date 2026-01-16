@@ -245,13 +245,21 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                     if (result.status === 'fulfilled') {
                         const { type, data } = result.value;
                         if (type === 'project') {
-                            console.log('✅ Setting project tasks:', data.length);
-                            setProjectTasks(data);
+                            console.log('✅ Setting project tasks:', data.length, '(cached:', cachedProjectTasks.length, ')');
+                            // Only update if we got fresh data (not just cached/empty)
+                            // This prevents overwriting cached tasks with empty arrays from API
+                            if (data.length > 0 || cachedProjectTasks.length === 0) {
+                                setProjectTasks(data);
+                            } else {
+                                console.log('⚠️ Keeping cached project tasks (API returned empty, but we have cached data)');
+                            }
                         } else if (type === 'user') {
                             // Only update if we got fresh data (not just cached)
                             if (data.length > 0 || cachedUserTasks.length === 0) {
                                 console.log('✅ Setting user tasks:', data.length);
                                 setUserTasks(data);
+                            } else {
+                                console.log('⚠️ Keeping cached user tasks (API returned empty, but we have cached data)');
                             }
                         }
                     } else {
