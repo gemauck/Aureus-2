@@ -1285,9 +1285,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setShowDocumentModal(true);
     };
     
-    const handleEditDocument = (section, document) => {
+    const handleEditDocument = (section, doc) => {
         setEditingSectionId(section.id);
-        setEditingDocument(document);
+        setEditingDocument(doc);
         setShowDocumentModal(true);
     };
     
@@ -1654,12 +1654,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setSectionsByYear(updatedSectionsByYear);
     };
     
-    const getDocumentStatus = (document, month) => {
-        return getStatusForYear(document.collectionStatus, month, selectedYear);
+    const getDocumentStatus = (doc, month) => {
+        return getStatusForYear(doc.collectionStatus, month, selectedYear);
     };
     
-    const getDocumentComments = (document, month) => {
-        return getCommentsForYear(document.comments, month, selectedYear);
+    const getDocumentComments = (doc, month) => {
+        return getCommentsForYear(doc.comments, month, selectedYear);
     };
     
     // ============================================================
@@ -1802,7 +1802,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
@@ -1886,8 +1886,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         };
         
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        window.document.addEventListener('mousedown', handleClickOutside);
+        return () => window.document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
@@ -1946,7 +1946,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
-                    const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -1982,7 +1982,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
                         // Fallback: try to find the cell and position relative to it
-                        const cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        const cell = window.document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
                         if (cell) {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2045,10 +2045,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         // Try multiple selectors to find the comment (handle both string and number IDs)
                         const commentElement = 
-                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            document.querySelector(`#comment-${targetCommentId}`) ||
-                            document.querySelector(`#comment-${Number(targetCommentId)}`);
+                            window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            window.document.querySelector(`#comment-${targetCommentId}`) ||
+                            window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             // Scroll the comment into view within the popup
@@ -2117,12 +2117,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, document, month) => {
-        const status = getDocumentStatus(document, month);
+    const renderStatusCell = (section, doc, month) => {
+        const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
-        const comments = getDocumentComments(document, month);
+        const comments = getDocumentComments(doc, month);
         const hasComments = comments.length > 0;
-        const cellKey = `${section.id}-${document.id}-${month}`;
+        const cellKey = `${section.id}-${doc.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
@@ -2188,7 +2188,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
                             const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                            handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
+                            handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
@@ -2196,7 +2196,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             if (newStatus !== status) {
                                 const currentSelectedCells = selectedCellsRef.current;
                                 const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                                handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
+                                handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
                             }
                         }}
                         onMouseDown={(e) => {
@@ -2224,11 +2224,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 });
                             }
                         }}
-                        aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
+                        aria-label={`Status for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                         role="combobox"
                         aria-haspopup="listbox"
                         data-section-id={section.id}
-                        data-document-id={document.id}
+                        data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
@@ -2255,7 +2255,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;
@@ -2995,8 +2995,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    if (!section || !document) return;
-                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                    if (!section || !doc) return;
+                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
@@ -3011,11 +3011,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && section && document ? (
+                            {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, document.id, month, commentText);
+                                            handleAddComment(section.id, doc.id, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3029,8 +3029,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, quickComment);
+                                            if (e.key === 'Enter' && e.ctrlKey && section && doc) {
+                                                handleAddComment(section.id, doc.id, month, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3040,8 +3040,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, quickComment);
+                                            if (!section || !doc) return;
+                                            handleAddComment(section.id, doc.id, month, quickComment);
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
@@ -3307,34 +3307,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document) => (
-                                                <tr key={document.id} className="hover:bg-gray-50">
+                                            section.documents.map((doc) => (
+                                                <tr key={doc.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
                                                         <div className="min-w-[200px]">
-                                                            <div className="text-xs font-medium text-gray-900">{document.name}</div>
-                                                            {document.description && (
-                                                                <div className="text-[10px] text-gray-500">{document.description}</div>
+                                                            <div className="text-xs font-medium text-gray-900">{doc.name}</div>
+                                                            {doc.description && (
+                                                                <div className="text-[10px] text-gray-500">{doc.description}</div>
                                                             )}
                                                         </div>
                                                     </td>
                                                     {months.map((month) => (
-                                                        <React.Fragment key={`${document.id}-${month}`}>
-                                                            {renderStatusCell(section, document, month)}
+                                                        <React.Fragment key={`${doc.id}-${month}`}>
+                                                            {renderStatusCell(section, doc, month)}
                                                         </React.Fragment>
                                                     ))}
                                                     <td className="px-2.5 py-1.5 border-l border-gray-200">
                                                         <div className="flex items-center gap-1">
                                                             <button
-                                                                onClick={() => handleEditDocument(section, document)}
+                                                                onClick={() => handleEditDocument(section, doc)}
                                                                 className="text-gray-600 hover:text-primary-600 p-1"
                                                             >
                                                                 <i className="fas fa-edit text-xs"></i>
                                                             </button>
                                                             <button
-                                                                onClick={(e) => handleDeleteDocument(section.id, document.id, e)}
+                                                                onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
                                                                 className="text-gray-600 hover:text-red-600 p-1"
                                                                 type="button"
                                                             >
