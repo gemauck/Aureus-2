@@ -518,10 +518,19 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             : sectionsByYear;
         const serialized = JSON.stringify(payload);
         
-        // Skip if data hasn't changed
-        if (lastSavedDataRef.current === serialized) {
-            console.log('⏸️ Save skipped: data unchanged');
+        // Skip if data hasn't changed (unless forceSave is requested)
+        if (!options.forceSave && lastSavedDataRef.current === serialized) {
+            console.log('⏸️ Save skipped: data unchanged', {
+                payloadSize: serialized.length,
+                lastSavedSize: lastSavedDataRef.current?.length,
+                hasPayload: !!payload,
+                payloadKeys: Object.keys(payload || {})
+            });
             return;
+        }
+        
+        if (options.forceSave) {
+            console.log('🔨 Force save requested - bypassing unchanged check');
         }
         
         console.log('💾 Saving to database...', { 
@@ -1583,18 +1592,28 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 saveTimeoutRef.current = null;
             }
             
-            // Reset the last saved data ref so saveToDatabase knows data has changed
-            // Do this AFTER updating the ref but BEFORE calling saveToDatabase
-            lastSavedDataRef.current = null;
-            
             // Now update state (this will trigger auto-save, but we'll save immediately anyway)
             setSectionsByYear(updatedSectionsByYear);
             
-            // Save immediately with a small delay to ensure ref is fully set
-            console.log('💾 Calling saveToDatabase...');
-            // Use setTimeout to ensure the ref update has fully propagated
-            await new Promise(resolve => setTimeout(resolve, 10));
-            await saveToDatabase();
+            // Force an immediate save by calling saveToDatabase with a flag to skip the unchanged check
+            console.log('💾 Calling saveToDatabase immediately after comment addition...');
+            
+            // Wait a moment to ensure state has updated, then save
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Force save by temporarily clearing lastSavedDataRef and calling saveToDatabase
+            const previousSavedData = lastSavedDataRef.current;
+            lastSavedDataRef.current = null; // Force save by making comparison fail
+            
+            try {
+                await saveToDatabase({ forceSave: true });
+                console.log('✅ Comment save completed');
+            } catch (saveError) {
+                console.error('❌ Comment save failed:', saveError);
+                // Restore previous value if save failed
+                lastSavedDataRef.current = previousSavedData;
+                throw saveError;
+            }
             
             setQuickComment('');
             
