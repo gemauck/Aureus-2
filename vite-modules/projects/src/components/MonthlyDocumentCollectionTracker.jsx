@@ -824,7 +824,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             // 2. A save is in progress
             // 3. Component is not visible (document hidden)
             const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-            const isDocumentVisible = document.visibilityState === 'visible';
+            const isDocumentVisible = window.document.visibilityState === 'visible';
             
             if (isSavingRef.current || timeSinceLastChange < 5000 || !isDocumentVisible) {
                 return; // Skip this poll
@@ -1596,9 +1596,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowDocumentModal(true);
     };
     
-    const handleEditDocument = (section, document) => {
+    const handleEditDocument = (section, doc) => {
         setEditingSectionId(section.id);
-        setEditingDocument(document);
+        setEditingDocument(doc);
         setShowDocumentModal(true);
     };
     
@@ -1941,12 +1941,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }));
     };
     
-    const getDocumentStatus = (document, month) => {
-        return getStatusForYear(document.collectionStatus, month, selectedYear);
+    const getDocumentStatus = (doc, month) => {
+        return getStatusForYear(doc.collectionStatus, month, selectedYear);
     };
     
-    const getDocumentComments = (document, month) => {
-        return getCommentsForYear(document.comments, month, selectedYear);
+    const getDocumentComments = (doc, month) => {
+        return getCommentsForYear(doc.comments, month, selectedYear);
     };
     
     // ============================================================
@@ -2111,7 +2111,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
@@ -2195,8 +2195,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         };
         
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        window.document.addEventListener('mousedown', handleClickOutside);
+        return () => window.document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
@@ -2284,7 +2284,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
-                    const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -2320,7 +2320,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
                         // Fallback: try to find the cell and position relative to it
-                        const cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        const cell = window.document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
                         if (cell) {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2386,10 +2386,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         // Try multiple selectors to find the comment (handle both string and number IDs)
                         const commentElement = 
-                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            document.querySelector(`#comment-${targetCommentId}`) ||
-                            document.querySelector(`#comment-${Number(targetCommentId)}`);
+                            window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            window.document.querySelector(`#comment-${targetCommentId}`) ||
+                            window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             // Scroll the comment into view within the popup
@@ -2481,7 +2481,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // First, try to scroll the table to make the cell visible
                     // Find the cell element in the table and scroll it into view
                     setTimeout(() => {
-                        const cellElement = document.querySelector(`[data-section-id="${foundSectionId}"][data-document-id="${foundDocumentId}"][data-month="${foundMonth}"]`);
+                        const cellElement = window.document.querySelector(`[data-section-id="${foundSectionId}"][data-document-id="${foundDocumentId}"][data-month="${foundMonth}"]`);
                         if (cellElement) {
                             cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }
@@ -2498,7 +2498,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     
                     // Position popup near the cell
                     const positionPopup = () => {
-                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                         if (commentButton) {
                             const buttonRect = commentButton.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2558,10 +2558,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         // Try multiple selectors to find the comment element
                         const commentElement = 
-                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            document.querySelector(`#comment-${targetCommentId}`) ||
-                            document.querySelector(`#comment-${Number(targetCommentId)}`);
+                            window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            window.document.querySelector(`#comment-${targetCommentId}`) ||
+                            window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             console.log('✅ Found comment element, scrolling into view');
@@ -2601,7 +2601,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         } else {
                             console.warn('⚠️ Deep link: Could not find comment element with ID', targetCommentId, 'after', maxScrollAttempts, 'attempts');
                             console.warn('🔍 Debug: Popup container ref:', commentPopupContainerRef.current);
-                            console.warn('🔍 Debug: All comment elements in popup:', document.querySelectorAll('[data-comment-id]'));
+                            console.warn('🔍 Debug: All comment elements in popup:', window.document.querySelectorAll('[data-comment-id]'));
                         }
                     };
                     
@@ -2669,12 +2669,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, document, month) => {
-        const status = getDocumentStatus(document, month);
+    const renderStatusCell = (section, doc, month) => {
+        const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
-        const comments = getDocumentComments(document, month);
+        const comments = getDocumentComments(doc, month);
         const hasComments = comments.length > 0;
-        const cellKey = `${section.id}-${document.id}-${month}`;
+        const cellKey = `${section.id}-${doc.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
@@ -2740,7 +2740,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
                             const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                            handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
+                            handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
@@ -2748,7 +2748,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             if (newStatus !== status) {
                                 const currentSelectedCells = selectedCellsRef.current;
                                 const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                                handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
+                                handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
                             }
                         }}
                         onMouseDown={(e) => {
@@ -2776,11 +2776,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 });
                             }
                         }}
-                        aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
+                        aria-label={`Status for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                         role="combobox"
                         aria-haspopup="listbox"
                         data-section-id={section.id}
-                        data-document-id={document.id}
+                        data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
@@ -2807,7 +2807,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;
@@ -3522,8 +3522,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    if (!section || !document) return;
-                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                    if (!section || !doc) return;
+                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
@@ -3538,11 +3538,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && section && document ? (
+                            {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, document.id, month, commentText);
+                                            handleAddComment(section.id, doc.id, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3556,8 +3556,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, quickComment);
+                                            if (e.key === 'Enter' && e.ctrlKey && section && doc) {
+                                                handleAddComment(section.id, doc.id, month, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3567,8 +3567,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, quickComment);
+                                            if (!section || !doc) return;
+                                            handleAddComment(section.id, doc.id, month, quickComment);
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
@@ -3822,8 +3822,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document) => (
-                                                <tr key={document.id} className="hover:bg-gray-50">
+                                            section.documents.map((doc) => (
+                                                <tr key={doc.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
@@ -3836,20 +3836,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                         </div>
                                                     </td>
                                                     {months.map((month) => (
-                                                        <React.Fragment key={`${document.id}-${month}`}>
-                                                            {renderStatusCell(section, document, month)}
+                                                        <React.Fragment key={`${doc.id}-${month}`}>
+                                                            {renderStatusCell(section, doc, month)}
                                                         </React.Fragment>
                                                     ))}
                                                     <td className="px-2.5 py-1.5 border-l border-gray-200">
                                                         <div className="flex items-center gap-1">
                                                             <button
-                                                                onClick={() => handleEditDocument(section, document)}
+                                                                onClick={() => handleEditDocument(section, doc)}
                                                                 className="text-gray-600 hover:text-primary-600 p-1"
                                                             >
                                                                 <i className="fas fa-edit text-xs"></i>
                                                             </button>
                                                             <button
-                                                                onClick={(e) => handleDeleteDocument(section.id, document.id, e)}
+                                                                onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
                                                                 className="text-gray-600 hover:text-red-600 p-1"
                                                                 type="button"
                                                             >
