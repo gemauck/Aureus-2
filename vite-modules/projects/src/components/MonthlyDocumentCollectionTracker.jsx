@@ -341,6 +341,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const hasAutoScrolledRef = useRef(false);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1844,6 +1845,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }));
         
         setQuickComment('');
+        
+        // Scroll to show the new comment (reset auto-scroll flag to allow scrolling)
+        setTimeout(() => {
+            if (commentPopupContainerRef.current) {
+                hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
+                commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                hasAutoScrolledRef.current = true; // Set flag again after scrolling
+            }
+        }, 100);
 
         // ========================================================
         // @MENTIONS - Process mentions and create notifications
@@ -2135,7 +2145,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 window.removeEventListener('scroll', updatePopupPosition);
             };
         }
-    }, [hoverCommentCell, sections, commentPopupPosition]);
+    }, [hoverCommentCell, sections]); // Removed commentPopupPosition to prevent re-triggering on position updates
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -2387,22 +2397,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 let foundDocumentId = null;
                 let foundMonth = null;
                 
+                // Search through all sections, documents, and months
                 for (const section of sections) {
                     for (const document of section.documents || []) {
-                        // Get all months from comments object
-                        const commentsByYear = document.comments || {};
-                        const yearComments = commentsByYear[selectedYear] || {};
+                        // Comments are stored as: comments[monthKey] where monthKey = "January-2026"
+                        // Search through all possible months in the selected year
+                        const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                                       'July', 'August', 'September', 'October', 'November', 'December'];
                         
-                        // Search through all months
-                        for (const monthKey in yearComments) {
-                            const monthComments = getCommentsForYear(document.comments, monthKey, selectedYear);
+                        for (const month of months) {
+                            const monthComments = getCommentsForYear(document.comments, month, selectedYear);
                             const comment = monthComments.find(c => String(c.id) === String(deepCommentId));
                             
                             if (comment) {
                                 foundComment = comment;
                                 foundSectionId = section.id;
                                 foundDocumentId = document.id;
-                                foundMonth = monthKey;
+                                foundMonth = month; // Store month name (e.g., "January")
+                                console.log('✅ Found comment:', deepCommentId, 'in section:', foundSectionId, 'document:', foundDocumentId, 'month:', foundMonth);
                                 break;
                             }
                         }
@@ -2414,6 +2426,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (foundComment && foundSectionId && foundDocumentId && foundMonth) {
                     // Found the comment! Open the popup for that cell
                     const cellKey = `${foundSectionId}-${foundDocumentId}-${foundMonth}`;
+                    console.log('✅ Opening comment popup for cell:', cellKey);
+                    
+                    // First, try to scroll the table to make the cell visible
+                    // Find the cell element in the table and scroll it into view
+                    setTimeout(() => {
+                        const cellElement = document.querySelector(`[data-section-id="${foundSectionId}"][data-document-id="${foundDocumentId}"][data-month="${foundMonth}"]`);
+                        if (cellElement) {
+                            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 100);
                     
                     // Set initial position
                     setCommentPopupPosition({

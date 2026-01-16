@@ -904,14 +904,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             items = items.filter(item => item.isStarred === true);
         }
 
-        // Value filters
-        if (filters.minValue) {
-            items = items.filter(item => item.value >= Number(filters.minValue));
-        }
-        if (filters.maxValue) {
-            items = items.filter(item => item.value <= Number(filters.maxValue));
-        }
-
         // Industry filter
         if (filters.industry !== 'All') {
             items = items.filter(item => item.industry === filters.industry);
@@ -1904,24 +1896,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </select>
                     </div>
                     
-                    {/* Value Range Filters */}
-                    <div className="flex gap-2">
-                        <input
-                            type="number"
-                            placeholder="Min Value"
-                            value={filters.minValue}
-                            onChange={(e) => setFilters({ ...filters, minValue: e.target.value })}
-                            className="flex-1 px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white"
-                        />
-                        <input
-                            type="number"
-                            placeholder="Max Value"
-                            value={filters.maxValue}
-                            onChange={(e) => setFilters({ ...filters, maxValue: e.target.value })}
-                            className="flex-1 px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white"
-                        />
-                    </div>
-                    
                     {/* Starred Only Checkbox */}
                     <div className="flex items-center">
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -1959,7 +1933,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 </div>
 
                 {/* Active Filters Count */}
-                {(filters.search || filters.minValue || filters.maxValue || 
+                {(filters.search || 
                   filters.industry !== 'All' || filters.status !== 'All' || showStarredOnly) && (
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
