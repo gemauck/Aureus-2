@@ -1875,25 +1875,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             return (
                                                 <div
                                                     key={`${itemType}-${item.id}`}
-                                                    draggable={true}
-                                                    onMouseDown={(e) => {
-                                                        // Allow drag to start from anywhere on the card
-                                                        // Only prevent if clicking the star button (handled separately)
-                                                        if (e.target.closest('button')) {
-                                                            return;
-                                                        }
-                                                    }}
+                                                    draggable
                                                     onDragStart={(e) => {
+                                                        console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target });
+                                                        
                                                         // Prevent drag if clicking on button
                                                         if (e.target.closest('button')) {
+                                                            console.log('❌ Drag prevented - clicked on button');
                                                             e.preventDefault();
-                                                            return;
+                                                            return false;
                                                         }
                                                         
                                                         // Set dataTransfer data (like working KanbanView)
                                                         e.dataTransfer.setData('pipelineItemId', String(item.id));
                                                         e.dataTransfer.setData('pipelineItemType', String(itemType));
                                                         e.dataTransfer.effectAllowed = 'move';
+                                                        
+                                                        console.log('✅ Drag data set', { 
+                                                            itemId: item.id, 
+                                                            itemType,
+                                                            dataTransferTypes: e.dataTransfer.types 
+                                                        });
                                                         
                                                         // Also call the handler for state management
                                                         if (onItemDragStart) {
@@ -1906,12 +1908,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         }
                                                     }}
                                                     onClick={(e) => {
-                                                        // Prevent click if we just dragged
-                                                        if (isDragging) {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            return;
-                                                        }
                                                         // Don't trigger card click if clicking button
                                                         if (e.target.closest('button')) {
                                                             return;
@@ -1920,10 +1916,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             onItemClick(item);
                                                         }
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
+                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
                                                         isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
                                                     }`}
-                                                    style={{ touchAction: 'none', userSelect: 'none' }}
                                                 >
                                                     {/* Card Header */}
                                                     <div className="flex items-start justify-between mb-2">
@@ -1939,14 +1934,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         </div>
                                                         <button
                                                             type="button"
-                                                            draggable={false}
-                                                            onMouseDown={(e) => {
-                                                                e.stopPropagation();
-                                                                e.preventDefault();
-                                                            }}
+                                                            draggable="false"
                                                             onDragStart={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
+                                                                return false;
                                                             }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
