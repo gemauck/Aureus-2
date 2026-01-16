@@ -2210,8 +2210,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const hasDocCollectionParams = urlHash.includes('docSectionId=') || urlSearch.includes('docSectionId=');
             const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
             
+            console.log('🔍 MonthlyDocumentCollectionTracker: checkAndOpenDeepLink called', {
+                urlHash,
+                urlSearch,
+                hasDocCollectionParams,
+                hasCommentId,
+                sectionsCount: sections?.length || 0
+            });
+            
             // Only proceed if we have doc collection params OR commentId (for comment search fallback)
             if (!hasDocCollectionParams && !hasCommentId) {
+                console.log('⏭️ MonthlyDocumentCollectionTracker: No deep link params, exiting');
                 return; // No deep link params, exit early
             }
             
@@ -2219,12 +2228,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (!sections || sections.length === 0) {
                 // Retry after a delay if we have deep link params or commentId but no sections yet
                 if (hasDocCollectionParams || hasCommentId) {
+                    console.log('⏳ MonthlyDocumentCollectionTracker: Sections not loaded, retrying in 500ms');
                     setTimeout(() => {
                         checkAndOpenDeepLink();
                     }, 500);
                 }
                 return;
             }
+            
+            console.log('✅ MonthlyDocumentCollectionTracker: Proceeding with deep link check');
             
             // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
             let params = null;
