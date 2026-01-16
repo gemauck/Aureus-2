@@ -2195,10 +2195,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // If sections aren't loaded yet, wait and retry (for email link navigation)
             if (!sections || sections.length === 0) {
-                // Retry after a delay if we have deep link params but no sections yet
-                setTimeout(() => {
-                    checkAndOpenDeepLink();
-                }, 500);
+                // Retry after a delay if we have deep link params or commentId but no sections yet
+                if (hasDocCollectionParams || hasCommentId) {
+                    setTimeout(() => {
+                        checkAndOpenDeepLink();
+                    }, 500);
+                }
                 return;
             }
             
