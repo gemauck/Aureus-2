@@ -70,8 +70,7 @@ async function handler(req, res) {
               where: {
                 OR: [
                   { type: 'client' },
-                  { type: 'group' },
-                  { type: null }
+                  { type: 'group' }
                 ]
               },
               include: {
@@ -333,10 +332,7 @@ async function handler(req, res) {
               try {
                 rawClients = await prisma.client.findMany({
                   where: {
-                    OR: [
-                      { type: 'client' },
-                      { type: null }
-                    ]
+                    type: 'client'
                   },
                   orderBy: {
                     createdAt: 'desc'
@@ -1093,10 +1089,7 @@ async function handler(req, res) {
             // Also verify it's queryable by type filter
             const typeQueryResult = await prisma.client.findMany({
               where: { 
-                OR: [
-                  { type: 'client' },
-                  { type: null }
-                ],
+                type: 'client',
                 id: client.id
               },
               select: { id: true, name: true }
