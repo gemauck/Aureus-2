@@ -114,10 +114,10 @@ async function handler(req, res) {
                     notes: true,
                     createdAt: true
                   },
-                  orderBy: {
-                    isPrimary: 'desc',
-                    createdAt: 'asc'
-                  }
+                  orderBy: [
+                    { isPrimary: 'desc' },
+                    { createdAt: 'asc' }
+                  ]
                 },
                 clientComments: {
                   select: {
