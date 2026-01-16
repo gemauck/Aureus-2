@@ -1876,7 +1876,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 <div
                                                     key={`${itemType}-${item.id}`}
                                                     draggable={true}
+                                                    onMouseDown={(e) => {
+                                                        // Allow drag to start from anywhere on the card
+                                                        // Only prevent if clicking the star button (handled separately)
+                                                        if (e.target.closest('button')) {
+                                                            return;
+                                                        }
+                                                    }}
                                                     onDragStart={(e) => {
+                                                        // Prevent drag if clicking on button
+                                                        if (e.target.closest('button')) {
+                                                            e.preventDefault();
+                                                            return;
+                                                        }
+                                                        
                                                         // Set dataTransfer data (like working KanbanView)
                                                         e.dataTransfer.setData('pipelineItemId', String(item.id));
                                                         e.dataTransfer.setData('pipelineItemType', String(itemType));
@@ -1899,14 +1912,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             e.stopPropagation();
                                                             return;
                                                         }
+                                                        // Don't trigger card click if clicking button
+                                                        if (e.target.closest('button')) {
+                                                            return;
+                                                        }
                                                         if (onItemClick) {
                                                             onItemClick(item);
                                                         }
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
+                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
                                                         isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
                                                     }`}
-                                                    style={{ touchAction: 'none' }}
+                                                    style={{ touchAction: 'none', userSelect: 'none' }}
                                                 >
                                                     {/* Card Header */}
                                                     <div className="flex items-start justify-between mb-2">
@@ -1922,8 +1939,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         </div>
                                                         <button
                                                             type="button"
-                                                            onMouseDown={(e) => e.stopPropagation()}
-                                                            onDragStart={(e) => e.stopPropagation()}
+                                                            draggable={false}
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                                e.preventDefault();
+                                                            }}
+                                                            onDragStart={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                            }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 e.preventDefault();
@@ -1931,7 +1955,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                     onToggleStar(e, item);
                                                                 }
                                                             }}
-                                                            className={`ml-2 flex-shrink-0 transition-colors ${
+                                                            className={`ml-2 flex-shrink-0 transition-colors cursor-pointer ${
                                                                 item.isStarred 
                                                                     ? 'text-yellow-500' 
                                                                     : 'text-gray-300 hover:text-yellow-400'
