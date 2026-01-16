@@ -3142,8 +3142,20 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                             {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
+                                        console.log('🎯 MonthlyFMSReviewTracker: onSubmit callback called', {
+                                            commentText: commentText?.substring(0, 50),
+                                            commentLength: commentText?.length,
+                                            hasSection: !!section,
+                                            hasDoc: !!doc,
+                                            sectionId: section?.id,
+                                            docId: doc?.id,
+                                            month
+                                        });
                                         if (commentText && commentText.trim()) {
+                                            console.log('✅ MonthlyFMSReviewTracker: Calling handleAddComment...');
                                             handleAddComment(section.id, doc.id, month, commentText);
+                                        } else {
+                                            console.log('⏸️ MonthlyFMSReviewTracker: Comment text is empty, skipping');
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
