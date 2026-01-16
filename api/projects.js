@@ -568,16 +568,46 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
       arrayLength: Array.isArray(sections) ? sections.length : 'N/A'
     });
 
-    // Delete existing sections for this project
+    // Check if we have data to save BEFORE deleting
+    if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
+      console.log('⚠️ saveWeeklyFMSReviewSectionsToTable: Empty sections data, nothing to save');
+      // Still delete existing sections if we're clearing the data
+      const deletedCount = await prisma.weeklyFMSReviewSection.deleteMany({
+        where: { projectId }
+      });
+      console.log(`🗑️ Deleted ${deletedCount.count} existing weekly FMS review sections for project ${projectId} (clearing empty data)`);
+      return;
+    }
+
+    // Validate we have actual sections to create before deleting
+    let hasValidSections = false;
+    if (typeof sections === 'object' && !Array.isArray(sections)) {
+      // Year-based structure
+      for (const [yearStr, yearSections] of Object.entries(sections)) {
+        if (Array.isArray(yearSections) && yearSections.length > 0) {
+          hasValidSections = true;
+          break;
+        }
+      }
+    } else if (Array.isArray(sections) && sections.length > 0) {
+      hasValidSections = true;
+    }
+
+    if (!hasValidSections) {
+      console.log('⚠️ saveWeeklyFMSReviewSectionsToTable: No valid sections to save');
+      // Still delete existing sections if we're clearing the data
+      const deletedCount = await prisma.weeklyFMSReviewSection.deleteMany({
+        where: { projectId }
+      });
+      console.log(`🗑️ Deleted ${deletedCount.count} existing weekly FMS review sections for project ${projectId} (no valid sections)`);
+      return;
+    }
+
+    // Delete existing sections for this project (only if we have valid data to replace them)
     const deletedCount = await prisma.weeklyFMSReviewSection.deleteMany({
       where: { projectId }
     });
     console.log(`🗑️ Deleted ${deletedCount.count} existing weekly FMS review sections for project ${projectId}`);
-
-    if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
-      console.log('⚠️ saveWeeklyFMSReviewSectionsToTable: Empty sections data, nothing to save');
-      return;
-    }
 
     // Handle year-based structure: { "2024": [...], "2025": [...] }
     if (typeof sections === 'object' && !Array.isArray(sections)) {
@@ -600,88 +630,99 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
             continue;
           }
 
+          // Only create section if it has documents or if we want to preserve empty sections
+          const documents = section.documents || [];
+          const hasDocuments = Array.isArray(documents) && documents.length > 0;
+
           try {
-            await prisma.weeklyFMSReviewSection.create({
-              data: {
-                projectId,
-                year,
-                name: section.name || '',
-                description: section.description || '',
-                reviewer: section.reviewer || '',
-                order: i,
-                items: {
-                  create: (section.documents || []).map((doc, docIdx) => {
-                    const statuses = []
-                    const statusMap = new Map() // Deduplicate by year-month to prevent unique constraint violations
-                    if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
-                      for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                        // Parse "2024-01" format (monthly, no week)
-                        const parts = key.split('-')
-                        if (parts.length >= 2) {
-                          const year = parseInt(parts[0], 10)
-                          const month = parseInt(parts[1], 10)
-                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            const statusKey = `${year}-${month}`
-                            // Deduplicate: if same year-month exists, use the latest status value
-                            statusMap.set(statusKey, {
-                              year,
-                              month,
-                              status: String(status || 'pending')
-                            })
-                          }
+            // Build the create data
+            const sectionData = {
+              projectId,
+              year,
+              name: section.name || '',
+              description: section.description || '',
+              reviewer: section.reviewer || '',
+              order: i
+            };
+
+            // Only add items if we have documents
+            if (hasDocuments) {
+              sectionData.items = {
+                create: documents.map((doc, docIdx) => {
+                  const statuses = []
+                  const statusMap = new Map() // Deduplicate by year-month to prevent unique constraint violations
+                  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+                    for (const [key, status] of Object.entries(doc.collectionStatus)) {
+                      // Parse "2024-01" format (monthly, no week)
+                      const parts = key.split('-')
+                      if (parts.length >= 2) {
+                        const year = parseInt(parts[0], 10)
+                        const month = parseInt(parts[1], 10)
+                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+                          const statusKey = `${year}-${month}`
+                          // Deduplicate: if same year-month exists, use the latest status value
+                          statusMap.set(statusKey, {
+                            year,
+                            month,
+                            status: String(status || 'pending')
+                          })
                         }
                       }
                     }
-                    // Convert map values to array (automatically deduplicated)
-                    statuses.push(...Array.from(statusMap.values()))
+                  }
+                  // Convert map values to array (automatically deduplicated)
+                  statuses.push(...Array.from(statusMap.values()))
 
-                    const comments = []
-                    if (doc.comments && typeof doc.comments === 'object') {
-                      for (const [key, commentArray] of Object.entries(doc.comments)) {
-                        const parts = key.split('-')
-                        if (parts.length >= 2) {
-                          const year = parseInt(parts[0], 10)
-                          const month = parseInt(parts[1], 10)
-                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
-                            for (const comment of commentList) {
-                              if (comment && (comment.text || comment)) {
-                                comments.push({
-                                  year,
-                                  month,
-                                  text: comment.text || String(comment),
-                                  author: comment.author || comment.authorName || '',
-                                  authorId: comment.authorId || null
-                                })
-                              }
+                  const comments = []
+                  if (doc.comments && typeof doc.comments === 'object') {
+                    for (const [key, commentArray] of Object.entries(doc.comments)) {
+                      const parts = key.split('-')
+                      if (parts.length >= 2) {
+                        const year = parseInt(parts[0], 10)
+                        const month = parseInt(parts[1], 10)
+                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+                          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+                          for (const comment of commentList) {
+                            if (comment && (comment.text || comment)) {
+                              comments.push({
+                                year,
+                                month,
+                                text: comment.text || String(comment),
+                                author: comment.author || comment.authorName || '',
+                                authorId: comment.authorId || null
+                              })
                             }
                           }
                         }
                       }
                     }
+                  }
 
-                    // Build item data, only include statuses/comments if they have data
-                    const itemData = {
-                      name: doc.name || '',
-                      description: doc.description || '',
-                      required: doc.required || false,
-                      order: docIdx
-                    }
-                    
-                    // Only add statuses if array is not empty
-                    if (statuses.length > 0) {
-                      itemData.statuses = { create: statuses }
-                    }
-                    
-                    // Only add comments if array is not empty
-                    if (comments.length > 0) {
-                      itemData.comments = { create: comments }
-                    }
-                    
-                    return itemData
-                  })
-                }
+                  // Build item data, only include statuses/comments if they have data
+                  const itemData = {
+                    name: doc.name || '',
+                    description: doc.description || '',
+                    required: doc.required || false,
+                    order: docIdx
+                  }
+                  
+                  // Only add statuses if array is not empty
+                  if (statuses.length > 0) {
+                    itemData.statuses = { create: statuses }
+                  }
+                  
+                  // Only add comments if array is not empty
+                  if (comments.length > 0) {
+                    itemData.comments = { create: comments }
+                  }
+                  
+                  return itemData
+                })
               }
+            }
+            // Create the section (with or without items)
+            await prisma.weeklyFMSReviewSection.create({
+              data: sectionData
             });
             totalSectionsCreated++;
           } catch (createError) {
