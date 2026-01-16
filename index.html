@@ -80,14 +80,14 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1768552520092'; // Updated by build process
+        window.BUILD_VERSION = '1768552571788'; // Updated by build process
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
     <!-- VERSION: 20251215-remove-simple-v2 - Update this when deploying new changes -->
     <script>
         (function() {
-            var APP_VERSION = '1768552520092';
+            var APP_VERSION = '1768552571788';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -793,8 +793,16 @@
                     allErrorText.includes('already exists') ||
                     (allErrorText.includes('duplicate') && (allErrorText.includes('weekly') || allErrorText.includes('notes')));
                 
-                // Only log non-database, non-opportunities-api, non-projects-api, non-server, and non-already-exists errors
-                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError) {
+                // Check for "Not found" / 404 errors - these are expected when resources don't exist
+                // (e.g., deleted clients/leads, non-existent entities)
+                const isNotFoundError = 
+                    allErrorText.includes('not found') ||
+                    allErrorText.includes('404') ||
+                    (error instanceof Error && error.message && error.message.includes('Not found')) ||
+                    (error && typeof error === 'object' && (error.status === 404 || error.code === 404));
+                
+                // Only log non-database, non-opportunities-api, non-projects-api, non-server, non-already-exists, and non-not-found errors
+                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError && !isNotFoundError) {
                     console.error('🚨 Unhandled Promise Rejection:', {
                         reason: error,
                         promise: event.promise,
@@ -1062,8 +1070,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1768552520092" as="script">
-    <script defer src="/dist/core-bundle.js?v=1768552520092"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1768552571788" as="script">
+    <script defer src="/dist/core-bundle.js?v=1768552571788"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1416,8 +1424,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260108-deep-link-fix-v1 -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1768552520092" as="script">
-    <script defer src="/lazy-load-components.js?v=1768552520092"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1768552571788" as="script">
+    <script defer src="/lazy-load-components.js?v=1768552571788"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

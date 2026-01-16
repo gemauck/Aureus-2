@@ -2016,6 +2016,11 @@ function initializeProjectDetail() {
         };
         
         // Check immediately
+        console.log('🔍 ProjectDetail: Running deep link checks', {
+            projectId: project?.id,
+            hasDocCollection: project?.hasDocumentCollectionProcess,
+            activeSection
+        });
         checkAndSwitchToDocumentCollection();
         checkAndSwitchToWeeklyFMSReview();
         
