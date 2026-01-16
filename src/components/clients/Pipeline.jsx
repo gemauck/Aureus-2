@@ -1875,12 +1875,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             return (
                                                 <div
                                                     key={`${itemType}-${item.id}`}
-                                                    draggable
+                                                    draggable="true"
+                                                    onMouseDown={(e) => {
+                                                        // Ensure drag works even when clicking on child elements
+                                                        // Don't interfere with button clicks
+                                                        if (e.target.closest('button')) {
+                                                            return;
+                                                        }
+                                                        // Make sure the card itself is draggable
+                                                        e.currentTarget.setAttribute('draggable', 'true');
+                                                    }}
                                                     onDragStart={(e) => {
                                                         console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target, currentTarget: e.currentTarget });
                                                         
-                                                        // Prevent drag if clicking directly on button (not just if button is ancestor)
-                                                        if (e.target.tagName === 'BUTTON' || e.target.closest('button') === e.target) {
+                                                        // Prevent drag if clicking directly on button
+                                                        if (e.target.tagName === 'BUTTON' || (e.target.closest('button') && e.target.closest('button') === e.target)) {
                                                             console.log('❌ Drag prevented - clicked directly on button');
                                                             e.preventDefault();
                                                             e.stopPropagation();
@@ -1917,19 +1926,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             onItemClick(item);
                                                         }
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 ${
+                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
                                                         isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
                                                     }`}
+                                                    style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                                                 >
                                                     {/* Card Header */}
                                                     <div 
-                                                        className="flex items-start justify-between mb-2"
+                                                        className="flex items-start justify-between mb-2 pointer-events-none"
                                                         draggable="false"
                                                         onDragStart={(e) => e.preventDefault()}
+                                                        onMouseDown={(e) => e.stopPropagation()}
                                                     >
                                                         <div className="flex-1 min-w-0" draggable="false" onDragStart={(e) => e.preventDefault()}>
                                                             <h4 
-                                                                className="text-sm font-semibold text-gray-900 truncate"
+                                                                className="text-sm font-semibold text-gray-900 truncate pointer-events-none"
                                                                 draggable="false"
                                                                 onDragStart={(e) => e.preventDefault()}
                                                             >
@@ -1937,7 +1948,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             </h4>
                                                             {itemIndustry && (
                                                                 <p 
-                                                                    className="text-xs text-gray-500 mt-0.5 truncate"
+                                                                    className="text-xs text-gray-500 mt-0.5 truncate pointer-events-none"
                                                                     draggable="false"
                                                                     onDragStart={(e) => e.preventDefault()}
                                                                 >
@@ -1953,6 +1964,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                 e.stopPropagation();
                                                                 return false;
                                                             }}
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                                e.preventDefault();
+                                                            }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 e.preventDefault();
@@ -1960,7 +1975,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                     onToggleStar(e, item);
                                                                 }
                                                             }}
-                                                            className={`ml-2 flex-shrink-0 transition-colors cursor-pointer ${
+                                                            className={`ml-2 flex-shrink-0 transition-colors cursor-pointer pointer-events-auto ${
                                                                 item.isStarred 
                                                                     ? 'text-yellow-500' 
                                                                     : 'text-gray-300 hover:text-yellow-400'
@@ -1972,9 +1987,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                                                     {/* Card Body - Minimal Info */}
                                                     <div 
-                                                        className="space-y-1.5"
+                                                        className="space-y-1.5 pointer-events-none"
                                                         draggable="false"
                                                         onDragStart={(e) => e.preventDefault()}
+                                                        onMouseDown={(e) => e.stopPropagation()}
                                                     >
                                                         {/* Value */}
                                                         {itemValue > 0 && (
