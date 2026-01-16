@@ -2185,9 +2185,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             // Check if URL has deep link parameters first
             const urlHash = window.location.hash || '';
             const urlSearch = window.location.search || '';
-            const hasDeepLinkParams = urlHash.includes('docSectionId=') || urlSearch.includes('docSectionId=');
+            const hasDocCollectionParams = urlHash.includes('docSectionId=') || urlSearch.includes('docSectionId=');
+            const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
             
-            if (!hasDeepLinkParams) {
+            // Only proceed if we have doc collection params OR commentId (for comment search fallback)
+            if (!hasDocCollectionParams && !hasCommentId) {
                 return; // No deep link params, exit early
             }
             
