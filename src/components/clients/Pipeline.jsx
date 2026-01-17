@@ -2083,8 +2083,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             onItemClick(item);
                                                         }
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
-                                                        isDragging ? 'opacity-50 scale-95' : 'hover:scale-[1.02]'
+                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 ease-out border border-gray-200 hover:shadow-md hover:border-blue-300 hover:scale-[1.01] select-none ${
+                                                        isDragging && draggedItem?.id === item.id 
+                                                            ? 'opacity-60 scale-[0.98] shadow-xl' 
+                                                            : mouseDragState?.item?.id === item.id
+                                                            ? 'opacity-85 scale-[0.98] shadow-lg cursor-grabbing'
+                                                            : 'opacity-100'
                                                     }`}
                                                     style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                                                 >
