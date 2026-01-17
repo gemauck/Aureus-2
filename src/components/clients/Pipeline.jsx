@@ -1341,10 +1341,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 dragState.currentX = moveEvent.clientX;
                 dragState.currentY = moveEvent.clientY;
                 
-                // Find which column we're over
+                // Find which column we're over by checking element under cursor
                 const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-                const columnElement = elementBelow?.closest('[data-column-name]');
-                const columnName = columnElement?.dataset?.columnName;
+                let columnName = null;
+                
+                if (elementBelow) {
+                    // Look for the column heading (h3) - this is what the Kanban columns use
+                    const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
+                    if (columnContainer) {
+                        const heading = columnContainer.querySelector('h3');
+                        if (heading) {
+                            columnName = heading.textContent?.trim();
+                        }
+                    }
+                    // Fallback: check for data-column-name
+                    if (!columnName) {
+                        const dataColumn = elementBelow.closest('[data-column-name]');
+                        if (dataColumn) {
+                            columnName = dataColumn.dataset.columnName;
+                        }
+                    }
+                }
                 
                 if (columnName && columnName !== dragState.targetStage) {
                     dragState.targetStage = columnName;
@@ -2041,13 +2058,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     onClick={(e) => {
                                                         // Don't trigger card click if:
                                                         // 1. Clicking button
-                                                        // 2. This was a drag operation (check if drag started recently)
+                                                        // 2. We just dragged (mouse or touch)
                                                         if (e.target.closest('button')) {
                                                             return;
                                                         }
-                                                        const dragStartTime = e.currentTarget.dataset.dragStartTime;
-                                                        if (dragStartTime && (Date.now() - parseInt(dragStartTime)) < 300) {
-                                                            // This was likely a drag, not a click
+                                                        if (justDragged || mouseDragState || touchDragState) {
                                                             return;
                                                         }
                                                         if (onItemClick) {
