@@ -2386,24 +2386,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
-                            // Scroll the comment into view within the popup
                             // Only scroll if we haven't already scrolled to this comment
-                            if (commentPopupContainerRef.current) {
+                            if (!deepLinkScrolledRef.current.has(targetCommentId)) {
                                 const container = commentPopupContainerRef.current;
                                 const containerRect = container.getBoundingClientRect();
                                 const commentRect = commentElement.getBoundingClientRect();
-                                const scrollTop = container.scrollTop;
-                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
                                 
                                 // Only scroll if comment is not already visible
                                 const isVisible = commentRect.top >= containerRect.top && 
                                                  commentRect.bottom <= containerRect.bottom;
                                 if (!isVisible) {
+                                    const scrollTop = container.scrollTop;
+                                    const commentOffset = commentRect.top - containerRect.top + scrollTop;
                                     container.scrollTo({
                                         top: Math.max(0, commentOffset - 20), // 20px padding from top
                                         behavior: 'smooth'
                                     });
                                 }
+                                // Mark as scrolled to prevent re-scrolling
+                                deepLinkScrolledRef.current.add(targetCommentId);
                             }
                             // Highlight the comment briefly
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
