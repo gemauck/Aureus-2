@@ -1302,6 +1302,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
         
+        // Calculate offset from mouse to card origin (for smooth following)
+        const offsetX = e.clientX - cardRect.left - (cardRect.width / 2);
+        const offsetY = e.clientY - cardRect.top - (cardRect.height / 2);
+        
         const dragState = {
             item,
             type,
@@ -1309,6 +1313,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             currentY: e.clientY,
             startX: e.clientX,
             currentX: e.clientX,
+            offsetX,
+            offsetY,
             cardRect,
             initialStage: item.stage,
             cardElement,
@@ -1320,13 +1326,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setDraggedType(type);
         setIsDragging(true);
         
-        // Smooth visual feedback with transitions
-        cardElement.style.transition = 'transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease';
-        cardElement.style.transform = 'scale(0.98) rotate(1deg)';
-        cardElement.style.opacity = '0.85';
+        // Initial visual feedback - remove transition for instant response
+        cardElement.style.transition = 'opacity 0.15s ease, box-shadow 0.15s ease';
+        cardElement.style.opacity = '0.9';
         cardElement.style.zIndex = '1000';
         cardElement.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1)';
         cardElement.style.cursor = 'grabbing';
+        cardElement.style.pointerEvents = 'none'; // Prevent interference during drag
         
         // Add global mouse event listeners
         const mouseMoveHandler = (moveEvent) => {
@@ -1343,6 +1349,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 // Update position
                 dragState.currentX = moveEvent.clientX;
                 dragState.currentY = moveEvent.clientY;
+                
+                // Make card follow mouse cursor smoothly
+                const newX = moveEvent.clientX - dragState.cardRect.left - (dragState.cardRect.width / 2);
+                const newY = moveEvent.clientY - dragState.cardRect.top - (dragState.cardRect.height / 2);
+                dragState.cardElement.style.transition = 'none'; // No transition during drag for smooth following
+                dragState.cardElement.style.transform = `translate(${newX}px, ${newY}px) scale(0.98) rotate(1deg)`;
                 
                 // Find which column we're over by checking element under cursor
                 const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
@@ -1380,18 +1392,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
             
             // Smoothly restore visual feedback
             if (dragState.cardElement) {
-                dragState.cardElement.style.transition = 'transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease';
+                dragState.cardElement.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out, box-shadow 0.2s ease-out';
                 dragState.cardElement.style.transform = '';
                 dragState.cardElement.style.opacity = '';
                 dragState.cardElement.style.zIndex = '';
                 dragState.cardElement.style.boxShadow = '';
                 dragState.cardElement.style.cursor = '';
+                dragState.cardElement.style.pointerEvents = ''; // Restore pointer events
                 // Remove transition after animation completes
                 setTimeout(() => {
                     if (dragState.cardElement) {
                         dragState.cardElement.style.transition = '';
                     }
-                }, 300);
+                }, 200);
             }
             
             const { item, type, targetStage, initialStage, hasMoved } = dragState;
