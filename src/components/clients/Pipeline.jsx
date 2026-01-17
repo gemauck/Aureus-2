@@ -1320,10 +1320,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setDraggedType(type);
         setIsDragging(true);
         
-        // Visual feedback
-        cardElement.style.transform = 'scale(0.95)';
-        cardElement.style.opacity = '0.7';
+        // Smooth visual feedback with transitions
+        cardElement.style.transition = 'transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease';
+        cardElement.style.transform = 'scale(0.98) rotate(1deg)';
+        cardElement.style.opacity = '0.85';
         cardElement.style.zIndex = '1000';
+        cardElement.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1)';
+        cardElement.style.cursor = 'grabbing';
         
         // Add global mouse event listeners
         const mouseMoveHandler = (moveEvent) => {
@@ -1375,11 +1378,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
             document.removeEventListener('mousemove', mouseMoveHandler);
             document.removeEventListener('mouseup', mouseUpHandler);
             
-            // Restore visual feedback
+            // Smoothly restore visual feedback
             if (dragState.cardElement) {
+                dragState.cardElement.style.transition = 'transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease';
                 dragState.cardElement.style.transform = '';
                 dragState.cardElement.style.opacity = '';
                 dragState.cardElement.style.zIndex = '';
+                dragState.cardElement.style.boxShadow = '';
+                dragState.cardElement.style.cursor = '';
+                // Remove transition after animation completes
+                setTimeout(() => {
+                    if (dragState.cardElement) {
+                        dragState.cardElement.style.transition = '';
+                    }
+                }, 300);
             }
             
             const { item, type, targetStage, initialStage, hasMoved } = dragState;
@@ -1960,8 +1972,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             <div
                                 key={column.id}
                                 data-pipeline-stage={column.name}
-                                className={`flex-shrink-0 w-72 sm:w-80 transition-all duration-200 ${
-                                    isDraggedOver ? 'scale-105' : ''
+                                className={`flex-shrink-0 w-72 sm:w-80 transition-all duration-200 ease-out ${
+                                    isDraggedOver ? 'scale-[1.02] shadow-lg ring-2 ring-blue-400 ring-opacity-50' : ''
                                 }`}
                             >
                                 {/* Column Header */}
