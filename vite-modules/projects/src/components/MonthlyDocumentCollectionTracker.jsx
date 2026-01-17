@@ -341,8 +341,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
-    const hasAutoScrolledOnceRef = useRef(false); // Track if we've auto-scrolled once for current popup
-    const userScrolledManuallyRef = useRef(false); // Track if user has manually scrolled
+    const hasAutoScrolledOnPageLoadRef = useRef(false); // Track if we've auto-scrolled on page load (only once per page reload)
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -2071,11 +2070,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
-    // Auto-scroll ONCE when popup opens, then completely stop all auto-scroll
+    // Auto-scroll to bottom ONLY on initial page load/reload
+    // Never auto-scroll when opening popup - user has full control
     useEffect(() => {
         if (!hoverCommentCell) {
-            // Reset flag when popup closes
-            hasAutoScrolledOnceRef.current = false;
             return;
         }
         
@@ -2085,21 +2083,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
         
         if (hasCommentId) {
-            hasAutoScrolledOnceRef.current = true;
+            // Deep-link logic handles scrolling
             return;
         }
         
-        // Auto-scroll to bottom ONCE ONLY when popup first opens
-        // After this, NEVER auto-scroll again - user has full control
-        if (!hasAutoScrolledOnceRef.current) {
+        // Only auto-scroll on initial page load (first time popup opens after page reload)
+        // After that, NEVER auto-scroll - user has full control
+        if (!hasAutoScrolledOnPageLoadRef.current) {
             const timeoutId = setTimeout(() => {
                 const container = commentPopupContainerRef.current;
-                if (container && !hasAutoScrolledOnceRef.current) {
-                    // Scroll once and mark as done - NEVER scroll again
+                if (container && !hasAutoScrolledOnPageLoadRef.current) {
+                    // Scroll to bottom on initial page load only
                     container.scrollTop = container.scrollHeight;
-                    hasAutoScrolledOnceRef.current = true;
+                    hasAutoScrolledOnPageLoadRef.current = true; // Mark as done - never scroll again until page reload
                 }
-            }, 300); // Longer delay to ensure DOM is ready
+            }, 500); // Delay to ensure DOM is ready
             
             return () => clearTimeout(timeoutId);
         }
@@ -2374,9 +2372,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
-                    // Disable auto-scroll immediately to prevent interference
-                    hasAutoScrolledOnceRef.current = true;
-                    userScrolledManuallyRef.current = true;
+                    // Mark as done so initial page load scroll doesn't interfere
+                    hasAutoScrolledOnPageLoadRef.current = true;
                     
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
@@ -2548,9 +2545,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                     }, 200);
                     
-                    // Disable auto-scroll immediately to prevent interference
-                    hasAutoScrolledOnceRef.current = true;
-                    userScrolledManuallyRef.current = true;
+                    // Mark as done so initial page load scroll doesn't interfere
+                    hasAutoScrolledOnPageLoadRef.current = true;
                     
                     // Scroll to the comment within the popup
                     const targetCommentId = String(deepCommentId);
