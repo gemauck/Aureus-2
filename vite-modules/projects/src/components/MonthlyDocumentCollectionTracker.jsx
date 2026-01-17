@@ -3510,6 +3510,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div 
+                                    key={`comment-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef} 
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
                                 >
