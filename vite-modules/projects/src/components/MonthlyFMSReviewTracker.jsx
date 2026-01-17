@@ -339,6 +339,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     const hasAutoScrolledRef = useRef(false);
+    const userHasScrolledRef = useRef(false);
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -1617,14 +1618,14 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             
             setQuickComment('');
             
-            // Scroll to show the new comment (reset auto-scroll flag to allow scrolling)
-            setTimeout(() => {
-                if (commentPopupContainerRef.current) {
-                    hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
-                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                    hasAutoScrolledRef.current = true; // Set flag again after scrolling
-                }
-            }, 100);
+        // Scroll to show the new comment (only if user hasn't manually scrolled)
+        setTimeout(() => {
+            if (commentPopupContainerRef.current && !userHasScrolledRef.current) {
+                hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
+                commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                hasAutoScrolledRef.current = true; // Set flag again after scrolling
+            }
+        }, 100);
             
             console.log('✅ Comment added successfully:', { sectionId, documentId, month, commentId: newCommentId });
         } catch (error) {
@@ -1887,18 +1888,41 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current && !hasAutoScrolledRef.current) {
+        if (hoverCommentCell && commentPopupContainerRef.current && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
             setTimeout(() => {
-                if (commentPopupContainerRef.current) {
+                // Double-check user hasn't scrolled during timeout
+                if (commentPopupContainerRef.current && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
                     commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
                     hasAutoScrolledRef.current = true;
                 }
             }, 100);
         } else if (!hoverCommentCell) {
-            // Reset flag when popup closes
+            // Reset flags when popup closes
             hasAutoScrolledRef.current = false;
+            userHasScrolledRef.current = false;
         }
     }, [hoverCommentCell]); // Only depend on hoverCommentCell, not position updates
+    
+    // Track manual scrolling to prevent auto-scroll from interfering
+    useEffect(() => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !hoverCommentCell) return;
+        
+        const handleScroll = () => {
+            // If user has manually scrolled, mark it
+            // Only mark if scroll is not at the bottom (within 10px tolerance)
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+            if (!isAtBottom && !userHasScrolledRef.current) {
+                userHasScrolledRef.current = true;
+            }
+        };
+        
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        
+        return () => {
+            container.removeEventListener('scroll', handleScroll);
+        };
+    }, [hoverCommentCell, commentPopupContainerRef.current]);
     
     // Smart positioning for comment popup (separate effect)
     useEffect(() => {

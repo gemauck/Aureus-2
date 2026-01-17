@@ -338,6 +338,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const userHasScrolledRef = useRef(false);
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -1828,15 +1829,41 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current) {
+        if (hoverCommentCell && commentPopupContainerRef.current && !userHasScrolledRef.current) {
             setTimeout(() => {
-                if (commentPopupContainerRef.current) {
+                // Double-check user hasn't scrolled during timeout
+                if (commentPopupContainerRef.current && !userHasScrolledRef.current) {
                     commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
                 }
             }, 100);
+        } else if (!hoverCommentCell) {
+            // Reset flag when popup closes
+            userHasScrolledRef.current = false;
         }
+    }, [hoverCommentCell]);
+    
+    // Track manual scrolling to prevent auto-scroll from interfering
+    useEffect(() => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !hoverCommentCell) return;
         
-        // Smart positioning for comment popup
+        const handleScroll = () => {
+            // If user has manually scrolled, mark it
+            // Only mark if scroll is not at the bottom (within 10px tolerance)
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+            if (!isAtBottom && !userHasScrolledRef.current) {
+                userHasScrolledRef.current = true;
+            }
+        };
+        
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        
+        return () => {
+            container.removeEventListener('scroll', handleScroll);
+        };
+    }, [hoverCommentCell, commentPopupContainerRef.current]);
+    
+    // Smart positioning for comment popup
         const updatePopupPosition = () => {
             if (!hoverCommentCell) {
                 return;

@@ -342,6 +342,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     const hasAutoScrolledRef = useRef(false);
+    const userHasScrolledRef = useRef(false);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1846,9 +1847,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setQuickComment('');
         
-        // Scroll to show the new comment (reset auto-scroll flag to allow scrolling)
+        // Scroll to show the new comment (only if user hasn't manually scrolled)
         setTimeout(() => {
-            if (commentPopupContainerRef.current) {
+            if (commentPopupContainerRef.current && !userHasScrolledRef.current) {
                 hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
                 commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
                 hasAutoScrolledRef.current = true; // Set flag again after scrolling
@@ -2077,17 +2078,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Skip auto-scroll if there's a deep-link comment ID (let deep-link scrolling handle it)
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current && !hasAutoScrolledRef.current) {
+        if (hoverCommentCell && commentPopupContainerRef.current && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
             // Check if there's a commentId in the URL (deep-link scenario)
             const urlHash = window.location.hash || '';
             const urlSearch = window.location.search || '';
             const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
             
-            // Only auto-scroll to bottom if there's no deep-link comment ID
+            // Only auto-scroll to bottom if there's no deep-link comment ID and user hasn't scrolled
             // If there's a commentId, the deep-link logic will handle scrolling
             if (!hasCommentId) {
                 setTimeout(() => {
-                    if (commentPopupContainerRef.current && !hasAutoScrolledRef.current) {
+                    // Double-check user hasn't scrolled during timeout
+                    if (commentPopupContainerRef.current && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
                         commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
                         hasAutoScrolledRef.current = true;
                     }
@@ -2098,10 +2100,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 hasAutoScrolledRef.current = true;
             }
         } else if (!hoverCommentCell) {
-            // Reset flag when popup closes
+            // Reset flags when popup closes
             hasAutoScrolledRef.current = false;
+            userHasScrolledRef.current = false;
         }
     }, [hoverCommentCell]); // Only depend on hoverCommentCell, not position updates
+    
+    // Track manual scrolling to prevent auto-scroll from interfering
+    useEffect(() => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !hoverCommentCell) return;
+        
+        const handleScroll = () => {
+            // If user has manually scrolled, mark it
+            // Only mark if scroll is not at the bottom (within 10px tolerance)
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+            if (!isAtBottom && !userHasScrolledRef.current) {
+                userHasScrolledRef.current = true;
+            }
+        };
+        
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        
+        return () => {
+            container.removeEventListener('scroll', handleScroll);
+        };
+    }, [hoverCommentCell, commentPopupContainerRef.current]);
     
     // Smart positioning for comment popup (separate effect)
     useEffect(() => {
