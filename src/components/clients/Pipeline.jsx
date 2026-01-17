@@ -1302,9 +1302,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
         
-        // Calculate offset from mouse to card origin (for smooth following)
-        const offsetX = e.clientX - cardRect.left - (cardRect.width / 2);
-        const offsetY = e.clientY - cardRect.top - (cardRect.height / 2);
+        // Calculate offset from mouse click point to card's top-left corner
+        const offsetX = e.clientX - cardRect.left;
+        const offsetY = e.clientY - cardRect.top;
         
         const dragState = {
             item,
@@ -1326,13 +1326,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setDraggedType(type);
         setIsDragging(true);
         
-        // Initial visual feedback - remove transition for instant response
-        cardElement.style.transition = 'opacity 0.15s ease, box-shadow 0.15s ease';
+        // Make card follow mouse - set fixed position relative to viewport
+        cardElement.style.position = 'fixed';
+        cardElement.style.left = `${cardRect.left}px`;
+        cardElement.style.top = `${cardRect.top}px`;
+        cardElement.style.width = `${cardRect.width}px`;
+        cardElement.style.transition = 'none'; // No transition during drag
         cardElement.style.opacity = '0.9';
-        cardElement.style.zIndex = '1000';
-        cardElement.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1)';
+        cardElement.style.zIndex = '9999'; // High z-index to stay on top
+        cardElement.style.boxShadow = '0 15px 35px rgba(0, 0, 0, 0.2), 0 5px 15px rgba(0, 0, 0, 0.15)';
         cardElement.style.cursor = 'grabbing';
         cardElement.style.pointerEvents = 'none'; // Prevent interference during drag
+        cardElement.style.transform = 'rotate(2deg) scale(1.02)'; // Visual feedback
         
         // Add global mouse event listeners
         const mouseMoveHandler = (moveEvent) => {
