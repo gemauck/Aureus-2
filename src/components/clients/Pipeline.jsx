@@ -1350,11 +1350,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 dragState.currentX = moveEvent.clientX;
                 dragState.currentY = moveEvent.clientY;
                 
-                // Make card follow mouse cursor smoothly
-                const newX = moveEvent.clientX - dragState.cardRect.left - (dragState.cardRect.width / 2);
-                const newY = moveEvent.clientY - dragState.cardRect.top - (dragState.cardRect.height / 2);
+                // Make card follow mouse cursor smoothly - calculate offset from original position
+                const deltaX = moveEvent.clientX - dragState.startX;
+                const deltaY = moveEvent.clientY - dragState.startY;
                 dragState.cardElement.style.transition = 'none'; // No transition during drag for smooth following
-                dragState.cardElement.style.transform = `translate(${newX}px, ${newY}px) scale(0.98) rotate(1deg)`;
+                dragState.cardElement.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(0.98) rotate(1deg)`;
                 
                 // Find which column we're over by checking element under cursor
                 const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
