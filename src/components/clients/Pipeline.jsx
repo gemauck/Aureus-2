@@ -1343,26 +1343,36 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const mouseMoveHandler = (moveEvent) => {
             if (!dragState) return;
             
+            moveEvent.preventDefault();
+            moveEvent.stopPropagation();
+            
+            // Always update position immediately for visual feedback
+            const newX = moveEvent.clientX - dragState.offsetX;
+            const newY = moveEvent.clientY - dragState.offsetY;
+            
+            // Update card position in real-time - this is what makes it visible during drag
+            dragState.cardElement.style.left = `${newX}px`;
+            dragState.cardElement.style.top = `${newY}px`;
+            
+            // Check if we've moved enough to consider it a drag (not just a click)
             const deltaX = moveEvent.clientX - dragState.startX;
             const deltaY = moveEvent.clientY - dragState.startY;
-            const minDragDistance = 5; // pixels
+            const minDragDistance = 3; // pixels
             
             if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
                 dragState.hasMoved = true;
-                moveEvent.preventDefault();
                 
-                // Update position
+                // Update position tracking
                 dragState.currentX = moveEvent.clientX;
                 dragState.currentY = moveEvent.clientY;
                 
-                // Make card follow mouse cursor - position it so the click point stays under cursor
-                const newX = moveEvent.clientX - dragState.offsetX;
-                const newY = moveEvent.clientY - dragState.offsetY;
-                dragState.cardElement.style.left = `${newX}px`;
-                dragState.cardElement.style.top = `${newY}px`;
-                
                 // Find which column we're over by checking element under cursor
+                // Temporarily hide the dragged card to see what's beneath
+                const originalDisplay = dragState.cardElement.style.display;
+                dragState.cardElement.style.display = 'none';
                 const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+                dragState.cardElement.style.display = originalDisplay;
+                
                 let columnName = null;
                 
                 if (elementBelow) {
