@@ -2032,8 +2032,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             <div
                                 key={column.id}
                                 data-pipeline-stage={column.name}
-                                className={`flex-shrink-0 w-72 sm:w-80 transition-all duration-200 ease-out ${
-                                    isDraggedOver ? 'scale-[1.02] shadow-lg ring-2 ring-blue-400 ring-opacity-50' : ''
+                                className={`flex-shrink-0 w-72 sm:w-80 ${
+                                    isDraggedOver ? 'ring-2 ring-blue-400 ring-opacity-50' : ''
                                 }`}
                             >
                                 {/* Column Header */}
@@ -2051,9 +2051,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                                 {/* Column Cards */}
                                 <div 
-                                    className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-300 ease-out ${
+                                    className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 ${
                                         isDraggedOver 
-                                            ? 'border-blue-400 border-dashed shadow-lg bg-blue-50/50 scale-[1.01]' 
+                                            ? 'border-blue-400 border-dashed bg-blue-50/50' 
                                             : 'border-transparent hover:border-gray-200'
                                     }`}
                                     onDragEnter={(e) => {
@@ -2143,11 +2143,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             onItemClick(item);
                                                         }
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-move transition-all duration-200 ease-out border border-gray-200 hover:shadow-md hover:border-blue-300 hover:scale-[1.01] select-none ${
+                                                    className={`bg-white rounded-lg p-3 cursor-move border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
                                                         isDragging && draggedItem?.id === item.id 
-                                                            ? 'opacity-60 scale-[0.98] shadow-xl' 
+                                                            ? 'opacity-30' 
                                                             : mouseDragState?.item?.id === item.id
-                                                            ? 'opacity-85 scale-[0.98] shadow-lg cursor-grabbing'
+                                                            ? 'opacity-30'
                                                             : 'opacity-100'
                                                     }`}
                                                     style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
