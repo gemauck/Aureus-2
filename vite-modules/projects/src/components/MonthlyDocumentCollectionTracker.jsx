@@ -2098,16 +2098,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // 1. No deep-link comment ID (deep-link logic handles scrolling)
         // 2. We haven't already auto-scrolled
         // 3. User hasn't manually scrolled
+        // 4. Container exists and is ready
         if (!hasCommentId && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
-            // Use a longer delay to ensure scroll listener is set up first
-            const timeoutId = setTimeout(() => {
-                // Triple-check conditions before scrolling
-                const currentContainer = commentPopupContainerRef.current;
-                if (currentContainer && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
-                    currentContainer.scrollTop = currentContainer.scrollHeight;
-                    hasAutoScrolledRef.current = true;
-                }
-            }, 150);
+            // Set up scroll listener FIRST before auto-scrolling
+            // This ensures we catch any manual scroll attempts
+            const setupScrollListener = () => {
+                if (!container || !hoverCommentCell) return;
+                
+                const handleScroll = () => {
+                    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
+                    if (!isAtBottom) {
+                        userHasScrolledRef.current = true;
+                    }
+                };
+                
+                container.addEventListener('scroll', handleScroll, { passive: true });
+                
+                // Now do the auto-scroll, but only if user hasn't scrolled yet
+                setTimeout(() => {
+                    if (container && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
+                        container.scrollTop = container.scrollHeight;
+                        hasAutoScrolledRef.current = true;
+                    }
+                }, 50);
+            };
+            
+            // Small delay to ensure DOM is ready
+            const timeoutId = setTimeout(setupScrollListener, 50);
             
             return () => clearTimeout(timeoutId);
         } else if (hasCommentId) {
@@ -2118,32 +2135,50 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [hoverCommentCell]); // Only depend on hoverCommentCell - runs once when popup opens
     
     // Track manual scrolling to prevent auto-scroll from interfering
+    // IMPORTANT: This runs AFTER the auto-scroll effect to ensure listener is always active
     useEffect(() => {
         const container = commentPopupContainerRef.current;
         if (!container || !hoverCommentCell) return;
         
-        // Set up scroll listener immediately when popup opens
+        // Track if user is actively scrolling (to prevent auto-scroll during scroll)
+        let isScrolling = false;
+        let scrollTimeout = null;
+        
         const handleScroll = () => {
-            // If user has manually scrolled away from bottom, mark it
-            // Use a larger tolerance to catch scroll attempts
+            // Mark that scrolling is happening
+            isScrolling = true;
+            
+            // Clear any pending scroll timeout
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            
+            // If user has manually scrolled away from bottom, mark it immediately
             const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
             if (!isAtBottom) {
                 userHasScrolledRef.current = true;
-            } else if (isAtBottom) {
-                // If user scrolls back to bottom, reset the flag to allow auto-scroll for new comments
-                // But only after a small delay to avoid race conditions
-                setTimeout(() => {
-                    if (container.scrollHeight - container.scrollTop - container.clientHeight < 5) {
+            } else if (isAtBottom && userHasScrolledRef.current) {
+                // If user scrolls back to bottom, reset the flag after a delay
+                // This allows auto-scroll for new comments when user is at bottom
+                scrollTimeout = setTimeout(() => {
+                    if (container && container.scrollHeight - container.scrollTop - container.clientHeight < 5) {
                         userHasScrolledRef.current = false;
                     }
-                }, 100);
+                }, 200);
             }
+            
+            // Reset scrolling flag after scroll ends
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                isScrolling = false;
+            }, 150);
         };
         
         container.addEventListener('scroll', handleScroll, { passive: true });
         
         return () => {
             container.removeEventListener('scroll', handleScroll);
+            if (scrollTimeout) clearTimeout(scrollTimeout);
         };
     }, [hoverCommentCell]);
     
