@@ -1350,11 +1350,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 dragState.currentX = moveEvent.clientX;
                 dragState.currentY = moveEvent.clientY;
                 
-                // Make card follow mouse cursor smoothly - calculate offset from original position
-                const deltaX = moveEvent.clientX - dragState.startX;
-                const deltaY = moveEvent.clientY - dragState.startY;
-                dragState.cardElement.style.transition = 'none'; // No transition during drag for smooth following
-                dragState.cardElement.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(0.98) rotate(1deg)`;
+                // Make card follow mouse cursor - position it so the click point stays under cursor
+                const newX = moveEvent.clientX - dragState.offsetX;
+                const newY = moveEvent.clientY - dragState.offsetY;
+                dragState.cardElement.style.left = `${newX}px`;
+                dragState.cardElement.style.top = `${newY}px`;
                 
                 // Find which column we're over by checking element under cursor
                 const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
@@ -1392,13 +1392,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
             
             // Smoothly restore visual feedback
             if (dragState.cardElement) {
+                // Reset position styles
+                dragState.cardElement.style.position = '';
+                dragState.cardElement.style.left = '';
+                dragState.cardElement.style.top = '';
+                dragState.cardElement.style.width = '';
                 dragState.cardElement.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out, box-shadow 0.2s ease-out';
                 dragState.cardElement.style.transform = '';
                 dragState.cardElement.style.opacity = '';
                 dragState.cardElement.style.zIndex = '';
                 dragState.cardElement.style.boxShadow = '';
                 dragState.cardElement.style.cursor = '';
-                dragState.cardElement.style.pointerEvents = ''; // Restore pointer events
+                dragState.cardElement.style.pointerEvents = '';
                 // Remove transition after animation completes
                 setTimeout(() => {
                     if (dragState.cardElement) {
