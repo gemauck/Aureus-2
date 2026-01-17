@@ -1320,24 +1320,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
         ghost.innerHTML = cardElement.innerHTML;
         ghost.className = cardElement.className;
         
-        // Apply styles directly
-        Object.assign(ghost.style, {
-            position: 'fixed',
-            left: `${cardRect.left}px`,
-            top: `${cardRect.top}px`,
-            width: `${cardRect.width}px`,
-            zIndex: '99999',
-            opacity: '0.9',
-            pointerEvents: 'none',
-            transform: 'rotate(2deg) scale(1.03)',
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)',
-            transition: 'none',
-            cursor: 'grabbing',
-            backgroundColor: 'white',
-            borderRadius: '0.5rem',
-            padding: '0.75rem',
-            border: '1px solid #e5e7eb'
-        });
+        // Apply styles directly - set each property individually
+        ghost.style.position = 'fixed';
+        ghost.style.left = `${cardRect.left}px`;
+        ghost.style.top = `${cardRect.top}px`;
+        ghost.style.width = `${cardRect.width}px`;
+        ghost.style.zIndex = '99999';
+        ghost.style.opacity = '0.9';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.transform = 'rotate(2deg) scale(1.03)';
+        ghost.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
+        ghost.style.transition = 'none';
+        ghost.style.cursor = 'grabbing';
+        ghost.style.backgroundColor = 'white';
+        ghost.style.borderRadius = '0.5rem';
+        ghost.style.padding = '0.75rem';
+        ghost.style.border = '1px solid #e5e7eb';
         
         document.body.appendChild(ghost);
         dragGhostRef.current = ghost;

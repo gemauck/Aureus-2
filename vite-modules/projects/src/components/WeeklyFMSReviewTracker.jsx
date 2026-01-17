@@ -407,9 +407,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             console.log('⚠️ Falling back to prop data');
             if (project?.weeklyFMSReviewSections) {
                 const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
+                console.log('📥 Normalized prop data:', { 
+                    yearKeys: Object.keys(normalized),
+                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                });
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
+                setIsLoading(false);
+                return;
             } else {
                 // Check localStorage as backup before initializing empty
                 const snapshotKey = getSnapshotKey(project.id);
@@ -542,10 +548,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             : sectionsByYear;
         const serialized = JSON.stringify(payload);
         
-        // Skip if data hasn't changed
-        if (lastSavedDataRef.current === serialized) {
-            console.log('⏸️ Save skipped: data unchanged');
+        // Skip if data hasn't changed (unless forceSave is requested)
+        if (!options.forceSave && lastSavedDataRef.current === serialized) {
+            console.log('⏸️ Save skipped: data unchanged', {
+                payloadSize: serialized.length,
+                lastSavedSize: lastSavedDataRef.current?.length,
+                hasPayload: !!payload,
+                payloadKeys: Object.keys(payload || {})
+            });
             return;
+        }
+        
+        if (options.forceSave) {
+            console.log('🔨 Force save requested - bypassing unchanged check');
         }
         
         console.log('💾 Saving to database...', { 
@@ -1437,7 +1452,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // STATUS AND COMMENTS
     // ============================================================
     
-    const handleUpdateStatus = useCallback(async (sectionId, documentId, month, status, applyToSelected = false) => {
+    const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
         
         // Use current state (most up-to-date) or fallback to ref
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
@@ -1510,12 +1525,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately and await to ensure it completes before any navigation
-        try {
-            await saveToDatabase();
-        } catch (error) {
-            console.error('❌ Error saving status change:', error);
-        }
+        // Save immediately
+        saveToDatabase();
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -1525,116 +1536,147 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear, sectionsByYear]);
+    }, [selectedYear]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
-        const currentUser = getCurrentUser();
-        const newCommentId = Date.now();
-        const newComment = {
-            id: newCommentId,
-            text: commentText,
-            date: new Date().toISOString(),
-            author: currentUser.name,
-            authorEmail: currentUser.email,
-            authorId: currentUser.id
-        };
+        console.log('💬 handleAddComment called:', { sectionId, documentId, month, commentText: commentText.substring(0, 50) });
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        
+        try {
+            const currentUser = getCurrentUser();
+            const newCommentId = Date.now();
+            const newComment = {
+                id: newCommentId,
+                text: commentText,
+                date: new Date().toISOString(),
+                author: currentUser.name,
+                authorEmail: currentUser.email,
+                authorId: currentUser.id
+            };
+            
+            // Validate inputs
+            if (!sectionId || !documentId || !month) {
+                console.error('❌ Missing required fields for comment:', { sectionId, documentId, month });
+                alert('Error: Missing required information. Please try again.');
+                return;
+            }
+            
+            // Use current state (most up-to-date) or fallback to ref
+            const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
+                ? sectionsByYear 
+                : (sectionsRef.current || {});
+            const currentYearSections = latestSectionsByYear[selectedYear] || [];
+            
+            console.log('🔍 Looking for section:', { sectionId, selectedYear, sectionsCount: currentYearSections.length });
+            
+            let sectionFound = false;
+            let documentFound = false;
+            
             const updated = currentYearSections.map(section => {
                 if (String(section.id) === String(sectionId)) {
-                return {
-                    ...section,
-                    documents: section.documents.map(doc => {
+                    sectionFound = true;
+                    return {
+                        ...section,
+                        documents: section.documents.map(doc => {
                             if (String(doc.id) === String(documentId)) {
-                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
-                            return {
-                                ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
-                };
-            }
-            return section;
+                                documentFound = true;
+                                const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                                return {
+                                    ...doc,
+                                    comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
+                                };
+                            }
+                            return doc;
+                        })
+                    };
+                }
+                return section;
             });
             
-        const updatedSectionsByYear = {
-            ...latestSectionsByYear,
+            if (!sectionFound) {
+                console.error('❌ Section not found:', sectionId);
+                alert('Error: Section not found. Please refresh and try again.');
+                return;
+            }
+            
+            if (!documentFound) {
+                console.error('❌ Document not found:', documentId);
+                alert('Error: Document not found. Please refresh and try again.');
+                return;
+            }
+            
+            const updatedSectionsByYear = {
+                ...latestSectionsByYear,
                 [selectedYear]: updated
             };
-        
-        // Update ref IMMEDIATELY before state update to prevent race conditions
-        sectionsRef.current = updatedSectionsByYear;
-        
-        // Now update state (this will trigger auto-save)
-        setSectionsByYear(updatedSectionsByYear);
-        
-        // Force immediate save (don't wait for debounce) to ensure persistence
-        // Clear any pending debounced save first
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = null;
-        }
-        // Save immediately and await to ensure it completes before any navigation
-        await saveToDatabase().catch(error => {
-            console.error('❌ Error saving comment:', error);
-        });
-        
-        setQuickComment('');
+            
+            // Update ref IMMEDIATELY before state update to prevent race conditions
+            sectionsRef.current = updatedSectionsByYear;
+            
+            // Now update state (this will trigger auto-save)
+            setSectionsByYear(updatedSectionsByYear);
+            
+            // Force immediate save (don't wait for debounce) to ensure persistence
+            // Clear any pending debounced save first
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            // Save immediately
+            saveToDatabase();
+            
+            setQuickComment('');
 
-        // ========================================================
-        // @MENTIONS - Process mentions and create notifications
-        // ========================================================
-        try {
-            if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
-                const token = window.storage?.getToken?.();
-                
-                if (token && window.DatabaseAPI?.getUsers) {
-                    // Fetch all users once for matching mentions
-                    const usersResponse = await window.DatabaseAPI.getUsers();
-                    const allUsers =
-                        usersResponse?.data?.users ||
-                        usersResponse?.data?.data?.users ||
-                        usersResponse?.users ||
-                        [];
+            // ========================================================
+            // @MENTIONS - Process mentions and create notifications
+            // ========================================================
+            try {
+                if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
+                    const token = window.storage?.getToken?.();
                     
-                    const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
-                    // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
-                    const projectInfo = {
-                        projectId: project?.id,
-                        projectName: project?.name,
-                        sectionId,
-                        documentId,
-                        month,
-                        commentId: newCommentId
-                    };
-                    
-                    // Fire mention notifications (do not block UI on errors)
-                    window.MentionHelper.processMentions(
-                        commentText,
-                        contextTitle,
-                        contextLink,
-                        currentUser.name || currentUser.email || 'Unknown',
-                        allUsers,
-                        projectInfo
-                    ).then(() => {
-                    }).catch(error => {
-                        console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
-                    });
+                    if (token && window.DatabaseAPI?.getUsers) {
+                        // Fetch all users once for matching mentions
+                        const usersResponse = await window.DatabaseAPI.getUsers();
+                        const allUsers =
+                            usersResponse?.data?.users ||
+                            usersResponse?.data?.data?.users ||
+                            usersResponse?.users ||
+                            [];
+                        
+                        const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
+                        // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
+                        const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                        const projectInfo = {
+                            projectId: project?.id,
+                            projectName: project?.name,
+                            sectionId,
+                            documentId,
+                            month,
+                            commentId: newCommentId
+                        };
+                        
+                        // Fire mention notifications (do not block UI on errors)
+                        window.MentionHelper.processMentions(
+                            commentText,
+                            contextTitle,
+                            contextLink,
+                            currentUser.name || currentUser.email || 'Unknown',
+                            allUsers,
+                            projectInfo
+                        ).then(() => {
+                        }).catch(error => {
+                            console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
+                        });
+                    }
                 }
+            } catch (error) {
+                console.error('❌ Unexpected error in handleAddComment @mentions processing:', error);
+                // Swallow errors so commenting UI never breaks due to notifications
             }
         } catch (error) {
-            console.error('❌ Unexpected error in handleAddComment @mentions processing:', error);
-            // Swallow errors so commenting UI never breaks due to notifications
+            console.error('❌ Error in handleAddComment:', error);
+            alert('Error adding comment. Please try again.');
         }
     };
     
