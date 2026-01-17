@@ -1828,31 +1828,53 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
+    // Auto-scroll to bottom only when popup first opens (not on every render)
+    // IMPORTANT: Only runs once when hoverCommentCell changes, and respects user scroll
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current && !userHasScrolledRef.current) {
-            setTimeout(() => {
-                // Double-check user hasn't scrolled during timeout
-                if (commentPopupContainerRef.current && !userHasScrolledRef.current) {
-                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                }
-            }, 100);
-        } else if (!hoverCommentCell) {
+        if (!hoverCommentCell) {
             // Reset flag when popup closes
             userHasScrolledRef.current = false;
+            return;
         }
-    }, [hoverCommentCell]);
+        
+        const container = commentPopupContainerRef.current;
+        if (!container) return;
+        
+        // Only auto-scroll to bottom if user hasn't manually scrolled
+        if (!userHasScrolledRef.current) {
+            // Use a longer delay to ensure scroll listener is set up first
+            const timeoutId = setTimeout(() => {
+                // Double-check conditions before scrolling
+                const currentContainer = commentPopupContainerRef.current;
+                if (currentContainer && !userHasScrolledRef.current) {
+                    currentContainer.scrollTop = currentContainer.scrollHeight;
+                }
+            }, 150);
+            
+            return () => clearTimeout(timeoutId);
+        }
+    }, [hoverCommentCell]); // Only depend on hoverCommentCell - runs once when popup opens
     
     // Track manual scrolling to prevent auto-scroll from interfering
     useEffect(() => {
         const container = commentPopupContainerRef.current;
         if (!container || !hoverCommentCell) return;
         
+        // Set up scroll listener immediately when popup opens
         const handleScroll = () => {
-            // If user has manually scrolled, mark it
-            // Only mark if scroll is not at the bottom (within 10px tolerance)
-            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
-            if (!isAtBottom && !userHasScrolledRef.current) {
+            // If user has manually scrolled away from bottom, mark it
+            // Use a larger tolerance to catch scroll attempts
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
+            if (!isAtBottom) {
                 userHasScrolledRef.current = true;
+            } else if (isAtBottom) {
+                // If user scrolls back to bottom, reset the flag to allow auto-scroll for new comments
+                // But only after a small delay to avoid race conditions
+                setTimeout(() => {
+                    if (container.scrollHeight - container.scrollTop - container.clientHeight < 5) {
+                        userHasScrolledRef.current = false;
+                    }
+                }, 100);
             }
         };
         
@@ -1861,7 +1883,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => {
             container.removeEventListener('scroll', handleScroll);
         };
-    }, [hoverCommentCell, commentPopupContainerRef.current]);
+    }, [hoverCommentCell]);
     
     // Smart positioning for comment popup
     useEffect(() => {
