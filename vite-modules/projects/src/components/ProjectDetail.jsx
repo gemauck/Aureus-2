@@ -265,7 +265,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     const [viewingTaskParent, setViewingTaskParent] = useState(null);
     const [creatingTaskForList, setCreatingTaskForList] = useState(null);
     const [creatingTaskWithStatus, setCreatingTaskWithStatus] = useState(null);
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+    // Load view mode from localStorage, defaulting to 'list' if not set
+    const [viewMode, setViewMode] = useState(() => {
+        try {
+            const saved = localStorage.getItem('projectTaskViewMode');
+            return saved === 'kanban' || saved === 'list' ? saved : 'list';
+        } catch (e) {
+            return 'list';
+        }
+    });
     const [editingDocument, setEditingDocument] = useState(null);
     
     // Comments popup state
@@ -307,6 +315,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             window.removeEventListener('componentLoaded', handleComponentLoaded);
         };
     }, [listModalComponent]);
+
+    // Persist view mode preference to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('projectTaskViewMode', viewMode);
+        } catch (error) {
+            console.warn('⚠️ ProjectDetail: Failed to save view mode preference:', error);
+        }
+    }, [viewMode]);
 
     useEffect(() => {
         if (taskDetailModalComponent) {

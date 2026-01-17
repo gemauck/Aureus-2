@@ -125,8 +125,20 @@ class DocumentCollectionAPI {
 
         try {
             const serialized = JSON.stringify(payload);
+            console.log('📤 documentCollectionAPI.saveWeeklyFMSReviewSections:', {
+                projectId,
+                payloadType: typeof payload,
+                serializedLength: serialized.length,
+                serializedPreview: serialized.substring(0, 300)
+            });
+            
             const result = await window.DatabaseAPI.updateProject(projectId, {
                 weeklyFMSReviewSections: serialized
+            });
+            
+            console.log('✅ documentCollectionAPI.saveWeeklyFMSReviewSections - API call completed:', {
+                hasResult: !!result,
+                resultKeys: result ? Object.keys(result) : []
             });
 
             // Update parent component's project prop if available and not skipping
@@ -138,6 +150,7 @@ class DocumentCollectionAPI {
                         ...updatedProject,
                         weeklyFMSReviewSections: serialized
                     });
+                    console.log('✅ Updated parent project prop');
                 }
             }
 

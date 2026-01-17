@@ -566,7 +566,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         console.log('💾 Saving to database...', { 
             hasData: Object.keys(payload).length > 0,
             yearKeys: Object.keys(payload),
-            payloadSize: serialized.length
+            payloadSize: serialized.length,
+            payloadPreview: serialized.substring(0, 500)
         });
 
         isSavingRef.current = true;
@@ -575,8 +576,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             // Use DocumentCollectionAPI if available, fallback to DatabaseAPI
             let result;
             if (apiRef.current?.saveWeeklyFMSReviewSections) {
+                console.log('📤 Calling saveWeeklyFMSReviewSections API with payload:', {
+                    projectId: project.id,
+                    payloadType: typeof payload,
+                    payloadKeys: Object.keys(payload || {}),
+                    firstYearData: payload[Object.keys(payload)[0]]?.slice(0, 2)
+                });
                 result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
                 console.log('✅ Saved via DocumentCollectionAPI:', result);
+                console.log('✅ Save result details:', {
+                    hasResult: !!result,
+                    hasData: !!result?.data,
+                    hasProject: !!result?.data?.project || !!result?.project,
+                    projectId: result?.data?.project?.id || result?.project?.id
+                });
             } else if (window.DatabaseAPI?.updateProject) {
                 result = await window.DatabaseAPI.updateProject(project.id, {
                     weeklyFMSReviewSections: serialized
@@ -605,10 +618,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 message: error.message,
                 stack: error.stack,
                 projectId: project.id,
-                payloadSize: serialized.length
+                payloadSize: serialized.length,
+                payloadPreview: serialized.substring(0, 200),
+                errorName: error.name,
+                errorCode: error.code,
+                responseStatus: error.response?.status,
+                responseData: error.response?.data
             });
-            // Reset saved data ref so it will retry on next change
-            lastSavedDataRef.current = null;
+            // Don't reset lastSavedDataRef on error - keep the previous successful save state
+            // This prevents infinite retry loops if there's a persistent error
+            // Only reset if this is a network/client error, not a server error
+            if (error.message?.includes('network') || error.message?.includes('fetch')) {
+                lastSavedDataRef.current = null;
+            }
+            // Don't re-throw - this function is called without await, so errors are handled via .catch()
         } finally {
             isSavingRef.current = false;
         }
@@ -1453,12 +1476,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
+        console.log('🔄 handleUpdateStatus called:', { sectionId, documentId, month, status, applyToSelected, selectedYear });
         
         // Use current state (most up-to-date) or fallback to ref
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
             ? sectionsByYear 
             : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        console.log('🔄 Current state:', { 
+            hasSectionsByYear: Object.keys(sectionsByYear || {}).length > 0,
+            hasRef: Object.keys(sectionsRef.current || {}).length > 0,
+            currentYearSectionsCount: currentYearSections.length,
+            selectedYear 
+        });
         
         // Always use ref to get the latest selectedCells value (avoids stale closure)
         const currentSelectedCells = selectedCellsRef.current;
@@ -1475,6 +1506,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             // Just update the single cell
             cellsToUpdate = [{ sectionId, documentId, month }];
         }
+        
+        console.log('🔄 Cells to update:', cellsToUpdate);
         
         // Update the sections for the current year
         const updated = currentYearSections.map(section => {
@@ -1495,8 +1528,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     // Apply status to all matching months for this document
                     let updatedStatus = doc.collectionStatus || {};
+                    const oldStatus = { ...updatedStatus };
                     docUpdates.forEach(cell => {
                         updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
+                    });
+                    
+                    console.log('🔄 Document status updated:', { 
+                        docId: doc.id, 
+                        docName: doc.name,
+                        oldStatus: oldStatus,
+                        newStatus: updatedStatus 
                     });
                     
                     return {
@@ -1512,6 +1553,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             [selectedYear]: updated
         };
         
+        console.log('🔄 Updated sections by year:', { 
+            year: selectedYear, 
+            sectionsCount: updated.length,
+            firstSectionName: updated[0]?.name,
+            serializedLength: JSON.stringify(updatedSectionsByYear).length
+        });
+        
         // Update ref IMMEDIATELY before state update to prevent race conditions
         // This ensures auto-save always has the latest data, even during rapid changes
         sectionsRef.current = updatedSectionsByYear;
@@ -1525,8 +1573,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately
-        saveToDatabase();
+        // Save immediately - use forceSave to bypass unchanged check since we just updated the data
+        console.log('💾 handleUpdateStatus: Triggering immediate save with forceSave');
+        // Don't await - fire and forget to keep UI responsive
+        // But catch errors to prevent unhandled promise rejections
+        saveToDatabase({ forceSave: true }).catch(error => {
+            console.error('❌ handleUpdateStatus: Save failed (non-blocking):', error);
+        });
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -1623,8 +1676,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 clearTimeout(saveTimeoutRef.current);
                 saveTimeoutRef.current = null;
             }
-            // Save immediately
-            saveToDatabase();
+            // Save immediately - use forceSave to bypass unchanged check since we just updated the data
+            console.log('💾 handleAddComment: Triggering immediate save with forceSave');
+            // Don't await - fire and forget to keep UI responsive
+            // But catch errors to prevent unhandled promise rejections
+            saveToDatabase({ forceSave: true }).catch(error => {
+                console.error('❌ handleAddComment: Save failed (non-blocking):', error);
+            });
             
             setQuickComment('');
 

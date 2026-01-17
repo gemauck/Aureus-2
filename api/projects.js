@@ -1858,13 +1858,34 @@ async function handler(req, res) {
             await saveDocumentSectionsToTable(id, body.documentSections)
           }
           if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
-            await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
+            console.log('💾 API: Saving weeklyFMSReviewSections to table', {
+              projectId: id,
+              dataType: typeof body.weeklyFMSReviewSections,
+              dataLength: typeof body.weeklyFMSReviewSections === 'string' 
+                ? body.weeklyFMSReviewSections.length 
+                : 'N/A'
+            });
+            try {
+              await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections);
+              console.log('✅ API: Successfully saved weeklyFMSReviewSections to table');
+            } catch (tableSaveError) {
+              console.error('❌ API: Error saving weeklyFMSReviewSections to table:', tableSaveError);
+              // Don't fail the entire update, but log the error - the JSON field will still be saved
+            }
           }
           
           const project = await prisma.project.update({ 
             where: { id }, 
             data: updateData 
           })
+          
+          console.log('✅ API: Project update completed', {
+            projectId: id,
+            hasWeeklyFMSInUpdateData: updateData.weeklyFMSReviewSections !== undefined,
+            weeklyFMSLength: typeof updateData.weeklyFMSReviewSections === 'string' 
+              ? updateData.weeklyFMSReviewSections.length 
+              : 'N/A'
+          });
           
           return ok(res, { project })
         } catch (dbError) {

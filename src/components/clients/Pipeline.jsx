@@ -111,7 +111,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     });
     const [showStarredOnly, setShowStarredOnly] = useState(false);
     const [sortBy, setSortBy] = useState('value-desc');
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+    // Load view mode from localStorage, defaulting to 'list' if not set
+    const [viewMode, setViewMode] = useState(() => {
+        try {
+            const saved = localStorage.getItem('pipelineViewMode');
+            return saved === 'kanban' || saved === 'list' ? saved : 'list';
+        } catch (e) {
+            return 'list';
+        }
+    });
     const [kanbanGroupBy, setKanbanGroupBy] = useState('stage'); // 'stage' (AIDA) or 'status'
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -138,6 +146,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             console.warn('⚠️ Pipeline: Unable to clear returnToPipeline flag at mount', error);
         }
     }, []);
+
+    // Persist view mode preference to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('pipelineViewMode', viewMode);
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Failed to save view mode preference:', error);
+        }
+    }, [viewMode]);
 
     const normalizeLifecycleStage = useCallback(normalizeLifecycleStageValue, []);
 
