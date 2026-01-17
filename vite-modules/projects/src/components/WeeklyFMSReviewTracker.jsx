@@ -1864,6 +1864,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [hoverCommentCell, commentPopupContainerRef.current]);
     
     // Smart positioning for comment popup
+    useEffect(() => {
         const updatePopupPosition = () => {
             if (!hoverCommentCell) {
                 return;
