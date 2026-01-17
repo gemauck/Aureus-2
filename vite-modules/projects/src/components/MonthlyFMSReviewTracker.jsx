@@ -3098,7 +3098,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2" style={{ scrollBehavior: 'smooth' }}>
+                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2 smooth-scroll">
                                     {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 

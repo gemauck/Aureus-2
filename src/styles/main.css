@@ -153,6 +153,15 @@ body {
     display: none;
 }
 
+/* Smooth scrolling for comment containers */
+.smooth-scroll,
+.comment-popup .max-h-32.overflow-y-auto,
+.comment-popup [ref="commentPopupContainerRef"],
+.max-h-32.overflow-y-auto.smooth-scroll {
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* Mobile-friendly horizontal scrolling - show scrollbar on mobile */
 @media (max-width: 1024px) {
     .scrollbar-hide {
