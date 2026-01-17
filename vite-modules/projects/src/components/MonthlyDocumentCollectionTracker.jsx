@@ -2070,41 +2070,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
-    // NO AUTO-SCROLL - User has full control
-    // Only scroll on initial page load if flag is not set
+    // COMPLETELY DISABLED AUTO-SCROLL - User has full manual control
+    // No automatic scrolling at all - user can scroll manually
+    // Only deep-link scrolling is allowed
     useEffect(() => {
         if (!hoverCommentCell) {
             return;
         }
         
-        // Check if there's a commentId in the URL (deep-link scenario) - skip auto-scroll
+        // Check if there's a commentId in the URL (deep-link scenario)
         const urlHash = window.location.hash || '';
         const urlSearch = window.location.search || '';
         const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
         
         if (hasCommentId) {
-            // Deep-link logic handles scrolling
+            // Deep-link logic handles scrolling - mark as done so no other auto-scroll runs
             hasAutoScrolledOnPageLoadRef.current = true;
             return;
         }
         
-        // Only auto-scroll on initial page load (first time popup opens after page reload)
-        // Use a longer delay and check flag multiple times to prevent re-running
-        if (!hasAutoScrolledOnPageLoadRef.current) {
-            const timeoutId = setTimeout(() => {
-                const container = commentPopupContainerRef.current;
-                // Triple-check the flag hasn't changed
-                if (container && !hasAutoScrolledOnPageLoadRef.current) {
-                    // Scroll to bottom on initial page load only
-                    container.scrollTop = container.scrollHeight;
-                    // Set flag IMMEDIATELY to prevent any other code from scrolling
-                    hasAutoScrolledOnPageLoadRef.current = true;
-                }
-            }, 600); // Longer delay to ensure DOM is ready
-            
-            return () => clearTimeout(timeoutId);
-        }
-    }, [hoverCommentCell]); // Only run when hoverCommentCell changes
+        // NO AUTO-SCROLL - User has full control
+        // Set flag immediately to prevent any auto-scroll attempts
+        hasAutoScrolledOnPageLoadRef.current = true;
+    }, [hoverCommentCell]);
     
     // Smart positioning for comment popup (separate effect)
     useEffect(() => {
