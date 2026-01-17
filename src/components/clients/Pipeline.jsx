@@ -1305,6 +1305,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
         e.preventDefault();
         e.stopPropagation();
         
+        console.log('🖱️ MouseDown triggered', { itemId: item.id });
+        
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
         
@@ -1312,22 +1314,34 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const offsetX = e.clientX - cardRect.left;
         const offsetY = e.clientY - cardRect.top;
         
-        // Create a ghost/drag preview element that will follow the cursor
-        const ghost = cardElement.cloneNode(true);
+        // Create a simple ghost element with card content
+        const ghost = document.createElement('div');
         ghost.id = 'pipeline-drag-ghost';
-        ghost.style.position = 'fixed';
-        ghost.style.left = `${cardRect.left}px`;
-        ghost.style.top = `${cardRect.top}px`;
-        ghost.style.width = `${cardRect.width}px`;
-        ghost.style.zIndex = '99999';
-        ghost.style.opacity = '0.9';
-        ghost.style.pointerEvents = 'none';
-        ghost.style.transform = 'rotate(2deg) scale(1.03)';
-        ghost.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
-        ghost.style.transition = 'none';
-        ghost.style.cursor = 'grabbing';
+        ghost.innerHTML = cardElement.innerHTML;
+        ghost.className = cardElement.className;
+        
+        // Apply styles directly
+        Object.assign(ghost.style, {
+            position: 'fixed',
+            left: `${cardRect.left}px`,
+            top: `${cardRect.top}px`,
+            width: `${cardRect.width}px`,
+            zIndex: '99999',
+            opacity: '0.9',
+            pointerEvents: 'none',
+            transform: 'rotate(2deg) scale(1.03)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)',
+            transition: 'none',
+            cursor: 'grabbing',
+            backgroundColor: 'white',
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            border: '1px solid #e5e7eb'
+        });
+        
         document.body.appendChild(ghost);
         dragGhostRef.current = ghost;
+        console.log('👻 Ghost element created and appended', ghost);
         
         // Make original card semi-transparent
         cardElement.style.opacity = '0.3';
@@ -1359,7 +1373,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const mouseMoveHandler = (moveEvent) => {
             const state = dragStateRef.current;
             const ghostEl = dragGhostRef.current;
-            if (!state || !ghostEl) return;
+            if (!state || !ghostEl) {
+                console.log('⚠️ MouseMove: Missing state or ghost', { state: !!state, ghost: !!ghostEl });
+                return;
+            }
             
             moveEvent.preventDefault();
             moveEvent.stopPropagation();
@@ -1371,6 +1388,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             // Update ghost position - this is what the user sees moving
             ghostEl.style.left = `${newX}px`;
             ghostEl.style.top = `${newY}px`;
+            
+            console.log('🔄 MouseMove: Updating ghost position', { newX, newY, clientX: moveEvent.clientX, clientY: moveEvent.clientY });
             
             // Update current position tracking
             state.currentX = moveEvent.clientX;
