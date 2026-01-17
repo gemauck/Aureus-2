@@ -2384,17 +2384,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             // Scroll the comment into view within the popup
-                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            // Also scroll the popup container to ensure visibility
+                            // Only scroll if we haven't already scrolled to this comment
                             if (commentPopupContainerRef.current) {
-                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
+                                const container = commentPopupContainerRef.current;
+                                const containerRect = container.getBoundingClientRect();
                                 const commentRect = commentElement.getBoundingClientRect();
-                                const scrollTop = commentPopupContainerRef.current.scrollTop;
+                                const scrollTop = container.scrollTop;
                                 const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                commentPopupContainerRef.current.scrollTo({
-                                    top: commentOffset - 20, // 20px padding from top
-                                    behavior: 'smooth'
-                                });
+                                
+                                // Only scroll if comment is not already visible
+                                const isVisible = commentRect.top >= containerRect.top && 
+                                                 commentRect.bottom <= containerRect.bottom;
+                                if (!isVisible) {
+                                    container.scrollTo({
+                                        top: Math.max(0, commentOffset - 20), // 20px padding from top
+                                        behavior: 'smooth'
+                                    });
+                                }
                             }
                             // Highlight the comment briefly
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
@@ -2557,17 +2563,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         if (commentElement && commentPopupContainerRef.current) {
                             console.log('✅ Found comment element, scrolling into view');
                             // Scroll the comment into view within the popup container
-                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-                            
+                            // Only scroll if comment is not already visible
                             if (commentPopupContainerRef.current) {
-                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
+                                const container = commentPopupContainerRef.current;
+                                const containerRect = container.getBoundingClientRect();
                                 const commentRect = commentElement.getBoundingClientRect();
-                                const scrollTop = commentPopupContainerRef.current.scrollTop;
-                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                commentPopupContainerRef.current.scrollTo({
-                                    top: Math.max(0, commentOffset - 20),
-                                    behavior: 'smooth'
-                                });
+                                const isVisible = commentRect.top >= containerRect.top && 
+                                                 commentRect.bottom <= containerRect.bottom;
+                                
+                                if (!isVisible) {
+                                    const scrollTop = container.scrollTop;
+                                    const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                    container.scrollTo({
+                                        top: Math.max(0, commentOffset - 20),
+                                        behavior: 'smooth'
+                                    });
+                                }
                             }
                             
                             // Highlight the comment with a blue background
