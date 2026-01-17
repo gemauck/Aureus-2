@@ -342,6 +342,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     const hasAutoScrolledOnPageLoadRef = useRef(false); // Track if we've auto-scrolled on page load (only once per page reload)
+    const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -2072,9 +2073,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Auto-scroll to bottom only when popup first opens (not on every render)
     // COMPLETELY DISABLED AUTO-SCROLL - User has full manual control
     // No automatic scrolling at all - user can scroll manually
-    // Only deep-link scrolling is allowed
+    // Only deep-link scrolling is allowed (and it's prevented from running repeatedly)
     useEffect(() => {
         if (!hoverCommentCell) {
+            // Reset deep-link scroll tracking when popup closes
+            deepLinkScrolledRef.current.clear();
             return;
         }
         
@@ -2563,22 +2566,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         if (commentElement && commentPopupContainerRef.current) {
                             console.log('✅ Found comment element, scrolling into view');
                             // Scroll the comment into view within the popup container
-                            // Only scroll if comment is not already visible
-                            if (commentPopupContainerRef.current) {
+                            // Only scroll if we haven't already scrolled to this comment
+                            if (!deepLinkScrolledRef.current.has(targetCommentId)) {
                                 const container = commentPopupContainerRef.current;
-                                const containerRect = container.getBoundingClientRect();
-                                const commentRect = commentElement.getBoundingClientRect();
-                                const isVisible = commentRect.top >= containerRect.top && 
-                                                 commentRect.bottom <= containerRect.bottom;
-                                
-                                if (!isVisible) {
-                                    const scrollTop = container.scrollTop;
-                                    const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                    container.scrollTo({
-                                        top: Math.max(0, commentOffset - 20),
-                                        behavior: 'smooth'
-                                    });
+                                if (container) {
+                                    const containerRect = container.getBoundingClientRect();
+                                    const commentRect = commentElement.getBoundingClientRect();
+                                    
+                                    // Only scroll if comment is not already visible
+                                    const isVisible = commentRect.top >= containerRect.top && 
+                                                     commentRect.bottom <= containerRect.bottom;
+                                    
+                                    if (!isVisible) {
+                                        const scrollTop = container.scrollTop;
+                                        const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                        container.scrollTo({
+                                            top: Math.max(0, commentOffset - 20),
+                                            behavior: 'smooth'
+                                        });
+                                    }
                                 }
+                                // Mark as scrolled to prevent re-scrolling
+                                deepLinkScrolledRef.current.add(targetCommentId);
                             }
                             
                             // Highlight the comment with a blue background
