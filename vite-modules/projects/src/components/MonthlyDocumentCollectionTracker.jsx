@@ -2097,46 +2097,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         hasAutoScrolledOnPageLoadRef.current = true;
     }, [hoverCommentCell]);
     
-    // Preserve scroll position across re-renders
-    const savedScrollTopRef = useRef(null);
-    useEffect(() => {
-        const container = commentPopupContainerRef.current;
-        if (!container || !hoverCommentCell) {
-            savedScrollTopRef.current = null;
-            return;
-        }
-        
-        // Save scroll position before potential re-render
-        const saveScroll = () => {
-            savedScrollTopRef.current = container.scrollTop;
-        };
-        
-        // Restore scroll position after render
-        const restoreScroll = () => {
-            if (savedScrollTopRef.current !== null && container) {
-                // Only restore if it's different (to avoid unnecessary scrolls)
-                if (Math.abs(container.scrollTop - savedScrollTopRef.current) > 1) {
-                    container.scrollTop = savedScrollTopRef.current;
-                }
-            }
-        };
-        
-        // Save before any potential changes
-        saveScroll();
-        
-        // Use requestAnimationFrame to restore after render
-        requestAnimationFrame(() => {
-            requestAnimationFrame(restoreScroll);
-        });
-        
-        // Also listen to scroll to update saved position
-        container.addEventListener('scroll', saveScroll, { passive: true });
-        
-        return () => {
-            container.removeEventListener('scroll', saveScroll);
-        };
-    }, [hoverCommentCell, comments.length]); // Re-run when comments change
-    
     // Smart positioning for comment popup (separate effect)
     useEffect(() => {
         // Smart positioning for comment popup
