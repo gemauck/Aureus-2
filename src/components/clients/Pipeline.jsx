@@ -1276,13 +1276,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 }
             }
             
-            // Refresh data after a short delay
-            setTimeout(() => {
-                setRefreshKey(k => k + 1);
-            }, 500);
+            // Don't refresh immediately - optimistic update already handled it
+            // Only refresh on error to ensure data consistency
         } catch (error) {
             console.error('❌ Pipeline: Failed to update item in Kanban:', error);
             alert('Failed to save change. Please try again.');
+            // Refresh on error to get latest data
+            setTimeout(() => {
+                setRefreshKey(k => k + 1);
+            }, 500);
         } finally {
             setDraggedItem(null);
             setDraggedType(null);
