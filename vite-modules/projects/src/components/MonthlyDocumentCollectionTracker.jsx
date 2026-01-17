@@ -341,7 +341,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
-    const autoScrollEnabledRef = useRef(true); // Simple flag: enable auto-scroll until user scrolls
+    const hasAutoScrolledOnceRef = useRef(false); // Track if we've auto-scrolled once for current popup
+    const userScrolledManuallyRef = useRef(false); // Track if user has manually scrolled
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1846,12 +1847,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setQuickComment('');
         
-        // Scroll to show the new comment (only if auto-scroll is still enabled)
+        // Scroll to show the new comment (only if user hasn't manually scrolled)
         setTimeout(() => {
-            if (commentPopupContainerRef.current && autoScrollEnabledRef.current) {
+            if (commentPopupContainerRef.current && !userScrolledManuallyRef.current) {
                 const container = commentPopupContainerRef.current;
-                // Only scroll if user hasn't disabled auto-scroll (i.e., hasn't manually scrolled)
-                container.scrollTop = container.scrollHeight;
+                // Only scroll if user hasn't manually scrolled away
+                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+                if (isAtBottom) {
+                    // User is at bottom, scroll to show new comment
+                    container.scrollTop = container.scrollHeight;
+                }
+                // If user has scrolled up, don't scroll - respect their position
             }
         }, 100);
 
@@ -2076,56 +2082,68 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
-    // Simple auto-scroll: only scroll to bottom when popup opens (once)
-    // Disable auto-scroll if user manually scrolls
+    // Reset scroll flags when popup opens/closes
     useEffect(() => {
         if (!hoverCommentCell) {
-            // Reset flag when popup closes
-            autoScrollEnabledRef.current = true;
+            // Reset flags when popup closes
+            hasAutoScrolledOnceRef.current = false;
+            userScrolledManuallyRef.current = false;
             return;
         }
         
-        const container = commentPopupContainerRef.current;
-        if (!container) return;
-        
-        // Check if there's a commentId in the URL (deep-link scenario)
+        // Check if there's a commentId in the URL (deep-link scenario) - skip auto-scroll
         const urlHash = window.location.hash || '';
         const urlSearch = window.location.search || '';
         const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
         
-        // If there's a deep-link commentId, let that logic handle scrolling
         if (hasCommentId) {
-            autoScrollEnabledRef.current = false;
+            hasAutoScrolledOnceRef.current = true; // Mark as done so we don't auto-scroll
+            userScrolledManuallyRef.current = true; // Prevent any auto-scroll
             return;
         }
         
-        // Simple scroll listener: if user scrolls away from bottom, disable auto-scroll
-        const handleScroll = () => {
-            if (!autoScrollEnabledRef.current) return; // Already disabled
+        // Auto-scroll to bottom ONCE when popup first opens
+        // Only if we haven't already scrolled and user hasn't manually scrolled
+        if (!hasAutoScrolledOnceRef.current && !userScrolledManuallyRef.current) {
+            const timeoutId = setTimeout(() => {
+                const container = commentPopupContainerRef.current;
+                if (container && !hasAutoScrolledOnceRef.current && !userScrolledManuallyRef.current) {
+                    container.scrollTop = container.scrollHeight;
+                    hasAutoScrolledOnceRef.current = true; // Mark as done - only once
+                }
+            }, 150);
             
-            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
-            if (!isAtBottom) {
-                // User scrolled away from bottom - disable auto-scroll permanently for this session
-                autoScrollEnabledRef.current = false;
-                container.removeEventListener('scroll', handleScroll);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [hoverCommentCell]);
+    
+    // Track manual scrolling - runs separately to detect user interaction
+    useEffect(() => {
+        if (!hoverCommentCell) return;
+        
+        const container = commentPopupContainerRef.current;
+        if (!container) return;
+        
+        // Track if user manually scrolls - disable auto-scroll if they do
+        let lastScrollTop = container.scrollTop;
+        
+        const handleScroll = () => {
+            const currentScrollTop = container.scrollTop;
+            // If scroll changed by more than 5px, it's a manual scroll (not our auto-scroll)
+            if (Math.abs(currentScrollTop - lastScrollTop) > 5) {
+                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+                if (!isAtBottom) {
+                    // User scrolled away from bottom - disable auto-scroll permanently
+                    userScrolledManuallyRef.current = true;
+                }
             }
+            lastScrollTop = currentScrollTop;
         };
         
-        // Set up scroll listener
         container.addEventListener('scroll', handleScroll, { passive: true });
         
-        // Auto-scroll to bottom once when popup opens (after DOM settles)
-        const timeoutId = setTimeout(() => {
-            if (autoScrollEnabledRef.current && commentPopupContainerRef.current) {
-                commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-            }
-        }, 100);
-        
         return () => {
-            clearTimeout(timeoutId);
-            if (container) {
-                container.removeEventListener('scroll', handleScroll);
-            }
+            container.removeEventListener('scroll', handleScroll);
         };
     }, [hoverCommentCell]);
     
@@ -2399,7 +2417,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
                     // Disable auto-scroll immediately to prevent interference
-                    autoScrollEnabledRef.current = false;
+                    hasAutoScrolledOnceRef.current = true;
+                    userScrolledManuallyRef.current = true;
                     
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
@@ -2572,7 +2591,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     }, 200);
                     
                     // Disable auto-scroll immediately to prevent interference
-                    autoScrollEnabledRef.current = false;
+                    hasAutoScrolledOnceRef.current = true;
+                    userScrolledManuallyRef.current = true;
                     
                     // Scroll to the comment within the popup
                     const targetCommentId = String(deepCommentId);
