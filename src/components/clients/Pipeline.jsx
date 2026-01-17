@@ -1351,19 +1351,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setIsDragging(true);
         
         // Immediately apply drag styles for visual feedback
-        cardElement.style.position = 'fixed';
-        cardElement.style.left = `${cardRect.left}px`;
-        cardElement.style.top = `${cardRect.top}px`;
-        cardElement.style.width = `${cardRect.width}px`;
-        cardElement.style.transition = 'none';
-        cardElement.style.opacity = '0.85';
-        cardElement.style.zIndex = '99999';
-        cardElement.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
-        cardElement.style.cursor = 'grabbing';
-        cardElement.style.pointerEvents = 'none';
-        cardElement.style.transform = 'rotate(2deg) scale(1.03)';
+        // Use setProperty with important flag to override any CSS classes
+        cardElement.style.setProperty('position', 'fixed', 'important');
+        cardElement.style.setProperty('left', `${cardRect.left}px`, 'important');
+        cardElement.style.setProperty('top', `${cardRect.top}px`, 'important');
+        cardElement.style.setProperty('width', `${cardRect.width}px`, 'important');
+        cardElement.style.setProperty('transition', 'none', 'important');
+        cardElement.style.setProperty('opacity', '0.85', 'important');
+        cardElement.style.setProperty('z-index', '99999', 'important');
+        cardElement.style.setProperty('box-shadow', '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)', 'important');
+        cardElement.style.setProperty('cursor', 'grabbing', 'important');
+        cardElement.style.setProperty('pointer-events', 'none', 'important');
+        cardElement.style.setProperty('transform', 'rotate(2deg) scale(1.03)', 'important');
+        // Remove any CSS classes that might interfere with dragging
+        cardElement.classList.add('dragging');
         
-        // Mouse move handler using requestAnimationFrame for smooth updates
+        // Mouse move handler - update position IMMEDIATELY for visual feedback
         const mouseMoveHandler = (moveEvent) => {
             const state = dragStateRef.current;
             if (!state || !state.cardElement) return;
@@ -1371,67 +1374,56 @@ function doesOpportunityBelongToClient(opportunity, client) {
             moveEvent.preventDefault();
             moveEvent.stopPropagation();
             
-            // Update current position
-            state.currentX = moveEvent.clientX;
-            state.currentY = moveEvent.clientY;
-            
             // Calculate new position
             const newX = moveEvent.clientX - state.offsetX;
             const newY = moveEvent.clientY - state.offsetY;
             
-            // Cancel any pending animation frame
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
+            // CRITICAL: Update position IMMEDIATELY with !important to override CSS
+            state.cardElement.style.setProperty('left', `${newX}px`, 'important');
+            state.cardElement.style.setProperty('top', `${newY}px`, 'important');
             
-            // Use requestAnimationFrame for smooth visual updates
-            animationFrameRef.current = requestAnimationFrame(() => {
-                const currentState = dragStateRef.current;
-                if (!currentState || !currentState.cardElement) return;
+            // Update current position tracking
+            state.currentX = moveEvent.clientX;
+            state.currentY = moveEvent.clientY;
+            
+            // Check if we've moved enough to consider it a drag
+            const deltaX = moveEvent.clientX - state.startX;
+            const deltaY = moveEvent.clientY - state.startY;
+            const minDragDistance = 5;
+            
+            if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
+                state.hasMoved = true;
                 
-                // Update card position - this is the critical visual update
-                currentState.cardElement.style.left = `${newX}px`;
-                currentState.cardElement.style.top = `${newY}px`;
+                // Find which column we're over
+                // Temporarily hide dragged card to detect underlying column
+                const originalVisibility = state.cardElement.style.visibility;
+                state.cardElement.style.visibility = 'hidden';
+                const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+                state.cardElement.style.visibility = originalVisibility;
                 
-                // Check if we've moved enough to consider it a drag
-                const deltaX = moveEvent.clientX - currentState.startX;
-                const deltaY = moveEvent.clientY - currentState.startY;
-                const minDragDistance = 5;
+                let columnName = null;
                 
-                if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
-                    currentState.hasMoved = true;
-                    
-                    // Find which column we're over
-                    // Temporarily hide dragged card to detect underlying column
-                    const originalVisibility = currentState.cardElement.style.visibility;
-                    currentState.cardElement.style.visibility = 'hidden';
-                    const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-                    currentState.cardElement.style.visibility = originalVisibility;
-                    
-                    let columnName = null;
-                    
-                    if (elementBelow) {
-                        const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
-                        if (columnContainer) {
-                            const heading = columnContainer.querySelector('h3');
-                            if (heading) {
-                                columnName = heading.textContent?.trim();
-                            }
-                        }
-                        if (!columnName) {
-                            const dataColumn = elementBelow.closest('[data-column-name]');
-                            if (dataColumn) {
-                                columnName = dataColumn.dataset.columnName;
-                            }
+                if (elementBelow) {
+                    const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
+                    if (columnContainer) {
+                        const heading = columnContainer.querySelector('h3');
+                        if (heading) {
+                            columnName = heading.textContent?.trim();
                         }
                     }
-                    
-                    if (columnName && columnName !== currentState.targetStage) {
-                        currentState.targetStage = columnName;
-                        setDraggedOverStage(columnName);
+                    if (!columnName) {
+                        const dataColumn = elementBelow.closest('[data-column-name]');
+                        if (dataColumn) {
+                            columnName = dataColumn.dataset.columnName;
+                        }
                     }
                 }
-            });
+                
+                if (columnName && columnName !== state.targetStage) {
+                    state.targetStage = columnName;
+                    setDraggedOverStage(columnName);
+                }
+            }
         };
         
         // Mouse up handler
