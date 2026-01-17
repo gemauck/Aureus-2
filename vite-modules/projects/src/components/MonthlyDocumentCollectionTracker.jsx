@@ -2150,11 +2150,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
         
-        // Update immediately and on resize/scroll
+        // Update immediately and on resize (but NOT on scroll to avoid interfering with comment container scrolling)
         if (hoverCommentCell) {
             setTimeout(updatePopupPosition, 50); // Wait for DOM to update
             window.addEventListener('resize', updatePopupPosition);
-            window.addEventListener('scroll', updatePopupPosition);
+            // REMOVED: window.addEventListener('scroll', updatePopupPosition); - this was causing re-renders that reset scroll
             
             return () => {
                 window.removeEventListener('resize', updatePopupPosition);
