@@ -1564,6 +1564,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // This ensures auto-save always has the latest data, even during rapid changes
         sectionsRef.current = updatedSectionsByYear;
         
+        // Verify ref was updated correctly
+        const refVerify = JSON.stringify(sectionsRef.current);
+        const stateVerify = JSON.stringify(updatedSectionsByYear);
+        if (refVerify !== stateVerify) {
+            console.error('⚠️ CRITICAL: Ref update mismatch!', {
+                refLength: refVerify.length,
+                stateLength: stateVerify.length
+            });
+        }
+        
+        console.log('🔄 Ref updated, about to save. Ref has data:', {
+            refHasData: Object.keys(sectionsRef.current || {}).length > 0,
+            refYearKeys: Object.keys(sectionsRef.current || {}),
+            stateYearKeys: Object.keys(updatedSectionsByYear)
+        });
+        
         // Now update state (this will trigger auto-save, but ref already has the latest data)
         setSectionsByYear(updatedSectionsByYear);
         
@@ -1573,12 +1589,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
+        
         // Save immediately - use forceSave to bypass unchanged check since we just updated the data
         console.log('💾 handleUpdateStatus: Triggering immediate save with forceSave');
+        console.log('💾 handleUpdateStatus: Ref at save time:', {
+            hasRef: !!sectionsRef.current,
+            refKeys: Object.keys(sectionsRef.current || {}),
+            refDataSample: JSON.stringify(sectionsRef.current || {}).substring(0, 200)
+        });
+        
         // Don't await - fire and forget to keep UI responsive
         // But catch errors to prevent unhandled promise rejections
-        saveToDatabase({ forceSave: true }).catch(error => {
+        saveToDatabase({ forceSave: true }).then(() => {
+            console.log('✅ handleUpdateStatus: Save promise resolved');
+        }).catch(error => {
             console.error('❌ handleUpdateStatus: Save failed (non-blocking):', error);
+            // Show alert for critical errors
+            if (error.message && !error.message.includes('network')) {
+                console.error('🚨 CRITICAL SAVE ERROR - User should see this in console');
+            }
         });
         
         // Clear selection after applying status to multiple cells
