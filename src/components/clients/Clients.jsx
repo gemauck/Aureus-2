@@ -3548,6 +3548,25 @@ const Clients = React.memo(() => {
         } catch (error) {
             // Silently fail - sessionStorage access is non-critical
         }
+        
+        // Clear URL segments to prevent route handler from reopening the detail view
+        if (window.RouteState && window.RouteState.navigate) {
+            try {
+                const targetView = returnToPipeline ? 'pipeline' : 'leads';
+                window.RouteState.navigate({
+                    page: 'clients',
+                    segments: [],
+                    search: '',
+                    hash: '',
+                    replace: false,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            } catch (error) {
+                // Silently fail - URL update is non-critical
+            }
+        }
+        
         if (returnToPipeline) {
             try {
                 sessionStorage.removeItem('returnToPipeline');
@@ -7983,29 +8002,8 @@ const Clients = React.memo(() => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button 
-                            onClick={async () => {
-                                // Refresh leads from database to ensure we have latest persisted data
-                                await loadLeads(true); // Force refresh to get latest data
-                                const returnToPipeline = (() => {
-                                    try {
-                                        return sessionStorage.getItem('returnToPipeline') === 'true';
-                                    } catch (error) {
-                                        // Silently fail - sessionStorage access is non-critical
-                                        return false;
-                                    }
-                                })();
-
-                                if (returnToPipeline) {
-                                    try {
-                                        sessionStorage.removeItem('returnToPipeline');
-                                    } catch (error) {
-                                        // Silently fail - sessionStorage clear is non-critical
-                                    }
-                                    setViewMode('pipeline');
-                                } else {
-                                    setViewMode('leads');
-                                }
-                                selectedLeadRef.current = null;
+                            onClick={() => {
+                                handleLeadModalClose();
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
                             title="Go back"
