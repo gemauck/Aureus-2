@@ -2100,31 +2100,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // 3. User hasn't manually scrolled
         // 4. Container exists and is ready
         if (!hasCommentId && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
-            // Set up scroll listener FIRST before auto-scrolling
-            // This ensures we catch any manual scroll attempts
-            const setupScrollListener = () => {
-                if (!container || !hoverCommentCell) return;
-                
-                const handleScroll = () => {
-                    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
-                    if (!isAtBottom) {
-                        userHasScrolledRef.current = true;
-                    }
-                };
-                
-                container.addEventListener('scroll', handleScroll, { passive: true });
-                
-                // Now do the auto-scroll, but only if user hasn't scrolled yet
-                setTimeout(() => {
-                    if (container && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
-                        container.scrollTop = container.scrollHeight;
-                        hasAutoScrolledRef.current = true;
-                    }
-                }, 50);
-            };
-            
-            // Small delay to ensure DOM is ready
-            const timeoutId = setTimeout(setupScrollListener, 50);
+            // Auto-scroll to bottom once when popup opens
+            // Use requestAnimationFrame to ensure DOM is ready
+            const timeoutId = setTimeout(() => {
+                const currentContainer = commentPopupContainerRef.current;
+                if (currentContainer && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
+                    // Only auto-scroll if user hasn't manually scrolled yet
+                    currentContainer.scrollTop = currentContainer.scrollHeight;
+                    hasAutoScrolledRef.current = true;
+                }
+            }, 200); // Longer delay to ensure scroll listener is set up first
             
             return () => clearTimeout(timeoutId);
         } else if (hasCommentId) {
@@ -2135,49 +2120,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [hoverCommentCell]); // Only depend on hoverCommentCell - runs once when popup opens
     
     // Track manual scrolling to prevent auto-scroll from interfering
-    // IMPORTANT: This runs AFTER the auto-scroll effect to ensure listener is always active
+    // IMPORTANT: This runs to detect when user manually scrolls
     useEffect(() => {
         const container = commentPopupContainerRef.current;
         if (!container || !hoverCommentCell) return;
         
-        // Track if user is actively scrolling (to prevent auto-scroll during scroll)
-        let isScrolling = false;
+        // Track the last scroll position to detect user-initiated scrolling
+        let lastScrollTop = container.scrollTop;
         let scrollTimeout = null;
         
-        const handleScroll = () => {
-            // Mark that scrolling is happening
-            isScrolling = true;
+        const handleScroll = (e) => {
+            const currentScrollTop = container.scrollTop;
+            const scrollDelta = Math.abs(currentScrollTop - lastScrollTop);
             
-            // Clear any pending scroll timeout
+            // If scroll position changed significantly (> 1px), it's user-initiated
+            if (scrollDelta > 1) {
+                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
+                
+                // If user scrolled away from bottom, disable auto-scroll permanently for this popup session
+                if (!isAtBottom) {
+                    userHasScrolledRef.current = true;
+                }
+            }
+            
+            lastScrollTop = currentScrollTop;
+            
+            // Clear any pending timeout
             if (scrollTimeout) {
                 clearTimeout(scrollTimeout);
             }
-            
-            // If user has manually scrolled away from bottom, mark it immediately
-            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
-            if (!isAtBottom) {
-                userHasScrolledRef.current = true;
-            } else if (isAtBottom && userHasScrolledRef.current) {
-                // If user scrolls back to bottom, reset the flag after a delay
-                // This allows auto-scroll for new comments when user is at bottom
-                scrollTimeout = setTimeout(() => {
-                    if (container && container.scrollHeight - container.scrollTop - container.clientHeight < 5) {
-                        userHasScrolledRef.current = false;
-                    }
-                }, 200);
-            }
-            
-            // Reset scrolling flag after scroll ends
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                isScrolling = false;
-            }, 150);
         };
         
-        container.addEventListener('scroll', handleScroll, { passive: true });
+        // Use capture phase to catch scroll events early
+        container.addEventListener('scroll', handleScroll, { passive: true, capture: true });
         
         return () => {
-            container.removeEventListener('scroll', handleScroll);
+            container.removeEventListener('scroll', handleScroll, { capture: true });
             if (scrollTimeout) clearTimeout(scrollTimeout);
         };
     }, [hoverCommentCell]);
@@ -3576,7 +3554,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2 smooth-scroll">
+                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto overflow-x-hidden space-y-2 mb-2 pr-1 smooth-scroll">
                                     {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
