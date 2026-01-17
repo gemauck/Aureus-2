@@ -3501,14 +3501,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     ref={commentPopupContainerRef} 
                                     className="space-y-2 mb-2 pr-1"
                                     style={{ 
+                                        height: '128px',
                                         maxHeight: '128px',
-                                        height: 'auto',
-                                        overflowY: 'auto',
+                                        overflowY: 'scroll',
                                         overflowX: 'hidden',
-                                        scrollBehavior: 'smooth',
+                                        scrollBehavior: 'auto',
                                         WebkitOverflowScrolling: 'touch',
                                         touchAction: 'pan-y',
-                                        cursor: 'default'
+                                        cursor: 'default',
+                                        position: 'relative',
+                                        willChange: 'scroll-position'
                                     }}
                                 >
                                     {comments.map((comment, idx) => (
