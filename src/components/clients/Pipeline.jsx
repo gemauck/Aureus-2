@@ -1991,8 +1991,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                                 {/* Column Cards */}
                                 <div 
-                                    className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-200 ${
-                                        isDraggedOver ? 'border-blue-400 shadow-lg' : 'border-transparent'
+                                    className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 transition-all duration-300 ease-out ${
+                                        isDraggedOver 
+                                            ? 'border-blue-400 border-dashed shadow-lg bg-blue-50/50 scale-[1.01]' 
+                                            : 'border-transparent hover:border-gray-200'
                                     }`}
                                     onDragEnter={(e) => {
                                         e.preventDefault();
