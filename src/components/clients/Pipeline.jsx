@@ -1292,6 +1292,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     // Mouse-based drag handlers (fallback for when HTML5 drag doesn't work)
+    // Use refs to avoid stale closures in drag handlers
+    const dragStateRef = useRef(null);
+    const animationFrameRef = useRef(null);
+
     const handleMouseDown = (e, item, type) => {
         // Don't interfere with button clicks
         if (e.target.closest('button')) {
@@ -1299,6 +1303,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
         
         e.preventDefault();
+        e.stopPropagation();
+        
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
         
@@ -1306,136 +1312,180 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const offsetX = e.clientX - cardRect.left;
         const offsetY = e.clientY - cardRect.top;
         
+        // Store original styles for restoration
+        const originalStyles = {
+            position: cardElement.style.position || '',
+            left: cardElement.style.left || '',
+            top: cardElement.style.top || '',
+            width: cardElement.style.width || '',
+            transform: cardElement.style.transform || '',
+            transition: cardElement.style.transition || '',
+            opacity: cardElement.style.opacity || '',
+            zIndex: cardElement.style.zIndex || '',
+            boxShadow: cardElement.style.boxShadow || '',
+            cursor: cardElement.style.cursor || '',
+            pointerEvents: cardElement.style.pointerEvents || ''
+        };
+        
         const dragState = {
             item,
             type,
-            startY: e.clientY,
-            currentY: e.clientY,
             startX: e.clientX,
+            startY: e.clientY,
             currentX: e.clientX,
+            currentY: e.clientY,
             offsetX,
             offsetY,
             cardRect,
             initialStage: item.stage,
             cardElement,
-            hasMoved: false
+            originalStyles,
+            hasMoved: false,
+            targetStage: null
         };
         
+        dragStateRef.current = dragState;
         setMouseDragState(dragState);
         setDraggedItem(item);
         setDraggedType(type);
         setIsDragging(true);
         
-        // Make card follow mouse - set fixed position relative to viewport
+        // Immediately apply drag styles for visual feedback
         cardElement.style.position = 'fixed';
         cardElement.style.left = `${cardRect.left}px`;
         cardElement.style.top = `${cardRect.top}px`;
         cardElement.style.width = `${cardRect.width}px`;
-        cardElement.style.transition = 'none'; // No transition during drag
-        cardElement.style.opacity = '0.9';
-        cardElement.style.zIndex = '9999'; // High z-index to stay on top
-        cardElement.style.boxShadow = '0 15px 35px rgba(0, 0, 0, 0.2), 0 5px 15px rgba(0, 0, 0, 0.15)';
+        cardElement.style.transition = 'none';
+        cardElement.style.opacity = '0.85';
+        cardElement.style.zIndex = '99999';
+        cardElement.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
         cardElement.style.cursor = 'grabbing';
-        cardElement.style.pointerEvents = 'none'; // Prevent interference during drag
-        cardElement.style.transform = 'rotate(2deg) scale(1.02)'; // Visual feedback
+        cardElement.style.pointerEvents = 'none';
+        cardElement.style.transform = 'rotate(2deg) scale(1.03)';
         
-        // Add global mouse event listeners
+        // Mouse move handler using requestAnimationFrame for smooth updates
         const mouseMoveHandler = (moveEvent) => {
-            if (!dragState) return;
+            const state = dragStateRef.current;
+            if (!state || !state.cardElement) return;
             
             moveEvent.preventDefault();
             moveEvent.stopPropagation();
             
-            // Always update position immediately for visual feedback
-            const newX = moveEvent.clientX - dragState.offsetX;
-            const newY = moveEvent.clientY - dragState.offsetY;
+            // Update current position
+            state.currentX = moveEvent.clientX;
+            state.currentY = moveEvent.clientY;
             
-            // Update card position in real-time - this is what makes it visible during drag
-            dragState.cardElement.style.left = `${newX}px`;
-            dragState.cardElement.style.top = `${newY}px`;
+            // Calculate new position
+            const newX = moveEvent.clientX - state.offsetX;
+            const newY = moveEvent.clientY - state.offsetY;
             
-            // Check if we've moved enough to consider it a drag (not just a click)
-            const deltaX = moveEvent.clientX - dragState.startX;
-            const deltaY = moveEvent.clientY - dragState.startY;
-            const minDragDistance = 3; // pixels
-            
-            if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
-                dragState.hasMoved = true;
-                
-                // Update position tracking
-                dragState.currentX = moveEvent.clientX;
-                dragState.currentY = moveEvent.clientY;
-                
-                // Find which column we're over by checking element under cursor
-                // Temporarily hide the dragged card to see what's beneath
-                const originalDisplay = dragState.cardElement.style.display;
-                dragState.cardElement.style.display = 'none';
-                const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-                dragState.cardElement.style.display = originalDisplay;
-                
-                let columnName = null;
-                
-                if (elementBelow) {
-                    // Look for the column heading (h3) - this is what the Kanban columns use
-                    const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
-                    if (columnContainer) {
-                        const heading = columnContainer.querySelector('h3');
-                        if (heading) {
-                            columnName = heading.textContent?.trim();
-                        }
-                    }
-                    // Fallback: check for data-column-name
-                    if (!columnName) {
-                        const dataColumn = elementBelow.closest('[data-column-name]');
-                        if (dataColumn) {
-                            columnName = dataColumn.dataset.columnName;
-                        }
-                    }
-                }
-                
-                if (columnName && columnName !== dragState.targetStage) {
-                    dragState.targetStage = columnName;
-                    setDraggedOverStage(columnName);
-                }
+            // Cancel any pending animation frame
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
             }
+            
+            // Use requestAnimationFrame for smooth visual updates
+            animationFrameRef.current = requestAnimationFrame(() => {
+                const currentState = dragStateRef.current;
+                if (!currentState || !currentState.cardElement) return;
+                
+                // Update card position - this is the critical visual update
+                currentState.cardElement.style.left = `${newX}px`;
+                currentState.cardElement.style.top = `${newY}px`;
+                
+                // Check if we've moved enough to consider it a drag
+                const deltaX = moveEvent.clientX - currentState.startX;
+                const deltaY = moveEvent.clientY - currentState.startY;
+                const minDragDistance = 5;
+                
+                if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
+                    currentState.hasMoved = true;
+                    
+                    // Find which column we're over
+                    // Temporarily hide dragged card to detect underlying column
+                    const originalVisibility = currentState.cardElement.style.visibility;
+                    currentState.cardElement.style.visibility = 'hidden';
+                    const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+                    currentState.cardElement.style.visibility = originalVisibility;
+                    
+                    let columnName = null;
+                    
+                    if (elementBelow) {
+                        const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
+                        if (columnContainer) {
+                            const heading = columnContainer.querySelector('h3');
+                            if (heading) {
+                                columnName = heading.textContent?.trim();
+                            }
+                        }
+                        if (!columnName) {
+                            const dataColumn = elementBelow.closest('[data-column-name]');
+                            if (dataColumn) {
+                                columnName = dataColumn.dataset.columnName;
+                            }
+                        }
+                    }
+                    
+                    if (columnName && columnName !== currentState.targetStage) {
+                        currentState.targetStage = columnName;
+                        setDraggedOverStage(columnName);
+                    }
+                }
+            });
         };
         
+        // Mouse up handler
         const mouseUpHandler = async (upEvent) => {
-            // Remove listeners
+            const state = dragStateRef.current;
+            
+            // Clean up
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = null;
+            }
+            
             document.removeEventListener('mousemove', mouseMoveHandler);
             document.removeEventListener('mouseup', mouseUpHandler);
             
-            // Smoothly restore visual feedback
-            if (dragState.cardElement) {
-                // Reset position styles
-                dragState.cardElement.style.position = '';
-                dragState.cardElement.style.left = '';
-                dragState.cardElement.style.top = '';
-                dragState.cardElement.style.width = '';
-                dragState.cardElement.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out, box-shadow 0.2s ease-out';
-                dragState.cardElement.style.transform = '';
-                dragState.cardElement.style.opacity = '';
-                dragState.cardElement.style.zIndex = '';
-                dragState.cardElement.style.boxShadow = '';
-                dragState.cardElement.style.cursor = '';
-                dragState.cardElement.style.pointerEvents = '';
-                // Remove transition after animation completes
-                setTimeout(() => {
-                    if (dragState.cardElement) {
-                        dragState.cardElement.style.transition = '';
-                    }
-                }, 200);
+            if (!state || !state.cardElement) {
+                dragStateRef.current = null;
+                setMouseDragState(null);
+                setDraggedItem(null);
+                setDraggedType(null);
+                setIsDragging(false);
+                setDraggedOverStage(null);
+                return;
             }
             
-            const { item, type, targetStage, initialStage, hasMoved } = dragState;
+            // Restore original styles
+            const styles = state.originalStyles;
+            state.cardElement.style.position = styles.position;
+            state.cardElement.style.left = styles.left;
+            state.cardElement.style.top = styles.top;
+            state.cardElement.style.width = styles.width;
+            state.cardElement.style.transition = 'all 0.2s ease-out';
+            state.cardElement.style.transform = styles.transform;
+            state.cardElement.style.opacity = styles.opacity;
+            state.cardElement.style.zIndex = styles.zIndex;
+            state.cardElement.style.boxShadow = styles.boxShadow;
+            state.cardElement.style.cursor = styles.cursor;
+            state.cardElement.style.pointerEvents = styles.pointerEvents;
             
-            // Only perform drop if we moved enough and have a target stage
+            // Clear transition after animation
+            setTimeout(() => {
+                if (state.cardElement) {
+                    state.cardElement.style.transition = styles.transition;
+                }
+            }, 200);
+            
+            const { item, type, targetStage, initialStage, hasMoved } = state;
+            
+            // Handle drop
             if (hasMoved && targetStage && targetStage !== initialStage) {
                 setJustDragged(true);
                 upEvent.preventDefault();
                 upEvent.stopPropagation();
                 
-                // Call the drop handler
                 const fakeEvent = {
                     preventDefault: () => {},
                     stopPropagation: () => {},
@@ -1449,15 +1499,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 };
                 
                 await handleKanbanDrop(fakeEvent, targetStage, kanbanGroupBy, item);
-                
-                // Reset justDragged after a short delay
                 setTimeout(() => setJustDragged(false), 300);
-            } else if (!hasMoved) {
-                // This was a click, not a drag - allow onClick to handle it
-                // But don't trigger it here, let the normal onClick handle it
             }
             
             // Reset state
+            dragStateRef.current = null;
             setMouseDragState(null);
             setDraggedItem(null);
             setDraggedType(null);
@@ -1465,9 +1511,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedOverStage(null);
         };
         
-        // Add global listeners
-        document.addEventListener('mousemove', mouseMoveHandler);
-        document.addEventListener('mouseup', mouseUpHandler);
+        // Add global listeners with capture phase for better handling
+        document.addEventListener('mousemove', mouseMoveHandler, { passive: false });
+        document.addEventListener('mouseup', mouseUpHandler, { once: true });
     };
 
     // Mobile touch drag handlers - use document-level listeners for better mobile support
