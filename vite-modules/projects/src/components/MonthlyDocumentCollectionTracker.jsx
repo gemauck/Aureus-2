@@ -2070,8 +2070,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
-    // Auto-scroll to bottom ONLY on initial page load/reload
-    // Never auto-scroll when opening popup - user has full control
+    // NO AUTO-SCROLL - User has full control
+    // Only scroll on initial page load if flag is not set
     useEffect(() => {
         if (!hoverCommentCell) {
             return;
@@ -2084,20 +2084,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (hasCommentId) {
             // Deep-link logic handles scrolling
+            hasAutoScrolledOnPageLoadRef.current = true;
             return;
         }
         
         // Only auto-scroll on initial page load (first time popup opens after page reload)
-        // After that, NEVER auto-scroll - user has full control
+        // Use a longer delay and check flag multiple times to prevent re-running
         if (!hasAutoScrolledOnPageLoadRef.current) {
             const timeoutId = setTimeout(() => {
                 const container = commentPopupContainerRef.current;
+                // Triple-check the flag hasn't changed
                 if (container && !hasAutoScrolledOnPageLoadRef.current) {
                     // Scroll to bottom on initial page load only
                     container.scrollTop = container.scrollHeight;
-                    hasAutoScrolledOnPageLoadRef.current = true; // Mark as done - never scroll again until page reload
+                    // Set flag IMMEDIATELY to prevent any other code from scrolling
+                    hasAutoScrolledOnPageLoadRef.current = true;
                 }
-            }, 500); // Delay to ensure DOM is ready
+            }, 600); // Longer delay to ensure DOM is ready
             
             return () => clearTimeout(timeoutId);
         }
