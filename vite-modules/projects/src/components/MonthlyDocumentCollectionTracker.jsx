@@ -3501,7 +3501,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto overflow-x-hidden space-y-2 mb-2 pr-1 smooth-scroll">
+                                <div 
+                                    ref={commentPopupContainerRef} 
+                                    className="overflow-y-auto overflow-x-hidden space-y-2 mb-2 pr-1 smooth-scroll"
+                                    style={{ 
+                                        maxHeight: '128px',
+                                        minHeight: '64px',
+                                        height: 'auto'
+                                    }}
+                                >
                                     {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
