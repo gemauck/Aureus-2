@@ -1294,7 +1294,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // Mouse-based drag handlers (fallback for when HTML5 drag doesn't work)
     // Use refs to avoid stale closures in drag handlers
     const dragStateRef = useRef(null);
-    const animationFrameRef = useRef(null);
+    const dragGhostRef = useRef(null); // Separate ghost element that follows cursor
 
     const handleMouseDown = (e, item, type) => {
         // Don't interfere with button clicks
@@ -1312,20 +1312,26 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const offsetX = e.clientX - cardRect.left;
         const offsetY = e.clientY - cardRect.top;
         
-        // Store original styles for restoration
-        const originalStyles = {
-            position: cardElement.style.position || '',
-            left: cardElement.style.left || '',
-            top: cardElement.style.top || '',
-            width: cardElement.style.width || '',
-            transform: cardElement.style.transform || '',
-            transition: cardElement.style.transition || '',
-            opacity: cardElement.style.opacity || '',
-            zIndex: cardElement.style.zIndex || '',
-            boxShadow: cardElement.style.boxShadow || '',
-            cursor: cardElement.style.cursor || '',
-            pointerEvents: cardElement.style.pointerEvents || ''
-        };
+        // Create a ghost/drag preview element that will follow the cursor
+        const ghost = cardElement.cloneNode(true);
+        ghost.id = 'pipeline-drag-ghost';
+        ghost.style.position = 'fixed';
+        ghost.style.left = `${cardRect.left}px`;
+        ghost.style.top = `${cardRect.top}px`;
+        ghost.style.width = `${cardRect.width}px`;
+        ghost.style.zIndex = '99999';
+        ghost.style.opacity = '0.9';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.transform = 'rotate(2deg) scale(1.03)';
+        ghost.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
+        ghost.style.transition = 'none';
+        ghost.style.cursor = 'grabbing';
+        document.body.appendChild(ghost);
+        dragGhostRef.current = ghost;
+        
+        // Make original card semi-transparent
+        cardElement.style.opacity = '0.3';
+        cardElement.style.transition = 'none';
         
         const dragState = {
             item,
@@ -1339,7 +1345,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             cardRect,
             initialStage: item.stage,
             cardElement,
-            originalStyles,
             hasMoved: false,
             targetStage: null
         };
@@ -1350,26 +1355,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setDraggedType(type);
         setIsDragging(true);
         
-        // Immediately apply drag styles for visual feedback
-        // Use setProperty with important flag to override any CSS classes
-        cardElement.style.setProperty('position', 'fixed', 'important');
-        cardElement.style.setProperty('left', `${cardRect.left}px`, 'important');
-        cardElement.style.setProperty('top', `${cardRect.top}px`, 'important');
-        cardElement.style.setProperty('width', `${cardRect.width}px`, 'important');
-        cardElement.style.setProperty('transition', 'none', 'important');
-        cardElement.style.setProperty('opacity', '0.85', 'important');
-        cardElement.style.setProperty('z-index', '99999', 'important');
-        cardElement.style.setProperty('box-shadow', '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)', 'important');
-        cardElement.style.setProperty('cursor', 'grabbing', 'important');
-        cardElement.style.setProperty('pointer-events', 'none', 'important');
-        cardElement.style.setProperty('transform', 'rotate(2deg) scale(1.03)', 'important');
-        // Remove any CSS classes that might interfere with dragging
-        cardElement.classList.add('dragging');
-        
-        // Mouse move handler - update position IMMEDIATELY for visual feedback
+        // Mouse move handler - update ghost position IMMEDIATELY
         const mouseMoveHandler = (moveEvent) => {
             const state = dragStateRef.current;
-            if (!state || !state.cardElement) return;
+            const ghostEl = dragGhostRef.current;
+            if (!state || !ghostEl) return;
             
             moveEvent.preventDefault();
             moveEvent.stopPropagation();
@@ -1378,9 +1368,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
             const newX = moveEvent.clientX - state.offsetX;
             const newY = moveEvent.clientY - state.offsetY;
             
-            // CRITICAL: Update position IMMEDIATELY with !important to override CSS
-            state.cardElement.style.setProperty('left', `${newX}px`, 'important');
-            state.cardElement.style.setProperty('top', `${newY}px`, 'important');
+            // Update ghost position - this is what the user sees moving
+            ghostEl.style.left = `${newX}px`;
+            ghostEl.style.top = `${newY}px`;
             
             // Update current position tracking
             state.currentX = moveEvent.clientX;
@@ -1395,12 +1385,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 state.hasMoved = true;
                 
                 // Find which column we're over
-                // Temporarily hide dragged card to detect underlying column
-                const originalVisibility = state.cardElement.style.visibility;
-                state.cardElement.style.visibility = 'hidden';
                 const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-                state.cardElement.style.visibility = originalVisibility;
-                
                 let columnName = null;
                 
                 if (elementBelow) {
@@ -1429,17 +1414,25 @@ function doesOpportunityBelongToClient(opportunity, client) {
         // Mouse up handler
         const mouseUpHandler = async (upEvent) => {
             const state = dragStateRef.current;
+            const ghostEl = dragGhostRef.current;
             
-            // Clean up
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-                animationFrameRef.current = null;
-            }
-            
+            // Remove event listeners
             document.removeEventListener('mousemove', mouseMoveHandler);
             document.removeEventListener('mouseup', mouseUpHandler);
             
-            if (!state || !state.cardElement) {
+            // Remove ghost element
+            if (ghostEl && ghostEl.parentNode) {
+                ghostEl.parentNode.removeChild(ghostEl);
+            }
+            dragGhostRef.current = null;
+            
+            // Restore original card
+            if (state && state.cardElement) {
+                state.cardElement.style.opacity = '';
+                state.cardElement.style.transition = '';
+            }
+            
+            if (!state) {
                 dragStateRef.current = null;
                 setMouseDragState(null);
                 setDraggedItem(null);
@@ -1448,27 +1441,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 setDraggedOverStage(null);
                 return;
             }
-            
-            // Restore original styles
-            const styles = state.originalStyles;
-            state.cardElement.style.position = styles.position;
-            state.cardElement.style.left = styles.left;
-            state.cardElement.style.top = styles.top;
-            state.cardElement.style.width = styles.width;
-            state.cardElement.style.transition = 'all 0.2s ease-out';
-            state.cardElement.style.transform = styles.transform;
-            state.cardElement.style.opacity = styles.opacity;
-            state.cardElement.style.zIndex = styles.zIndex;
-            state.cardElement.style.boxShadow = styles.boxShadow;
-            state.cardElement.style.cursor = styles.cursor;
-            state.cardElement.style.pointerEvents = styles.pointerEvents;
-            
-            // Clear transition after animation
-            setTimeout(() => {
-                if (state.cardElement) {
-                    state.cardElement.style.transition = styles.transition;
-                }
-            }, 200);
             
             const { item, type, targetStage, initialStage, hasMoved } = state;
             
@@ -1503,7 +1475,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedOverStage(null);
         };
         
-        // Add global listeners with capture phase for better handling
+        // Add global listeners
         document.addEventListener('mousemove', mouseMoveHandler, { passive: false });
         document.addEventListener('mouseup', mouseUpHandler, { once: true });
     };
