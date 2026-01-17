@@ -2016,8 +2016,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         if (e.target.closest('button')) {
                                                             return;
                                                         }
-                                                        // Store that we're starting a potential drag
-                                                        e.currentTarget.dataset.dragStartTime = Date.now();
+                                                        // Use mouse-based drag as primary method (HTML5 drag as fallback)
+                                                        handleMouseDown(e, item, itemType);
                                                     }}
                                                     onDragStart={(e) => {
                                                         console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target, currentTarget: e.currentTarget });
