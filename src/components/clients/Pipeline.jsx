@@ -117,6 +117,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
+    const [mouseDragState, setMouseDragState] = useState(null); // Mouse-based drag state
     const [justDragged, setJustDragged] = useState(false); // Track if we just completed a drag to prevent accidental clicks
     const [draggedOverStage, setDraggedOverStage] = useState(null);
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
@@ -1288,6 +1289,242 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setIsDragging(false);
             setDraggedOverStage(null);
         }
+    };
+
+    // Mouse-based drag handlers (fallback for when HTML5 drag doesn't work)
+    const handleMouseDown = (e, item, type) => {
+        // Don't interfere with button clicks
+        if (e.target.closest('button')) {
+            return;
+        }
+        
+        e.preventDefault();
+        const cardElement = e.currentTarget;
+        const cardRect = cardElement.getBoundingClientRect();
+        
+        const dragState = {
+            item,
+            type,
+            startY: e.clientY,
+            currentY: e.clientY,
+            startX: e.clientX,
+            currentX: e.clientX,
+            cardRect,
+            initialStage: item.stage,
+            cardElement,
+            hasMoved: false
+        };
+        
+        setMouseDragState(dragState);
+        setDraggedItem(item);
+        setDraggedType(type);
+        setIsDragging(true);
+        
+        // Visual feedback
+        cardElement.style.transform = 'scale(0.95)';
+        cardElement.style.opacity = '0.7';
+        cardElement.style.zIndex = '1000';
+        
+        // Add global mouse event listeners
+        const mouseMoveHandler = (moveEvent) => {
+            if (!dragState) return;
+            
+            const deltaX = moveEvent.clientX - dragState.startX;
+            const deltaY = moveEvent.clientY - dragState.startY;
+            const minDragDistance = 5; // pixels
+            
+            if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
+                dragState.hasMoved = true;
+                moveEvent.preventDefault();
+                
+                // Update position
+                dragState.currentX = moveEvent.clientX;
+                dragState.currentY = moveEvent.clientY;
+                
+                // Find which column we're over
+                const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+                const columnElement = elementBelow?.closest('[data-column-name]');
+                const columnName = columnElement?.dataset?.columnName;
+                
+                if (columnName && columnName !== dragState.targetStage) {
+                    dragState.targetStage = columnName;
+                    setDraggedOverStage(columnName);
+                }
+            }
+        };
+        
+        const mouseUpHandler = async (upEvent) => {
+            // Remove listeners
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            document.removeEventListener('mouseup', mouseUpHandler);
+            
+            // Restore visual feedback
+            if (dragState.cardElement) {
+                dragState.cardElement.style.transform = '';
+                dragState.cardElement.style.opacity = '';
+                dragState.cardElement.style.zIndex = '';
+            }
+            
+            const { item, type, targetStage, initialStage, hasMoved } = dragState;
+            
+            // Only perform drop if we moved enough and have a target stage
+            if (hasMoved && targetStage && targetStage !== initialStage) {
+                setJustDragged(true);
+                upEvent.preventDefault();
+                upEvent.stopPropagation();
+                
+                // Call the drop handler
+                const fakeEvent = {
+                    preventDefault: () => {},
+                    stopPropagation: () => {},
+                    dataTransfer: {
+                        getData: (key) => {
+                            if (key === 'pipelineItemId') return String(item.id);
+                            if (key === 'pipelineItemType') return String(type);
+                            return '';
+                        }
+                    }
+                };
+                
+                await handleKanbanDrop(fakeEvent, targetStage, kanbanGroupBy, item);
+                
+                // Reset justDragged after a short delay
+                setTimeout(() => setJustDragged(false), 300);
+            } else if (!hasMoved) {
+                // This was a click, not a drag - allow onClick to handle it
+                // But don't trigger it here, let the normal onClick handle it
+            }
+            
+            // Reset state
+            setMouseDragState(null);
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
+        };
+        
+        // Add global listeners
+        document.addEventListener('mousemove', mouseMoveHandler);
+        document.addEventListener('mouseup', mouseUpHandler);
+    };
+
+    // Mouse-based drag handlers (fallback for when HTML5 drag doesn't work)
+    const handleMouseDown = (e, item, type) => {
+        // Don't interfere with button clicks
+        if (e.target.closest('button')) {
+            return;
+        }
+        
+        e.preventDefault();
+        const cardElement = e.currentTarget;
+        
+        const dragState = {
+            item,
+            type,
+            startY: e.clientY,
+            currentY: e.clientY,
+            startX: e.clientX,
+            currentX: e.clientX,
+            initialStage: item.stage || (normalizeStageToAida ? normalizeStageToAida(item.stage) : 'Awareness'),
+            cardElement,
+            hasMoved: false
+        };
+        
+        setMouseDragState(dragState);
+        setDraggedItem(item);
+        setDraggedType(type);
+        setIsDragging(true);
+        
+        // Visual feedback
+        cardElement.style.transform = 'scale(0.95)';
+        cardElement.style.opacity = '0.7';
+        cardElement.style.zIndex = '1000';
+        
+        // Add global mouse event listeners
+        const mouseMoveHandler = (moveEvent) => {
+            if (!dragState) return;
+            
+            const deltaX = moveEvent.clientX - dragState.startX;
+            const deltaY = moveEvent.clientY - dragState.startY;
+            const minDragDistance = 5; // pixels
+            
+            if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
+                dragState.hasMoved = true;
+                moveEvent.preventDefault();
+                
+                // Update position
+                dragState.currentX = moveEvent.clientX;
+                dragState.currentY = moveEvent.clientY;
+                
+                // Find which column we're over by checking element under cursor
+                const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+                // Try to find the column by looking for h3 headings or data attributes
+                let columnName = null;
+                if (elementBelow) {
+                    // Look for the column heading
+                    const heading = elementBelow.closest('[class*="flex"]')?.querySelector('h3');
+                    if (heading) {
+                        columnName = heading.textContent?.trim();
+                    }
+                }
+                
+                if (columnName && columnName !== dragState.targetStage) {
+                    dragState.targetStage = columnName;
+                    setDraggedOverStage(columnName);
+                }
+            }
+        };
+        
+        const mouseUpHandler = async (upEvent) => {
+            // Remove listeners
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            document.removeEventListener('mouseup', mouseUpHandler);
+            
+            // Restore visual feedback
+            if (dragState.cardElement) {
+                dragState.cardElement.style.transform = '';
+                dragState.cardElement.style.opacity = '';
+                dragState.cardElement.style.zIndex = '';
+            }
+            
+            const { item, type, targetStage, initialStage, hasMoved } = dragState;
+            
+            // Only perform drop if we moved enough and have a target stage
+            if (hasMoved && targetStage && targetStage !== initialStage) {
+                setJustDragged(true);
+                upEvent.preventDefault();
+                upEvent.stopPropagation();
+                
+                // Call the drop handler
+                const fakeEvent = {
+                    preventDefault: () => {},
+                    stopPropagation: () => {},
+                    dataTransfer: {
+                        getData: (key) => {
+                            if (key === 'pipelineItemId') return String(item.id);
+                            if (key === 'pipelineItemType') return String(type);
+                            return '';
+                        }
+                    }
+                };
+                
+                await handleKanbanDrop(fakeEvent, targetStage, kanbanGroupBy, item);
+                
+                // Reset justDragged after a short delay
+                setTimeout(() => setJustDragged(false), 300);
+            }
+            
+            // Reset state
+            setMouseDragState(null);
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
+        };
+        
+        // Add global listeners
+        document.addEventListener('mousemove', mouseMoveHandler);
+        document.addEventListener('mouseup', mouseUpHandler);
     };
 
     // Mobile touch drag handlers - use document-level listeners for better mobile support
