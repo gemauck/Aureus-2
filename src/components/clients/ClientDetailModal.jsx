@@ -3107,6 +3107,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         <div className={`px-3 sm:px-6 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <nav className="flex items-center space-x-2 text-sm">
                                 <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (onClose) {
+                                            onClose();
+                                        }
+                                    }}
+                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 mr-2`}
+                                    title="Go back"
+                                >
+                                    <i className="fas fa-arrow-left"></i>
+                                </button>
+                                <button
                                     onClick={() => navigateToPage('dashboard')}
                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                                 >
