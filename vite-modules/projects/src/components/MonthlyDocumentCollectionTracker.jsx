@@ -1847,19 +1847,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setQuickComment('');
         
-        // Scroll to show the new comment (only if user hasn't manually scrolled)
-        setTimeout(() => {
-            if (commentPopupContainerRef.current && !userScrolledManuallyRef.current) {
-                const container = commentPopupContainerRef.current;
-                // Only scroll if user hasn't manually scrolled away
-                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
-                if (isAtBottom) {
-                    // User is at bottom, scroll to show new comment
-                    container.scrollTop = container.scrollHeight;
-                }
-                // If user has scrolled up, don't scroll - respect their position
-            }
-        }, 100);
+        // DO NOT auto-scroll after adding comment - let user stay where they are
+        // User can manually scroll to see new comments if they want
 
         // ========================================================
         // @MENTIONS - Process mentions and create notifications
@@ -2082,17 +2071,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
-    // Simple scroll management: auto-scroll once on open, then let user control
+    // Auto-scroll ONCE when popup opens, then completely stop all auto-scroll
     useEffect(() => {
         if (!hoverCommentCell) {
-            // Reset flags when popup closes
+            // Reset flag when popup closes
             hasAutoScrolledOnceRef.current = false;
-            userScrolledManuallyRef.current = false;
             return;
         }
-        
-        const container = commentPopupContainerRef.current;
-        if (!container) return;
         
         // Check if there's a commentId in the URL (deep-link scenario) - skip auto-scroll
         const urlHash = window.location.hash || '';
@@ -2101,51 +2086,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (hasCommentId) {
             hasAutoScrolledOnceRef.current = true;
-            userScrolledManuallyRef.current = true;
             return;
         }
         
-        // Auto-scroll to bottom ONCE when popup opens
-        // Use longer delay to ensure DOM is ready
-        const timeoutId = setTimeout(() => {
-            const currentContainer = commentPopupContainerRef.current;
-            if (currentContainer && !hasAutoScrolledOnceRef.current) {
-                // Temporarily disable manual scroll detection during auto-scroll
-                const wasManuallyScrolled = userScrolledManuallyRef.current;
-                userScrolledManuallyRef.current = false; // Prevent detection from firing
-                
-                currentContainer.scrollTop = currentContainer.scrollHeight;
-                
-                // Re-enable detection after a short delay
-                setTimeout(() => {
-                    userScrolledManuallyRef.current = wasManuallyScrolled;
-                }, 100);
-                
-                hasAutoScrolledOnceRef.current = true;
-            }
-        }, 200);
-        
-        // Track manual scrolling - disable auto-scroll if user scrolls
-        let isScrolling = false;
-        const handleScroll = () => {
-            if (hasAutoScrolledOnceRef.current) {
-                // Only track after initial auto-scroll is done
-                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
-                if (!isAtBottom) {
-                    userScrolledManuallyRef.current = true;
+        // Auto-scroll to bottom ONCE ONLY when popup first opens
+        // After this, NEVER auto-scroll again - user has full control
+        if (!hasAutoScrolledOnceRef.current) {
+            const timeoutId = setTimeout(() => {
+                const container = commentPopupContainerRef.current;
+                if (container && !hasAutoScrolledOnceRef.current) {
+                    // Scroll once and mark as done - NEVER scroll again
+                    container.scrollTop = container.scrollHeight;
+                    hasAutoScrolledOnceRef.current = true;
                 }
-            }
-        };
-        
-        container.addEventListener('scroll', handleScroll, { passive: true });
-        
-        return () => {
-            clearTimeout(timeoutId);
-            if (container) {
-                container.removeEventListener('scroll', handleScroll);
-            }
-        };
-    }, [hoverCommentCell]);
+            }, 300); // Longer delay to ensure DOM is ready
+            
+            return () => clearTimeout(timeoutId);
+        }
+    }, [hoverCommentCell]); // Only run when hoverCommentCell changes
     
     // Smart positioning for comment popup (separate effect)
     useEffect(() => {
