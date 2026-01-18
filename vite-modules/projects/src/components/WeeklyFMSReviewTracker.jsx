@@ -628,6 +628,45 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 containsStatus: lastSavedDataRef.current?.includes('collectionStatus')
             });
             
+            // CRITICAL VERIFICATION: Immediately reload from database to verify it was actually saved
+            console.log('🔍 VERIFICATION: Reloading from database to verify save persisted...');
+            try {
+                if (apiRef.current?.fetchProject) {
+                    const verifyProject = await apiRef.current.fetchProject(project.id, ['weeklyFMSReviewSections']);
+                    const verifyData = verifyProject?.weeklyFMSReviewSections;
+                    let verifySerialized;
+                    
+                    if (typeof verifyData === 'string') {
+                        verifySerialized = verifyData;
+                    } else if (verifyData && typeof verifyData === 'object') {
+                        verifySerialized = JSON.stringify(verifyData);
+                    } else {
+                        verifySerialized = '{}';
+                    }
+                    
+                    console.log('🔍 VERIFICATION RESULTS:', {
+                        savedLength: serialized.length,
+                        loadedLength: verifySerialized.length,
+                        match: serialized === verifySerialized,
+                        savedPreview: serialized.substring(0, 300),
+                        loadedPreview: verifySerialized.substring(0, 300),
+                        savedHasStatus: serialized.includes('collectionStatus'),
+                        loadedHasStatus: verifySerialized.includes('collectionStatus')
+                    });
+                    
+                    if (serialized !== verifySerialized) {
+                        console.error('🚨 VERIFICATION FAILED: Saved data does NOT match loaded data!');
+                        console.error('🚨 This means the save API call succeeded but data was NOT persisted!');
+                        console.error('🚨 Saved:', serialized.substring(0, 500));
+                        console.error('🚨 Loaded:', verifySerialized.substring(0, 500));
+                    } else {
+                        console.log('✅ VERIFICATION PASSED: Saved and loaded data match perfectly!');
+                    }
+                }
+            } catch (verifyError) {
+                console.error('❌ Verification check failed:', verifyError);
+            }
+            
             // Update localStorage backup
             const snapshotKey = getSnapshotKey(project.id);
             if (snapshotKey && window.localStorage) {

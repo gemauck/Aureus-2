@@ -1861,7 +1861,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            if (deepSectionId && deepDocumentId && deepMonth) {
+            // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
+            const isValidDocumentId = deepDocumentId && 
+                                     deepDocumentId !== 'undefined' && 
+                                     deepDocumentId.trim() !== '';
+            
+            if (deepSectionId && isValidDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
                 
                 // Set initial position (will be updated once cell is found)
@@ -2015,6 +2020,49 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // Start looking for the comment after a short delay
                     setTimeout(findAndScrollToComment, 300);
                 }
+            } else if (deepCommentId && !isValidDocumentId) {
+                // If we have commentId but invalid docDocumentId, still try to find and scroll to the comment
+                // This handles URLs like #/projects/123?docSectionId=...&docDocumentId=undefined&docMonth=...&commentId=...
+                const targetCommentId = String(deepCommentId);
+                
+                // Wait for component to render, then search for comment
+                let attempts = 0;
+                const maxAttempts = 10; // Try for up to 2 seconds
+                const findAndScrollToComment = () => {
+                    attempts++;
+                    
+                    // Try multiple selectors to find the comment (handle both string and number IDs)
+                    const commentElement = 
+                        window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                        window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                        window.document.querySelector(`#comment-${targetCommentId}`) ||
+                        window.document.querySelector(`#comment-${Number(targetCommentId)}`);
+                    
+                    if (commentElement) {
+                        // Scroll the comment into view
+                        commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // Highlight the comment briefly
+                        const originalBg = window.getComputedStyle(commentElement).backgroundColor;
+                        commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
+                        commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                        commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+                        setTimeout(() => {
+                            commentElement.style.backgroundColor = originalBg;
+                            commentElement.style.boxShadow = '';
+                            commentElement.style.transition = '';
+                        }, 2000);
+                        console.log('✅ Deep link: Scrolled to comment (invalid docDocumentId):', targetCommentId);
+                    } else if (attempts < maxAttempts) {
+                        // Comment not found yet, try again
+                        setTimeout(findAndScrollToComment, 200);
+                    } else {
+                        console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
+                    }
+                };
+                
+                // Start looking for the comment after a short delay
+                setTimeout(findAndScrollToComment, 300);
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);

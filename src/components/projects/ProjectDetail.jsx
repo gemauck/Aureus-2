@@ -1929,16 +1929,21 @@ function initializeProjectDetail() {
                     }
                 }
                 
-                // If we have full params, switch to document collection tab
-                if (deepSectionId && deepDocumentId && deepMonth) {
+                // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
+                const isValidDocumentId = deepDocumentId && 
+                                         deepDocumentId !== 'undefined' && 
+                                         deepDocumentId.trim() !== '';
+                
+                // If we have full params with valid document ID, switch to document collection tab
+                if (deepSectionId && isValidDocumentId && deepMonth) {
                     // Only switch if not already on document collection tab
                     if (activeSection !== 'documentCollection') {
                         switchSection('documentCollection');
                     }
                 } 
-                // Fallback: If we only have commentId (missing section/doc/month), 
+                // Fallback: If we have commentId but missing valid docDocumentId (or section/doc/month), 
                 // still switch to document collection tab and let MonthlyDocumentCollectionTracker search for it
-                else if (deepCommentId && !deepSectionId && !deepDocumentId && !deepMonth) {
+                else if (deepCommentId && (!isValidDocumentId || !deepSectionId || !deepMonth)) {
                     console.log('📧 ProjectDetail: Found commentId-only deep link:', deepCommentId, {
                         activeSection,
                         hasDocCollection: project?.hasDocumentCollectionProcess
