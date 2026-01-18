@@ -1736,11 +1736,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
             // Save immediately - use forceSave to bypass unchanged check since we just updated the data
             console.log('💾 handleAddComment: Triggering immediate save with forceSave');
-            // Don't await - fire and forget to keep UI responsive
-            // But catch errors to prevent unhandled promise rejections
-            saveToDatabase({ forceSave: true }).catch(error => {
-                console.error('❌ handleAddComment: Save failed (non-blocking):', error);
-            });
+            // CRITICAL: Await the save to ensure it completes
+            (async () => {
+                try {
+                    await saveToDatabase({ forceSave: true });
+                    console.log('✅ handleAddComment: Save promise resolved and completed');
+                } catch (error) {
+                    console.error('❌ handleAddComment: Save failed:', error);
+                    console.error('🚨 CRITICAL SAVE ERROR - Comment may not persist!', error);
+                }
+            })();
             
             setQuickComment('');
 
