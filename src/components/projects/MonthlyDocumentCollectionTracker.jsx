@@ -1819,6 +1819,47 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         window.document.addEventListener('mousedown', handleClickOutside);
         return () => window.document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
+    
+    // Preserve scroll position across re-renders - CRITICAL to prevent jumping to bottom
+    useEffect(() => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !hoverCommentCell) {
+            savedScrollPositionRef.current = null;
+            return;
+        }
+        
+        // Save scroll position before any potential re-render
+        const saveScrollPosition = () => {
+            if (container) {
+                savedScrollPositionRef.current = container.scrollTop;
+            }
+        };
+        
+        // Restore scroll position after render
+        const restoreScrollPosition = () => {
+            if (container && savedScrollPositionRef.current !== null) {
+                // Only restore if position is significantly different (avoid unnecessary scrolls)
+                if (Math.abs(container.scrollTop - savedScrollPositionRef.current) > 2) {
+                    container.scrollTop = savedScrollPositionRef.current;
+                }
+            }
+        };
+        
+        // Save current position
+        saveScrollPosition();
+        
+        // Listen to scroll events to update saved position
+        container.addEventListener('scroll', saveScrollPosition, { passive: true });
+        
+        // Restore after render using requestAnimationFrame (runs after React render)
+        requestAnimationFrame(() => {
+            requestAnimationFrame(restoreScrollPosition);
+        });
+        
+        return () => {
+            container.removeEventListener('scroll', saveScrollPosition);
+        };
+    }, [hoverCommentCell]); // Re-run when popup opens/closes, but preserve position during re-renders
 
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
