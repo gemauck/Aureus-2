@@ -338,6 +338,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const savedScrollPositionRef = useRef(null); // Preserve scroll position across re-renders
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -2924,7 +2925,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
-                                    ref={commentPopupContainerRef} 
+                                    ref={(el) => {
+                                        commentPopupContainerRef.current = el;
+                                        // Restore scroll position when container is mounted/re-mounted
+                                        if (el && savedScrollPositionRef.current !== null) {
+                                            requestAnimationFrame(() => {
+                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
+                                                    el.scrollTop = savedScrollPositionRef.current;
+                                                }
+                                            });
+                                        }
+                                    }}
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
                                 >
                                     {comments.map((comment, idx) => (
