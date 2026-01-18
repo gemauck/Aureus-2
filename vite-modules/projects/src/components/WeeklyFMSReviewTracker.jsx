@@ -1540,7 +1540,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
-        console.log('🔄 handleUpdateStatus called:', { sectionId, documentId, month, status, applyToSelected, selectedYear });
+        console.log('🚨🔄 handleUpdateStatus CALLED:', { sectionId, documentId, month, status, applyToSelected, selectedYear });
+        console.log('🚨 THIS IS THE KEY LOG - IF YOU SEE THIS, handleUpdateStatus IS WORKING');
         
         // Use current state (most up-to-date) or fallback to ref
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
@@ -2476,11 +2477,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             e.preventDefault();
                             e.stopPropagation();
                             const newStatus = e.target.value;
+                            console.log('🚨🚨🚨 STATUS DROPDOWN ONCHANGE FIRED!', {
+                                sectionId: section.id,
+                                docId: doc.id,
+                                month,
+                                newStatus,
+                                oldStatus: status,
+                                cellKey
+                            });
                             // Always use ref to get latest selectedCells value
                             const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
                             const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
+                            console.log('🚨🚨🚨 About to call handleUpdateStatus...');
                             handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
+                            console.log('🚨🚨🚨 handleUpdateStatus called (may be async)');
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
