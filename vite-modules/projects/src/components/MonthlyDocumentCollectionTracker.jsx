@@ -2099,14 +2099,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         hasAutoScrolledOnPageLoadRef.current = true;
     }, [hoverCommentCell]);
     
-    // Smart positioning for comment popup (separate effect)
+    // Smart positioning for comment popup - REFACTORED to prevent jitter and scroll interference
+    const positionUpdateTimeoutRef = useRef(null);
     useEffect(() => {
-        // Smart positioning for comment popup
-        const updatePopupPosition = () => {
-            if (!hoverCommentCell) {
-                return;
+        if (!hoverCommentCell) {
+            // Clear any pending updates when popup closes
+            if (positionUpdateTimeoutRef.current) {
+                clearTimeout(positionUpdateTimeoutRef.current);
+                positionUpdateTimeoutRef.current = null;
             }
-            
+            return;
+        }
+        
+        // Throttled position update - only runs once when popup opens, not on every render
+        const updatePopupPosition = () => {
             const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
@@ -2115,9 +2121,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const buttonRect = commentButton.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const popupWidth = 288; // w-72 = 288px
-            const popupHeight = 300; // approximate max height
-            const spacing = 8; // Space between button and popup
+            const popupWidth = 288;
+            const popupHeight = 300;
+            const spacing = 8;
             
             // Determine if popup should be above or below
             const spaceBelow = viewportHeight - buttonRect.bottom;
@@ -2128,14 +2134,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             let popupTop, popupLeft;
             
             if (positionAbove) {
-                // Position above the button
                 popupTop = buttonRect.top - popupHeight - spacing;
             } else {
-                // Position below the button (default)
                 popupTop = buttonRect.bottom + spacing;
             }
             
-            // Align horizontally - prefer aligning with button center, but adjust to stay in viewport
+            // Align horizontally
             const buttonCenterX = buttonRect.left + buttonRect.width / 2;
             let preferredLeft = buttonCenterX - popupWidth / 2;
             
@@ -2148,22 +2152,38 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             popupLeft = preferredLeft;
             
-            // Update popup position
+            // Update popup position (this should NOT cause re-render of container)
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
         
-        // Update immediately and on resize (but NOT on scroll to avoid interfering with comment container scrolling)
-        if (hoverCommentCell) {
-            setTimeout(updatePopupPosition, 50); // Wait for DOM to update
-            window.addEventListener('resize', updatePopupPosition);
-            // REMOVED: window.addEventListener('scroll', updatePopupPosition); - this was causing re-renders that reset scroll
-            
-            return () => {
-                window.removeEventListener('resize', updatePopupPosition);
-                window.removeEventListener('scroll', updatePopupPosition);
-            };
+        // Throttled resize handler - prevents jitter
+        let resizeTimeout;
+        const handleResize = () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(updatePopupPosition, 150);
+        };
+        
+        // Initial position update - only once
+        if (positionUpdateTimeoutRef.current) {
+            clearTimeout(positionUpdateTimeoutRef.current);
         }
-    }, [hoverCommentCell, sections]); // Removed commentPopupPosition to prevent re-triggering on position updates
+        positionUpdateTimeoutRef.current = setTimeout(() => {
+            updatePopupPosition();
+            positionUpdateTimeoutRef.current = null;
+        }, 50);
+        
+        // Listen to resize only - NO scroll listener
+        window.addEventListener('resize', handleResize);
+        
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            clearTimeout(resizeTimeout);
+            if (positionUpdateTimeoutRef.current) {
+                clearTimeout(positionUpdateTimeoutRef.current);
+                positionUpdateTimeoutRef.current = null;
+            }
+        };
+    }, [hoverCommentCell]); // ONLY depend on hoverCommentCell - sections changes shouldn't re-position
     
     useEffect(() => {
         const handleClickOutside = (event) => {
