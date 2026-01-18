@@ -546,7 +546,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const payload = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
             ? sectionsRef.current 
             : sectionsByYear;
+        
+        // CRITICAL: Verify payload structure before saving
+        console.log('🔍 Payload verification before save:', {
+            hasPayload: !!payload,
+            payloadType: typeof payload,
+            payloadKeys: Object.keys(payload || {}),
+            firstYear: Object.keys(payload || {})[0],
+            firstYearSectionsCount: payload?.[Object.keys(payload || {})[0]]?.length || 0,
+            firstSectionFirstDoc: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0],
+            firstDocStatus: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0]?.collectionStatus
+        });
+        
         const serialized = JSON.stringify(payload);
+        
+        console.log('🔍 Serialized payload check:', {
+            serializedLength: serialized.length,
+            serializedPreview: serialized.substring(0, 500),
+            containsStatus: serialized.includes('collectionStatus'),
+            containsChecked: serialized.includes('checked') || serialized.includes('not-checked') || serialized.includes('issue')
+        });
         
         // Skip if data hasn't changed (unless forceSave is requested)
         if (!options.forceSave && lastSavedDataRef.current === serialized) {
@@ -602,6 +621,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             // Mark as saved
             lastSavedDataRef.current = serialized;
             console.log('✅ Save completed successfully');
+            console.log('✅ Save verification - lastSavedDataRef now contains:', {
+                length: lastSavedDataRef.current?.length,
+                preview: lastSavedDataRef.current?.substring(0, 300),
+                containsStatus: lastSavedDataRef.current?.includes('collectionStatus')
+            });
             
             // Update localStorage backup
             const snapshotKey = getSnapshotKey(project.id);

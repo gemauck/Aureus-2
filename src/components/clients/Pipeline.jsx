@@ -73,6 +73,8 @@ const normalizeLifecycleStageValue = (value) => {
             return 'Active';
         case 'proposal':
             return 'Proposal';
+        case 'tender':
+            return 'Tender';
         case 'disinterested':
             return 'Disinterested';
         case 'potential':
@@ -159,8 +161,10 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const normalizeLifecycleStage = useCallback(normalizeLifecycleStageValue, []);
 
     const statusOptions = useMemo(() => {
-        const statuses = new Set();
+        // Start with all possible statuses to ensure they're always available
+        const statuses = new Set(['Active', 'Potential', 'Proposal', 'Tender', 'Disinterested']);
 
+        // Also include any statuses found in the data (normalized)
         leads.forEach((lead) => {
             if (lead?.status) {
                 statuses.add(normalizeLifecycleStage(lead.status));
@@ -178,7 +182,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         });
 
         return Array.from(statuses).filter(Boolean).sort((a, b) => a.localeCompare(b));
-    }, [clients, leads]);
+    }, [clients, leads, normalizeLifecycleStage]);
 
     const handleListSort = useCallback((column) => {
         setListSortColumn((prevColumn) => {
