@@ -601,7 +601,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     payloadKeys: Object.keys(payload || {}),
                     firstYearData: payload[Object.keys(payload)[0]]?.slice(0, 2)
                 });
-                result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
+                // Don't skip parent update - we want the parent to refresh with new data
+                result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
                 console.log('✅ Saved via DocumentCollectionAPI:', result);
                 console.log('✅ Save result details:', {
                     hasResult: !!result,
