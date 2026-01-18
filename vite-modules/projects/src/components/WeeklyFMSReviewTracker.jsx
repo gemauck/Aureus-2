@@ -1623,17 +1623,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             refDataSample: JSON.stringify(sectionsRef.current || {}).substring(0, 200)
         });
         
-        // Don't await - fire and forget to keep UI responsive
-        // But catch errors to prevent unhandled promise rejections
-        saveToDatabase({ forceSave: true }).then(() => {
-            console.log('✅ handleUpdateStatus: Save promise resolved');
-        }).catch(error => {
-            console.error('❌ handleUpdateStatus: Save failed (non-blocking):', error);
-            // Show alert for critical errors
-            if (error.message && !error.message.includes('network')) {
-                console.error('🚨 CRITICAL SAVE ERROR - User should see this in console');
+        // CRITICAL: Await the save to ensure it completes before any navigation
+        // This is the key difference - we MUST wait for the save to complete
+        (async () => {
+            try {
+                await saveToDatabase({ forceSave: true });
+                console.log('✅ handleUpdateStatus: Save promise resolved and completed');
+            } catch (error) {
+                console.error('❌ handleUpdateStatus: Save failed:', error);
+                console.error('🚨 CRITICAL SAVE ERROR - Data may not persist!', error);
+                // Show alert for critical errors
+                if (error.message && !error.message.includes('network')) {
+                    alert('Warning: Failed to save changes. Please try again.');
+                }
             }
-        });
+        })();
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
