@@ -2074,6 +2074,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // COMPLETELY DISABLED AUTO-SCROLL - User has full manual control
     // No automatic scrolling at all - user can scroll manually
     // Only deep-link scrolling is allowed (and it's prevented from running repeatedly)
+    // This effect does NOT touch the scroll container - only sets flags
     useEffect(() => {
         if (!hoverCommentCell) {
             // Reset deep-link scroll tracking when popup closes
@@ -2094,6 +2095,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // NO AUTO-SCROLL - User has full control
         // Set flag immediately to prevent any auto-scroll attempts
+        // This flag is checked by deep-link code to prevent auto-scroll
         hasAutoScrolledOnPageLoadRef.current = true;
     }, [hoverCommentCell]);
     
