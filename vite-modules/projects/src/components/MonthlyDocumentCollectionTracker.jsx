@@ -343,6 +343,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const commentPopupContainerRef = useRef(null);
     const hasAutoScrolledOnPageLoadRef = useRef(false); // Track if we've auto-scrolled on page load (only once per page reload)
     const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
+    const savedScrollPositionRef = useRef(null); // Preserve scroll position across re-renders
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
