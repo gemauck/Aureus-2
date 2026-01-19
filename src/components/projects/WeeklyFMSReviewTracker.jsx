@@ -420,6 +420,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const userHasScrolledRef = useRef(false);
+    const hasAutoScrolledRef = useRef(false);
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-weekLabel)
@@ -1113,16 +1115,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const weekKey = getWeekKey(week, year);
         if (!weekKey) return [];
         
-        // Prefer weekly key first
+        // Prefer weekly key first - if it exists (even if empty array), use it
+        // This prevents fallback to monthly key when weekly key was explicitly set
         if (Object.prototype.hasOwnProperty.call(comments, weekKey)) {
-            return comments[weekKey] || [];
+            const weeklyComments = comments[weekKey];
+            // If weekly key is explicitly set to empty array, return empty (don't fall back)
+            if (Array.isArray(weeklyComments)) {
+                return weeklyComments;
+            }
+            // If it's set to something else (legacy), return empty array
+            return [];
         }
         
-        // Fallback to monthly key for legacy data
+        // Fallback to monthly key for legacy data (only if weekly key was never set)
         const parts = weekKey.split('-');
         if (parts.length >= 2) {
             const monthKey = `${parts[0]}-${parts[1]}`;
-            return comments[monthKey] || [];
+            if (Object.prototype.hasOwnProperty.call(comments, monthKey)) {
+                const monthlyComments = comments[monthKey];
+                return Array.isArray(monthlyComments) ? monthlyComments : [];
+            }
         }
         
         return [];
@@ -1840,7 +1852,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     };
     
-    const handleDeleteComment = (sectionId, documentId, week, commentId) => {
+    const handleDeleteComment = async (sectionId, documentId, week, commentId) => {
         
         const currentUser = getCurrentUser();
         
@@ -1866,16 +1878,53 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         if (!confirm('Delete this comment?')) return;
         
+        // Get the week key to identify which key(s) to update
+        const weekKey = getWeekKey(week, selectedYear);
+        if (!weekKey) {
+            console.error('Failed to get week key for comment deletion');
+            return;
+        }
+        
+        // Extract monthly key for cleanup
+        const parts = weekKey.split('-');
+        const monthKey = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : null;
+        
         const updated = currentYearSections.map(section => {
             if (String(section.id) === String(sectionId)) {
                 return {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (String(doc.id) === String(documentId)) {
+                            const comments = { ...(doc.comments || {}) };
                             const updatedComments = existingComments.filter(c => c.id !== commentId);
+                            
+                            // Set the weekly key with filtered comments
+                            comments[weekKey] = updatedComments;
+                            
+                            // Also remove the comment from monthly key if it exists
+                            // This prevents duplicates when reloading from database
+                            if (monthKey && comments[monthKey]) {
+                                const monthlyComments = Array.isArray(comments[monthKey]) 
+                                    ? comments[monthKey] 
+                                    : [];
+                                const updatedMonthlyComments = monthlyComments.filter(c => {
+                                    // Match by id, or by text+author if id doesn't match (for legacy data)
+                                    if (c.id === commentId) return false;
+                                    if (comment && comment.text && c.text === comment.text && c.author === comment.author) {
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                                if (updatedMonthlyComments.length === 0) {
+                                    delete comments[monthKey];
+                                } else {
+                                    comments[monthKey] = updatedMonthlyComments;
+                                }
+                            }
+                            
                             return {
                                 ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, week, updatedComments, selectedYear)
+                                comments
                             };
                         }
                         return doc;
@@ -1895,6 +1944,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Now update state (this will trigger auto-save)
         setSectionsByYear(updatedSectionsByYear);
+        
+        // Force immediate save to ensure deletion persists
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        try {
+            await saveToDatabase();
+        } catch (error) {
+            console.error('❌ Error saving comment deletion:', error);
+        }
     };
     
     const getDocumentStatus = (doc, week) => {
