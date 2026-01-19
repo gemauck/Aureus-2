@@ -40,7 +40,7 @@ const isAdminFromUser = (user) => {
 
 // Department definitions - matching API and Teams configuration
 const DEPARTMENTS = [
-    { id: 'management', name: 'Management', icon: 'fa-user-tie', color: 'blue' },
+    { id: 'management', name: 'Director + General', icon: 'fa-user-tie', color: 'blue' },
     { id: 'compliance', name: 'Compliance', icon: 'fa-shield-alt', color: 'red' },
     { id: 'finance', name: 'Finance', icon: 'fa-coins', color: 'yellow' },
     { id: 'technical', name: 'Technical', icon: 'fa-tools', color: 'purple' },

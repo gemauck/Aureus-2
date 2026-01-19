@@ -28,7 +28,7 @@ This analysis identifies multiple data storage issues in the Teams section that 
 const TEAMS = [
     { 
         id: 'management', 
-        name: 'Management', 
+        name: 'Director + General', 
         icon: 'fa-user-tie',      // ❌ Not in database
         color: 'blue',            // ❌ Not in database
         description: '...',       // ❌ Not in database

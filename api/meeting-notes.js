@@ -8,7 +8,7 @@ import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
 
 // Department definitions
 const DEPARTMENTS = [
-  { id: 'management', name: 'Management' },
+  { id: 'management', name: 'Director + General' },
   { id: 'compliance', name: 'Compliance' },
   { id: 'finance', name: 'Finance' },
   { id: 'technical', name: 'Technical' },
