@@ -2483,15 +2483,37 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 month,
                                 newStatus,
                                 oldStatus: status,
-                                cellKey
+                                cellKey,
+                                hasHandleUpdateStatus: typeof handleUpdateStatus === 'function'
                             });
+                            
+                            if (typeof handleUpdateStatus !== 'function') {
+                                console.error('🚨🚨🚨 CRITICAL ERROR: handleUpdateStatus is not a function!', {
+                                    handleUpdateStatus,
+                                    type: typeof handleUpdateStatus
+                                });
+                                alert('Error: Cannot update status. Please refresh the page.');
+                                return;
+                            }
+                            
                             // Always use ref to get latest selectedCells value
                             const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
                             const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
-                            console.log('🚨🚨🚨 About to call handleUpdateStatus...');
-                            handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
-                            console.log('🚨🚨🚨 handleUpdateStatus called (may be async)');
+                            console.log('🚨🚨🚨 About to call handleUpdateStatus...', {
+                                sectionId: section.id,
+                                docId: doc.id,
+                                month,
+                                newStatus,
+                                applyToSelected
+                            });
+                            try {
+                                handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
+                                console.log('🚨🚨🚨 handleUpdateStatus called successfully (may be async)');
+                            } catch (error) {
+                                console.error('🚨🚨🚨 ERROR calling handleUpdateStatus:', error);
+                                alert('Error updating status: ' + error.message);
+                            }
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
