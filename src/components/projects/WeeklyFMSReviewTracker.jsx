@@ -1085,11 +1085,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Prefer the fully-qualified weekly key ("YYYY-MM-W##")
         if (Object.prototype.hasOwnProperty.call(collectionStatus, weekKey)) {
-            return collectionStatus[weekKey];
+            const weeklyStatus = collectionStatus[weekKey];
+            // If weekly key is explicitly set to empty string, return null (cleared)
+            // Don't fall back to monthly key if this week was explicitly cleared
+            if (weeklyStatus === '' || weeklyStatus === null) {
+                return null;
+            }
+            return weeklyStatus;
         }
         
         // Fallback to the coarser monthly key ("YYYY-MM") so any legacy
         // data written before weekly support still shows up.
+        // Only fall back if the weekly key was never set (not if it was explicitly cleared)
         const parts = weekKey.split('-');
         if (parts.length >= 2) {
             const monthKey = `${parts[0]}-${parts[1]}`;
@@ -1122,16 +1129,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     };
     
     // Set status for a specific week in the selected year only
-    // If status is empty/null, remove the key instead of setting it to empty string
+    // If status is empty/null, explicitly set it to empty string (not delete)
+    // This prevents fallback to monthly key when a week is explicitly cleared
     const setStatusForYear = (collectionStatus, week, status, year = selectedYear) => {
         const weekKey = getWeekKey(week, year);
         if (!weekKey) return collectionStatus || {};
         
         const newStatus = { ...(collectionStatus || {}) };
         
-        // If status is empty/null, remove the key to show white background
+        // If status is empty/null, explicitly set to empty string to mark as cleared
+        // This prevents getStatusForYear from falling back to monthly key
         if (!status || status === '' || status === 'Select Status') {
-            delete newStatus[weekKey];
+            newStatus[weekKey] = '';
         } else {
             newStatus[weekKey] = status;
         }
