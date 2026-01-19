@@ -463,18 +463,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     // Load data on mount and when project changes
     // OPTIMIZATION: Don't reload when only year changes - data is already loaded for all years
+    // CRITICAL: Only reload when project ID changes, NOT when prop data changes (prevents stale data overwriting saves)
     const lastProjectIdRef = useRef(null);
     const hasLoadedRef = useRef(false);
     useEffect(() => {
         if (project?.id) {
             // Load on initial mount or when project ID changes
             if (project.id !== lastProjectIdRef.current || !hasLoadedRef.current) {
+                console.log('🔄 Triggering loadData due to project ID change:', {
+                    oldId: lastProjectIdRef.current,
+                    newId: project.id,
+                    hasLoaded: hasLoadedRef.current
+                });
                 lastProjectIdRef.current = project.id;
                 hasLoadedRef.current = true;
                 loadData();
+            } else {
+                console.log('⏸️ Skipping loadData - project ID unchanged:', {
+                    projectId: project.id,
+                    lastProjectId: lastProjectIdRef.current
+                });
             }
         }
-    }, [project?.id, loadData]);
+    }, [project?.id, loadData]); // NOTE: loadData only depends on project?.id now, so this effect only runs when ID changes
     
     // Load users for reviewer assignment
     useEffect(() => {
