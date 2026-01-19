@@ -70,7 +70,15 @@ cd $PROD_PATH || { echo "❌ Directory not found: $PROD_PATH"; exit 1; }
 echo ""
 echo "📥 Step 3: Pulling latest code..."
 echo "=================================="
-git pull origin main || echo "⚠️  Git pull failed or already up to date"
+
+# Ensure production checkout exactly matches origin/main to avoid stale local changes
+echo "Fetching latest from origin..."
+git fetch origin
+echo "Resetting local checkout to origin/main..."
+git reset --hard origin/main || {
+    echo "❌ git reset --hard origin/main failed"
+    exit 1
+}
 
 echo ""
 echo "📦 Step 4: Installing dependencies..."
