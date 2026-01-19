@@ -459,7 +459,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.weeklyFMSReviewSections]);
+    }, [project?.id]); // CRITICAL FIX: Removed project?.weeklyFMSReviewSections from deps to prevent reloading stale prop data
     
     // Load data on mount and when project changes
     // OPTIMIZATION: Don't reload when only year changes - data is already loaded for all years
