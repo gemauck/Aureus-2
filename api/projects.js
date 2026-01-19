@@ -195,6 +195,7 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
 
 /**
  * Convert WeeklyFMSReviewSection table data to JSON format (for backward compatibility)
+ * Merges table data (monthly keys) with JSON field data (weekly keys preserved)
  */
 async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
   try {
@@ -204,6 +205,24 @@ async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
     } catch (e) {
       // Table doesn't exist yet, return null to use JSON fallback
       return null
+    }
+
+    // Get the project to access the JSON field (which may contain weekly keys)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { weeklyFMSReviewSections: true }
+    })
+    
+    // Parse JSON field to get weekly keys
+    let jsonFieldData = null
+    if (project?.weeklyFMSReviewSections) {
+      try {
+        jsonFieldData = typeof project.weeklyFMSReviewSections === 'string'
+          ? JSON.parse(project.weeklyFMSReviewSections)
+          : project.weeklyFMSReviewSections
+      } catch (e) {
+        console.warn('Failed to parse weeklyFMSReviewSections JSON field:', e)
+      }
     }
 
     const includeComments = !options.skipComments;
@@ -232,20 +251,25 @@ async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
         byYear[section.year] = []
       }
 
+      // Find corresponding section in JSON field data (if it exists)
+      const jsonSection = jsonFieldData?.[section.year]?.find(s => 
+        s.id === section.id || s.name === section.name
+      )
+
       const sectionData = {
         id: section.id,
         name: section.name,
         description: section.description || '',
         reviewer: section.reviewer || '',
         documents: section.items.map(item => {
-          // Build collectionStatus object: { "2024-01": "completed", ... } (monthly format, no week)
+          // Start with monthly statuses from table
           const collectionStatus = {}
           for (const status of item.statuses) {
             const key = `${status.year}-${String(status.month).padStart(2, '0')}`
             collectionStatus[key] = status.status
           }
 
-          // Build comments object: { "2024-01": [...], ... } (monthly format, no week)
+          // Start with monthly comments from table
           const comments = {}
           if (includeComments && item.comments) {
             for (const comment of item.comments) {
@@ -262,6 +286,33 @@ async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
                 date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
                 createdAt: comment.createdAt
               })
+            }
+          }
+
+          // Merge with weekly keys from JSON field (preserve weekly data)
+          const jsonDoc = jsonSection?.documents?.find(d => 
+            d.id === item.id || d.name === item.name
+          )
+          if (jsonDoc) {
+            // Merge statuses: weekly keys take precedence, monthly keys from table are fallback
+            if (jsonDoc.collectionStatus && typeof jsonDoc.collectionStatus === 'object') {
+              for (const [key, value] of Object.entries(jsonDoc.collectionStatus)) {
+                // Preserve weekly keys (YYYY-MM-W##) and empty strings (explicitly cleared)
+                if (key.includes('-W') || value === '') {
+                  collectionStatus[key] = value
+                }
+                // Monthly keys from JSON are only used if not in table (table is source of truth for monthly)
+              }
+            }
+            
+            // Merge comments: weekly keys take precedence
+            if (includeComments && jsonDoc.comments && typeof jsonDoc.comments === 'object') {
+              for (const [key, value] of Object.entries(jsonDoc.comments)) {
+                // Preserve weekly keys (YYYY-MM-W##)
+                if (key.includes('-W')) {
+                  comments[key] = Array.isArray(value) ? value : []
+                }
+              }
             }
           }
 
