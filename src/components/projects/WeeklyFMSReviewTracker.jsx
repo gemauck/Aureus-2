@@ -977,11 +977,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     // Create a week key scoped to the selected year.
-    // IMPORTANT: Backend tables for weekly FMS currently store data at a
-    // YEAR+MONTH level (YYYY-MM). To ensure status/comment persistence, we
-    // map each visual "week" to the appropriate month key for the given year.
     //
-    // week can be:
+    // IMPORTANT BACKEND MAPPING:
+    // - The Prisma tables for weekly FMS statuses/comments are stored at
+    //   a YEAR+MONTH level (columns: year, month).
+    // - The JSON used by the UI, however, can be more granular.
+    //
+    // To support **true per-week editing in the UI** while still being
+    // compatible with the backend migration helpers, we:
+    //   1. Persist weekly data under a key shaped like:  "YYYY-MM-W##"
+    //      e.g. "2026-01-W01" for Week 1 in Jan 2026.
+    //   2. When *reading*, we first look for the weekly key, and if it
+    //      doesn't exist, we gracefully fall back to the coarser
+    //      monthly key: "YYYY-MM".
+    //
+    // The table migrator only looks at the first two segments of the key
+    // (year/month), so it remains compatible with the new weekly keys.
+    //
+    // `week` can be:
     // - a week object from generateWeeksForYear
     // - a week number
     // - a string like "Week 1 (Dec 29 - Jan 5)" or "W01"
@@ -989,6 +1002,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         if (!week) return null;
         
         // Resolve to a week object so we can derive the correct calendar month
+        // and week number.
         let weekObj = null;
         
         if (typeof week === 'object' && week.number && week.startDate) {
@@ -1048,36 +1062,63 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return base.getMonth() + 1;
         };
         
+        // Derive month + week number for the final key
         const month = resolveMonthForYear(year);
+        const weekNumber = weekObj.number || weeks.find(w => w === weekObj)?.number;
         const monthStr = String(month).padStart(2, '0');
-        return `${year}-${monthStr}`;
+        const weekStr = String(weekNumber || '').padStart(2, '0');
+        
+        // If we couldn't resolve a week number, fall back to plain month key
+        if (!weekStr || weekStr === '00') {
+            return `${year}-${monthStr}`;
+        }
+        
+        return `${year}-${monthStr}-W${weekStr}`;
     };
     
     // Get status for a specific week in the selected year only
-    // IMPORTANT: Backend persistence for weekly FMS review currently stores
-    // statuses/comments at a YEAR+MONTH granularity (e.g. "2026-01"), not
-    // per‑week. To ensure that values actually round‑trip via the API,
-    // we intentionally map each visual "week" to an underlying month key.
-    //
-    // This means:
-    // - All weeks that fall inside the same calendar month for a given year
-    //   will share the same persisted status/comments.
-    // - The UI still renders per‑week columns, but persistence is monthly.
-    //
-    // The mapping logic lives in getWeekKey, which returns a "YYYY-MM" key
-    // derived from the week object/label/number for the specified year.
     const getStatusForYear = (collectionStatus, week, year = selectedYear) => {
         if (!collectionStatus) return null;
+        
         const weekKey = getWeekKey(week, year);
-        return weekKey ? (collectionStatus[weekKey] || null) : null;
+        if (!weekKey) return null;
+        
+        // Prefer the fully-qualified weekly key ("YYYY-MM-W##")
+        if (Object.prototype.hasOwnProperty.call(collectionStatus, weekKey)) {
+            return collectionStatus[weekKey];
+        }
+        
+        // Fallback to the coarser monthly key ("YYYY-MM") so any legacy
+        // data written before weekly support still shows up.
+        const parts = weekKey.split('-');
+        if (parts.length >= 2) {
+            const monthKey = `${parts[0]}-${parts[1]}`;
+            return collectionStatus[monthKey] || null;
+        }
+        
+        return null;
     };
     
     // Get comments for a specific week in the selected year only
     const getCommentsForYear = (comments, week, year = selectedYear) => {
         if (!comments) return [];
+        
         const weekKey = getWeekKey(week, year);
         if (!weekKey) return [];
-        return comments[weekKey] || [];
+        
+        // Prefer weekly key first
+        if (Object.prototype.hasOwnProperty.call(comments, weekKey)) {
+            return comments[weekKey] || [];
+        }
+        
+        // Fallback to monthly key for legacy data
+        const parts = weekKey.split('-');
+        if (parts.length >= 2) {
+            const monthKey = `${parts[0]}-${parts[1]}`;
+            return comments[monthKey] || [];
+        }
+        
+        return [];
     };
     
     // Set status for a specific week in the selected year only
