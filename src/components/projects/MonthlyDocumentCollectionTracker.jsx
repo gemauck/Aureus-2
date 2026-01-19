@@ -338,6 +338,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const commentTouchStartYRef = useRef(0);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1762,6 +1763,59 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             window.removeEventListener('resize', updatePopupPosition);
         };
     }, [hoverCommentCell]);
+
+    // Dedicated scroll handler for the comment popup container (wheel)
+    const handleCommentWheel = useCallback((event) => {
+        const container = commentPopupContainerRef.current;
+        if (!container) return;
+
+        const deltaY = event.deltaY;
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingUp = deltaY < 0;
+        const scrollingDown = deltaY > 0;
+
+        // If the container can scroll in the direction of the wheel, handle it here
+        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+        }
+        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
+    }, []);
+
+    // Touch scrolling for mobile inside the comment popup container
+    const handleCommentTouchStart = useCallback((event) => {
+        if (event.touches && event.touches.length > 0) {
+            commentTouchStartYRef.current = event.touches[0].clientY;
+        }
+    }, []);
+
+    const handleCommentTouchMove = useCallback((event) => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !(event.touches && event.touches.length > 0)) return;
+
+        const currentY = event.touches[0].clientY;
+        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
+
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingDown = deltaY > 0;
+        const scrollingUp = deltaY < 0;
+
+        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+            // There is room to scroll inside the container – keep the scroll local
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            commentTouchStartYRef.current = currentY;
+        }
+        // Otherwise, allow the page to handle the scroll when we've hit the edge
+    }, []);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -2900,6 +2954,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
+                                    onWheel={handleCommentWheel}
+                                    onTouchStart={handleCommentTouchStart}
+                                    onTouchMove={handleCommentTouchMove}
                                 >
                                     {comments.map((comment, idx) => (
                                         <div 
