@@ -338,7 +338,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
-    const savedScrollPositionRef = useRef(null); // Preserve scroll position across re-renders
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1702,56 +1701,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
-    // Get comments for current hover cell to track changes for scrolling
-    const currentComments = React.useMemo(() => {
-        if (!hoverCommentCell) return [];
-        const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
-        const section = sections.find(s => String(s.id) === String(rawSectionId));
-        const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-        return doc ? getDocumentComments(doc, month) : [];
-    }, [hoverCommentCell, sections, selectedYear]);
-    
+    // Smart positioning for comment popup (no auto-scroll, no window scroll listener)
     useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current) {
-            // Scroll to bottom when popup opens or comments update
-            const scrollToBottom = () => {
-                if (commentPopupContainerRef.current) {
-                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                }
-            };
-            
-            // Multiple attempts to ensure scrolling works
-            setTimeout(scrollToBottom, 50);
-            setTimeout(scrollToBottom, 100);
-            setTimeout(scrollToBottom, 200);
+        if (!hoverCommentCell) {
+            return;
         }
-        
-        // Smart positioning for comment popup
+
         const updatePopupPosition = () => {
-            if (!hoverCommentCell) {
-                return;
-            }
-            
             const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
-            
+
             const buttonRect = commentButton.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
             const popupWidth = 288; // w-72 = 288px
             const popupHeight = 300; // approximate max height
             const spacing = 8; // Space between button and popup
-            
+
             // Determine if popup should be above or below
             const spaceBelow = viewportHeight - buttonRect.bottom;
             const spaceAbove = buttonRect.top;
             const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
-            
+
             // Calculate popup position
             let popupTop, popupLeft;
-            
+
             if (positionAbove) {
                 // Position above the button
                 popupTop = buttonRect.top - popupHeight - spacing;
@@ -1759,36 +1735,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Position below the button (default)
                 popupTop = buttonRect.bottom + spacing;
             }
-            
+
             // Align horizontally - prefer aligning with button center, but adjust to stay in viewport
             const buttonCenterX = buttonRect.left + buttonRect.width / 2;
             let preferredLeft = buttonCenterX - popupWidth / 2;
-            
+
             // Ensure popup stays within viewport
             if (preferredLeft < 10) {
                 preferredLeft = 10;
             } else if (preferredLeft + popupWidth > viewportWidth - 10) {
                 preferredLeft = viewportWidth - popupWidth - 10;
             }
-            
+
             popupLeft = preferredLeft;
-            
+
             // Update popup position
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
-        
-        // Update immediately and on resize/scroll
-        if (hoverCommentCell) {
-            setTimeout(updatePopupPosition, 50); // Wait for DOM to update
-            window.addEventListener('resize', updatePopupPosition);
-            window.addEventListener('scroll', updatePopupPosition);
-            
-            return () => {
-                window.removeEventListener('resize', updatePopupPosition);
-                window.removeEventListener('scroll', updatePopupPosition);
-            };
-        }
-    }, [hoverCommentCell, sections, commentPopupPosition, currentComments.length]);
+
+        // Initial position update
+        setTimeout(updatePopupPosition, 50);
+
+        // Update on window resize only (no scroll listener)
+        window.addEventListener('resize', updatePopupPosition);
+        return () => {
+            window.removeEventListener('resize', updatePopupPosition);
+        };
+    }, [hoverCommentCell]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -1820,47 +1793,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return () => window.document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
     
-    // Preserve scroll position across re-renders - CRITICAL to prevent jumping to bottom
-    useEffect(() => {
-        const container = commentPopupContainerRef.current;
-        if (!container || !hoverCommentCell) {
-            savedScrollPositionRef.current = null;
-            return;
-        }
-        
-        // Save scroll position before any potential re-render
-        const saveScrollPosition = () => {
-            if (container) {
-                savedScrollPositionRef.current = container.scrollTop;
-            }
-        };
-        
-        // Restore scroll position after render
-        const restoreScrollPosition = () => {
-            if (container && savedScrollPositionRef.current !== null) {
-                // Only restore if position is significantly different (avoid unnecessary scrolls)
-                if (Math.abs(container.scrollTop - savedScrollPositionRef.current) > 2) {
-                    container.scrollTop = savedScrollPositionRef.current;
-                }
-            }
-        };
-        
-        // Save current position
-        saveScrollPosition();
-        
-        // Listen to scroll events to update saved position
-        container.addEventListener('scroll', saveScrollPosition, { passive: true });
-        
-        // Restore after render using requestAnimationFrame (runs after React render)
-        requestAnimationFrame(() => {
-            requestAnimationFrame(restoreScrollPosition);
-        });
-        
-        return () => {
-            container.removeEventListener('scroll', saveScrollPosition);
-        };
-    }, [hoverCommentCell]); // Re-run when popup opens/closes, but preserve position during re-renders
-
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
     // immediately see the relevant discussion.
@@ -2966,17 +2898,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
-                                    ref={(el) => {
-                                        commentPopupContainerRef.current = el;
-                                        // Restore scroll position when container is mounted/re-mounted
-                                        if (el && savedScrollPositionRef.current !== null) {
-                                            requestAnimationFrame(() => {
-                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
-                                                    el.scrollTop = savedScrollPositionRef.current;
-                                                }
-                                            });
-                                        }
-                                    }}
+                                    ref={commentPopupContainerRef}
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
                                 >
                                     {comments.map((comment, idx) => (
