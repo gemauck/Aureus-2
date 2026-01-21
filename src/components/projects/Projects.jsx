@@ -93,6 +93,7 @@ const Projects = () => {
     const lastProcessedRouteRef = useRef(null);
     const lastProcessedProjectIdRef = useRef(null);
     const routeCheckInProgressRef = useRef(false);
+    const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -1405,7 +1406,8 @@ const Projects = () => {
         tryOpenProjectFromRoute();
     }, []); // Only run once on mount
     
-    // Check route when projects load or viewingProject changes - this handles cases where projects weren't loaded yet
+    // Check route when projects load - this handles cases where projects weren't loaded yet
+    // NOTE: Removed viewingProject from dependencies to prevent infinite loops
     useEffect(() => {
         if (routeCheckInProgressRef.current) {
             return;
@@ -1428,7 +1430,21 @@ const Projects = () => {
                 const taskId = currentRoute.search?.get('task');
                 
                 // Prevent processing the same project multiple times
-                if (lastProcessedProjectIdRef.current === projectId && viewingProject && String(viewingProject.id) === String(projectId)) {
+                // Use ref to check if we've already processed this project
+                if (lastProcessedProjectIdRef.current === projectId) {
+                    // Only handle task opening if we're already viewing this project
+                    if (taskId && viewingProject && String(viewingProject.id) === String(projectId)) {
+                        console.log('📋 Projects: Already viewing project, opening task:', taskId);
+                        const dispatchOpenTask = (attempt = 1) => {
+                            window.dispatchEvent(new CustomEvent('openTask', {
+                                detail: { taskId: taskId, tab: 'details' }
+                            }));
+                            if (attempt < 5) {
+                                setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                            }
+                        };
+                        setTimeout(() => dispatchOpenTask(1), 1000);
+                    }
                     return;
                 }
                 
@@ -1458,8 +1474,11 @@ const Projects = () => {
                         setTimeout(() => dispatchOpenTask(1), 1000);
                     };
                     
-                    // Check if we're already viewing this project
+                    // Check if we're already viewing this project (using current state via closure)
+                    // This check happens before we set lastProcessedProjectIdRef to prevent loops
                     if (viewingProject && String(viewingProject.id) === String(projectId)) {
+                        // Mark as processed to prevent re-processing
+                        lastProcessedProjectIdRef.current = projectId;
                         if (taskId) {
                             console.log('📋 Projects: Already viewing project, opening task:', taskId);
                             dispatchOpenTaskWithRetry(taskId);
@@ -1491,6 +1510,7 @@ const Projects = () => {
                     if (window.DatabaseAPI?.getProject) {
                         try {
                             routeCheckInProgressRef.current = true;
+                            lastProcessedProjectIdRef.current = projectId; // Set early to prevent duplicate processing
                             const response = await window.DatabaseAPI.getProject(projectId);
                             const projectData = response?.data?.project || response?.project;
                             if (projectData) {
@@ -1498,7 +1518,6 @@ const Projects = () => {
                                     ...projectData,
                                     client: projectData.clientName || projectData.client || ''
                                 };
-                                lastProcessedProjectIdRef.current = projectId;
                                 // Add to projects array
                                 setProjects(prev => {
                                     const exists = prev.find(p => String(p.id) === String(projectId));
@@ -1521,9 +1540,15 @@ const Projects = () => {
                                     dispatchOpenTaskWithRetry(taskId);
                                 }
                                 return;
+                            } else {
+                                // Reset ref if fetch failed
+                                lastProcessedProjectIdRef.current = null;
                             }
                         } catch (error) {
                             console.error('❌ Projects: Failed to fetch project from API:', error);
+                            // Reset ref on error
+                            lastProcessedProjectIdRef.current = null;
+                            setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
                         }
                     }
                 }
@@ -1532,7 +1557,7 @@ const Projects = () => {
         
         // Try immediately
         tryOpenProjectFromRoute();
-    }, [projects, viewingProject]); // Run when projects load or viewingProject changes
+    }, [projects]); // Only run when projects load - removed viewingProject to prevent infinite loops
 
     // Check route after projects are loaded to open project from URL
     useEffect(() => {
@@ -2230,6 +2255,18 @@ const Projects = () => {
 
     const handleViewProject = async (project) => {
         console.log('🔵 handleViewProject called with project:', project?.id, project?.name);
+        
+        // Prevent duplicate calls for the same project within 500ms
+        const now = Date.now();
+        const projectId = project?.id;
+        if (projectId && 
+            lastHandleViewProjectCallRef.current.projectId === projectId && 
+            now - lastHandleViewProjectCallRef.current.timestamp < 500) {
+            console.log('⚠️ handleViewProject: Ignoring duplicate call for project:', projectId);
+            return;
+        }
+        lastHandleViewProjectCallRef.current = { projectId, timestamp: now };
+        
         // Update ref so it can be accessed from other useEffects
         handleViewProjectRef.current = handleViewProject;
         
