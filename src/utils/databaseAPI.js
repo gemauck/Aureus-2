@@ -443,11 +443,10 @@ const DatabaseAPI = {
                 }
                 
                 // Add timeout handling using AbortController
-                // Use shorter timeout for faster failure detection on connection issues
-                // Reduced from 30s to 15s to fail faster on connection resets/timeouts (ERR_CONNECTION_RESET, ERR_TIMED_OUT)
-                // This allows faster retry attempts and better user experience
+                // Match server timeout (30s) to prevent premature client-side timeouts
+                // Server timeout is 30s for most endpoints, so client should match to avoid false timeouts
                 // Note: Individual requests can still override with options.timeout for longer-running operations
-                const timeoutMs = options.timeout || 15000; // Default 15 seconds (reduced from 30s)
+                const timeoutMs = options.timeout || 30000; // Default 30 seconds (matches server timeout)
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => {
                     controller.abort();
