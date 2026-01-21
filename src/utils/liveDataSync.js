@@ -312,7 +312,7 @@ class LiveDataSync {
         // Additional check to prevent rapid sync calls (skip if force sync)
         if (!this._forceSyncInProgress) {
             const now = Date.now();
-            const minInterval = 10000 + this.rateLimitBackoff; // 10 seconds minimum + backoff (increased from 3s)
+            const minInterval = 30000 + this.rateLimitBackoff; // 30 seconds minimum + backoff (increased to reduce server load)
             if (this.lastSync && (now - this.lastSync.getTime()) < minInterval) {
                 log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
                 return;
@@ -379,7 +379,7 @@ class LiveDataSync {
             // Execute calls with delays between them
             for (let i = 0; i < syncCalls.length; i++) {
                 const call = syncCalls[i];
-                const delay = i * 1000; // 1000ms (1 second) delay between each call (increased from 500ms to prevent rate limiting)
+                const delay = i * 2000; // 2000ms (2 seconds) delay between each call (increased to prevent rate limiting and timeouts)
                 const promise = new Promise(resolve => {
                     setTimeout(async () => {
                         // Check if stopped or paused before making API call
@@ -417,7 +417,7 @@ class LiveDataSync {
                 const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
                 if (role === 'admin') {
                     // Add users sync with delay after other calls
-                    const usersDelay = syncCalls.length * 1000; // After all other calls (increased from 500ms to 1000ms)
+                    const usersDelay = syncCalls.length * 2000; // After all other calls (2 seconds per call to prevent rate limiting)
                     const usersPromise = new Promise(resolve => {
                         setTimeout(async () => {
                             // Check if stopped or paused before making API call
@@ -669,10 +669,23 @@ class LiveDataSync {
             const log = getLog();
             const errorMessage = error.message || String(error);
             
+            // Check if it's a timeout error (suppress logs for these during sync - they're expected when server is slow)
+            const isTimeoutError = error.isTimeout === true || 
+                                 error.code === 'TIMEOUT' ||
+                                 error.name === 'TimeoutError' ||
+                                 errorMessage.includes('timeout') ||
+                                 errorMessage.includes('Request timeout');
+            
             // Check if it's a circuit breaker error (endpoint temporarily unavailable)
             const isCircuitBreakerError = error.circuitBreaker === true || 
                                          error.code === 'CIRCUIT_BREAKER_OPEN' ||
                                          (errorMessage.includes('circuit breaker') && errorMessage.includes('open'));
+            
+            // Handle timeout errors silently during sync (they're expected when server is slow)
+            if (isTimeoutError) {
+                // Suppress timeout error logs during sync operations
+                return { dataType, success: false, error: 'timeout', suppressed: true };
+            }
             
             // Handle circuit breaker errors by skipping the sync (no error logged)
             if (isCircuitBreakerError) {

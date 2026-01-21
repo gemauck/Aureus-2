@@ -31,7 +31,7 @@ const DatabaseAPI = {
     // Request throttling / rate limiting safeguards
     _maxConcurrentRequests: 2, // Reduced from 4 to prevent overwhelming the server
     _currentRequests: 0,
-    _minRequestInterval: 300, // Increased to 300ms to match RateLimitManager and reduce request frequency
+    _minRequestInterval: 500, // 500ms to match RateLimitManager and reduce request frequency
     _lastRequestTimestamp: 0,
     _rateLimitResumeAt: 0,
     _rateLimitCount: 0, // Track consecutive rate limit errors
@@ -321,8 +321,10 @@ const DatabaseAPI = {
     async _executeRequest(endpoint, options = {}) {
         // Reduce retries for 502 errors - they often indicate server is down
         // Reduced default maxRetries from 5 to 2 to fail faster and reduce load
-        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 2;
-        const baseDelay = 2000; // Start with 2 seconds - longer delay to reduce load
+        // For timeout errors, use fewer retries (1) since they're less likely to succeed
+        const isTimeoutRequest = options.isTimeout || false;
+        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : (isTimeoutRequest ? 1 : 2);
+        const baseDelay = 3000; // Start with 3 seconds - longer delay to give server time to recover
 
         // Check RateLimitManager before acquiring slot (if available)
         if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
@@ -469,6 +471,9 @@ const DatabaseAPI = {
                         const timeoutError = new Error(`Request timeout after ${timeoutMs}ms: ${endpoint}`);
                         timeoutError.name = 'TimeoutError';
                         timeoutError.isTimeout = true;
+                        timeoutError.code = 'TIMEOUT';
+                        // Suppress timeout error logs during sync operations (they're expected when server is slow)
+                        timeoutError.suppressLog = options.suppressTimeoutLog || false;
                         throw timeoutError;
                     }
                     
@@ -943,8 +948,10 @@ const DatabaseAPI = {
                             // Connection resets: 500ms, 1s, 2s, 4s - faster retries since connection issues may resolve quickly
                             delay = Math.min(500 * Math.pow(2, attempt), 4000);
                         } else if (isTimeout) {
-                            // Timeouts: 1s, 2s, 4s, 8s - give server a bit more time
+                            // Timeouts: 3s, 6s - fewer retries with longer delays to give server more time
                             delay = baseDelay * Math.pow(2, attempt);
+                            // Cap timeout retry delay at 10 seconds
+                            delay = Math.min(delay, 10000);
                         } else {
                             // Other network errors: standard exponential backoff
                             delay = baseDelay * Math.pow(2, attempt);
