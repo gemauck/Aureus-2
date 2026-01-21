@@ -31,10 +31,11 @@ async function handler(req, res) {
     const base64 = match[2]
     const buffer = Buffer.from(base64, 'base64')
 
-    // Security: restrict max size (~8MB)
-    const MAX_BYTES = 8 * 1024 * 1024
+    // Security: restrict max size (50MB to match POA Review component limit)
+    // Base64 encoding adds ~33% overhead, so 50MB file becomes ~66MB when encoded
+    const MAX_BYTES = 50 * 1024 * 1024
     if (buffer.length > MAX_BYTES) {
-      return badRequest(res, 'File too large (max 8MB)')
+      return badRequest(res, 'File too large (max 50MB)')
     }
 
     // Ensure uploads directory exists

@@ -335,8 +335,9 @@ app.use('/api', apiLimiter)
 // Enable gzip compression for all responses to speed up loads
 app.use(compression({ threshold: 0 }))
 
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+// Increased limit to 100mb to support POA Review file uploads (50MB files + base64 encoding overhead)
+app.use(express.json({ limit: '100mb' }))
+app.use(express.urlencoded({ extended: true, limit: '100mb' }))
 app.use(cookieParser())
 
 // Lightweight version endpoint for clients to detect new deployments
