@@ -1619,33 +1619,52 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     }, [statusOptions]);
 
     const openTaskComments = useCallback(async (event, task, { parentTask = null, isSubtask = false } = {}) => {
-        event.stopPropagation();
-        const rect = event.currentTarget.getBoundingClientRect();
-        const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
-        const scrollY = window.scrollY ?? window.pageYOffset ?? 0;
-        const commentWidth = 320;
-        const left = Math.min(rect.left + scrollX, (scrollX + window.innerWidth) - commentWidth - 16);
+        try {
+            if (event) {
+                event.stopPropagation();
+            }
+            if (!task) {
+                console.error('❌ No task provided to openTaskComments');
+                return;
+            }
+            console.log('💬 openTaskComments called', { taskId: task?.id, isSubtask });
+            
+            const rect = event?.currentTarget?.getBoundingClientRect() || { left: 0, bottom: 0 };
+            const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
+            const scrollY = window.scrollY ?? window.pageYOffset ?? 0;
+            const commentWidth = 320;
+            const left = Math.min(rect.left + scrollX, (scrollX + window.innerWidth) - commentWidth - 16);
 
-        const position = {
-            top: rect.bottom + scrollY + 8,
-            left: Math.max(16, left)
-        };
+            const position = {
+                top: rect.bottom + scrollY + 8,
+                left: Math.max(16, left)
+            };
 
-        const ready = await ensureCommentsPopupLoaded();
-        if (!ready) {
-            console.warn('⚠️ CommentsPopup component is not available yet.');
-            alert('Comments workspace is still loading. Please try again in a moment.');
-            setCommentsPopup(null);
-            return;
+            const ready = await ensureCommentsPopupLoaded();
+            if (!ready) {
+                console.warn('⚠️ CommentsPopup not ready, attempting to load...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const retryReady = await ensureCommentsPopupLoaded();
+                if (!retryReady) {
+                    console.error('❌ CommentsPopup failed to load after retry');
+                    alert('Comments workspace is still loading. Please refresh the page and try again.');
+                    setCommentsPopup(null);
+                    return;
+                }
+            }
+
+            setCommentsPopup({
+                taskId: task.id,
+                task,
+                isSubtask,
+                parentId: parentTask ? parentTask.id : null,
+                position
+            });
+            console.log('✅ Comments popup opened');
+        } catch (error) {
+            console.error('❌ Error in openTaskComments:', error);
+            alert('Failed to open comments: ' + error.message);
         }
-
-        setCommentsPopup({
-            taskId: task.id,
-            task,
-            isSubtask,
-            parentId: parentTask ? parentTask.id : null,
-            position
-        });
     }, [ensureCommentsPopupLoaded]);
 
     // List Management
@@ -1711,44 +1730,92 @@ export function ProjectDetail({ project, onBack, onDelete }) {
 
     // Task Management - Unified for both creating and editing
     const handleAddTask = useCallback(async (listId, statusName = null) => {
-        const ready = await ensureTaskDetailModalLoaded();
-        if (!ready) {
-            alert('Task workspace is still loading. Please try again in a moment.');
-            return;
+        try {
+            console.log('➕ handleAddTask called', { listId, statusName });
+            const ready = await ensureTaskDetailModalLoaded();
+            if (!ready) {
+                console.warn('⚠️ TaskDetailModal not ready, attempting to load...');
+                // Try one more time after a short delay
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const retryReady = await ensureTaskDetailModalLoaded();
+                if (!retryReady) {
+                    console.error('❌ TaskDetailModal failed to load after retry');
+                    alert('Task workspace is still loading. Please refresh the page and try again.');
+                    return;
+                }
+            }
+            const newTask = { listId };
+            if (statusName) {
+                newTask.status = statusName;
+                setCreatingTaskWithStatus(statusName);
+            }
+            setViewingTask(newTask);
+            setViewingTaskParent(null);
+            setCreatingTaskForList(listId);
+            setShowTaskDetailModal(true);
+            console.log('✅ Task modal opened for new task');
+        } catch (error) {
+            console.error('❌ Error in handleAddTask:', error);
+            alert('Failed to open task workspace: ' + error.message);
         }
-        const newTask = { listId };
-        if (statusName) {
-            newTask.status = statusName;
-            setCreatingTaskWithStatus(statusName);
-        }
-        setViewingTask(newTask);
-        setViewingTaskParent(null);
-        setCreatingTaskForList(listId);
-        setShowTaskDetailModal(true);
     }, [ensureTaskDetailModalLoaded]);
 
     const handleAddSubtask = useCallback(async (parentTask) => {
-        const ready = await ensureTaskDetailModalLoaded();
-        if (!ready) {
-            alert('Task workspace is still loading. Please try again in a moment.');
-            return;
+        try {
+            console.log('➕ handleAddSubtask called', { parentTaskId: parentTask?.id });
+            if (!parentTask) {
+                console.error('❌ No parent task provided');
+                return;
+            }
+            const ready = await ensureTaskDetailModalLoaded();
+            if (!ready) {
+                console.warn('⚠️ TaskDetailModal not ready, attempting to load...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const retryReady = await ensureTaskDetailModalLoaded();
+                if (!retryReady) {
+                    console.error('❌ TaskDetailModal failed to load after retry');
+                    alert('Task workspace is still loading. Please refresh the page and try again.');
+                    return;
+                }
+            }
+            setViewingTask({ listId: parentTask.listId });
+            setViewingTaskParent(parentTask);
+            setCreatingTaskForList(null);
+            setShowTaskDetailModal(true);
+            console.log('✅ Task modal opened for new subtask');
+        } catch (error) {
+            console.error('❌ Error in handleAddSubtask:', error);
+            alert('Failed to open task workspace: ' + error.message);
         }
-        setViewingTask({ listId: parentTask.listId });
-        setViewingTaskParent(parentTask);
-        setCreatingTaskForList(null);
-        setShowTaskDetailModal(true);
     }, [ensureTaskDetailModalLoaded]);
 
     const handleViewTaskDetail = useCallback(async (task, parentTask = null) => {
-        const ready = await ensureTaskDetailModalLoaded();
-        if (!ready) {
-            alert('Task workspace is still loading. Please try again in a moment.');
-            return;
+        try {
+            console.log('👁️ handleViewTaskDetail called', { taskId: task?.id, parentTaskId: parentTask?.id });
+            if (!task) {
+                console.error('❌ No task provided');
+                return;
+            }
+            const ready = await ensureTaskDetailModalLoaded();
+            if (!ready) {
+                console.warn('⚠️ TaskDetailModal not ready, attempting to load...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const retryReady = await ensureTaskDetailModalLoaded();
+                if (!retryReady) {
+                    console.error('❌ TaskDetailModal failed to load after retry');
+                    alert('Task workspace is still loading. Please refresh the page and try again.');
+                    return;
+                }
+            }
+            setViewingTask(task);
+            setViewingTaskParent(parentTask);
+            setCreatingTaskForList(null);
+            setShowTaskDetailModal(true);
+            console.log('✅ Task modal opened for task:', task.id);
+        } catch (error) {
+            console.error('❌ Error in handleViewTaskDetail:', error);
+            alert('Failed to open task workspace: ' + error.message);
         }
-        setViewingTask(task);
-        setViewingTaskParent(parentTask);
-        setCreatingTaskForList(null);
-        setShowTaskDetailModal(true);
     }, [ensureTaskDetailModalLoaded]);
 
     const handleUpdateTaskFromDetail = async (updatedTaskData) => {
@@ -2066,23 +2133,33 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     };
 
     const handleDeleteTask = async (taskId) => {
-        if (confirm('Delete this task and all its subtasks?')) {
-            // Filter out the task and all its subtasks
-            const updatedTasks = tasks.filter(t => t.id !== taskId);
-            
-            // Update local state
-            setTasks(updatedTasks);
-            
-            // Persist to database immediately
-            try {
-                await persistProjectData({ nextTasks: updatedTasks });
-                console.log('✅ Task deleted successfully');
-            } catch (error) {
-                console.error('❌ Failed to delete task:', error);
-                alert('Failed to delete task: ' + error.message);
-                // Revert on error
-                setTasks(tasks);
+        try {
+            console.log('🗑️ handleDeleteTask called', { taskId });
+            if (!taskId) {
+                console.error('❌ No taskId provided');
+                return;
             }
+            if (confirm('Delete this task and all its subtasks?')) {
+                // Filter out the task and all its subtasks
+                const updatedTasks = tasks.filter(t => t.id !== taskId);
+                
+                // Update local state
+                setTasks(updatedTasks);
+                
+                // Persist to database immediately
+                try {
+                    await persistProjectData({ nextTasks: updatedTasks });
+                    console.log('✅ Task deleted successfully');
+                } catch (error) {
+                    console.error('❌ Failed to delete task:', error);
+                    alert('Failed to delete task: ' + error.message);
+                    // Revert on error
+                    setTasks(tasks);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error in handleDeleteTask:', error);
+            alert('Failed to delete task: ' + error.message);
         }
     };
 
@@ -2521,7 +2598,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             </label>
                             {hasActiveTaskFilters && (
                                 <button
-                                    onClick={resetTaskFilters}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        try {
+                                            resetTaskFilters();
+                                        } catch (error) {
+                                            console.error('Error resetting filters:', error);
+                                        }
+                                    }}
                                     className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors"
                                 >
                                     <i className="fas fa-times mr-1"></i>
@@ -2572,7 +2657,13 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={() => handleAddTask(list.id)}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleAddTask(list.id).catch(err => {
+                                                    console.error('Error adding task:', err);
+                                                });
+                                            }}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
                                         >
                                             <i className="fas fa-plus text-[10px]"></i>
@@ -2596,7 +2687,13 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                             </p>
                                             {!hasActiveTaskFilters && (
                                                 <button
-                                                    onClick={() => handleAddTask(list.id)}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleAddTask(list.id).catch(err => {
+                                                            console.error('Error adding task:', err);
+                                                        });
+                                                    }}
                                                     className="mt-4 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors"
                                                 >
                                                     Add your first task
@@ -2611,7 +2708,13 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                             return (
                                                 <article
                                                     key={task.id}
-                                                    onClick={() => handleViewTaskDetail(task)}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleViewTaskDetail(task).catch(err => {
+                                                            console.error('Error opening task detail:', err);
+                                                        });
+                                                    }}
                                                     className="p-4 hover:bg-primary-50/40 transition-colors cursor-pointer"
                                                 >
                                                     <div className="flex justify-between gap-3">
@@ -2694,7 +2797,13 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                         <div className="flex flex-col items-end gap-2">
                                                             <div className="flex items-center gap-1.5">
                                                                 <button
-                                                                    onClick={(e) => openTaskComments(e, task)}
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        openTaskComments(e, task).catch(err => {
+                                                                            console.error('Error opening comments:', err);
+                                                                        });
+                                                                    }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
                                                                     title="Open comments"
                                                                 >
@@ -2703,8 +2812,11 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                 </button>
                                                                 <button
                                                                     onClick={(e) => {
+                                                                        e.preventDefault();
                                                                         e.stopPropagation();
-                                                                        handleAddSubtask(task);
+                                                                        handleAddSubtask(task).catch(err => {
+                                                                            console.error('Error adding subtask:', err);
+                                                                        });
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
                                                                     title="Add subtask"
@@ -2714,8 +2826,11 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                 </button>
                                                                 <button
                                                                     onClick={(e) => {
+                                                                        e.preventDefault();
                                                                         e.stopPropagation();
-                                                                        handleDeleteTask(task.id);
+                                                                        handleDeleteTask(task.id).catch(err => {
+                                                                            console.error('Error deleting task:', err);
+                                                                        });
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-500 text-white rounded-lg hover:bg-red-600 hover:shadow-md transition-all font-medium"
                                                                     title="Delete task"
@@ -2725,8 +2840,11 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                             </div>
                                                             <button
                                                                 onClick={(e) => {
+                                                                    e.preventDefault();
                                                                     e.stopPropagation();
-                                                                    handleViewTaskDetail(task);
+                                                                    handleViewTaskDetail(task).catch(err => {
+                                                                        console.error('Error opening task detail:', err);
+                                                                    });
                                                                 }}
                                                                 className="text-[11px] text-primary-600 hover:text-primary-700 font-semibold"
                                                             >
@@ -2750,8 +2868,11 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                         >
                                                                             <button
                                                                                 onClick={(e) => {
+                                                                                    e.preventDefault();
                                                                                     e.stopPropagation();
-                                                                                    handleViewTaskDetail(subtask, task);
+                                                                                    handleViewTaskDetail(subtask, task).catch(err => {
+                                                                                        console.error('Error opening subtask detail:', err);
+                                                                                    });
                                                                                 }}
                                                                                 className="w-full text-left px-3 py-2 flex flex-col gap-1"
                                                                             >
@@ -2775,7 +2896,13 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                                         {subtaskDue.label}
                                                                                     </span>
                                                                                     <button
-                                                                                        onClick={(e) => openTaskComments(e, subtask, { parentTask: task, isSubtask: true })}
+                                                                                        onClick={(e) => {
+                                                                                            e.preventDefault();
+                                                                                            e.stopPropagation();
+                                                                                            openTaskComments(e, subtask, { parentTask: task, isSubtask: true }).catch(err => {
+                                                                                                console.error('Error opening subtask comments:', err);
+                                                                                            });
+                                                                                        }}
                                                                                         className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-white text-gray-600 rounded border border-gray-200 hover:bg-primary-600 hover:text-white transition-colors"
                                                                                         title="Open subtask comments"
                                                                                     >
@@ -2938,7 +3065,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             {/* View Switcher */}
                             <div className="flex border border-gray-300 rounded-lg overflow-hidden">
                                 <button
-                                    onClick={() => setViewMode('list')}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        try {
+                                            setViewMode('list');
+                                        } catch (error) {
+                                            console.error('Error switching to list view:', error);
+                                        }
+                                    }}
                                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                                         viewMode === 'list'
                                             ? 'bg-primary-600 text-white'
@@ -2949,7 +3084,15 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                     List
                                 </button>
                                 <button
-                                    onClick={() => setViewMode('kanban')}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        try {
+                                            setViewMode('kanban');
+                                        } catch (error) {
+                                            console.error('Error switching to kanban view:', error);
+                                        }
+                                    }}
                                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                                         viewMode === 'kanban'
                                             ? 'bg-primary-600 text-white'
