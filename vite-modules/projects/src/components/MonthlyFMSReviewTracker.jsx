@@ -338,8 +338,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
-    const hasAutoScrolledRef = useRef(false);
-    const userHasScrolledRef = useRef(false);
+    const savedScrollPositionRef = useRef(null); // Preserve scroll position across re-renders
+    const commentTouchStartYRef = useRef(0); // Track touch start position for mobile scrolling
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -1620,11 +1620,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             
         // Scroll to show the new comment (only if user hasn't manually scrolled)
         setTimeout(() => {
-            if (commentPopupContainerRef.current && !userHasScrolledRef.current) {
-                hasAutoScrolledRef.current = false; // Reset flag so we can scroll to new comment
-                commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                hasAutoScrolledRef.current = true; // Set flag again after scrolling
-            }
+            // DO NOT auto-scroll after adding comment - let user stay where they are
+            // User can manually scroll to see new comments if they want
         }, 100);
             
             console.log('✅ Comment added successfully:', { sectionId, documentId, month, commentId: newCommentId });
@@ -1886,58 +1883,70 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
-    // Auto-scroll to bottom only when popup first opens (not on every render)
-    // IMPORTANT: Only runs once when hoverCommentCell changes, and respects user scroll
-    useEffect(() => {
-        if (!hoverCommentCell) {
-            // Reset flags when popup closes
-            hasAutoScrolledRef.current = false;
-            userHasScrolledRef.current = false;
-            return;
-        }
-        
+    // Dedicated scroll handler for the comment popup container (wheel)
+    const handleCommentWheel = useCallback((event) => {
         const container = commentPopupContainerRef.current;
         if (!container) return;
-        
-        // Only auto-scroll to bottom if:
-        // 1. We haven't already auto-scrolled
-        // 2. User hasn't manually scrolled
-        if (!hasAutoScrolledRef.current && !userHasScrolledRef.current) {
-            // Use a longer delay to ensure scroll listener is set up first
-            const timeoutId = setTimeout(() => {
-                // Triple-check conditions before scrolling
-                const currentContainer = commentPopupContainerRef.current;
-                if (currentContainer && !hasAutoScrolledRef.current && !userHasScrolledRef.current) {
-                    currentContainer.scrollTop = currentContainer.scrollHeight;
-                    hasAutoScrolledRef.current = true;
-                }
-            }, 150);
-            
-            return () => clearTimeout(timeoutId);
+
+        const deltaY = event.deltaY;
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingUp = deltaY < 0;
+        const scrollingDown = deltaY > 0;
+
+        // If the container can scroll in the direction of the wheel, handle it here
+        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            // Save scroll position for restoration
+            savedScrollPositionRef.current = container.scrollTop;
         }
-    }, [hoverCommentCell]); // Only depend on hoverCommentCell - runs once when popup opens
+        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
+    }, []);
+
+    // Touch scrolling for mobile inside the comment popup container
+    const handleCommentTouchStart = useCallback((event) => {
+        if (event.touches && event.touches.length > 0) {
+            commentTouchStartYRef.current = event.touches[0].clientY;
+        }
+    }, []);
+
+    const handleCommentTouchMove = useCallback((event) => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !(event.touches && event.touches.length > 0)) return;
+
+        const currentY = event.touches[0].clientY;
+        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
+
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingDown = deltaY > 0;
+        const scrollingUp = deltaY < 0;
+
+        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+            // There is room to scroll inside the container – keep the scroll local
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            commentTouchStartYRef.current = currentY;
+            // Save scroll position for restoration
+            savedScrollPositionRef.current = container.scrollTop;
+        }
+        // Otherwise, allow the page to handle the scroll when we've hit the edge
+    }, []);
     
-    // Track manual scrolling to prevent auto-scroll from interfering
+    // Save scroll position on scroll (for restoration across re-renders)
     useEffect(() => {
         const container = commentPopupContainerRef.current;
         if (!container || !hoverCommentCell) return;
         
-        // Set up scroll listener immediately when popup opens
         const handleScroll = () => {
-            // If user has manually scrolled away from bottom, mark it
-            // Use a larger tolerance to catch scroll attempts
-            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 5;
-            if (!isAtBottom) {
-                userHasScrolledRef.current = true;
-            } else if (isAtBottom) {
-                // If user scrolls back to bottom, reset the flag to allow auto-scroll for new comments
-                // But only after a small delay to avoid race conditions
-                setTimeout(() => {
-                    if (container.scrollHeight - container.scrollTop - container.clientHeight < 5) {
-                        userHasScrolledRef.current = false;
-                    }
-                }, 100);
-            }
+            savedScrollPositionRef.current = container.scrollTop;
         };
         
         container.addEventListener('scroll', handleScroll, { passive: true });
@@ -3145,7 +3154,24 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2 smooth-scroll">
+                                <div 
+                                    key={`comment-container-${hoverCommentCell}`}
+                                    ref={(el) => {
+                                        commentPopupContainerRef.current = el;
+                                        // Restore scroll position when container is mounted/re-mounted
+                                        if (el && savedScrollPositionRef.current !== null) {
+                                            requestAnimationFrame(() => {
+                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
+                                                    el.scrollTop = savedScrollPositionRef.current;
+                                                }
+                                            });
+                                        }
+                                    }}
+                                    className="comment-scroll-container space-y-2 mb-2 pr-1"
+                                    onWheel={handleCommentWheel}
+                                    onTouchStart={handleCommentTouchStart}
+                                    onTouchMove={handleCommentTouchMove}
+                                >
                                     {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
