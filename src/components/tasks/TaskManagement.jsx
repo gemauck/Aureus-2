@@ -475,9 +475,38 @@ const TaskManagement = () => {
             cancelled: []
         };
 
+        // Normalize task status to match grouping keys
+        const normalizeStatus = (status) => {
+            if (!status) return 'todo';
+            const normalized = String(status).toLowerCase().trim();
+            
+            // Map various status formats to standard keys
+            if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') {
+                return 'todo';
+            }
+            if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') {
+                return 'in-progress';
+            }
+            if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') {
+                return 'completed';
+            }
+            if (normalized === 'cancelled' || normalized === 'canceled') {
+                return 'cancelled';
+            }
+            
+            // If no match, check if it exists as-is (case-insensitive)
+            const statusKeys = Object.keys(grouped);
+            const exactMatch = statusKeys.find(key => key.toLowerCase() === normalized);
+            if (exactMatch) return exactMatch;
+            
+            // Default to todo for unknown statuses
+            return 'todo';
+        };
+
         filteredTasks.forEach(task => {
-            if (grouped[task.status]) {
-                grouped[task.status].push(task);
+            const normalizedStatus = normalizeStatus(task.status);
+            if (grouped[normalizedStatus]) {
+                grouped[normalizedStatus].push(task);
             }
         });
 
