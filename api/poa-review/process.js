@@ -120,10 +120,71 @@ input_file = r'${inputFilePath.replace(/\\/g, '/')}'
 output_file = r'${outputFilePath.replace(/\\/g, '/')}'
 sources = ${JSON.stringify(sources || ['Inmine: Daily Diesel Issues'])}
 
+def normalize_column_name(col_name):
+    """Normalize column name for matching (case-insensitive, strip whitespace)"""
+    if pd.isna(col_name):
+        return None
+    return str(col_name).strip().lower()
+
+def find_column(df, target_name):
+    """Find a column in the dataframe by normalized name"""
+    normalized_target = normalize_column_name(target_name)
+    for col in df.columns:
+        if normalize_column_name(col) == normalized_target:
+            return col
+    return None
+
 try:
     # Read the Excel file
     print("Reading file...")
     data = pd.read_excel(input_file, skiprows=1)
+    
+    print(f"Found columns: {list(data.columns)}")
+    
+    # Required columns and their normalized names
+    required_columns = {
+        "Transaction ID": ["transaction id", "transactionid", "txn id", "txnid"],
+        "Asset Number": ["asset number", "assetnumber", "asset no", "assetno"],
+        "Date & Time": ["date & time", "date and time", "datetime", "date", "timestamp"]
+    }
+    
+    # Normalize column names - map actual columns to expected names
+    column_mapping = {}
+    missing_columns = []
+    
+    for expected_col, possible_names in required_columns.items():
+        found_col = None
+        # Try exact match first
+        if expected_col in data.columns:
+            found_col = expected_col
+        else:
+            # Try normalized matches
+            for possible_name in possible_names:
+                found_col = find_column(data, possible_name)
+                if found_col:
+                    break
+        
+        if found_col:
+            if found_col != expected_col:
+                print(f"Mapping column '{found_col}' to '{expected_col}'")
+                column_mapping[found_col] = expected_col
+        else:
+            missing_columns.append(expected_col)
+    
+    # Report missing columns
+    if missing_columns:
+        available_cols = ", ".join([f"'{col}'" for col in data.columns])
+        error_msg = f"Missing required columns: {', '.join(missing_columns)}.\\n"
+        error_msg += f"Available columns in your file: {available_cols}\\n"
+        error_msg += "Please ensure your Excel file contains columns with names matching (case-insensitive):\\n"
+        for col in missing_columns:
+            error_msg += f"  - {col}\\n"
+        raise ValueError(error_msg)
+    
+    # Rename columns to match expected names
+    if column_mapping:
+        print(f"Renaming columns: {column_mapping}")
+        data = data.rename(columns=column_mapping)
     
     print("Initializing review...")
     review = POAReview(data)
@@ -228,10 +289,23 @@ except Exception as e:
                 } else {
                     errorMessage = 'Missing required column in Excel file. Please check the file structure.';
                 }
-            } else if (combinedOutput.includes('Error:')) {
-                const errorMatch = combinedOutput.match(/Error:\s*(.+?)(?:\n|Traceback)/);
+            } else if (combinedOutput.includes('Error:') || combinedOutput.includes('ValueError')) {
+                // Try to extract the full error message including available columns
+                // Look for "Error:" or "ValueError:" followed by the message (may span multiple lines until Traceback)
+                // Use dotall flag equivalent by using [\s\S] instead of .
+                const errorMatch = combinedOutput.match(/(?:Error|ValueError):\s*([\s\S]+?)(?:\nTraceback|$)/);
                 if (errorMatch) {
-                    errorMessage = errorMatch[1].trim();
+                    // Clean up the error message - remove extra whitespace but preserve structure
+                    errorMessage = errorMatch[1]
+                        .replace(/\\n/g, '\n') // Convert \n escape sequences to actual newlines
+                        .replace(/\n\s*\n\s*\n/g, '\n\n') // Collapse multiple blank lines to double newline
+                        .trim();
+                } else {
+                    // Fallback: try simpler pattern for single-line errors
+                    const simpleMatch = combinedOutput.match(/Error:\s*([^\n]+)/);
+                    if (simpleMatch) {
+                        errorMessage = simpleMatch[1].trim();
+                    }
                 }
             }
             throw new Error(errorMessage);
