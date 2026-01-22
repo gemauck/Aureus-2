@@ -345,8 +345,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
-    const commentTouchStartYRef = useRef(0); // Track touch start position for mobile scrolling
-    const savedScrollPositionRef = useRef(null); // Save scroll position for restoration
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -2404,92 +2402,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     // SCROLL FUNCTIONALITY
     // ============================================================
-    // Handle wheel scrolling inside comment popup container
-    const handleCommentWheel = useCallback((event) => {
-        const container = commentPopupContainerRef.current;
-        if (!container) return;
-
-        const deltaY = event.deltaY;
-        if (deltaY === 0) return;
-
-        const atTop = container.scrollTop === 0;
-        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
-        const scrollingUp = deltaY < 0;
-        const scrollingDown = deltaY > 0;
-
-        // If the container can scroll in the direction of the wheel, handle it here
-        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
-            event.preventDefault();
-            event.stopPropagation();
-            container.scrollTop += deltaY;
-            // Save scroll position for restoration
-            savedScrollPositionRef.current = container.scrollTop;
-        }
-        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
-    }, []);
-
-    // Touch scrolling for mobile inside the comment popup container
-    const handleCommentTouchStart = useCallback((event) => {
-        if (event.touches && event.touches.length > 0) {
-            commentTouchStartYRef.current = event.touches[0].clientY;
-        }
-    }, []);
-
-    const handleCommentTouchMove = useCallback((event) => {
-        const container = commentPopupContainerRef.current;
-        if (!container || !(event.touches && event.touches.length > 0)) return;
-
-        const currentY = event.touches[0].clientY;
-        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
-
-        if (deltaY === 0) return;
-
-        const atTop = container.scrollTop === 0;
-        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
-        const scrollingDown = deltaY > 0;
-        const scrollingUp = deltaY < 0;
-
-        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
-            // There is room to scroll inside the container – keep the scroll local
-            event.preventDefault();
-            event.stopPropagation();
-            container.scrollTop += deltaY;
-            commentTouchStartYRef.current = currentY;
-            // Save scroll position for restoration
-            savedScrollPositionRef.current = container.scrollTop;
-        }
-        // Otherwise, allow the page to handle the scroll when we've hit the edge
-    }, []);
-    
-    // Track scroll position for restoration when popup reopens
-    useEffect(() => {
-        if (!hoverCommentCell || !commentPopupContainerRef.current) return;
-        
-        const container = commentPopupContainerRef.current;
-        let lastScrollTop = container.scrollTop;
-        
-        const handleScroll = () => {
-            const currentScrollTop = container.scrollTop;
-            // Save scroll position for restoration
-            if (Math.abs(currentScrollTop - lastScrollTop) > 1) {
-                savedScrollPositionRef.current = currentScrollTop;
-            }
-            lastScrollTop = currentScrollTop;
-        };
-        
-        container.addEventListener('scroll', handleScroll, { passive: true });
-        
-        return () => {
-            container.removeEventListener('scroll', handleScroll);
-        };
-    }, [hoverCommentCell]);
-    
-    // Reset saved scroll position when popup closes
-    useEffect(() => {
-        if (!hoverCommentCell) {
-            savedScrollPositionRef.current = null;
-        }
-    }, [hoverCommentCell]);
     
     // Smart positioning for comment popup - REFACTORED to prevent jitter and scroll interference
     const positionUpdateTimeoutRef = useRef(null);
