@@ -13,7 +13,12 @@ import { withHttp } from '../_lib/withHttp.js';
 import { withLogging } from '../_lib/logger.js';
 import { authRequired } from '../_lib/authRequired.js';
 import { badRequest, serverError, ok } from '../_lib/response.js';
-import busboy from 'busboy/lib/index.js';
+import { createReadStream } from 'fs';
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
+
+// For busboy, we'll use a simpler approach with FormData parsing
+// Since we're using FormData from the client, we can parse it directly
 
 const execAsync = promisify(exec);
 
@@ -23,39 +28,40 @@ async function handler(req, res) {
             return badRequest(res, 'Method not allowed');
         }
 
-        // Parse multipart form data
-        const bb = busboy({ headers: req.headers });
+        // Parse multipart form data using busboy
+        const Busboy = (await import('busboy')).default;
+        const bb = Busboy({ headers: req.headers });
         let fileBuffer = null;
         let fileName = null;
         let sources = ['Inmine: Daily Diesel Issues'];
         let fileReceived = false;
 
-        bb.on('file', (name, file, info) => {
-            const { filename, encoding, mimeType } = info;
-            fileName = filename;
-            fileReceived = true;
-            
-            const chunks = [];
-            file.on('data', (chunk) => {
-                chunks.push(chunk);
-            });
-            
-            file.on('end', () => {
-                fileBuffer = Buffer.concat(chunks);
-            });
-        });
-
-        bb.on('field', (name, value) => {
-            if (name === 'sources') {
-                try {
-                    sources = JSON.parse(value);
-                } catch (e) {
-                    // Keep default sources
-                }
-            }
-        });
-
         await new Promise((resolve, reject) => {
+            bb.on('file', (name, file, info) => {
+                const { filename, encoding, mimeType } = info;
+                fileName = filename;
+                fileReceived = true;
+                
+                const chunks = [];
+                file.on('data', (chunk) => {
+                    chunks.push(chunk);
+                });
+                
+                file.on('end', () => {
+                    fileBuffer = Buffer.concat(chunks);
+                });
+            });
+
+            bb.on('field', (name, value) => {
+                if (name === 'sources') {
+                    try {
+                        sources = JSON.parse(value);
+                    } catch (e) {
+                        // Keep default sources
+                    }
+                }
+            });
+
             bb.on('finish', resolve);
             bb.on('error', reject);
             req.pipe(bb);

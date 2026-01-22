@@ -2521,11 +2521,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [hoverCommentCell]);
     
     // Track user manual scrolling - if user scrolls, never auto-scroll again
+    // This catches ALL types of manual scrolling: mouse wheel, scrollbar dragging, touch, etc.
     useEffect(() => {
         if (!hoverCommentCell || !commentPopupContainerRef.current) return;
         
         const container = commentPopupContainerRef.current;
         let lastScrollTop = container.scrollTop;
+        let scrollTimeout = null;
         
         const handleScroll = () => {
             const currentScrollTop = container.scrollTop;
@@ -2535,14 +2537,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // User is manually scrolling - disable all auto-scroll immediately
                 userHasScrolledRef.current = true;
                 savedScrollPositionRef.current = currentScrollTop;
+                // Cancel any pending auto-scroll attempts
+                hasScrolledToBottomRef.current = true; // Mark as done so no more auto-scrolls happen
             }
             lastScrollTop = currentScrollTop;
         };
         
+        // Also handle mousedown on scrollbar to immediately disable auto-scroll
+        const handleMouseDown = (e) => {
+            // If clicking on or near the scrollbar, disable auto-scroll immediately
+            const rect = container.getBoundingClientRect();
+            const scrollbarWidth = container.offsetWidth - container.clientWidth;
+            if (scrollbarWidth > 0) {
+                const clickX = e.clientX - rect.left;
+                // If click is in the scrollbar area (right side of container)
+                if (clickX > rect.width - scrollbarWidth - 5) {
+                    userHasScrolledRef.current = true;
+                    hasScrolledToBottomRef.current = true;
+                }
+            }
+        };
+        
         container.addEventListener('scroll', handleScroll, { passive: true });
+        container.addEventListener('mousedown', handleMouseDown);
         
         return () => {
             container.removeEventListener('scroll', handleScroll);
+            container.removeEventListener('mousedown', handleMouseDown);
+            if (scrollTimeout) clearTimeout(scrollTimeout);
         };
     }, [hoverCommentCell]);
     
