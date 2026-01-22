@@ -2506,6 +2506,9 @@ export function ProjectDetail({ project, onBack, onDelete }) {
 
     // List View Component
     const ListView = () => {
+        console.log('🟢🟢🟢 ListView component is RENDERING NOW 🟢🟢🟢');
+        console.log('🟢 ListView: Component function called');
+        
         // Defensive checks to ensure handlers are available - log on every render to catch issues
         console.log('🔍 ListView render: Checking handler availability:', {
             handleAddTask: typeof handleAddTask,
@@ -3280,8 +3283,22 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                     </div>
 
             {/* List or Kanban View */}
+            {(() => {
+                console.log('🔵 Tasks view render check:', {
+                    viewMode,
+                    isList: viewMode === 'list',
+                    isKanban: viewMode === 'kanban',
+                    ListViewType: typeof ListView,
+                    ListViewIsFunction: typeof ListView === 'function',
+                    KanbanViewType: typeof KanbanView
+                });
+                return null;
+            })()}
             {viewMode === 'list' ? (
-                <ListView />
+                (() => {
+                    console.log('🟢 Rendering ListView component');
+                    return <ListView />;
+                })()
             ) : (
                 KanbanView ? (
                     <KanbanView
