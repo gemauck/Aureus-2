@@ -3216,8 +3216,22 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             
             {activeSection === 'overview' && <OverviewSection />}
             
+            {(() => {
+                console.log('🔴🔴🔴 ACTIVE SECTION CHECK:', {
+                    activeSection,
+                    isTasks: activeSection === 'tasks',
+                    willRender: activeSection === 'tasks'
+                });
+                return null;
+            })()}
             {activeSection === 'tasks' && (
                 <>
+                    {(() => {
+                        console.log('🟡🟡🟡 TASKS SECTION IS RENDERING 🟡🟡🟡');
+                        console.log('🟡 viewMode:', viewMode);
+                        console.log('🟡 ListView type:', typeof ListView);
+                        return null;
+                    })()}
                     {/* Task View Controls */}
                     <div className="flex justify-between items-center">
                         <div className="flex gap-2">
