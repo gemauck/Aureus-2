@@ -280,8 +280,8 @@ except Exception as e:
         const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
         const batchId = `excel_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Store batches in the batchStore (same as process-batch.js)
-        const batchStore = (await import('./process-batch.js')).batchStore || new Map();
+        // Create our own batch store for this Excel processing
+        const batchStore = new Map();
         
         if (!batchStore.has(batchId)) {
             batchStore.set(batchId, {
