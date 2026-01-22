@@ -3158,54 +3158,45 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={(el) => {
                                         commentPopupContainerRef.current = el;
-                                        // Restore scroll position when container is mounted/re-mounted
-                                        if (el && savedScrollPositionRef.current !== null) {
-                                            requestAnimationFrame(() => {
-                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
-                                                    el.scrollTop = savedScrollPositionRef.current;
-                                                }
-                                            });
-                                        }
                                     }}
-                                    className="comment-scroll-container space-y-2 mb-2 pr-1"
-                                    onWheel={handleCommentWheel}
-                                    onTouchStart={handleCommentTouchStart}
-                                    onTouchMove={handleCommentTouchMove}
+                                    className="comment-scroll-container mb-2"
                                 >
-                                    {comments.map((comment, idx) => (
-                                        <div 
-                                            key={comment.id || idx} 
-                                            data-comment-id={comment.id}
-                                            id={comment.id ? `comment-${comment.id}` : undefined}
-                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group"
-                                        >
-                                            <p
-                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-6"
-                                                dangerouslySetInnerHTML={{
-                                                    __html:
-                                                        window.MentionHelper && comment.text
-                                                            ? window.MentionHelper.highlightMentions(comment.text)
-                                                            : (comment.text || '')
-                                                }}
-                                            />
-                                            <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                <span className="font-medium">{comment.author}</span>
-                                                <span>{new Date(comment.date).toLocaleString('en-ZA', { 
-                                                    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                })}</span>
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    if (!section || !doc) return;
-                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
-                                                }}
-                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
-                                                type="button"
+                                    <div className="space-y-2 pr-1">
+                                        {comments.map((comment, idx) => (
+                                            <div 
+                                                key={comment.id || idx} 
+                                                data-comment-id={comment.id}
+                                                id={comment.id ? `comment-${comment.id}` : undefined}
+                                                className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group"
                                             >
-                                                <i className="fas fa-trash text-[10px]"></i>
-                                            </button>
-                                        </div>
-                                    ))}
+                                                <p
+                                                    className="text-xs text-gray-700 whitespace-pre-wrap pr-6"
+                                                    dangerouslySetInnerHTML={{
+                                                        __html:
+                                                            window.MentionHelper && comment.text
+                                                                ? window.MentionHelper.highlightMentions(comment.text)
+                                                                : (comment.text || '')
+                                                    }}
+                                                />
+                                                <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                    <span className="font-medium">{comment.author}</span>
+                                                    <span>{new Date(comment.date).toLocaleString('en-ZA', { 
+                                                        month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                    })}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        if (!section || !doc) return;
+                                                        handleDeleteComment(section.id, doc.id, month, comment.id);
+                                                    }}
+                                                    className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                    type="button"
+                                                >
+                                                    <i className="fas fa-trash text-[10px]"></i>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}

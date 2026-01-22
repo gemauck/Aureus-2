@@ -165,7 +165,11 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
                 </div>
 
                 {/* Comments List */}
-                <div ref={commentsContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div 
+                    ref={commentsContainerRef} 
+                    className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0"
+                    style={{ maxHeight: 'calc(80vh - 200px)' }}
+                >
                     {loading ? (
                         <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             <i className="fas fa-spinner fa-spin text-lg mb-2"></i>

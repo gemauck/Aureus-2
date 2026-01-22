@@ -3741,37 +3741,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={(el) => {
                                         commentPopupContainerRef.current = el;
-                                        if (el) {
-                                            // Restore scroll position if we have one saved, otherwise start at top
-                                            if (savedScrollPositionRef.current !== null) {
-                                                requestAnimationFrame(() => {
-                                                    if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
-                                                        el.scrollTop = savedScrollPositionRef.current;
-                                                    }
-                                                });
-                                            } else {
-                                                // Explicitly set to top when popup first opens (no saved position)
-                                                requestAnimationFrame(() => {
-                                                    if (el) {
-                                                        el.scrollTop = 0;
-                                                    }
-                                                });
-                                            }
-                                        }
                                     }}
-                                    className="comment-scroll-container space-y-2 mb-2 pr-1"
-                                    style={{
-                                        maxHeight: '8rem',
-                                        overflowY: 'auto',
-                                        overflowX: 'hidden',
-                                        WebkitOverflowScrolling: 'touch',
-                                        overscrollBehavior: 'contain'
-                                    }}
-                                    onWheel={handleCommentWheel}
-                                    onTouchStart={handleCommentTouchStart}
-                                    onTouchMove={handleCommentTouchMove}
+                                    className="comment-scroll-container mb-2"
                                 >
-                                    {comments.map((comment, idx) => (
+                                    <div className="space-y-2 pr-1">
+                                        {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
@@ -3813,7 +3787,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
                                         </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}

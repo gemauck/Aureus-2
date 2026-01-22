@@ -2953,12 +2953,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
-                                    className="comment-scroll-container space-y-2 mb-2 pr-1"
-                                    onWheel={handleCommentWheel}
-                                    onTouchStart={handleCommentTouchStart}
-                                    onTouchMove={handleCommentTouchMove}
+                                    className="comment-scroll-container mb-2"
                                 >
-                                    {comments.map((comment, idx) => (
+                                    <div className="space-y-2 pr-1">
+                                        {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
@@ -2999,7 +2997,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
                                         </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}

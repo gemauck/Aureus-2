@@ -153,28 +153,54 @@ body {
     display: none;
 }
 
-/* Smooth scrolling for comment containers */
-.smooth-scroll,
-.comment-popup .max-h-32.overflow-y-auto,
-.comment-popup [ref="commentPopupContainerRef"],
-.max-h-32.overflow-y-auto.smooth-scroll {
-    scroll-behavior: smooth !important;
+/* Comment scroll container - clean, reliable scrolling */
+.comment-scroll-container {
+    /* Fixed height ensures scrolling works */
+    height: 128px;
+    min-height: 128px;
+    max-height: 128px;
+    
+    /* Enable scrolling */
+    overflow-y: auto;
+    overflow-x: hidden;
+    
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+    
+    /* Prevent page scroll interference */
+    overscroll-behavior: contain;
+    
+    /* Ensure proper rendering */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    
+    /* Show scrollbar for better UX */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }
 
-/* Comment scroll container - fixed height, always scrollable */
-.comment-scroll-container {
-    height: 128px !important;
-    max-height: 128px !important;
-    overflow-y: scroll !important;
-    overflow-x: hidden !important;
-    scroll-behavior: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    touch-action: pan-y !important;
-    overscroll-behavior: contain !important;
-    position: relative !important;
-    will-change: scroll-position !important;
-    cursor: default !important;
+.comment-scroll-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.comment-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.comment-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+}
+
+.comment-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+/* Ensure content inside scrolls properly */
+.comment-scroll-container > * {
+    flex-shrink: 0;
 }
 
 /* Mobile-friendly horizontal scrolling - show scrollbar on mobile */
