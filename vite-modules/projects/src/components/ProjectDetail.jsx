@@ -115,8 +115,21 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     // Tab navigation state - always default to overview when opening a project
     const [activeSection, setActiveSection] = useState('overview');
     
+    // Read initial activeSection from URL on mount
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.location) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabFromUrl = urlParams.get('tab');
+            if (tabFromUrl && ['overview', 'tasks', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
+                console.log('🔵 Setting activeSection from URL:', tabFromUrl);
+                setActiveSection(tabFromUrl);
+            }
+        }
+    }, []); // Only run on mount
+    
     // Wrapper function to update both section state and URL
     const switchSection = useCallback((section, options = {}) => {
+        console.log('🟢 switchSection called with:', section);
         setActiveSection(section);
         
         // Update URL if updateProjectUrl function is available
