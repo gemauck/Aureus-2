@@ -237,10 +237,24 @@ const POAReview = () => {
 
     // Process file in chunks using batch API
     const handleChunkedUpload = useCallback(async (rows, fileName) => {
-        const BATCH_SIZE = 500; // Process 500 rows at a time
+        // Use larger batch size for very large files to reduce number of requests
+        // This helps prevent timeout issues with hundreds of batches
         const totalRows = rows.length;
+        let BATCH_SIZE = 500; // Default batch size
+        if (totalRows > 50000) {
+            BATCH_SIZE = 2000; // Larger batches for very large files
+        } else if (totalRows > 10000) {
+            BATCH_SIZE = 1000; // Medium batches for large files
+        }
+        
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
         const batchId = `poa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        console.log('POA Review - Batch configuration:', {
+            totalRows,
+            batchSize: BATCH_SIZE,
+            totalBatches
+        });
 
         console.log('POA Review - Starting chunked upload:', {
             totalRows,
@@ -272,22 +286,56 @@ const POAReview = () => {
                 setProcessingProgressPercent(Math.round((batchNumber / totalBatches) * 50)); // 50% for sending
 
                 console.log(`POA Review - Sending batch ${batchNumber}/${totalBatches} to server...`);
-                const batchResponse = await fetch('/api/poa-review/process-batch', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
-                    },
-                    body: JSON.stringify({
-                        batchId,
-                        batchNumber,
-                        totalBatches,
-                        rows: batch,
-                        sources: sources || ['Inmine: Daily Diesel Issues'],
-                        fileName,
-                        isFinal
-                    })
-                });
+                
+                // Retry logic for 502/503/504 errors (server/gateway errors)
+                let batchResponse;
+                let retries = 0;
+                const maxRetries = 3;
+                const retryDelay = 2000; // 2 seconds between retries
+                
+                while (retries <= maxRetries) {
+                    try {
+                        batchResponse = await fetch('/api/poa-review/process-batch', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
+                            },
+                            body: JSON.stringify({
+                                batchId,
+                                batchNumber,
+                                totalBatches,
+                                rows: batch,
+                                sources: sources || ['Inmine: Daily Diesel Issues'],
+                                fileName,
+                                isFinal
+                            })
+                        });
+                        
+                        // If successful or client error (4xx), don't retry
+                        if (batchResponse.ok || (batchResponse.status >= 400 && batchResponse.status < 500)) {
+                            break;
+                        }
+                        
+                        // Retry on server/gateway errors (5xx)
+                        if (batchResponse.status >= 500 && retries < maxRetries) {
+                            retries++;
+                            console.warn(`POA Review - Batch ${batchNumber} got ${batchResponse.status}, retrying (${retries}/${maxRetries})...`);
+                            await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
+                            continue;
+                        }
+                        
+                        break;
+                    } catch (fetchError) {
+                        if (retries < maxRetries) {
+                            retries++;
+                            console.warn(`POA Review - Batch ${batchNumber} fetch error, retrying (${retries}/${maxRetries}):`, fetchError.message);
+                            await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
+                            continue;
+                        }
+                        throw fetchError;
+                    }
+                }
                 
                 console.log(`POA Review - Batch ${batchNumber}/${totalBatches} response received, status:`, batchResponse.status);
 
