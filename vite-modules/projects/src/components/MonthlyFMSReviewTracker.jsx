@@ -1933,15 +1933,13 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
         
-        // Update immediately and on resize/scroll
+        // Update immediately and on resize only (no scroll listener)
         if (hoverCommentCell) {
             setTimeout(updatePopupPosition, 50); // Wait for DOM to update
             window.addEventListener('resize', updatePopupPosition);
-            window.addEventListener('scroll', updatePopupPosition);
             
             return () => {
                 window.removeEventListener('resize', updatePopupPosition);
-                window.removeEventListener('scroll', updatePopupPosition);
             };
         }
     }, [hoverCommentCell, sections]); // Removed commentPopupPosition to prevent re-triggering on position updates

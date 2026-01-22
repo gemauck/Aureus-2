@@ -1797,11 +1797,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     
     useEffect(() => {
         if (hoverCommentCell && commentPopupContainerRef.current) {
-            setTimeout(() => {
-                if (commentPopupContainerRef.current) {
-                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                }
-            }, 100);
+            // Auto-scroll removed - user controls scroll position
         }
         
         // Smart positioning for comment popup
@@ -1855,15 +1851,13 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
         
-        // Update immediately and on resize/scroll
+        // Update immediately and on resize only (no scroll listener)
         if (hoverCommentCell) {
             setTimeout(updatePopupPosition, 50); // Wait for DOM to update
             window.addEventListener('resize', updatePopupPosition);
-            window.addEventListener('scroll', updatePopupPosition);
             
             return () => {
                 window.removeEventListener('resize', updatePopupPosition);
-                window.removeEventListener('scroll', updatePopupPosition);
             };
         }
     }, [hoverCommentCell, sections, commentPopupPosition]);
@@ -2040,60 +2034,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     }
                 }, 200);
                 
-                // If a specific comment ID is provided, scroll to it after the popup opens
-                if (deepCommentId) {
-                    // Convert commentId to string for comparison (URL params are always strings)
-                    const targetCommentId = String(deepCommentId);
-                    
-                    // Wait for the popup to render and comments to load - use multiple attempts
-                    let attempts = 0;
-                    const maxAttempts = 10; // Try for up to 2 seconds
-                    const findAndScrollToComment = () => {
-                        attempts++;
-                        
-                        // Try multiple selectors to find the comment (handle both string and number IDs)
-                        const commentElement = 
-                            documentRef.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            documentRef.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            documentRef.querySelector(`#comment-${targetCommentId}`) ||
-                            documentRef.querySelector(`#comment-${Number(targetCommentId)}`);
-                        
-                        if (commentElement && commentPopupContainerRef.current) {
-                            // Scroll the comment into view within the popup
-                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            // Also scroll the popup container to ensure visibility
-                            if (commentPopupContainerRef.current) {
-                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
-                                const commentRect = commentElement.getBoundingClientRect();
-                                const scrollTop = commentPopupContainerRef.current.scrollTop;
-                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                commentPopupContainerRef.current.scrollTo({
-                                    top: commentOffset - 20, // 20px padding from top
-                                    behavior: 'smooth'
-                                });
-                            }
-                            // Highlight the comment briefly
-                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
-                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
-                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
-                            setTimeout(() => {
-                                commentElement.style.backgroundColor = originalBg;
-                                commentElement.style.boxShadow = '';
-                                commentElement.style.transition = '';
-                            }, 2000);
-                            console.log('✅ Deep link: Scrolled to comment', targetCommentId);
-                        } else if (attempts < maxAttempts) {
-                            // Comment not found yet, try again
-                            setTimeout(findAndScrollToComment, 200);
-                        } else {
-                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
-                        }
-                    };
-                    
-                    // Start looking for the comment after a short delay
-                    setTimeout(findAndScrollToComment, 300);
-                }
+                // Comment deep linking removed - no scrolling functionality
+            }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply monthly FMS review deep-link:', error);
