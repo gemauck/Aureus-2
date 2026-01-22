@@ -491,6 +491,47 @@ const POAReview = () => {
         setProcessingProgressPercent(0);
 
         try {
+            const fileName = uploadedFile.name.toLowerCase();
+            const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+            const isLargeFile = uploadedFile.size > 10 * 1024 * 1024; // 10MB threshold
+            
+            // For large Excel files, use server-side processing (much faster)
+            if (isExcel && isLargeFile) {
+                console.log('POA Review - Large Excel file detected, using server-side processing...');
+                setProcessingProgress('Uploading file to server for processing...');
+                
+                const formData = new FormData();
+                formData.append('file', uploadedFile);
+                formData.append('sources', JSON.stringify(sources));
+                
+                const token = window.storage?.getToken?.() || '';
+                const response = await fetch('/api/poa-review/process-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                    throw new Error(errorData.message || errorData.error || 'Failed to process file');
+                }
+                
+                const result = await response.json();
+                const downloadUrl = result.data?.downloadUrl || result.downloadUrl;
+            
+            if (downloadUrl) {
+                setDownloadUrl(downloadUrl);
+                setProcessingProgress('Complete!');
+                    setProcessingProgressPercent(100);
+            } else {
+                throw new Error('No download URL received from server');
+                }
+                return;
+            }
+            
+            // For smaller files or CSV, use client-side parsing
             setProcessingProgress('Reading file...');
             const rows = await parseFileToRows(uploadedFile);
             
