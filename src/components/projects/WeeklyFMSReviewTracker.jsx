@@ -3270,9 +3270,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             />
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
-                                                <span>{new Date(comment.date).toLocaleString('en-ZA', { 
-                                                    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                })}</span>
+                                                <span>{comment.date ? (() => {
+                                                    try {
+                                                        const date = new Date(comment.date);
+                                                        if (isNaN(date.getTime())) return 'Invalid Date';
+                                                        return date.toLocaleString('en-ZA', { 
+                                                            month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                        });
+                                                    } catch (e) {
+                                                        return 'Invalid Date';
+                                                    }
+                                                })() : 'No date'}</span>
                                             </div>
                                             <button
                                                 onClick={() => {
