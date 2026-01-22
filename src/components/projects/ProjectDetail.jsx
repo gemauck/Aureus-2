@@ -1421,9 +1421,35 @@ function initializeProjectDetail() {
         }
     }, []);
 
-    // REMOVED: All async task loading logic
-    // Tasks are now loaded synchronously from project prop only
-    // Background refresh removed - tasks update only when project prop changes or after mutations
+    // CRITICAL: Always load tasks from API when project changes or component mounts
+    // This ensures tasks are always displayed, even if project prop doesn't include them
+    useEffect(() => {
+        if (!project?.id) return;
+        
+        const loadTasks = async () => {
+            const apiTasks = await loadTasksFromAPI(project.id);
+            if (apiTasks && Array.isArray(apiTasks)) {
+                // Always use API tasks directly (they are the source of truth)
+                setTasks(apiTasks);
+                tasksRef.current = apiTasks;
+                console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
+            } else {
+                // If API returns null/undefined, keep existing tasks from project prop
+                // Don't clear tasks if API fails - fallback to project prop tasks
+                console.log('⚠️ ProjectDetail: API returned no tasks, keeping existing tasks from project prop');
+            }
+        };
+        
+        // Load immediately
+        loadTasks();
+        
+        // Also set up periodic refresh every 30 seconds to ensure tasks stay up-to-date
+        const refreshInterval = setInterval(() => {
+            loadTasks();
+        }, 30000);
+        
+        return () => clearInterval(refreshInterval);
+    }, [project?.id, loadTasksFromAPI]);
     
     // CRITICAL: Initialize default taskLists when project loads with empty taskLists
     // This ensures default lists are shown even if project.taskLists is an empty array from the database
@@ -3717,9 +3743,18 @@ function initializeProjectDetail() {
     const filteredTopLevelTasks = useMemo(() => {
         // CRITICAL: Ensure tasks is always an array to prevent .filter() errors
         const safeTasks = Array.isArray(tasks) ? tasks : [];
+        
+        // If no tasks match filters but we have tasks, show all tasks when no filters are active
         if (filteredTaskIdSet.size === 0) {
-            return taskFilters.list === 'all' && !hasActiveTaskFilters ? safeTasks : [];
+            // Always show tasks when no filters are active, or when list filter is 'all' and no other filters
+            if (taskFilters.list === 'all' && !hasActiveTaskFilters) {
+                return safeTasks;
+            }
+            // If filters are active but no matches, return empty (filtered out)
+            return [];
         }
+        
+        // Filter tasks based on filteredTaskIdSet (which respects all active filters)
         return safeTasks.filter(task => filteredTaskIdSet.has(task.id));
     }, [tasks, filteredTaskIdSet, taskFilters.list, hasActiveTaskFilters]);
 

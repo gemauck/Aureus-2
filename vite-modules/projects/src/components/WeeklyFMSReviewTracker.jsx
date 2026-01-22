@@ -347,6 +347,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
     const hasScrolledToBottomRef = useRef(false); // Track if we've scrolled to bottom on this popup open
     const userHasScrolledRef = useRef(false); // Track if user has manually scrolled (if true, never auto-scroll)
+    const commentTouchStartYRef = useRef(0); // Track touch start position for mobile scrolling
+    const savedScrollPositionRef = useRef(null); // Save scroll position for restoration
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -2407,8 +2409,65 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     // ============================================================
-    // SIMPLIFIED SCROLL FUNCTIONALITY
+    // SCROLL FUNCTIONALITY
     // ============================================================
+    // Handle wheel scrolling inside comment popup container
+    const handleCommentWheel = useCallback((event) => {
+        const container = commentPopupContainerRef.current;
+        if (!container) return;
+
+        const deltaY = event.deltaY;
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingUp = deltaY < 0;
+        const scrollingDown = deltaY > 0;
+
+        // If the container can scroll in the direction of the wheel, handle it here
+        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            // Save scroll position for restoration
+            savedScrollPositionRef.current = container.scrollTop;
+        }
+        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
+    }, []);
+
+    // Touch scrolling for mobile inside the comment popup container
+    const handleCommentTouchStart = useCallback((event) => {
+        if (event.touches && event.touches.length > 0) {
+            commentTouchStartYRef.current = event.touches[0].clientY;
+        }
+    }, []);
+
+    const handleCommentTouchMove = useCallback((event) => {
+        const container = commentPopupContainerRef.current;
+        if (!container || !(event.touches && event.touches.length > 0)) return;
+
+        const currentY = event.touches[0].clientY;
+        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
+
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingDown = deltaY > 0;
+        const scrollingUp = deltaY < 0;
+
+        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+            // There is room to scroll inside the container – keep the scroll local
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            commentTouchStartYRef.current = currentY;
+            // Save scroll position for restoration
+            savedScrollPositionRef.current = container.scrollTop;
+        }
+        // Otherwise, allow the page to handle the scroll when we've hit the edge
+    }, []);
+    
     // When popup opens: Auto-scroll to bottom to show latest comment
     // After that: User can freely scroll up and down
     
@@ -3735,6 +3794,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={(el) => {
                                         commentPopupContainerRef.current = el;
+                                        // Restore scroll position when container is mounted/re-mounted
+                                        if (el && savedScrollPositionRef.current !== null) {
+                                            requestAnimationFrame(() => {
+                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
+                                                    el.scrollTop = savedScrollPositionRef.current;
+                                                }
+                                            });
+                                        }
                                     }}
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
                                     style={{
@@ -3744,6 +3811,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         WebkitOverflowScrolling: 'touch',
                                         overscrollBehavior: 'contain'
                                     }}
+                                    onWheel={handleCommentWheel}
+                                    onTouchStart={handleCommentTouchStart}
+                                    onTouchMove={handleCommentTouchMove}
                                 >
                                     {comments.map((comment, idx) => (
                                         <div 

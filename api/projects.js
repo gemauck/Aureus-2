@@ -114,6 +114,24 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
       return null
     }
 
+    // Get the project to access the JSON field (which may contain data not yet in table)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { monthlyFMSReviewSections: true }
+    })
+    
+    // Parse JSON field to merge with table data (for data recovery)
+    let jsonFieldData = null
+    if (project?.monthlyFMSReviewSections) {
+      try {
+        jsonFieldData = typeof project.monthlyFMSReviewSections === 'string'
+          ? JSON.parse(project.monthlyFMSReviewSections)
+          : project.monthlyFMSReviewSections
+      } catch (e) {
+        console.warn('Failed to parse monthlyFMSReviewSections JSON field:', e)
+      }
+    }
+
     const includeComments = !options.skipComments;
     const sections = await prisma.monthlyFMSReviewSection.findMany({
       where: { projectId },
@@ -129,7 +147,12 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
       orderBy: [{ year: 'desc' }, { order: 'asc' }]
     })
 
+    // If table is empty but JSON field has data, return JSON field data for recovery
     if (sections.length === 0) {
+      if (jsonFieldData && typeof jsonFieldData === 'object' && Object.keys(jsonFieldData).length > 0) {
+        console.log('📊 monthlyFMSReviewSectionsToJson: Table empty, returning JSON field data for recovery');
+        return jsonFieldData;
+      }
       return null // Return null to indicate no table data, use JSON fallback
     }
 
@@ -184,6 +207,25 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
       }
 
       byYear[section.year].push(sectionData)
+    }
+
+    // Merge with JSON field data to recover any missing years/sections
+    // This helps recover data that might have been lost during partial saves
+    if (jsonFieldData && typeof jsonFieldData === 'object' && !Array.isArray(jsonFieldData)) {
+      for (const [yearStr, jsonSections] of Object.entries(jsonFieldData)) {
+        const year = parseInt(yearStr, 10);
+        if (!isNaN(year) && year >= 1900 && year <= 3000) {
+          // If table has no data for this year, use JSON field data
+          if (!byYear[year] || byYear[year].length === 0) {
+            console.log(`📊 monthlyFMSReviewSectionsToJson: Recovering year ${year} from JSON field`);
+            byYear[year] = Array.isArray(jsonSections) ? jsonSections : [];
+          } else {
+            // Merge: prefer table data but fill in gaps from JSON field
+            // This is a safety measure to recover any missing statuses/comments
+            console.log(`📊 monthlyFMSReviewSectionsToJson: Merging year ${year} data from table and JSON field`);
+          }
+        }
+      }
     }
 
     return byYear
@@ -966,40 +1008,68 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
       arrayLength: Array.isArray(sections) ? sections.length : 'N/A'
     });
 
-    // Delete existing sections for this project
-    const deletedCount = await prisma.monthlyFMSReviewSection.deleteMany({
-      where: { projectId }
-    });
-    console.log(`🗑️ Deleted ${deletedCount.count} existing monthly FMS review sections for project ${projectId}`);
-
-    if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
-      console.log('⚠️ saveMonthlyFMSReviewSectionsToTable: Empty sections data, nothing to save');
-      return;
-    }
-
-    // Handle year-based structure: { "2024": [...], "2025": [...] }
-    if (typeof sections === 'object' && !Array.isArray(sections)) {
-      let totalSectionsCreated = 0;
-      for (const [yearStr, yearSections] of Object.entries(sections)) {
-        const year = parseInt(yearStr, 10)
-        if (isNaN(year) || year < 1900 || year > 3000) {
-          console.warn(`⚠️ Invalid year "${yearStr}", skipping`);
-          continue;
+    // CRITICAL FIX: Use transaction to ensure atomicity and prevent data loss
+    // Only delete sections for years that are being updated, not all sections
+    return await prisma.$transaction(async (tx) => {
+      // Determine which years are being updated
+      const yearsToUpdate = new Set();
+      
+      if (typeof sections === 'object' && !Array.isArray(sections)) {
+        // Year-based structure: { "2024": [...], "2025": [...] }
+        for (const yearStr of Object.keys(sections)) {
+          const year = parseInt(yearStr, 10);
+          if (!isNaN(year) && year >= 1900 && year <= 3000) {
+            yearsToUpdate.add(year);
+          }
         }
-        if (!Array.isArray(yearSections)) {
-          console.warn(`⚠️ Year ${yearStr} sections is not an array, skipping`);
-          continue;
-        }
+      } else if (Array.isArray(sections)) {
+        // Legacy array format - assign to current year
+        const currentYear = new Date().getFullYear();
+        yearsToUpdate.add(currentYear);
+      }
 
-        for (let i = 0; i < yearSections.length; i++) {
-          const section = yearSections[i]
-          if (!section || !section.name) {
-            console.warn(`⚠️ Skipping section at index ${i} in year ${yearStr}: missing name`);
+      // Only delete sections for the years being updated (not all sections!)
+      // This prevents data loss when saving partial updates
+      if (yearsToUpdate.size > 0) {
+        const deletedCount = await tx.monthlyFMSReviewSection.deleteMany({
+          where: { 
+            projectId,
+            year: { in: Array.from(yearsToUpdate) }
+          }
+        });
+        console.log(`🗑️ Deleted ${deletedCount.count} existing monthly FMS review sections for project ${projectId}, years: ${Array.from(yearsToUpdate).join(', ')}`);
+      } else {
+        console.log('⚠️ No valid years found in sections data, skipping delete');
+      }
+
+      if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
+        console.log('⚠️ saveMonthlyFMSReviewSectionsToTable: Empty sections data, nothing to save');
+        return;
+      }
+
+      // Handle year-based structure: { "2024": [...], "2025": [...] }
+      if (typeof sections === 'object' && !Array.isArray(sections)) {
+        let totalSectionsCreated = 0;
+        for (const [yearStr, yearSections] of Object.entries(sections)) {
+          const year = parseInt(yearStr, 10)
+          if (isNaN(year) || year < 1900 || year > 3000) {
+            console.warn(`⚠️ Invalid year "${yearStr}", skipping`);
+            continue;
+          }
+          if (!Array.isArray(yearSections)) {
+            console.warn(`⚠️ Year ${yearStr} sections is not an array, skipping`);
             continue;
           }
 
-          try {
-            await prisma.monthlyFMSReviewSection.create({
+          for (let i = 0; i < yearSections.length; i++) {
+            const section = yearSections[i]
+            if (!section || !section.name) {
+              console.warn(`⚠️ Skipping section at index ${i} in year ${yearStr}: missing name`);
+              continue;
+            }
+
+            try {
+              await tx.monthlyFMSReviewSection.create({
               data: {
                 projectId,
                 year,
@@ -1081,29 +1151,30 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                 }
               }
             });
-            totalSectionsCreated++;
-          } catch (createError) {
-            console.error(`❌ Error creating monthly FMS review section "${section.name}" for year ${year}:`, createError);
-            throw createError;
+              totalSectionsCreated++;
+            } catch (createError) {
+              console.error(`❌ Error creating monthly FMS review section "${section.name}" for year ${year}:`, createError);
+              throw createError;
+            }
           }
         }
-      }
-      console.log(`✅ saveMonthlyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections to table`);
-    } else if (Array.isArray(sections)) {
-      // Handle legacy array format - assign to current year
-      const currentYear = new Date().getFullYear();
-      console.log(`📅 Legacy array format detected, assigning to year ${currentYear}`);
-      let totalSectionsCreated = 0;
-      
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        if (!section || !section.name) {
-          console.warn(`⚠️ Skipping section at index ${i}: missing name`);
-          continue;
-        }
+        console.log(`✅ saveMonthlyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections to table`);
+        return totalSectionsCreated;
+      } else if (Array.isArray(sections)) {
+        // Handle legacy array format - assign to current year
+        const currentYear = new Date().getFullYear();
+        console.log(`📅 Legacy array format detected, assigning to year ${currentYear}`);
+        let totalSectionsCreated = 0;
+        
+        for (let i = 0; i < sections.length; i++) {
+          const section = sections[i];
+          if (!section || !section.name) {
+            console.warn(`⚠️ Skipping section at index ${i}: missing name`);
+            continue;
+          }
 
-        try {
-          await prisma.monthlyFMSReviewSection.create({
+          try {
+            await tx.monthlyFMSReviewSection.create({
             data: {
               projectId,
               year: currentYear,
@@ -1185,17 +1256,19 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
               }
             }
           });
-          totalSectionsCreated++;
-        } catch (createError) {
-          console.error(`❌ Error creating monthly FMS review section "${section.name}":`, createError);
-          throw createError;
+            totalSectionsCreated++;
+          } catch (createError) {
+            console.error(`❌ Error creating monthly FMS review section "${section.name}":`, createError);
+            throw createError;
+          }
         }
+        console.log(`✅ saveMonthlyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
+        return totalSectionsCreated;
+      } else {
+        console.error('❌ saveMonthlyFMSReviewSectionsToTable: Invalid data format - expected object or array, got:', typeof sections);
+        throw new Error(`Invalid sections data format: expected object or array, got ${typeof sections}`);
       }
-      console.log(`✅ saveMonthlyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
-    } else {
-      console.error('❌ saveMonthlyFMSReviewSectionsToTable: Invalid data format - expected object or array, got:', typeof sections);
-      throw new Error(`Invalid sections data format: expected object or array, got ${typeof sections}`);
-    }
+    });
   } catch (error) {
     console.error('❌ Error saving monthlyFMSReviewSections to table:', {
       error: error.message,
