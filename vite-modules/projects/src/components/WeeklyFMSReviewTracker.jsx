@@ -2139,13 +2139,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             setQuickComment('');
         
-        // Scroll to bottom to show the new comment (only if user hasn't manually scrolled)
-        setTimeout(() => {
-            const container = commentPopupContainerRef.current;
-            if (container && !userHasScrolledRef.current) {
-                container.scrollTop = container.scrollHeight;
-            }
-        }, 100);
+        // DO NOT auto-scroll after adding comment - let user control their scroll position
+        // Only scroll if user explicitly wants to see the new comment (they can scroll down themselves)
 
             // ========================================================
             // @MENTIONS - Process mentions and create notifications
@@ -2416,6 +2411,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const container = commentPopupContainerRef.current;
         if (!container) return;
 
+        // Mark that user is manually scrolling - disable all auto-scroll
+        userHasScrolledRef.current = true;
+
         const deltaY = event.deltaY;
         if (deltaY === 0) return;
 
@@ -2446,6 +2444,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const container = commentPopupContainerRef.current;
         if (!container || !(event.touches && event.touches.length > 0)) return;
 
+        // Mark that user is manually scrolling - disable all auto-scroll
+        userHasScrolledRef.current = true;
+
         const currentY = event.touches[0].clientY;
         const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
 
@@ -2468,16 +2469,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // Otherwise, allow the page to handle the scroll when we've hit the edge
     }, []);
     
-    // When popup opens: Auto-scroll to bottom to show latest comment
-    // After that: User can freely scroll up and down
-    
-    // Auto-scroll to bottom when popup opens (to show latest comment)
-    // Only scrolls once when popup opens, never interferes with manual scrolling
+    // When popup opens: Auto-scroll to bottom to show latest comment ONCE
+    // After that: User can freely scroll up and down - NO MORE AUTO-SCROLL
     useEffect(() => {
         if (!hoverCommentCell) {
             // Reset flags when popup closes
             hasScrolledToBottomRef.current = false;
             userHasScrolledRef.current = false;
+            savedScrollPositionRef.current = null;
             return;
         }
         
@@ -2491,14 +2490,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        // Only auto-scroll if user hasn't manually scrolled yet
-        if (userHasScrolledRef.current) {
+        // Only auto-scroll ONCE when popup first opens, and only if user hasn't manually scrolled
+        if (hasScrolledToBottomRef.current || userHasScrolledRef.current) {
             return;
         }
         
-        // Auto-scroll to bottom to show latest comment (only once)
+        // Auto-scroll to bottom to show latest comment (only once, immediately on open)
         const scrollToBottom = () => {
             const container = commentPopupContainerRef.current;
+            // Double-check user hasn't scrolled in the meantime
             if (container && !hasScrolledToBottomRef.current && !userHasScrolledRef.current) {
                 // Scroll to bottom to show latest comment
                 container.scrollTop = container.scrollHeight;
@@ -2506,16 +2506,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         };
         
-        // Wait for container and comments to be ready, then scroll once
-        const attemptScroll = () => {
-            const container = commentPopupContainerRef.current;
-            if (container && container.scrollHeight > 0 && !userHasScrolledRef.current) {
+        // Try immediately, then once more after a brief delay to catch late renders
+        scrollToBottom();
+        const timeout = setTimeout(() => {
+            // Only scroll if we haven't already and user still hasn't scrolled
+            if (!hasScrolledToBottomRef.current && !userHasScrolledRef.current) {
                 scrollToBottom();
             }
-        };
-        
-        // Try after a brief delay to ensure comments are rendered
-        const timeout = setTimeout(attemptScroll, 200);
+        }, 100);
         
         return () => {
             clearTimeout(timeout);
@@ -2527,12 +2525,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         if (!hoverCommentCell || !commentPopupContainerRef.current) return;
         
         const container = commentPopupContainerRef.current;
+        let lastScrollTop = container.scrollTop;
         
         const handleScroll = () => {
-            // If user manually scrolls, mark it so we never auto-scroll again
-            if (!userHasScrolledRef.current) {
+            const currentScrollTop = container.scrollTop;
+            // Only mark as user scroll if scroll position actually changed (not just programmatic)
+            // Check if scroll changed by more than 1px to avoid false positives
+            if (Math.abs(currentScrollTop - lastScrollTop) > 1) {
+                // User is manually scrolling - disable all auto-scroll immediately
                 userHasScrolledRef.current = true;
+                savedScrollPositionRef.current = currentScrollTop;
             }
+            lastScrollTop = currentScrollTop;
         };
         
         container.addEventListener('scroll', handleScroll, { passive: true });
