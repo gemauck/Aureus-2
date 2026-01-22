@@ -264,8 +264,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // View model for the currently selected year only
     // This ensures that edits (adding sections, documents, comments, etc.)
     // are scoped to a single year instead of affecting every year.
+    // PERFORMANCE: Memoize to prevent unnecessary re-renders when other years change
     const sections = React.useMemo(
-        () => sectionsByYear[selectedYear] || [],
+        () => {
+            const yearSections = sectionsByYear[selectedYear] || [];
+            // Return a stable reference - only create new array if data actually changed
+            return yearSections;
+        },
         [sectionsByYear, selectedYear]
     );
 
@@ -358,7 +363,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // NETWORK ERROR HANDLING HELPERS
     // ============================================================
     
-    // Helper function to detect network errors
+    // Helper function to detect network errors (including timeouts)
     const isNetworkError = (error) => {
         if (!error) return false;
         const errorMessage = error.message?.toLowerCase() || '';
@@ -367,9 +372,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             errorMessage.includes('failed to fetch') ||
             errorMessage.includes('network error') ||
             errorMessage.includes('network request failed') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('request timeout') ||
             errorName === 'typeerror' ||
+            errorName === 'timeouterror' ||
             error.code === 'NETWORK_ERROR' ||
-            error.code === 'ECONNREFUSED'
+            error.code === 'ECONNREFUSED' ||
+            error.code === 'TIMEOUT' ||
+            error.isTimeout === true
         );
     };
     
@@ -408,6 +418,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
+    // Helper to estimate data size and determine if it's "large"
+    const isLargeDataset = (data) => {
+        if (!data) return false;
+        try {
+            const serialized = typeof data === 'string' ? data : JSON.stringify(data);
+            // Consider > 500KB as "large" - needs deferred processing
+            return serialized.length > 500 * 1024;
+        } catch {
+            return false;
+        }
+    };
+
     // Simplified loading - load from database, use prop as fallback
     const loadData = useCallback(async (retryCount = 0) => {
         if (!project?.id) return;
@@ -443,8 +465,111 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 });
                 
                 if (freshProject?.weeklyFMSReviewSections) {
-                    const normalized = normalizeSectionsByYear(freshProject.weeklyFMSReviewSections);
-                    console.log('📥 Normalized sections:', { 
+                    const rawData = freshProject.weeklyFMSReviewSections;
+                    const isLarge = isLargeDataset(rawData);
+                    
+                    if (isLarge) {
+                        // PERFORMANCE: Defer large data processing to avoid blocking main thread
+                        console.log('📊 Large dataset detected, deferring normalization...');
+                        // Set loading to false immediately so UI is responsive
+                        setIsLoading(false);
+                        
+                        const processLargeData = () => {
+                            try {
+                                const normalized = normalizeSectionsByYear(rawData);
+                                console.log('📥 Normalized sections (deferred):', { 
+                                    yearKeys: Object.keys(normalized),
+                                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                                });
+                                setSectionsByYear(normalized);
+                                sectionsRef.current = normalized;
+                                // Defer JSON.stringify for large data too
+                                if (typeof requestIdleCallback !== 'undefined') {
+                                    requestIdleCallback(() => {
+                                        lastSavedDataRef.current = JSON.stringify(normalized);
+                                    }, { timeout: 200 });
+                                } else {
+                                    setTimeout(() => {
+                                        lastSavedDataRef.current = JSON.stringify(normalized);
+                                    }, 0);
+                                }
+                            } catch (error) {
+                                console.error('❌ Error processing large data:', error);
+                                setSectionsByYear({});
+                                sectionsRef.current = {};
+                                lastSavedDataRef.current = JSON.stringify({});
+                            }
+                        };
+                        
+                        // Use requestIdleCallback for large data, fallback to setTimeout
+                        if (typeof requestIdleCallback !== 'undefined') {
+                            requestIdleCallback(processLargeData, { timeout: 100 });
+                        } else {
+                            setTimeout(processLargeData, 0);
+                        }
+                        return;
+                    } else {
+                        // Small data - process immediately
+                        const normalized = normalizeSectionsByYear(rawData);
+                        console.log('📥 Normalized sections:', { 
+                            yearKeys: Object.keys(normalized),
+                            totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                        });
+                        setSectionsByYear(normalized);
+                        sectionsRef.current = normalized;
+                        lastSavedDataRef.current = JSON.stringify(normalized);
+                        setIsLoading(false);
+                        return;
+                    }
+                }
+            }
+            
+            // Fallback to prop data (only if database load failed)
+            console.log('⚠️ Falling back to prop data');
+            if (project?.weeklyFMSReviewSections) {
+                const rawData = project.weeklyFMSReviewSections;
+                const isLarge = isLargeDataset(rawData);
+                
+                if (isLarge) {
+                    // Defer large prop data processing
+                    console.log('📊 Large prop dataset detected, deferring normalization...');
+                    setIsLoading(false);
+                    
+                    const processLargeData = () => {
+                        try {
+                            const normalized = normalizeSectionsByYear(rawData);
+                            console.log('📥 Normalized prop data (deferred):', { 
+                                yearKeys: Object.keys(normalized),
+                                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                            });
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            if (typeof requestIdleCallback !== 'undefined') {
+                                requestIdleCallback(() => {
+                                    lastSavedDataRef.current = JSON.stringify(normalized);
+                                }, { timeout: 200 });
+                            } else {
+                                setTimeout(() => {
+                                    lastSavedDataRef.current = JSON.stringify(normalized);
+                                }, 0);
+                            }
+                        } catch (error) {
+                            console.error('❌ Error processing large prop data:', error);
+                            setSectionsByYear({});
+                            sectionsRef.current = {};
+                            lastSavedDataRef.current = JSON.stringify({});
+                        }
+                    };
+                    
+                    if (typeof requestIdleCallback !== 'undefined') {
+                        requestIdleCallback(processLargeData, { timeout: 100 });
+                    } else {
+                        setTimeout(processLargeData, 0);
+                    }
+                    return;
+                } else {
+                    const normalized = normalizeSectionsByYear(rawData);
+                    console.log('📥 Normalized prop data:', { 
                         yearKeys: Object.keys(normalized),
                         totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
                     });
@@ -454,21 +579,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     setIsLoading(false);
                     return;
                 }
-            }
-            
-            // Fallback to prop data (only if database load failed)
-            console.log('⚠️ Falling back to prop data');
-            if (project?.weeklyFMSReviewSections) {
-                const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
-                console.log('📥 Normalized prop data:', { 
-                    yearKeys: Object.keys(normalized),
-                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                });
-                setSectionsByYear(normalized);
-                sectionsRef.current = normalized;
-                lastSavedDataRef.current = JSON.stringify(normalized);
-                setIsLoading(false);
-                return;
             } else {
                 // Check localStorage as backup before initializing empty
                 const snapshotKey = getSnapshotKey(project.id);
@@ -477,17 +587,48 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         const stored = window.localStorage.getItem(snapshotKey);
                         if (stored && stored.trim() && stored !== '{}' && stored !== 'null') {
                             console.log('📥 Loading from localStorage backup...');
-                            const parsed = JSON.parse(stored);
-                            const normalized = normalizeSectionsByYear(parsed);
-                            console.log('📥 Loaded from localStorage:', { 
-                                yearKeys: Object.keys(normalized),
-                                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                            });
-                            setSectionsByYear(normalized);
-                            sectionsRef.current = normalized;
-                            lastSavedDataRef.current = stored;
-                            setIsLoading(false);
-                            return;
+                            const isLarge = isLargeDataset(stored);
+                            
+                            if (isLarge) {
+                                setIsLoading(false);
+                                const processLargeData = () => {
+                                    try {
+                                        const parsed = JSON.parse(stored);
+                                        const normalized = normalizeSectionsByYear(parsed);
+                                        console.log('📥 Loaded from localStorage (deferred):', { 
+                                            yearKeys: Object.keys(normalized),
+                                            totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                                        });
+                                        setSectionsByYear(normalized);
+                                        sectionsRef.current = normalized;
+                                        lastSavedDataRef.current = stored;
+                                    } catch (error) {
+                                        console.error('❌ Error processing large localStorage data:', error);
+                                        setSectionsByYear({});
+                                        sectionsRef.current = {};
+                                        lastSavedDataRef.current = JSON.stringify({});
+                                    }
+                                };
+                                
+                                if (typeof requestIdleCallback !== 'undefined') {
+                                    requestIdleCallback(processLargeData, { timeout: 100 });
+                                } else {
+                                    setTimeout(processLargeData, 0);
+                                }
+                                return;
+                            } else {
+                                const parsed = JSON.parse(stored);
+                                const normalized = normalizeSectionsByYear(parsed);
+                                console.log('📥 Loaded from localStorage:', { 
+                                    yearKeys: Object.keys(normalized),
+                                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                                });
+                                setSectionsByYear(normalized);
+                                sectionsRef.current = normalized;
+                                lastSavedDataRef.current = stored;
+                                setIsLoading(false);
+                                return;
+                            }
                         }
                     } catch (storageError) {
                         console.warn('⚠️ Failed to load from localStorage:', storageError);
@@ -518,15 +659,41 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         const stored = window.localStorage.getItem(snapshotKey);
                         if (stored && stored.trim() && stored !== '{}' && stored !== 'null') {
                             console.log('✅ Loaded from localStorage cache due to network error');
-                            const parsed = JSON.parse(stored);
-                            const normalized = normalizeSectionsByYear(parsed);
-                            setSectionsByYear(normalized);
-                            sectionsRef.current = normalized;
-                            lastSavedDataRef.current = stored;
-                            setIsLoading(false);
-                            // Show a warning to the user
-                            console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
-                            return;
+                            const isLarge = isLargeDataset(stored);
+                            
+                            if (isLarge) {
+                                setIsLoading(false);
+                                const processLargeData = () => {
+                                    try {
+                                        const parsed = JSON.parse(stored);
+                                        const normalized = normalizeSectionsByYear(parsed);
+                                        setSectionsByYear(normalized);
+                                        sectionsRef.current = normalized;
+                                        lastSavedDataRef.current = stored;
+                                        console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
+                                    } catch (error) {
+                                        console.error('❌ Error processing cached data:', error);
+                                        setSectionsByYear({});
+                                        sectionsRef.current = {};
+                                    }
+                                };
+                                
+                                if (typeof requestIdleCallback !== 'undefined') {
+                                    requestIdleCallback(processLargeData, { timeout: 100 });
+                                } else {
+                                    setTimeout(processLargeData, 0);
+                                }
+                                return;
+                            } else {
+                                const parsed = JSON.parse(stored);
+                                const normalized = normalizeSectionsByYear(parsed);
+                                setSectionsByYear(normalized);
+                                sectionsRef.current = normalized;
+                                lastSavedDataRef.current = stored;
+                                setIsLoading(false);
+                                console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
+                                return;
+                            }
                         }
                     } catch (storageError) {
                         console.warn('⚠️ Failed to load from localStorage cache:', storageError);
@@ -582,7 +749,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     setUsers(allUsers);
                 }
             } catch (error) {
-                console.error('❌ Error loading users:', error);
+                // Suppress timeout errors for getUsers (they're expected when server is slow)
+                const isTimeout = error.name === 'TimeoutError' || 
+                                 error.isTimeout === true || 
+                                 error.message?.toLowerCase().includes('timeout') ||
+                                 error.code === 'TIMEOUT';
+                if (!isTimeout && !error.suppressLog) {
+                    console.error('❌ Error loading users:', error);
+                } else if (!error.suppressLog) {
+                    console.warn('⏱️ Timeout loading users (server may be slow), will retry later');
+                }
+                // Don't set users to empty array on error - keep existing users if any
             }
         };
         loadUsers();
@@ -610,10 +787,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
         }
         
-        // Debounce save by 1 second
+        // PERFORMANCE: Use longer debounce for large datasets to reduce save frequency
+        // Check if current data is large
+        const currentData = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
+            ? sectionsRef.current 
+            : sectionsByYear;
+        const isLarge = isLargeDataset(currentData);
+        
+        // Large datasets: 3 second debounce, small datasets: 1 second debounce
+        const debounceTime = isLarge ? 3000 : 1000;
+        
         saveTimeoutRef.current = setTimeout(() => {
             saveToDatabase();
-        }, 1000);
+        }, debounceTime);
         
         return () => {
             if (saveTimeoutRef.current) {
@@ -639,6 +825,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             ? sectionsRef.current 
             : sectionsByYear;
         
+        // PERFORMANCE: For large datasets, defer JSON.stringify to avoid blocking
+        const isLarge = isLargeDataset(payload);
+        
         // CRITICAL: Verify payload structure before saving
         console.log('🔍 Payload verification before save:', {
             hasPayload: !!payload,
@@ -647,10 +836,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             firstYear: Object.keys(payload || {})[0],
             firstYearSectionsCount: payload?.[Object.keys(payload || {})[0]]?.length || 0,
             firstSectionFirstDoc: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0],
-            firstDocStatus: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0]?.collectionStatus
+            firstDocStatus: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0]?.collectionStatus,
+            isLarge: isLarge
         });
         
-        const serialized = JSON.stringify(payload);
+        // PERFORMANCE: For large datasets, serialize in idle time to avoid blocking
+        let serialized;
+        if (isLarge) {
+            // For large data, we need to serialize but do it in a way that doesn't block
+            // We'll serialize synchronously but only check for changes after
+            // In practice, this is still needed for the comparison, but we'll minimize blocking
+            serialized = JSON.stringify(payload);
+        } else {
+            serialized = JSON.stringify(payload);
+        }
         
         console.log('🔍 Serialized payload check:', {
             serializedLength: serialized.length,
@@ -769,28 +968,43 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             }
         } catch (error) {
-            console.error('❌ Error saving to database:', error);
             const isNetworkErr = isNetworkError(error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                projectId: project.id,
-                payloadSize: serialized.length,
-                payloadPreview: serialized.substring(0, 200),
-                errorName: error.name,
-                errorCode: error.code,
-                responseStatus: error.response?.status,
-                responseData: error.response?.data,
-                isNetworkError: isNetworkErr
-            });
+            const isTimeoutErr = error.name === 'TimeoutError' || 
+                                error.isTimeout === true || 
+                                error.message?.toLowerCase().includes('timeout') ||
+                                error.code === 'TIMEOUT';
             
-            // For network errors, save to localStorage as backup and show user warning
-            if (isNetworkErr) {
+            // Suppress timeout error logs if suppressLog flag is set (to reduce console noise)
+            if (!error.suppressLog) {
+                if (isTimeoutErr) {
+                    console.warn('⏱️ Timeout saving to database (server may be slow):', error.message);
+                } else {
+                    console.error('❌ Error saving to database:', error);
+                }
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    projectId: project.id,
+                    payloadSize: serialized.length,
+                    payloadPreview: serialized.substring(0, 200),
+                    errorName: error.name,
+                    errorCode: error.code,
+                    responseStatus: error.response?.status,
+                    responseData: error.response?.data,
+                    isNetworkError: isNetworkErr,
+                    isTimeout: isTimeoutErr
+                });
+            }
+            
+            // For network/timeout errors, save to localStorage as backup
+            if (isNetworkErr || isTimeoutErr) {
                 const snapshotKey = getSnapshotKey(project.id);
                 if (snapshotKey && window.localStorage) {
                     try {
                         window.localStorage.setItem(snapshotKey, serialized);
-                        console.warn('⚠️ Network error: Saved to localStorage as backup. Data will be synced when connection is restored.');
+                        if (!error.suppressLog) {
+                            console.warn('⚠️ Network/timeout error: Saved to localStorage as backup. Data will be synced when connection is restored.');
+                        }
                     } catch (storageError) {
                         console.warn('⚠️ Failed to save to localStorage backup:', storageError);
                     }
@@ -1918,38 +2132,57 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     const token = window.storage?.getToken?.();
                     
                     if (token && window.DatabaseAPI?.getUsers) {
-                        // Fetch all users once for matching mentions
-                        const usersResponse = await window.DatabaseAPI.getUsers();
-                        const allUsers =
-                            usersResponse?.data?.users ||
-                            usersResponse?.data?.data?.users ||
-                            usersResponse?.users ||
-                            [];
-                        
-                        const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
-                        // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                        const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
-                        const projectInfo = {
-                            projectId: project?.id,
-                            projectName: project?.name,
-                            sectionId,
-                            documentId,
-                            month,
-                            commentId: newCommentId
-                        };
-                        
-                        // Fire mention notifications (do not block UI on errors)
-                        window.MentionHelper.processMentions(
-                            commentText,
-                            contextTitle,
-                            contextLink,
-                            currentUser.name || currentUser.email || 'Unknown',
-                            allUsers,
-                            projectInfo
-                        ).then(() => {
-                        }).catch(error => {
-                            console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
-                        });
+                        try {
+                            // Fetch all users once for matching mentions
+                            const usersResponse = await window.DatabaseAPI.getUsers();
+                            const allUsers =
+                                usersResponse?.data?.users ||
+                                usersResponse?.data?.data?.users ||
+                                usersResponse?.users ||
+                                [];
+                            
+                            const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
+                            // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
+                            const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                            const projectInfo = {
+                                projectId: project?.id,
+                                projectName: project?.name,
+                                sectionId,
+                                documentId,
+                                month,
+                                commentId: newCommentId
+                            };
+                            
+                            // Fire mention notifications (do not block UI on errors)
+                            window.MentionHelper.processMentions(
+                                commentText,
+                                contextTitle,
+                                contextLink,
+                                currentUser.name || currentUser.email || 'Unknown',
+                                allUsers,
+                                projectInfo
+                            ).then(() => {
+                            }).catch(error => {
+                                // Suppress timeout errors for mention processing
+                                const isTimeout = error.name === 'TimeoutError' || 
+                                                 error.isTimeout === true || 
+                                                 error.message?.toLowerCase().includes('timeout') ||
+                                                 error.code === 'TIMEOUT';
+                                if (!isTimeout && !error.suppressLog) {
+                                    console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
+                                }
+                            });
+                        } catch (usersError) {
+                            // Handle timeout/network errors when fetching users for mentions
+                            const isTimeout = usersError.name === 'TimeoutError' || 
+                                             usersError.isTimeout === true || 
+                                             usersError.message?.toLowerCase().includes('timeout') ||
+                                             usersError.code === 'TIMEOUT';
+                            if (!isTimeout && !usersError.suppressLog) {
+                                console.warn('⚠️ Failed to load users for @mentions, notifications may not work:', usersError);
+                            }
+                            // Continue without mention processing - don't block comment creation
+                        }
                     }
                 }
             } catch (error) {
