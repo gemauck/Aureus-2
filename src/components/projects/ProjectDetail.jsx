@@ -5969,7 +5969,8 @@ function initializeProjectDetail() {
                                                                             console.log('🖱️ Table row clicked:', task.id);
                                                                             console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
                                                                             
-                                                                            e.preventDefault();
+                                                                            // Don't prevent default - let the click work naturally
+                                                                            // e.preventDefault();
                                                                             e.stopPropagation();
                                                                             
                                                                             if (typeof handleViewTaskDetail === 'function') {
@@ -5992,6 +5993,7 @@ function initializeProjectDetail() {
                                                                         }
                                                                     }}
                                                                     className="hover:bg-gray-50 cursor-pointer transition"
+                                                                    style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                                                                 >
                                                                     <td className="px-4 py-2 whitespace-nowrap">
                                                                         <div className="text-xs font-medium text-gray-900">{task.title || 'Untitled task'}</div>
@@ -6533,7 +6535,7 @@ function initializeProjectDetail() {
 
             {/* List or Kanban View */}
             {viewMode === 'list' ? (
-                <ListView />
+                ListView()
             ) : (
                 KanbanViewComponent ? (
                     <KanbanViewComponent
