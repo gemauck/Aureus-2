@@ -17,6 +17,8 @@ const POAReview = () => {
     const [downloadUrl, setDownloadUrl] = useState(null);
     const [sources, setSources] = useState(['Inmine: Daily Diesel Issues']);
     const [newSource, setNewSource] = useState('');
+    const [processingProgressPercent, setProcessingProgressPercent] = useState(0);
+    const [useChunkedProcessing, setUseChunkedProcessing] = useState(true); // Default to chunked processing
 
     const handleFileSelect = useCallback((event) => {
         const file = event.target.files?.[0];
@@ -43,12 +45,167 @@ const POAReview = () => {
         }
     }, []);
 
-    const handleUpload = useCallback(async () => {
-        if (!uploadedFile) {
-            setError('Please select a file first');
-            return;
-        }
+    // Parse Excel/CSV file client-side and convert to JSON rows
+    const parseFileToRows = useCallback(async (file) => {
+        const fileName = file.name.toLowerCase();
+        const isCSV = fileName.endsWith('.csv');
+        const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
 
+        if (isCSV) {
+            // Parse CSV
+            const text = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) {
+                throw new Error('CSV must have at least a header row and one data row');
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const rows = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                // Simple CSV parsing (handles quoted fields)
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let j = 0; j < line.length; j++) {
+                    const char = line[j];
+                    if (char === '"') {
+                        if (inQuotes && line[j + 1] === '"') {
+                            current += '"';
+                            j++;
+                        } else {
+                            inQuotes = !inQuotes;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                values.push(current.trim());
+
+                if (values.length === headers.length) {
+                    const row = {};
+                    headers.forEach((header, idx) => {
+                        row[header] = values[idx] || '';
+                    });
+                    rows.push(row);
+                }
+            }
+
+            return rows;
+        } else if (isExcel) {
+            // Parse Excel using XLSX.js
+            let XLSXLib = window.XLSX;
+            if (!XLSXLib || !XLSXLib.utils) {
+                // Wait for XLSX to load
+                for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    XLSXLib = window.XLSX;
+                }
+            }
+
+            if (!XLSXLib || !XLSXLib.utils) {
+                throw new Error('Excel file support requires xlsx library. Please refresh the page.');
+            }
+
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSXLib.read(arrayBuffer, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            
+            // Convert to JSON (array of objects)
+            const rows = XLSXLib.utils.sheet_to_json(worksheet, { defval: '' });
+            return rows;
+        } else {
+            throw new Error('Unsupported file type. Please use CSV or Excel files.');
+        }
+    }, []);
+
+    // Process file in chunks using batch API
+    const handleChunkedUpload = useCallback(async (rows, fileName) => {
+        const BATCH_SIZE = 500; // Process 500 rows at a time
+        const totalRows = rows.length;
+        const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
+        const batchId = `poa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        setProcessingProgress(`Processing ${totalRows} rows in ${totalBatches} batches...`);
+        setProcessingProgressPercent(0);
+
+        try {
+            // Send batches
+            for (let i = 0; i < totalBatches; i++) {
+                const start = i * BATCH_SIZE;
+                const end = Math.min(start + BATCH_SIZE, totalRows);
+                const batch = rows.slice(start, end);
+                const batchNumber = i + 1;
+                const isFinal = batchNumber === totalBatches;
+
+                setProcessingProgress(`Sending batch ${batchNumber} of ${totalBatches} (${end} of ${totalRows} rows)...`);
+                setProcessingProgressPercent(Math.round((batchNumber / totalBatches) * 50)); // 50% for sending
+
+                const batchResponse = await fetch('/api/poa-review/process-batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
+                    },
+                    body: JSON.stringify({
+                        batchId,
+                        batchNumber,
+                        totalBatches,
+                        rows: batch,
+                        sources: sources || ['Inmine: Daily Diesel Issues'],
+                        fileName,
+                        isFinal
+                    })
+                });
+
+                if (!batchResponse.ok) {
+                    const errorData = await batchResponse.json().catch(() => ({ message: batchResponse.statusText }));
+                    throw new Error(errorData.message || `Failed to process batch ${batchNumber}`);
+                }
+
+                const batchResult = await batchResponse.json();
+
+                if (isFinal && batchResult.downloadUrl) {
+                    // Final batch - processing complete
+                    setProcessingProgress('Generating final report...');
+                    setProcessingProgressPercent(90);
+
+                    // Wait a moment for server to finish processing
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                    // Check for final result
+                    setDownloadUrl(batchResult.downloadUrl);
+                    setProcessingProgress('Complete!');
+                    setProcessingProgressPercent(100);
+                    return;
+                } else {
+                    // Update progress
+                    const progress = batchResult.progress || Math.round((batchNumber / totalBatches) * 50);
+                    setProcessingProgressPercent(progress);
+                }
+            }
+        } catch (error) {
+            console.error('POA Review - Chunked processing error:', error);
+            throw error;
+        }
+    }, [sources]);
+
+    // Legacy upload method (for backward compatibility)
+    const handleLegacyUpload = useCallback(async () => {
         setIsProcessing(true);
         setError(null);
         setProcessingProgress('Reading file...');
@@ -80,50 +237,24 @@ const POAReview = () => {
 
             if (!uploadResponse.ok) {
                 const errorText = await uploadResponse.text();
-                console.error('POA Review - Upload failed:', uploadResponse.status, errorText);
                 throw new Error(`Upload failed: ${uploadResponse.status} ${errorText}`);
             }
 
-            let uploadResult;
-            try {
-                uploadResult = await uploadResponse.json();
-                console.log('POA Review - Upload result:', uploadResult);
-            } catch (parseError) {
-                const text = await uploadResponse.text();
-                console.error('POA Review - Failed to parse upload response:', text);
-                throw new Error(`Upload response parse error: ${parseError.message}`);
-            }
-            
-            // Validate upload result - check for url property
-            if (!uploadResult) {
-                throw new Error(`Upload failed: Empty response`);
-            }
-            
-            // The API returns { data: { url, name, size, mimeType } } or { url, name, size, mimeType }
-            // Handle both formats
+            const uploadResult = await uploadResponse.json();
             const uploadData = uploadResult.data || uploadResult;
             const filePath = uploadData.url || uploadData.path || uploadData.filePath;
             
             if (!filePath) {
-                console.error('POA Review - Upload result missing url:', uploadResult);
-                throw new Error(`Upload failed: Missing 'url' in response. Got: ${JSON.stringify(uploadResult)}`);
+                throw new Error(`Upload failed: Missing 'url' in response`);
             }
-            
-            console.log('POA Review - Extracted filePath:', filePath);
             
             setProcessingProgress('Processing data...');
 
-            // Process the file
-            // filePath is the public URL path like "/uploads/poa-review-inputs/file.xlsx"
             const processPayload = {
-                filePath: filePath, // This should be "/uploads/poa-review-inputs/filename.xlsx"
+                filePath,
                 fileName: uploadedFile.name,
                 sources: sources || ['Inmine: Daily Diesel Issues']
             };
-            
-            console.log('POA Review - Sending process request with payload:', JSON.stringify(processPayload, null, 2));
-            
-            console.log('POA Review - Process request payload:', processPayload);
             
             const processResponse = await fetch('/api/poa-review/process', {
                 method: 'POST',
@@ -135,52 +266,12 @@ const POAReview = () => {
             });
 
             if (!processResponse.ok) {
-                let errorMessage = 'Failed to process file';
-                // Clone the response so we can read it multiple times if needed
-                const responseClone = processResponse.clone();
-                try {
-                    const errorData = await processResponse.json();
-                    console.error('POA Review API Error Response:', errorData);
-                    
-                    // The API wraps errors in { error: { code, message, details } }
-                    // Prefer details (most specific), then message, then code
-                    if (errorData.error) {
-                        if (typeof errorData.error === 'string') {
-                            errorMessage = errorData.error;
-                        } else {
-                            errorMessage = errorData.error.details || errorData.error.message || errorData.error.code || errorMessage;
-                        }
-                    } else if (errorData.message) {
-                        errorMessage = errorData.message;
-                    } else if (errorData.data?.error) {
-                        // Sometimes errors are nested in data
-                        errorMessage = errorData.data.error.details || errorData.data.error.message || errorMessage;
-                    } else if (typeof errorData === 'string') {
-                        errorMessage = errorData;
-                    } else {
-                        errorMessage = `Server error: ${JSON.stringify(errorData)}`;
-                    }
-                } catch (parseError) {
-                    // If JSON parsing failed, try reading as text from the cloned response
-                    try {
-                        const text = await responseClone.text();
-                        errorMessage = text || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
-                        console.error('POA Review API Error (text):', text);
-                    } catch (textError) {
-                        // If both fail, use status text
-                        errorMessage = `Server returned ${processResponse.status}: ${processResponse.statusText}`;
-                        console.error('POA Review API Error (both JSON and text failed):', textError);
-                    }
-                }
-                throw new Error(errorMessage);
+                const errorData = await processResponse.json().catch(() => ({ message: processResponse.statusText }));
+                throw new Error(errorData.message || 'Failed to process file');
             }
 
             setProcessingProgress('Generating report...');
-
             const processResult = await processResponse.json();
-            console.log('POA Review - Process result:', processResult);
-            
-            // The API wraps responses in { data: ... }
             const resultData = processResult.data || processResult;
             const downloadUrl = resultData.downloadUrl;
             
@@ -188,7 +279,6 @@ const POAReview = () => {
                 setDownloadUrl(downloadUrl);
                 setProcessingProgress('Complete!');
             } else {
-                console.error('POA Review - Process result missing downloadUrl:', processResult);
                 throw new Error('No download URL received from server');
             }
 
@@ -200,6 +290,43 @@ const POAReview = () => {
             setIsProcessing(false);
         }
     }, [uploadedFile, sources]);
+
+    // Main upload handler
+    const handleUpload = useCallback(async () => {
+        if (!uploadedFile) {
+            setError('Please select a file first');
+            return;
+        }
+
+        setIsProcessing(true);
+        setError(null);
+        setProcessingProgressPercent(0);
+
+        try {
+            if (useChunkedProcessing) {
+                // New chunked processing approach
+                setProcessingProgress('Reading file...');
+                const rows = await parseFileToRows(uploadedFile);
+                
+                if (rows.length === 0) {
+                    throw new Error('No data rows found in file');
+                }
+
+                setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...`);
+                await handleChunkedUpload(rows, uploadedFile.name);
+            } else {
+                // Legacy approach
+                await handleLegacyUpload();
+            }
+        } catch (err) {
+            console.error('POA Review error:', err);
+            setError(err.message || 'An error occurred while processing the file');
+            setProcessingProgress('');
+            setProcessingProgressPercent(0);
+        } finally {
+            setIsProcessing(false);
+        }
+    }, [uploadedFile, sources, useChunkedProcessing, parseFileToRows, handleChunkedUpload, handleLegacyUpload]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -370,10 +497,40 @@ const POAReview = () => {
                 </div>
             )}
 
+            {/* Processing Mode Toggle */}
+            <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <label className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
+                            Processing Mode
+                        </label>
+                        <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                            {useChunkedProcessing 
+                                ? 'Chunked processing (recommended for large files)' 
+                                : 'Legacy processing (may cause server issues with large files)'}
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={useChunkedProcessing}
+                            onChange={(e) => setUseChunkedProcessing(e.target.checked)}
+                            disabled={isProcessing}
+                            className="sr-only peer"
+                        />
+                        <div className={`w-11 h-6 rounded-full peer ${
+                            useChunkedProcessing 
+                                ? 'bg-indigo-600' 
+                                : 'bg-gray-300'
+                        } peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${isDark ? 'peer-checked:bg-indigo-600' : ''}`}></div>
+                    </label>
+                </div>
+            </div>
+
             {/* Processing Status */}
             {isProcessing && (
                 <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 mb-3">
                         <i className="fas fa-spinner fa-spin text-indigo-600"></i>
                         <div className="flex-1">
                             <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
@@ -383,6 +540,16 @@ const POAReview = () => {
                                 {processingProgress}
                             </p>
                         </div>
+                        <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                            {processingProgressPercent}%
+                        </span>
+                    </div>
+                    {/* Progress Bar */}
+                    <div className={`w-full h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
+                        <div 
+                            className="h-2 rounded-full bg-indigo-600 transition-all duration-300"
+                            style={{ width: `${processingProgressPercent}%` }}
+                        ></div>
                     </div>
                 </div>
             )}

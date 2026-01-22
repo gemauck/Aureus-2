@@ -1814,7 +1814,7 @@ app.use('/api', async (req, res) => {
     
     // Add timeout to prevent hanging requests
     // POA Review processing can take up to 5 minutes, so give it more time
-    const isPOAReview = req.url.includes('/poa-review/process');
+    const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch');
     const timeoutDuration = isPOAReview ? 360000 : 30000; // 6 minutes for POA Review, 30 seconds for others
     
     timeout = setTimeout(() => {

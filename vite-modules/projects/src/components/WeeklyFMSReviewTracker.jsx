@@ -448,7 +448,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         return false;
     };
-
+    
     // Simplified loading - load from database, use prop as fallback
     const loadData = useCallback(async (retryCount = 0) => {
         if (!project?.id) return;
@@ -532,15 +532,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     } else {
                         // Small data - process immediately
                         const normalized = normalizeSectionsByYear(rawData);
-                        console.log('📥 Normalized sections:', { 
-                            yearKeys: Object.keys(normalized),
-                            totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                        });
-                        setSectionsByYear(normalized);
-                        sectionsRef.current = normalized;
-                        lastSavedDataRef.current = JSON.stringify(normalized);
-                        setIsLoading(false);
-                        return;
+                    console.log('📥 Normalized sections:', { 
+                        yearKeys: Object.keys(normalized),
+                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                    });
+                    setSectionsByYear(normalized);
+                    sectionsRef.current = normalized;
+                    lastSavedDataRef.current = JSON.stringify(normalized);
+                    setIsLoading(false);
+                    return;
                     }
                 }
             }
@@ -591,15 +591,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     return;
                 } else {
                     const normalized = normalizeSectionsByYear(rawData);
-                    console.log('📥 Normalized prop data:', { 
-                        yearKeys: Object.keys(normalized),
-                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                    });
-                    setSectionsByYear(normalized);
-                    sectionsRef.current = normalized;
-                    lastSavedDataRef.current = JSON.stringify(normalized);
-                    setIsLoading(false);
-                    return;
+                console.log('📥 Normalized prop data:', { 
+                    yearKeys: Object.keys(normalized),
+                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                });
+                setSectionsByYear(normalized);
+                sectionsRef.current = normalized;
+                lastSavedDataRef.current = JSON.stringify(normalized);
+                setIsLoading(false);
+                return;
                 }
             } else {
                 // Check localStorage as backup before initializing empty
@@ -639,17 +639,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                                 return;
                             } else {
-                                const parsed = JSON.parse(stored);
-                                const normalized = normalizeSectionsByYear(parsed);
-                                console.log('📥 Loaded from localStorage:', { 
-                                    yearKeys: Object.keys(normalized),
-                                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                                });
-                                setSectionsByYear(normalized);
-                                sectionsRef.current = normalized;
-                                lastSavedDataRef.current = stored;
-                                setIsLoading(false);
-                                return;
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            console.log('📥 Loaded from localStorage:', { 
+                                yearKeys: Object.keys(normalized),
+                                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                            });
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            return;
                             }
                         }
                     } catch (storageError) {
@@ -707,14 +707,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                                 return;
                             } else {
-                                const parsed = JSON.parse(stored);
-                                const normalized = normalizeSectionsByYear(parsed);
-                                setSectionsByYear(normalized);
-                                sectionsRef.current = normalized;
-                                lastSavedDataRef.current = stored;
-                                setIsLoading(false);
-                                console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
-                                return;
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
+                            return;
                             }
                         }
                     } catch (storageError) {
@@ -777,7 +777,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                  error.message?.toLowerCase().includes('timeout') ||
                                  error.code === 'TIMEOUT';
                 if (!isTimeout && !error.suppressLog) {
-                    console.error('❌ Error loading users:', error);
+                console.error('❌ Error loading users:', error);
                 } else if (!error.suppressLog) {
                     console.warn('⏱️ Timeout loading users (server may be slow), will retry later');
                 }
@@ -998,19 +998,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 } else {
                     console.error('❌ Error saving to database:', error);
                 }
-                console.error('❌ Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    projectId: project.id,
-                    payloadSize: serialized.length,
-                    payloadPreview: serialized.substring(0, 200),
-                    errorName: error.name,
-                    errorCode: error.code,
-                    responseStatus: error.response?.status,
-                    responseData: error.response?.data,
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                projectId: project.id,
+                payloadSize: serialized.length,
+                payloadPreview: serialized.substring(0, 200),
+                errorName: error.name,
+                errorCode: error.code,
+                responseStatus: error.response?.status,
+                responseData: error.response?.data,
                     isNetworkError: isNetworkErr,
                     isTimeout: isTimeoutErr
-                });
+            });
             }
             
             // For network/timeout errors, save to localStorage as backup
@@ -2150,45 +2150,45 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     if (token && window.DatabaseAPI?.getUsers) {
                         try {
-                            // Fetch all users once for matching mentions
-                            const usersResponse = await window.DatabaseAPI.getUsers();
-                            const allUsers =
-                                usersResponse?.data?.users ||
-                                usersResponse?.data?.data?.users ||
-                                usersResponse?.users ||
-                                [];
-                            
-                            const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
-                            // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                            const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
-                            const projectInfo = {
-                                projectId: project?.id,
-                                projectName: project?.name,
-                                sectionId,
-                                documentId,
-                                month,
-                                commentId: newCommentId
-                            };
-                            
-                            // Fire mention notifications (do not block UI on errors)
-                            window.MentionHelper.processMentions(
-                                commentText,
-                                contextTitle,
-                                contextLink,
-                                currentUser.name || currentUser.email || 'Unknown',
-                                allUsers,
-                                projectInfo
-                            ).then(() => {
-                            }).catch(error => {
+                        // Fetch all users once for matching mentions
+                        const usersResponse = await window.DatabaseAPI.getUsers();
+                        const allUsers =
+                            usersResponse?.data?.users ||
+                            usersResponse?.data?.data?.users ||
+                            usersResponse?.users ||
+                            [];
+                        
+                        const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
+                        // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
+                        const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                        const projectInfo = {
+                            projectId: project?.id,
+                            projectName: project?.name,
+                            sectionId,
+                            documentId,
+                            month,
+                            commentId: newCommentId
+                        };
+                        
+                        // Fire mention notifications (do not block UI on errors)
+                        window.MentionHelper.processMentions(
+                            commentText,
+                            contextTitle,
+                            contextLink,
+                            currentUser.name || currentUser.email || 'Unknown',
+                            allUsers,
+                            projectInfo
+                        ).then(() => {
+                        }).catch(error => {
                                 // Suppress timeout errors for mention processing
                                 const isTimeout = error.name === 'TimeoutError' || 
                                                  error.isTimeout === true || 
                                                  error.message?.toLowerCase().includes('timeout') ||
                                                  error.code === 'TIMEOUT';
                                 if (!isTimeout && !error.suppressLog) {
-                                    console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
+                            console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
                                 }
-                            });
+                        });
                         } catch (usersError) {
                             // Handle timeout/network errors when fetching users for mentions
                             const isTimeout = usersError.name === 'TimeoutError' || 
