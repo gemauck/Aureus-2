@@ -190,6 +190,7 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
                 author: comment.author,
                 authorId: comment.authorId,
                 authorName: comment.author,
+                date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
                 createdAt: comment.createdAt
               })
             }
