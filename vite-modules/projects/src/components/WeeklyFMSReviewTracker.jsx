@@ -2403,10 +2403,33 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     // ============================================================
-    // SCROLL FUNCTIONALITY - Pure CSS, no JavaScript interference
+    // SCROLL FUNCTIONALITY - Pure CSS, prevent auto-scroll to bottom
     // ============================================================
     // Scroll is handled entirely by browser using CSS overflow-y: auto
-    // No JavaScript handlers needed - browser handles everything naturally
+    // But we need to prevent any auto-scroll to bottom when popup opens
+    
+    // Effect to prevent auto-scroll to bottom when popup opens
+    useEffect(() => {
+        if (!hoverCommentCell || !commentPopupContainerRef.current) return;
+        
+        const container = commentPopupContainerRef.current;
+        
+        // Force scroll to top when popup first opens
+        const forceTop = () => {
+            if (container && container.scrollTop > 0) {
+                container.scrollTop = 0;
+            }
+        };
+        
+        // Set immediately
+        forceTop();
+        // Set after render
+        requestAnimationFrame(forceTop);
+        // Set after a brief delay to catch any late scrolls
+        const timeout = setTimeout(forceTop, 100);
+        
+        return () => clearTimeout(timeout);
+    }, [hoverCommentCell]);
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
@@ -3679,7 +3702,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={(el) => {
-                                        commentPopupContainerRef.current = el;
+                                        if (el) {
+                                            commentPopupContainerRef.current = el;
+                                            // CRITICAL: Force scroll to top when container mounts
+                                            // This prevents any auto-scroll to bottom
+                                            el.scrollTop = 0;
+                                            // Also set after DOM is fully rendered to catch any late scrolls
+                                            requestAnimationFrame(() => {
+                                                if (el) {
+                                                    el.scrollTop = 0;
+                                                }
+                                            });
+                                            // One more check after a brief delay
+                                            setTimeout(() => {
+                                                if (el && el.scrollTop > 0) {
+                                                    el.scrollTop = 0;
+                                                }
+                                            }, 50);
+                                        }
                                     }}
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
                                     style={{
