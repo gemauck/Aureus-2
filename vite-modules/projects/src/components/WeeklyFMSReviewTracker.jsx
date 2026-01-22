@@ -419,15 +419,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
     // Helper to estimate data size and determine if it's "large"
+    // CRITICAL: Never JSON.stringify here - it causes 100% CPU/memory usage!
+    // Use lightweight checks only
     const isLargeDataset = (data) => {
         if (!data) return false;
-        try {
-            const serialized = typeof data === 'string' ? data : JSON.stringify(data);
-            // Consider > 500KB as "large" - needs deferred processing
-            return serialized.length > 500 * 1024;
-        } catch {
-            return false;
+        // If it's already a string, just check length (fast)
+        if (typeof data === 'string') {
+            return data.length > 500 * 1024; // > 500KB
         }
+        // For objects, use lightweight estimation - don't stringify!
+        // Estimate based on object structure depth and key count
+        if (typeof data === 'object' && data !== null) {
+            try {
+                // Quick estimate: count keys and nested structure
+                const keys = Object.keys(data);
+                if (keys.length > 50) return true; // Many years = likely large
+                // Check if any value is a large array
+                for (const key of keys.slice(0, 5)) { // Sample first 5 keys
+                    const value = data[key];
+                    if (Array.isArray(value) && value.length > 100) {
+                        return true; // Large array detected
+                    }
+                }
+            } catch {
+                // If estimation fails, assume small to be safe
+                return false;
+            }
+        }
+        return false;
     };
 
     // Simplified loading - load from database, use prop as fallback
@@ -483,16 +502,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 });
                                 setSectionsByYear(normalized);
                                 sectionsRef.current = normalized;
-                                // Defer JSON.stringify for large data too
-                                if (typeof requestIdleCallback !== 'undefined') {
-                                    requestIdleCallback(() => {
+                                // CRITICAL FIX: Don't nest requestIdleCallback - just use setTimeout for JSON.stringify
+                                // This prevents memory buildup from nested callbacks
+                                setTimeout(() => {
+                                    try {
                                         lastSavedDataRef.current = JSON.stringify(normalized);
-                                    }, { timeout: 200 });
-                                } else {
-                                    setTimeout(() => {
-                                        lastSavedDataRef.current = JSON.stringify(normalized);
-                                    }, 0);
-                                }
+                                    } catch (e) {
+                                        console.warn('⚠️ Failed to serialize large data:', e);
+                                        // Use empty string as fallback to prevent crashes
+                                        lastSavedDataRef.current = '{}';
+                                    }
+                                }, 100);
                             } catch (error) {
                                 console.error('❌ Error processing large data:', error);
                                 setSectionsByYear({});
@@ -502,10 +522,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         };
                         
                         // Use requestIdleCallback for large data, fallback to setTimeout
+                        // CRITICAL: Only one level of deferral to prevent callback buildup
                         if (typeof requestIdleCallback !== 'undefined') {
-                            requestIdleCallback(processLargeData, { timeout: 100 });
+                            requestIdleCallback(processLargeData, { timeout: 200 });
                         } else {
-                            setTimeout(processLargeData, 0);
+                            setTimeout(processLargeData, 50);
                         }
                         return;
                     } else {
@@ -544,15 +565,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             });
                             setSectionsByYear(normalized);
                             sectionsRef.current = normalized;
-                            if (typeof requestIdleCallback !== 'undefined') {
-                                requestIdleCallback(() => {
+                            // CRITICAL FIX: Don't nest requestIdleCallback - use setTimeout instead
+                            setTimeout(() => {
+                                try {
                                     lastSavedDataRef.current = JSON.stringify(normalized);
-                                }, { timeout: 200 });
-                            } else {
-                                setTimeout(() => {
-                                    lastSavedDataRef.current = JSON.stringify(normalized);
-                                }, 0);
-                            }
+                                } catch (e) {
+                                    console.warn('⚠️ Failed to serialize large prop data:', e);
+                                    lastSavedDataRef.current = '{}';
+                                }
+                            }, 100);
                         } catch (error) {
                             console.error('❌ Error processing large prop data:', error);
                             setSectionsByYear({});
@@ -561,10 +582,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         }
                     };
                     
+                    // CRITICAL: Only one level of deferral
                     if (typeof requestIdleCallback !== 'undefined') {
-                        requestIdleCallback(processLargeData, { timeout: 100 });
+                        requestIdleCallback(processLargeData, { timeout: 200 });
                     } else {
-                        setTimeout(processLargeData, 0);
+                        setTimeout(processLargeData, 50);
                     }
                     return;
                 } else {
@@ -787,15 +809,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
         }
         
-        // PERFORMANCE: Use longer debounce for large datasets to reduce save frequency
-        // Check if current data is large
-        const currentData = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
-            ? sectionsRef.current 
-            : sectionsByYear;
-        const isLarge = isLargeDataset(currentData);
-        
-        // Large datasets: 3 second debounce, small datasets: 1 second debounce
-        const debounceTime = isLarge ? 3000 : 1000;
+        // PERFORMANCE: Use longer debounce to reduce save frequency
+        // CRITICAL FIX: Don't check size on every change - use fixed longer debounce
+        // Checking size frequently can cause performance issues
+        const debounceTime = 2000; // Fixed 2 second debounce for all datasets
         
         saveTimeoutRef.current = setTimeout(() => {
             saveToDatabase();
@@ -825,9 +842,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             ? sectionsRef.current 
             : sectionsByYear;
         
-        // PERFORMANCE: For large datasets, defer JSON.stringify to avoid blocking
-        const isLarge = isLargeDataset(payload);
-        
         // CRITICAL: Verify payload structure before saving
         console.log('🔍 Payload verification before save:', {
             hasPayload: !!payload,
@@ -836,19 +850,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             firstYear: Object.keys(payload || {})[0],
             firstYearSectionsCount: payload?.[Object.keys(payload || {})[0]]?.length || 0,
             firstSectionFirstDoc: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0],
-            firstDocStatus: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0]?.collectionStatus,
-            isLarge: isLarge
+            firstDocStatus: payload?.[Object.keys(payload || {})[0]]?.[0]?.documents?.[0]?.collectionStatus
         });
         
-        // PERFORMANCE: For large datasets, serialize in idle time to avoid blocking
+        // CRITICAL FIX: Always serialize - but wrap in try/catch to prevent crashes
+        // Don't check size first (that was causing the CPU/memory issue)
         let serialized;
-        if (isLarge) {
-            // For large data, we need to serialize but do it in a way that doesn't block
-            // We'll serialize synchronously but only check for changes after
-            // In practice, this is still needed for the comparison, but we'll minimize blocking
+        try {
             serialized = JSON.stringify(payload);
-        } else {
-            serialized = JSON.stringify(payload);
+        } catch (error) {
+            console.error('❌ CRITICAL: Failed to serialize payload for save:', error);
+            console.error('❌ Payload size estimate:', {
+                payloadKeys: Object.keys(payload || {}),
+                firstYearKeyCount: payload?.[Object.keys(payload || {})[0]]?.length || 0
+            });
+            // Return early - can't save if we can't serialize
+            return;
         }
         
         console.log('🔍 Serialized payload check:', {
