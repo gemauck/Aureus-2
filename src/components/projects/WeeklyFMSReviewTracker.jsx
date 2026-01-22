@@ -1865,16 +1865,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
         const doc = section?.documents.find(d => String(d.id) === String(documentId));
         const existingComments = getCommentsForYear(doc?.comments, week, selectedYear);
-        const comment = existingComments.find(c => c.id === commentId);
-        
-        const canDelete = comment?.authorId === currentUser.id || 
-                         currentUser.role === 'Admin' || 
-                         currentUser.role === 'Administrator';
-        
-        if (!canDelete) {
-            alert('You can only delete your own comments or need admin privileges.');
-            return;
-        }
         
         if (!confirm('Delete this comment?')) return;
         

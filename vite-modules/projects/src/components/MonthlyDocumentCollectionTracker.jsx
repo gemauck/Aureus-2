@@ -1902,16 +1902,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const section = sections.find(s => s.id === sectionId);
         const doc = section?.documents.find(d => d.id === documentId);
         const existingComments = getCommentsForYear(doc?.comments, month, selectedYear);
-        const comment = existingComments.find(c => c.id === commentId);
-        
-        const canDelete = comment?.authorId === currentUser.id || 
-                         currentUser.role === 'Admin' || 
-                         currentUser.role === 'Administrator';
-        
-        if (!canDelete) {
-            alert('You can only delete your own comments or need admin privileges.');
-            return;
-        }
         
         if (!confirm('Delete this comment?')) return;
         
