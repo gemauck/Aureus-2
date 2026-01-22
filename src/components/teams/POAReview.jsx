@@ -125,9 +125,9 @@ const POAReview = () => {
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             
-            // CRITICAL: The Python script uses skiprows=1, so we need to handle the first row
-            // Try to detect if first row is a header or data
-            // First, get raw data to check first row
+            // CRITICAL: Excel files often have title rows before headers
+            // The Python script uses skiprows=1, meaning it skips the first row
+            // We need to find the actual header row by looking for required columns
             const rawData = XLSXLib.utils.sheet_to_json(worksheet, { 
                 header: 1, // Get as array of arrays
                 defval: '',
@@ -138,25 +138,38 @@ const POAReview = () => {
                 throw new Error('Excel file appears to be empty');
             }
             
-            // Check if first row looks like headers (contains common header keywords)
-            const firstRow = rawData[0] || [];
-            const firstRowStr = firstRow.join(' ').toLowerCase();
-            const hasHeaderKeywords = firstRowStr.includes('transaction') || 
-                                     firstRowStr.includes('asset') || 
-                                     firstRowStr.includes('date') ||
-                                     firstRowStr.includes('time');
+            // Find the header row by looking for required columns
+            // Required columns: "Transaction ID", "Asset Number", "Date & Time"
+            const requiredKeywords = ['transaction', 'asset', 'date', 'time'];
+            let headerRowIndex = -1;
+            let headers = [];
             
-            let headers, dataRows;
-            if (hasHeaderKeywords && rawData.length > 1) {
-                // First row is headers, use it
-                headers = firstRow.map(h => String(h || '').trim());
-                dataRows = rawData.slice(1);
-            } else {
-                // No clear header row, try to use first row as headers anyway
-                // This matches Python's behavior of using first row as headers
-                headers = firstRow.map(h => String(h || '').trim());
-                dataRows = rawData.slice(1);
+            // Check first 5 rows to find header row
+            for (let i = 0; i < Math.min(5, rawData.length); i++) {
+                const row = rawData[i] || [];
+                const rowStr = row.join(' ').toLowerCase();
+                
+                // Check if this row contains required keywords
+                const hasRequiredKeywords = requiredKeywords.some(keyword => 
+                    rowStr.includes(keyword)
+                );
+                
+                if (hasRequiredKeywords) {
+                    headerRowIndex = i;
+                    headers = row.map(h => String(h || '').trim());
+                    break;
+                }
             }
+            
+            // If no header row found, use first row (fallback)
+            if (headerRowIndex === -1) {
+                console.warn('POA Review - Could not find header row, using first row');
+                headerRowIndex = 0;
+                headers = (rawData[0] || []).map(h => String(h || '').trim());
+            }
+            
+            // Data rows start after the header row
+            const dataRows = rawData.slice(headerRowIndex + 1);
             
             // Filter out empty column headers (common in Excel files)
             const validHeaderIndices = [];
@@ -169,20 +182,37 @@ const POAReview = () => {
                 }
             });
             
+            if (validHeaders.length === 0) {
+                throw new Error('No valid column headers found in Excel file. Please ensure the file has a header row with column names.');
+            }
+            
             // Convert to array of objects with proper column names (only valid columns)
-            const rows = dataRows.map(row => {
-                const rowObj = {};
-                validHeaders.forEach((header, validIdx) => {
-                    const origIdx = validHeaderIndices[validIdx];
-                    rowObj[header] = row[origIdx] !== undefined ? String(row[origIdx] || '').trim() : '';
+            const rows = dataRows
+                .filter(row => row && row.length > 0) // Filter out completely empty rows
+                .map(row => {
+                    const rowObj = {};
+                    validHeaders.forEach((header, validIdx) => {
+                        const origIdx = validHeaderIndices[validIdx];
+                        rowObj[header] = row[origIdx] !== undefined ? String(row[origIdx] || '').trim() : '';
+                    });
+                    return rowObj;
+                })
+                .filter(row => {
+                    // Filter out rows that are completely empty
+                    return Object.values(row).some(val => val && val.trim() !== '');
                 });
-                return rowObj;
-            });
             
             // Log column names for debugging
+            console.log('POA Review - Header row index:', headerRowIndex);
             console.log('POA Review - Parsed Excel columns (filtered):', validHeaders);
-            console.log('POA Review - Total rows:', rows.length);
-            console.log('POA Review - First row sample:', rows[0]);
+            console.log('POA Review - Total data rows:', rows.length);
+            if (rows.length > 0) {
+                console.log('POA Review - First row sample:', rows[0]);
+            }
+            
+            if (rows.length === 0) {
+                throw new Error('No data rows found in Excel file after parsing. Please check the file format.');
+            }
             
             return rows;
         } else {
@@ -265,7 +295,7 @@ const POAReview = () => {
                     setDownloadUrl(batchResult.downloadUrl);
                     setProcessingProgress('Complete!');
                     setProcessingProgressPercent(100);
-                    return;
+            return;
                 } else {
                     // Update progress
                     const progress = batchResult.progress || Math.round((batchNumber / totalBatches) * 50);
