@@ -2402,20 +2402,33 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
+    // ============================================================
+    // REFACTORED SCROLL HANDLERS - Properly handle scroll events
+    // ============================================================
+    
     // Dedicated scroll handler for the comment popup container (wheel)
-    // REMOVED - Let browser handle scrolling naturally to prevent conflicts
-    // The custom handler was causing issues with smooth scrolling
+    // Handles mouse wheel scrolling within the comment container
     const handleCommentWheel = useCallback((event) => {
-        // Just save scroll position, don't interfere with native scrolling
         const container = commentPopupContainerRef.current;
-        if (container) {
-            // Use requestAnimationFrame to save position after browser scrolls
-            requestAnimationFrame(() => {
-                if (container) {
-                    savedScrollPositionRef.current = container.scrollTop;
-                }
-            });
+        if (!container) return;
+
+        const deltaY = event.deltaY;
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingUp = deltaY < 0;
+        const scrollingDown = deltaY > 0;
+
+        // If the container can scroll in the direction of the wheel, handle it here
+        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            // Save scroll position for restoration
+            savedScrollPositionRef.current = container.scrollTop;
         }
+        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
     }, []);
 
     // Touch scrolling for mobile inside the comment popup container
@@ -2426,15 +2439,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, []);
 
     const handleCommentTouchMove = useCallback((event) => {
-        // Just save scroll position, let browser handle touch scrolling naturally
         const container = commentPopupContainerRef.current;
-        if (container && event.touches && event.touches.length > 0) {
-            requestAnimationFrame(() => {
-                if (container) {
-                    savedScrollPositionRef.current = container.scrollTop;
-                }
-            });
+        if (!container || !(event.touches && event.touches.length > 0)) return;
+
+        const currentY = event.touches[0].clientY;
+        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
+
+        if (deltaY === 0) return;
+
+        const atTop = container.scrollTop === 0;
+        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
+        const scrollingDown = deltaY > 0;
+        const scrollingUp = deltaY < 0;
+
+        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+            // There is room to scroll inside the container – keep the scroll local
+            event.preventDefault();
+            event.stopPropagation();
+            container.scrollTop += deltaY;
+            commentTouchStartYRef.current = currentY;
+            // Save scroll position for restoration
+            savedScrollPositionRef.current = container.scrollTop;
         }
+        // Otherwise, allow the page to handle the scroll when we've hit the edge
     }, []);
     
     // Save scroll position on scroll (for restoration across re-renders)
@@ -3735,6 +3762,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         }
                                     }}
                                     className="comment-scroll-container max-h-32 overflow-y-auto space-y-2 mb-2 pr-1"
+                                    style={{
+                                        maxHeight: '8rem', // 32 * 0.25rem = 8rem
+                                        overflowY: 'auto',
+                                        WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
+                                        scrollBehavior: 'smooth'
+                                    }}
                                     onWheel={handleCommentWheel}
                                     onTouchStart={handleCommentTouchStart}
                                     onTouchMove={handleCommentTouchMove}
