@@ -2506,6 +2506,20 @@ export function ProjectDetail({ project, onBack, onDelete }) {
 
     // List View Component
     const ListView = () => {
+        // Defensive checks to ensure handlers are available
+        if (typeof handleAddTask !== 'function') {
+            console.error('❌ ListView: handleAddTask is not a function', typeof handleAddTask);
+        }
+        if (typeof handleViewTaskDetail !== 'function') {
+            console.error('❌ ListView: handleViewTaskDetail is not a function', typeof handleViewTaskDetail);
+        }
+        if (typeof handleDeleteTask !== 'function') {
+            console.error('❌ ListView: handleDeleteTask is not a function', typeof handleDeleteTask);
+        }
+        if (typeof handleAddSubtask !== 'function') {
+            console.error('❌ ListView: handleAddSubtask is not a function', typeof handleAddSubtask);
+        }
+
         const formatChecklistProgress = (checklist = []) => {
             if (!Array.isArray(checklist) || checklist.length === 0) {
                 return { percent: 0, label: '0/0 complete' };
@@ -2660,9 +2674,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                handleAddTask(list.id).catch(err => {
-                                                    console.error('Error adding task:', err);
-                                                });
+                                                console.log('➕ Add Task button clicked for list:', list.id);
+                                                if (typeof handleAddTask === 'function') {
+                                                    handleAddTask(list.id).catch(err => {
+                                                        console.error('Error adding task:', err);
+                                                        alert('Failed to add task: ' + (err?.message || 'Unknown error'));
+                                                    });
+                                                } else {
+                                                    console.error('❌ handleAddTask is not a function');
+                                                    alert('Task functionality is not available. Please refresh the page.');
+                                                }
                                             }}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
                                         >
@@ -2690,9 +2711,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        handleAddTask(list.id).catch(err => {
-                                                            console.error('Error adding task:', err);
-                                                        });
+                                                        console.log('➕ Add first task button clicked for list:', list.id);
+                                                        if (typeof handleAddTask === 'function') {
+                                                            handleAddTask(list.id).catch(err => {
+                                                                console.error('Error adding task:', err);
+                                                                alert('Failed to add task: ' + (err?.message || 'Unknown error'));
+                                                            });
+                                                        } else {
+                                                            console.error('❌ handleAddTask is not a function');
+                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                        }
                                                     }}
                                                     className="mt-4 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors"
                                                 >
@@ -2711,9 +2739,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        handleViewTaskDetail(task).catch(err => {
-                                                            console.error('Error opening task detail:', err);
-                                                        });
+                                                        console.log('👁️ Task row clicked:', task.id);
+                                                        if (typeof handleViewTaskDetail === 'function') {
+                                                            handleViewTaskDetail(task).catch(err => {
+                                                                console.error('Error opening task detail:', err);
+                                                                alert('Failed to open task: ' + (err?.message || 'Unknown error'));
+                                                            });
+                                                        } else {
+                                                            console.error('❌ handleViewTaskDetail is not a function');
+                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                        }
                                                     }}
                                                     className="p-4 hover:bg-primary-50/40 transition-colors cursor-pointer"
                                                 >
@@ -2814,9 +2849,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
-                                                                        handleAddSubtask(task).catch(err => {
-                                                                            console.error('Error adding subtask:', err);
-                                                                        });
+                                                                        console.log('➕ Add subtask button clicked for task:', task.id);
+                                                                        if (typeof handleAddSubtask === 'function') {
+                                                                            handleAddSubtask(task).catch(err => {
+                                                                                console.error('Error adding subtask:', err);
+                                                                                alert('Failed to add subtask: ' + (err?.message || 'Unknown error'));
+                                                                            });
+                                                                        } else {
+                                                                            console.error('❌ handleAddSubtask is not a function');
+                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                        }
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
                                                                     title="Add subtask"
@@ -2828,9 +2870,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
-                                                                        handleDeleteTask(task.id).catch(err => {
-                                                                            console.error('Error deleting task:', err);
-                                                                        });
+                                                                        console.log('🗑️ Delete task button clicked:', task.id);
+                                                                        if (typeof handleDeleteTask === 'function') {
+                                                                            handleDeleteTask(task.id).catch(err => {
+                                                                                console.error('Error deleting task:', err);
+                                                                                alert('Failed to delete task: ' + (err?.message || 'Unknown error'));
+                                                                            });
+                                                                        } else {
+                                                                            console.error('❌ handleDeleteTask is not a function');
+                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                        }
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-500 text-white rounded-lg hover:bg-red-600 hover:shadow-md transition-all font-medium"
                                                                     title="Delete task"
@@ -2842,9 +2891,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                 onClick={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
-                                                                    handleViewTaskDetail(task).catch(err => {
-                                                                        console.error('Error opening task detail:', err);
-                                                                    });
+                                                                    console.log('👁️ View details button clicked:', task.id);
+                                                                    if (typeof handleViewTaskDetail === 'function') {
+                                                                        handleViewTaskDetail(task).catch(err => {
+                                                                            console.error('Error opening task detail:', err);
+                                                                            alert('Failed to open task: ' + (err?.message || 'Unknown error'));
+                                                                        });
+                                                                    } else {
+                                                                        console.error('❌ handleViewTaskDetail is not a function');
+                                                                        alert('Task functionality is not available. Please refresh the page.');
+                                                                    }
                                                                 }}
                                                                 className="text-[11px] text-primary-600 hover:text-primary-700 font-semibold"
                                                             >
@@ -2870,9 +2926,16 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                                 onClick={(e) => {
                                                                                     e.preventDefault();
                                                                                     e.stopPropagation();
-                                                                                    handleViewTaskDetail(subtask, task).catch(err => {
-                                                                                        console.error('Error opening subtask detail:', err);
-                                                                                    });
+                                                                                    console.log('👁️ Subtask clicked:', subtask.id);
+                                                                                    if (typeof handleViewTaskDetail === 'function') {
+                                                                                        handleViewTaskDetail(subtask, task).catch(err => {
+                                                                                            console.error('Error opening subtask detail:', err);
+                                                                                            alert('Failed to open subtask: ' + (err?.message || 'Unknown error'));
+                                                                                        });
+                                                                                    } else {
+                                                                                        console.error('❌ handleViewTaskDetail is not a function');
+                                                                                        alert('Task functionality is not available. Please refresh the page.');
+                                                                                    }
                                                                                 }}
                                                                                 className="w-full text-left px-3 py-2 flex flex-col gap-1"
                                                                             >

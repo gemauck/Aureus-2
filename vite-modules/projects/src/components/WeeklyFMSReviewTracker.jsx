@@ -338,6 +338,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const hasAutoScrolledOnPageLoadRef = useRef(false); // Track if we've auto-scrolled on page load (only once per page reload)
+    const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
     const savedScrollPositionRef = useRef(null); // Preserve scroll position across re-renders
     const commentTouchStartYRef = useRef(0); // Track touch start position for mobile scrolling
     const [users, setUsers] = useState([]);
@@ -1902,10 +1904,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             })();
             
-            setQuickComment('');
+        setQuickComment('');
+        
+        // DO NOT auto-scroll after adding comment - let user stay where they are
+        // User can manually scroll to see new comments if they want
 
-            // ========================================================
-            // @MENTIONS - Process mentions and create notifications
+        // ========================================================
+        // @MENTIONS - Process mentions and create notifications
             // ========================================================
             try {
                 if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
@@ -2219,13 +2224,50 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
     }, [hoverCommentCell]);
     
-    // Smart positioning for comment popup
+    // Auto-scroll to bottom only when popup first opens (not on position updates)
+    // Auto-scroll to bottom only when popup first opens (not on every render)
+    // COMPLETELY DISABLED AUTO-SCROLL - User has full manual control
+    // No automatic scrolling at all - user can scroll manually
+    // Only deep-link scrolling is allowed (and it's prevented from running repeatedly)
+    // This effect does NOT touch the scroll container - only sets flags
     useEffect(() => {
-        const updatePopupPosition = () => {
-            if (!hoverCommentCell) {
-                return;
+        if (!hoverCommentCell) {
+            // Reset deep-link scroll tracking when popup closes
+            deepLinkScrolledRef.current.clear();
+            return;
+        }
+        
+        // Check if there's a commentId in the URL (deep-link scenario)
+        const urlHash = window.location.hash || '';
+        const urlSearch = window.location.search || '';
+        const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
+        
+        if (hasCommentId) {
+            // Deep-link logic handles scrolling - mark as done so no other auto-scroll runs
+            hasAutoScrolledOnPageLoadRef.current = true;
+            return;
+        }
+        
+        // NO AUTO-SCROLL - User has full control
+        // Set flag immediately to prevent any auto-scroll attempts
+        // This flag is checked by deep-link code to prevent auto-scroll
+        hasAutoScrolledOnPageLoadRef.current = true;
+    }, [hoverCommentCell]);
+    
+    // Smart positioning for comment popup - REFACTORED to prevent jitter and scroll interference
+    const positionUpdateTimeoutRef = useRef(null);
+    useEffect(() => {
+        if (!hoverCommentCell) {
+            // Clear any pending updates when popup closes
+            if (positionUpdateTimeoutRef.current) {
+                clearTimeout(positionUpdateTimeoutRef.current);
+                positionUpdateTimeoutRef.current = null;
             }
-            
+            return;
+        }
+        
+        // Throttled position update - only runs once when popup opens, not on every render
+        const updatePopupPosition = () => {
             const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
@@ -2234,9 +2276,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const buttonRect = commentButton.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const popupWidth = 288; // w-72 = 288px
-            const popupHeight = 300; // approximate max height
-            const spacing = 8; // Space between button and popup
+            const popupWidth = 288;
+            const popupHeight = 300;
+            const spacing = 8;
             
             // Determine if popup should be above or below
             const spaceBelow = viewportHeight - buttonRect.bottom;
@@ -2247,14 +2289,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             let popupTop, popupLeft;
             
             if (positionAbove) {
-                // Position above the button
                 popupTop = buttonRect.top - popupHeight - spacing;
             } else {
-                // Position below the button (default)
                 popupTop = buttonRect.bottom + spacing;
             }
             
-            // Align horizontally - prefer aligning with button center, but adjust to stay in viewport
+            // Align horizontally
             const buttonCenterX = buttonRect.left + buttonRect.width / 2;
             let preferredLeft = buttonCenterX - popupWidth / 2;
             
@@ -2267,22 +2307,38 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             popupLeft = preferredLeft;
             
-            // Update popup position
+            // Update popup position (this should NOT cause re-render of container)
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
         
-        // Update immediately and on resize/scroll
-        if (hoverCommentCell) {
-            setTimeout(updatePopupPosition, 50); // Wait for DOM to update
-            window.addEventListener('resize', updatePopupPosition);
-            window.addEventListener('scroll', updatePopupPosition);
-            
-            return () => {
-                window.removeEventListener('resize', updatePopupPosition);
-                window.removeEventListener('scroll', updatePopupPosition);
-            };
+        // Throttled resize handler - prevents jitter
+        let resizeTimeout;
+        const handleResize = () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(updatePopupPosition, 150);
+        };
+        
+        // Initial position update - only once
+        if (positionUpdateTimeoutRef.current) {
+            clearTimeout(positionUpdateTimeoutRef.current);
         }
-    }, [hoverCommentCell, sections, commentPopupPosition]);
+        positionUpdateTimeoutRef.current = setTimeout(() => {
+            updatePopupPosition();
+            positionUpdateTimeoutRef.current = null;
+        }, 50);
+        
+        // Listen to resize only - NO scroll listener
+        window.addEventListener('resize', handleResize);
+        
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            clearTimeout(resizeTimeout);
+            if (positionUpdateTimeoutRef.current) {
+                clearTimeout(positionUpdateTimeoutRef.current);
+                positionUpdateTimeoutRef.current = null;
+            }
+        };
+    }, [hoverCommentCell]); // ONLY depend on hoverCommentCell - sections changes shouldn't re-position
     
     useEffect(() => {
         const handleClickOutside = (event) => {
