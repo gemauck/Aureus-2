@@ -346,6 +346,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const commentPopupContainerRef = useRef(null);
     const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
     const hasScrolledToBottomRef = useRef(false); // Track if we've scrolled to bottom on this popup open
+    const userHasScrolledRef = useRef(false); // Track if user has manually scrolled (if true, never auto-scroll)
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -2136,10 +2137,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             setQuickComment('');
         
-        // Scroll to bottom to show the new comment
+        // Scroll to bottom to show the new comment (only if user hasn't manually scrolled)
         setTimeout(() => {
             const container = commentPopupContainerRef.current;
-            if (container) {
+            if (container && !userHasScrolledRef.current) {
                 container.scrollTop = container.scrollHeight;
             }
         }, 100);
@@ -2412,10 +2413,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // After that: User can freely scroll up and down
     
     // Auto-scroll to bottom when popup opens (to show latest comment)
+    // Only scrolls once when popup opens, never interferes with manual scrolling
     useEffect(() => {
         if (!hoverCommentCell) {
-            // Reset flag when popup closes
+            // Reset flags when popup closes
             hasScrolledToBottomRef.current = false;
+            userHasScrolledRef.current = false;
             return;
         }
         
@@ -2429,38 +2432,54 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        // Auto-scroll to bottom to show latest comment
+        // Only auto-scroll if user hasn't manually scrolled yet
+        if (userHasScrolledRef.current) {
+            return;
+        }
+        
+        // Auto-scroll to bottom to show latest comment (only once)
         const scrollToBottom = () => {
             const container = commentPopupContainerRef.current;
-            if (container && !hasScrolledToBottomRef.current) {
+            if (container && !hasScrolledToBottomRef.current && !userHasScrolledRef.current) {
                 // Scroll to bottom to show latest comment
                 container.scrollTop = container.scrollHeight;
                 hasScrolledToBottomRef.current = true;
             }
         };
         
-        // Wait for container and comments to be ready, then scroll
-        // Use multiple attempts to ensure content is fully rendered
+        // Wait for container and comments to be ready, then scroll once
         const attemptScroll = () => {
             const container = commentPopupContainerRef.current;
-            if (container && container.scrollHeight > 0) {
+            if (container && container.scrollHeight > 0 && !userHasScrolledRef.current) {
                 scrollToBottom();
             }
         };
         
-        // Try immediately
-        attemptScroll();
-        
-        // Try after DOM update
-        requestAnimationFrame(attemptScroll);
-        
         // Try after a brief delay to ensure comments are rendered
-        const timeout1 = setTimeout(attemptScroll, 100);
-        const timeout2 = setTimeout(attemptScroll, 300);
+        const timeout = setTimeout(attemptScroll, 200);
         
         return () => {
-            clearTimeout(timeout1);
-            clearTimeout(timeout2);
+            clearTimeout(timeout);
+        };
+    }, [hoverCommentCell]);
+    
+    // Track user manual scrolling - if user scrolls, never auto-scroll again
+    useEffect(() => {
+        if (!hoverCommentCell || !commentPopupContainerRef.current) return;
+        
+        const container = commentPopupContainerRef.current;
+        
+        const handleScroll = () => {
+            // If user manually scrolls, mark it so we never auto-scroll again
+            if (!userHasScrolledRef.current) {
+                userHasScrolledRef.current = true;
+            }
+        };
+        
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        
+        return () => {
+            container.removeEventListener('scroll', handleScroll);
         };
     }, [hoverCommentCell]);
     
