@@ -92,11 +92,17 @@ async function handler(req, res) {
 
             try {
                 // Combine all batches into single array
-                const allRows = batchData.batches
-                    .sort((a, b) => a.batchNumber - b.batchNumber)
-                    .flatMap(batch => batch.rows);
+                const sortedBatches = batchData.batches.sort((a, b) => a.batchNumber - b.batchNumber);
+                const allRows = sortedBatches.flatMap(batch => batch.rows);
 
                 console.log('POA Review Batch API - Combined rows:', allRows.length);
+                console.log('POA Review Batch API - Batch count:', sortedBatches.length);
+                console.log('POA Review Batch API - Rows per batch:', sortedBatches.map(b => ({ batch: b.batchNumber, rows: b.rows.length })));
+                
+                // Validate that we have data
+                if (allRows.length === 0) {
+                    throw new Error('No data rows to process after combining batches');
+                }
 
                 // Create temporary CSV file for processing
                 const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
@@ -106,13 +112,28 @@ async function handler(req, res) {
                     // Get all unique headers from all rows (in case some rows have different keys)
                     const allHeaders = new Set();
                     allRows.forEach(row => {
-                        Object.keys(row).forEach(key => allHeaders.add(key));
+                        if (row && typeof row === 'object') {
+                            Object.keys(row).forEach(key => {
+                                // Filter out empty column names
+                                const trimmed = String(key || '').trim();
+                                if (trimmed && trimmed !== '' && !trimmed.match(/^Unnamed:/i)) {
+                                    allHeaders.add(trimmed);
+                                }
+                            });
+                        }
                     });
                     const headers = Array.from(allHeaders);
                     
+                    // Validate we have headers
+                    if (headers.length === 0) {
+                        throw new Error('No valid column headers found in data rows');
+                    }
+                    
                     // Log headers for debugging
                     console.log('POA Review Batch API - CSV Headers:', headers);
+                    console.log('POA Review Batch API - Header count:', headers.length);
                     console.log('POA Review Batch API - First row keys:', Object.keys(allRows[0]));
+                    console.log('POA Review Batch API - First row sample:', JSON.stringify(allRows[0]).substring(0, 200));
                     
                     const headerRow = headers.map(h => {
                         // Escape header names if needed
@@ -331,8 +352,31 @@ except Exception as e:
 
             } catch (error) {
                 console.error('POA Review Batch API - Processing error:', error);
+                console.error('POA Review Batch API - Error stack:', error.stack);
+                console.error('POA Review Batch API - Error details:', {
+                    message: error.message,
+                    name: error.name,
+                    batchId,
+                    receivedBatches: batchData?.receivedBatches,
+                    totalBatches: batchData?.totalBatches,
+                    stdout: error.stdout,
+                    stderr: error.stderr
+                });
                 batchStore.delete(batchId);
-                return serverError(res, `Failed to process batches: ${error.message}`);
+                
+                // Return more detailed error information
+                const errorMessage = error.message || 'Unknown error occurred';
+                let errorDetails = errorMessage;
+                
+                // Include Python output if available
+                if (error.stdout) {
+                    errorDetails += `\nPython output: ${error.stdout}`;
+                }
+                if (error.stderr) {
+                    errorDetails += `\nPython errors: ${error.stderr}`;
+                }
+                
+                return serverError(res, `Failed to process batches: ${errorMessage}`, errorDetails);
             }
         } else {
             // Return acknowledgment that batch was received

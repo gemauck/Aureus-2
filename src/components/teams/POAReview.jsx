@@ -158,18 +158,30 @@ const POAReview = () => {
                 dataRows = rawData.slice(1);
             }
             
-            // Convert to array of objects with proper column names
+            // Filter out empty column headers (common in Excel files)
+            const validHeaderIndices = [];
+            const validHeaders = [];
+            headers.forEach((header, idx) => {
+                const trimmed = String(header || '').trim();
+                if (trimmed && trimmed !== '' && !trimmed.match(/^Unnamed:/i)) {
+                    validHeaderIndices.push(idx);
+                    validHeaders.push(trimmed);
+                }
+            });
+            
+            // Convert to array of objects with proper column names (only valid columns)
             const rows = dataRows.map(row => {
                 const rowObj = {};
-                headers.forEach((header, idx) => {
-                    // Preserve original column names exactly as they appear
-                    rowObj[header] = row[idx] !== undefined ? String(row[idx] || '').trim() : '';
+                validHeaders.forEach((header, validIdx) => {
+                    const origIdx = validHeaderIndices[validIdx];
+                    rowObj[header] = row[origIdx] !== undefined ? String(row[origIdx] || '').trim() : '';
                 });
                 return rowObj;
             });
             
             // Log column names for debugging
-            console.log('POA Review - Parsed Excel columns:', headers);
+            console.log('POA Review - Parsed Excel columns (filtered):', validHeaders);
+            console.log('POA Review - Total rows:', rows.length);
             console.log('POA Review - First row sample:', rows[0]);
             
             return rows;
@@ -218,8 +230,25 @@ const POAReview = () => {
                 });
 
                 if (!batchResponse.ok) {
-                    const errorData = await batchResponse.json().catch(() => ({ message: batchResponse.statusText }));
-                    throw new Error(errorData.message || `Failed to process batch ${batchNumber}`);
+                    // Get detailed error information
+                    let errorMessage = `Failed to process batch ${batchNumber}`;
+                    try {
+                        const errorData = await batchResponse.json();
+                        console.error('POA Review Batch API Error:', errorData);
+                        errorMessage = errorData.error?.message || 
+                                      errorData.message || 
+                                      errorData.error || 
+                                      errorMessage;
+                        // Include more details if available
+                        if (errorData.error?.details) {
+                            errorMessage += `: ${errorData.error.details}`;
+                        }
+                    } catch (parseError) {
+                        const errorText = await batchResponse.text().catch(() => batchResponse.statusText);
+                        console.error('POA Review Batch API Error (text):', errorText);
+                        errorMessage = `${errorMessage}: ${errorText || batchResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const batchResult = await batchResponse.json();
