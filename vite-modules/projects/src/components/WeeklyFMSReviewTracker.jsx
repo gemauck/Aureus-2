@@ -3704,8 +3704,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     <div 
                         className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
                         style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
                     >
                         {/* Close button */}
                         <button

@@ -18,7 +18,6 @@ const POAReview = () => {
     const [sources, setSources] = useState(['Inmine: Daily Diesel Issues']);
     const [newSource, setNewSource] = useState('');
     const [processingProgressPercent, setProcessingProgressPercent] = useState(0);
-    const [useChunkedProcessing, setUseChunkedProcessing] = useState(true); // Default to chunked processing
 
     const handleFileSelect = useCallback((event) => {
         const file = event.target.files?.[0];
@@ -54,7 +53,7 @@ const POAReview = () => {
         if (isCSV) {
             // Parse CSV
             const text = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
+            const reader = new FileReader();
                 reader.onload = (e) => resolve(e.target.result);
                 reader.onerror = reject;
                 reader.readAsText(file);
@@ -329,9 +328,9 @@ const POAReview = () => {
                         let token = getAuthToken();
                         
                         batchResponse = await fetch('/api/poa-review/process-batch', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${token}`
                             },
                             body: JSON.stringify({
@@ -459,93 +458,6 @@ const POAReview = () => {
         }
     }, [sources]);
 
-    // Legacy upload method (for backward compatibility)
-    const handleLegacyUpload = useCallback(async () => {
-        setIsProcessing(true);
-        setError(null);
-        setProcessingProgress('Reading file...');
-
-        try {
-            // Convert file to base64
-            const reader = new FileReader();
-            const fileData = await new Promise((resolve, reject) => {
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(uploadedFile);
-            });
-
-            setProcessingProgress('Uploading file to server...');
-
-            // Upload file to server
-            const uploadResponse = await fetch('/api/files', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
-                },
-                body: JSON.stringify({
-                    name: uploadedFile.name,
-                    dataUrl: fileData,
-                    folder: 'poa-review-inputs'
-                })
-            });
-
-            if (!uploadResponse.ok) {
-                const errorText = await uploadResponse.text();
-                throw new Error(`Upload failed: ${uploadResponse.status} ${errorText}`);
-            }
-
-            const uploadResult = await uploadResponse.json();
-            const uploadData = uploadResult.data || uploadResult;
-            const filePath = uploadData.url || uploadData.path || uploadData.filePath;
-            
-            if (!filePath) {
-                throw new Error(`Upload failed: Missing 'url' in response`);
-            }
-            
-            setProcessingProgress('Processing data...');
-
-            const processPayload = {
-                filePath,
-                fileName: uploadedFile.name,
-                sources: sources || ['Inmine: Daily Diesel Issues']
-            };
-            
-            const processResponse = await fetch('/api/poa-review/process', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
-                },
-                body: JSON.stringify(processPayload)
-            });
-
-            if (!processResponse.ok) {
-                const errorData = await processResponse.json().catch(() => ({ message: processResponse.statusText }));
-                throw new Error(errorData.message || 'Failed to process file');
-            }
-
-            setProcessingProgress('Generating report...');
-            const processResult = await processResponse.json();
-            const resultData = processResult.data || processResult;
-            const downloadUrl = resultData.downloadUrl;
-            
-            if (downloadUrl) {
-                setDownloadUrl(downloadUrl);
-                setProcessingProgress('Complete!');
-            } else {
-                throw new Error('No download URL received from server');
-            }
-
-        } catch (err) {
-            console.error('POA Review error:', err);
-            setError(err.message || 'An error occurred while processing the file');
-            setProcessingProgress('');
-        } finally {
-            setIsProcessing(false);
-        }
-    }, [uploadedFile, sources]);
-
     // Main upload handler
     const handleUpload = useCallback(async () => {
         if (!uploadedFile) {
@@ -558,26 +470,17 @@ const POAReview = () => {
         setProcessingProgressPercent(0);
 
         try {
-            if (useChunkedProcessing) {
-                // New chunked processing approach
-                console.log('POA Review - Starting chunked processing mode');
-                setProcessingProgress('Reading file...');
-                const rows = await parseFileToRows(uploadedFile);
-                
-                console.log('POA Review - File parsed, rows:', rows.length);
-                
-                if (rows.length === 0) {
-                    throw new Error('No data rows found in file');
-                }
-
-                setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...`);
-                console.log('POA Review - Calling handleChunkedUpload...');
-                await handleChunkedUpload(rows, uploadedFile.name);
-                console.log('POA Review - handleChunkedUpload completed');
-            } else {
-                // Legacy approach
-                await handleLegacyUpload();
+            setProcessingProgress('Reading file...');
+            const rows = await parseFileToRows(uploadedFile);
+            
+            console.log('POA Review - File parsed, rows:', rows.length);
+            
+            if (rows.length === 0) {
+                throw new Error('No data rows found in file');
             }
+
+            setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...`);
+            await handleChunkedUpload(rows, uploadedFile.name);
         } catch (err) {
             console.error('POA Review error:', err);
             setError(err.message || 'An error occurred while processing the file');
@@ -586,7 +489,7 @@ const POAReview = () => {
         } finally {
             setIsProcessing(false);
         }
-    }, [uploadedFile, sources, useChunkedProcessing, parseFileToRows, handleChunkedUpload, handleLegacyUpload]);
+    }, [uploadedFile, sources, parseFileToRows, handleChunkedUpload]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -756,36 +659,6 @@ const POAReview = () => {
                     </div>
                 </div>
             )}
-
-            {/* Processing Mode Toggle */}
-            <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <label className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
-                            Processing Mode
-                        </label>
-                        <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                            {useChunkedProcessing 
-                                ? 'Chunked processing (recommended for large files)' 
-                                : 'Legacy processing (may cause server issues with large files)'}
-                        </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={useChunkedProcessing}
-                            onChange={(e) => setUseChunkedProcessing(e.target.checked)}
-                            disabled={isProcessing}
-                            className="sr-only peer"
-                        />
-                        <div className={`w-11 h-6 rounded-full peer ${
-                            useChunkedProcessing 
-                                ? 'bg-indigo-600' 
-                                : 'bg-gray-300'
-                        } peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${isDark ? 'peer-checked:bg-indigo-600' : ''}`}></div>
-                    </label>
-                </div>
-            </div>
 
             {/* Processing Status */}
             {isProcessing && (

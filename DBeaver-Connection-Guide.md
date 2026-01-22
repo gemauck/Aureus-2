@@ -124,3 +124,4 @@ You can also use this in DBeaver's connection string field (Advanced tab).
 
 
 
+
