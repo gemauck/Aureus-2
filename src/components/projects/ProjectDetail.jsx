@@ -3583,8 +3583,11 @@ function initializeProjectDetail() {
         const includeSubtasks = taskFilters.includeSubtasks;
         // CRITICAL: Ensure tasks is always an array to prevent .map() errors
         const safeTasks = Array.isArray(tasks) ? tasks : [];
+        
+        // Track which tasks have been assigned to a list
+        const assignedTaskIds = new Set();
 
-        return taskLists
+        const result = taskLists
             .filter(list => taskFilters.list === 'all' || String(list.id) === taskFilters.list)
             .map(list => {
                 // CRITICAL: Use String() comparison to handle type mismatch (number vs string)
@@ -3599,6 +3602,9 @@ function initializeProjectDetail() {
                             return null;
                         }
 
+                        // Mark task as assigned
+                        assignedTaskIds.add(task.id);
+
                         return {
                             task,
                             matchingSubtasks: includeSubtasks ? matchingSubtasks : [],
@@ -3612,6 +3618,50 @@ function initializeProjectDetail() {
                     tasks: tasksForList
                 };
             });
+
+        // Find tasks that don't have a matching listId and assign them to the first available list
+        // Prefer "To Do" list if it exists, otherwise use the first list
+        const unmatchedTasks = safeTasks.filter(task => !assignedTaskIds.has(task.id));
+        
+        if (unmatchedTasks.length > 0 && result.length > 0) {
+            // Find "To Do" list or use the first list as fallback
+            const fallbackListIndex = result.findIndex(list => {
+                const listName = String(list.name || '').toLowerCase();
+                return listName === 'to do' || listName === 'todo';
+            });
+            const targetListIndex = fallbackListIndex >= 0 ? fallbackListIndex : 0;
+            const targetList = result[targetListIndex];
+            
+            // Process unmatched tasks and add them to the fallback list
+            const unmatchedTasksForList = unmatchedTasks
+                .map(task => {
+                    const taskMatches = matchesTaskFilters(task, targetList.id);
+                    const matchingSubtasks = (task.subtasks || []).filter(subtask => matchesTaskFilters(subtask, targetList.id));
+                    const shouldInclude = taskMatches || (includeSubtasks && matchingSubtasks.length > 0);
+
+                    if (!shouldInclude) {
+                        return null;
+                    }
+
+                    return {
+                        task,
+                        matchingSubtasks: includeSubtasks ? matchingSubtasks : [],
+                        matchedBySubtasks: includeSubtasks && !taskMatches && matchingSubtasks.length > 0
+                    };
+                })
+                .filter(Boolean);
+            
+            if (unmatchedTasksForList.length > 0) {
+                result[targetListIndex] = {
+                    ...targetList,
+                    tasks: [...targetList.tasks, ...unmatchedTasksForList]
+                };
+                console.warn(`ProjectDetail: ${unmatchedTasksForList.length} task(s) without matching listId assigned to "${targetList.name}" list. Task IDs:`, 
+                    unmatchedTasksForList.map(item => item.task.id));
+            }
+        }
+
+        return result;
     }, [taskLists, tasks, taskFilters, matchesTaskFilters]);
 
     const filteredTaskIdSet = useMemo(() => {

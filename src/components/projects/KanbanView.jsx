@@ -63,17 +63,83 @@ const KanbanView = ({
     
     const dueDateMetaFn = getDueDateMeta || getDefaultDueDateMeta;
 
-    // Group tasks by status - case-insensitive matching with both value and label
-    const tasksByStatus = columns.map(column => ({
-        column,
-        tasks: tasks.filter(t => {
-            const taskStatus = String(t.status || 'To Do').toLowerCase().trim();
-            const columnValue = String(column.value || '').toLowerCase().trim();
-            const columnLabel = String(column.label || '').toLowerCase().trim();
-            // Match against both column value and label for flexibility
-            return taskStatus === columnValue || taskStatus === columnLabel;
-        })
-    }));
+    // Normalize status string for better matching (handles variations like "todo" vs "to do", "in-progress" vs "in progress")
+    const normalizeStatus = (status) => {
+        if (!status) return '';
+        return String(status)
+            .toLowerCase()
+            .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
+            .replace(/\s+/g, ' ')  // Normalize multiple spaces to single space
+            .trim();
+    };
+
+    // Match task status to column with flexible matching
+    const matchTaskToColumn = (taskStatus, columnValue, columnLabel) => {
+        const normalizedTask = normalizeStatus(taskStatus);
+        const normalizedValue = normalizeStatus(columnValue);
+        const normalizedLabel = normalizeStatus(columnLabel);
+        
+        // Exact match
+        if (normalizedTask === normalizedValue || normalizedTask === normalizedLabel) {
+            return true;
+        }
+        
+        // Partial match for common variations
+        // e.g., "todo" matches "to do", "inprogress" matches "in progress"
+        if (normalizedTask.replace(/\s/g, '') === normalizedValue.replace(/\s/g, '') ||
+            normalizedTask.replace(/\s/g, '') === normalizedLabel.replace(/\s/g, '')) {
+            return true;
+        }
+        
+        // Contains match for statuses with extra text (e.g., "To Do - High Priority")
+        if (normalizedValue && normalizedTask.includes(normalizedValue)) {
+            return true;
+        }
+        if (normalizedLabel && normalizedTask.includes(normalizedLabel)) {
+            return true;
+        }
+        
+        return false;
+    };
+
+    // Group tasks by status - improved matching with fallback for unmatched tasks
+    const taskAssignments = new Map(); // Track which tasks have been assigned
+    const tasksByStatus = columns.map(column => {
+        const columnTasks = tasks.filter(t => {
+            if (taskAssignments.has(t.id)) return false; // Task already assigned to another column
+            
+            const taskStatus = String(t.status || 'To Do');
+            const columnValue = String(column.value || '');
+            const columnLabel = String(column.label || '');
+            
+            if (matchTaskToColumn(taskStatus, columnValue, columnLabel)) {
+                taskAssignments.set(t.id, true);
+                return true;
+            }
+            
+            return false;
+        });
+        
+        return {
+            column,
+            tasks: columnTasks
+        };
+    });
+
+    // Add unmatched tasks to "To Do" column as fallback (if it exists)
+    const todoColumnIndex = tasksByStatus.findIndex(({ column }) => {
+        const normalized = normalizeStatus(column.value || column.label || '');
+        return normalized === 'to do' || normalized === 'todo';
+    });
+    
+    if (todoColumnIndex >= 0) {
+        const unmatchedTasks = tasks.filter(t => !taskAssignments.has(t.id));
+        if (unmatchedTasks.length > 0) {
+            tasksByStatus[todoColumnIndex].tasks.push(...unmatchedTasks);
+            console.warn(`KanbanView: ${unmatchedTasks.length} task(s) with unmatched status added to "To Do" column. Task statuses:`, 
+                unmatchedTasks.map(t => t.status || 'undefined'));
+        }
+    }
 
     const handleDragStart = (e, task) => {
         e.dataTransfer.setData('taskId', task.id.toString());
