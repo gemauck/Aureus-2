@@ -3701,15 +3701,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 const comments = doc ? getDocumentComments(doc, month) : [];
                 
                 return (
-                    <>
-                        {/* Comment Popup */}
-                        <div 
-                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
-                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
+                    <div 
+                        className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
+                        style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Close button */}
+                        <button
+                            onClick={() => setHoverCommentCell(null)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
+                            type="button"
+                            title="Close"
                         >
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                        
                         {/* Show section and document context */}
                         {section && doc && (
-                            <div className="mb-2 pb-2 border-b border-gray-200">
+                            <div className="mb-2 pb-2 border-b border-gray-200 pr-6">
                                 <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
                                     {section.name || 'Section'}
                                 </div>
@@ -3718,6 +3728,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 </div>
                             </div>
                         )}
+                        
+                        {/* Comments List */}
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
@@ -3752,18 +3764,27 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 }}
                                             />
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                <span className="font-medium">{comment.author}</span>
-                                                <span>{new Date(comment.date).toLocaleString('en-ZA', { 
-                                                    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                })}</span>
+                                                <span className="font-medium">{comment.author || 'Unknown'}</span>
+                                                <span>
+                                                    {comment.date && !isNaN(new Date(comment.date).getTime())
+                                                        ? new Date(comment.date).toLocaleString('en-ZA', { 
+                                                            month: 'short', 
+                                                            day: '2-digit', 
+                                                            hour: '2-digit', 
+                                                            minute: '2-digit'
+                                                        })
+                                                        : 'Invalid Date'
+                                                    }
+                                                </span>
                                             </div>
                                             <button
                                                 onClick={() => {
                                                     if (!section || !doc) return;
                                                     handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
-                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
+                                                title="Delete comment"
                                             >
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
@@ -3773,13 +3794,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             </div>
                         )}
                         
+                        {/* Add Comment Section */}
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
                             {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim()) {
+                                        if (commentText && commentText.trim() && section && doc) {
                                             handleAddComment(section.id, doc.id, month, commentText);
+                                            // Clear the input after submission
+                                            setQuickComment('');
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3793,30 +3817,36 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && doc) {
-                                                handleAddComment(section.id, doc.id, month, quickComment);
+                                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && section && doc) {
+                                                e.preventDefault();
+                                                const textToSubmit = quickComment.trim();
+                                                if (textToSubmit) {
+                                                    handleAddComment(section.id, doc.id, month, textToSubmit);
+                                                }
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
                                         rows="2"
-                                        placeholder="Type comment... (Ctrl+Enter to submit)"
+                                        placeholder="Type comment... (Ctrl+Enter or Cmd+Enter to submit)"
                                         autoFocus
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !doc) return;
-                                            handleAddComment(section.id, doc.id, month, quickComment);
+                                            if (!section || !doc || !quickComment.trim()) return;
+                                            const textToSubmit = quickComment.trim();
+                                            handleAddComment(section.id, doc.id, month, textToSubmit);
                                         }}
-                                        disabled={!quickComment.trim()}
-                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
+                                        disabled={!quickComment.trim() || !section || !doc}
+                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        type="button"
                                     >
+                                        <i className="fas fa-paper-plane mr-1"></i>
                                         Add Comment
                                     </button>
                                 </>
                             )}
                         </div>
                     </div>
-                    </>
                 );
             })()}
             

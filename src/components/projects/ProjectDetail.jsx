@@ -1112,10 +1112,36 @@ function initializeProjectDetail() {
             }
         }
         
+        // Check for tab parameter in URL (e.g., ?tab=tasks)
+        let tabFromUrl = null;
+        if (!hasDocCollectionParams && !hasWeeklyFMSParams && !hasCommentIdOnly) {
+            if (!params) {
+                // Parse params if not already done
+                if (hash.includes('?')) {
+                    const hashParts = hash.split('?');
+                    if (hashParts.length > 1) {
+                        params = new URLSearchParams(hashParts[1]);
+                    }
+                } else if (search) {
+                    params = new URLSearchParams(search);
+                }
+            }
+            if (params) {
+                tabFromUrl = params.get('tab');
+                // Validate tab value
+                if (tabFromUrl && !['overview', 'tasks', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
+                    tabFromUrl = null;
+                }
+            }
+        }
+        
         if (hasDocCollectionParams) {
             return 'documentCollection';
         } else if (hasWeeklyFMSParams) {
             return 'weeklyFMSReview';
+        } else if (tabFromUrl) {
+            // Tab parameter takes precedence for simple navigation
+            return tabFromUrl;
         } else if (hasCommentIdOnly) {
             // If only commentId is present, default to document collection tab
             // The tracker will search for the comment across all sections
@@ -1128,26 +1154,38 @@ function initializeProjectDetail() {
     
     // Wrapper function to update both section state and URL
     const switchSection = useCallback((section, options = {}) => {
-        setActiveSection(section);
+        console.log('🟢 switchSection called with:', section, 'options:', options);
+        console.log('🟢 Current activeSection:', activeSection);
         
-        // Update URL if updateProjectUrl function is available
-        // BUT: Don't overwrite hash-based deep link parameters (docSectionId, etc.)
-        // These should be preserved for document collection tracker navigation
-        const hash = window.location.hash || '';
-        const hasDeepLinkParams = hash.includes('docSectionId=') || 
-                                   hash.includes('weeklySectionId=') ||
-                                   hash.includes('docDocumentId=') ||
-                                   hash.includes('weeklyDocumentId=');
-        
-        if (window.updateProjectUrl && project?.id && !hasDeepLinkParams) {
-            // Only update URL if there are no deep link params to preserve
-            window.updateProjectUrl({
-                tab: section,
-                section: options.section,
-                commentId: options.commentId
-            });
+        try {
+            setActiveSection(section);
+            console.log('🟢 setActiveSection called with:', section);
+            
+            // Update URL if updateProjectUrl function is available
+            // BUT: Don't overwrite hash-based deep link parameters (docSectionId, etc.)
+            // These should be preserved for document collection tracker navigation
+            const hash = window.location.hash || '';
+            const hasDeepLinkParams = hash.includes('docSectionId=') || 
+                                       hash.includes('weeklySectionId=') ||
+                                       hash.includes('docDocumentId=') ||
+                                       hash.includes('weeklyDocumentId=');
+            
+            if (window.updateProjectUrl && project?.id && !hasDeepLinkParams) {
+                // Only update URL if there are no deep link params to preserve
+                console.log('🟢 Updating URL with tab:', section);
+                window.updateProjectUrl({
+                    tab: section,
+                    section: options.section,
+                    commentId: options.commentId
+                });
+            } else {
+                console.log('🟢 Not updating URL - updateProjectUrl:', !!window.updateProjectUrl, 'project.id:', project?.id, 'hasDeepLinkParams:', hasDeepLinkParams);
+            }
+        } catch (error) {
+            console.error('❌ Error in switchSection:', error);
+            alert('Failed to switch section: ' + (error?.message || 'Unknown error'));
         }
-    }, [project?.id]);
+    }, [project?.id, activeSection]);
     
     // Helper function to update URL with task and/or comment parameters
     // CRITICAL: Always ensures project ID is in the path, not just query params
@@ -6309,7 +6347,25 @@ function initializeProjectDetail() {
                         Overview
                     </button>
                     <button
-                        onClick={() => switchSection('tasks')}
+                        onClick={(e) => {
+                            try {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                console.log('🖱️ Tasks button clicked - event:', e);
+                                console.log('🖱️ Current activeSection:', activeSection);
+                                console.log('🖱️ switchSection type:', typeof switchSection);
+                                if (typeof switchSection === 'function') {
+                                    switchSection('tasks');
+                                    console.log('✅ switchSection called with tasks');
+                                } else {
+                                    console.error('❌ switchSection is not a function', typeof switchSection);
+                                    alert('Failed to switch to tasks: Handler not available.');
+                                }
+                            } catch (error) {
+                                console.error('❌ Error in Tasks button click handler:', error);
+                                alert('An unexpected error occurred while trying to switch to tasks: ' + (error?.message || 'Unknown error'));
+                            }
+                        }}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'tasks'
                                 ? 'bg-primary-600 text-white'
