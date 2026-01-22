@@ -1,6 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
+const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
 // Derive a human‑readable facilities label from the project, handling both
@@ -31,11 +32,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
-    // Calculate working months (2 months in arrears from current month)
+    // Calculate working months (previous month and current month)
     const getWorkingMonths = () => {
-        const twoMonthsBack = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
         const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
-        return [twoMonthsBack, oneMonthBack];
+        return [oneMonthBack, currentMonth];
     };
     
     const workingMonths = getWorkingMonths();
@@ -1348,14 +1348,14 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
-        const document = section.documents.find(d => String(d.id) === normalizedDocumentId);
-        if (!document) {
+        const doc = section.documents.find(d => String(d.id) === normalizedDocumentId);
+        if (!doc) {
             console.error('❌ Document not found for deletion. Document ID:', documentId, 'Section:', section.name);
             alert(`Error: Document not found. Cannot delete.`);
             return;
         }
         
-        if (!confirm(`Delete document "${document.name}"?`)) {
+        if (!confirm(`Delete document "${doc.name}"?`)) {
             return;
         }
         
@@ -1604,8 +1604,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
-        const document = section?.documents.find(d => String(d.id) === String(documentId));
-        const existingComments = getCommentsForYear(document?.comments, month, selectedYear);
+        const doc = section?.documents.find(d => String(d.id) === String(documentId));
+        const existingComments = getCommentsForYear(doc?.comments, month, selectedYear);
         const comment = existingComments.find(c => c.id === commentId);
         
         const canDelete = comment?.authorId === currentUser.id || 
@@ -1810,7 +1810,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const commentButton = document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            const commentButton = documentRef.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
@@ -1894,8 +1894,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             }
         };
         
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        documentRef.addEventListener('mousedown', handleClickOutside);
+        return () => documentRef.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
@@ -1954,7 +1954,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
-                    const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -1990,7 +1990,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
                         // Fallback: try to find the cell and position relative to it
-                        const cell = document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        const cell = documentRef.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
                         if (cell) {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2053,10 +2053,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         
                         // Try multiple selectors to find the comment (handle both string and number IDs)
                         const commentElement = 
-                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            document.querySelector(`#comment-${targetCommentId}`) ||
-                            document.querySelector(`#comment-${Number(targetCommentId)}`);
+                            documentRef.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            documentRef.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            documentRef.querySelector(`#comment-${targetCommentId}`) ||
+                            documentRef.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             // Scroll the comment into view within the popup
@@ -2263,7 +2263,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;
@@ -2954,8 +2954,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 // Never parseInt them – always compare as strings to ensure we find the right row.
                 const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
-                const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-                const comments = document ? getDocumentComments(document, month) : [];
+                const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const comments = doc ? getDocumentComments(doc, month) : [];
                 
                 return (
                     <>
@@ -2965,13 +2965,13 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
                         {/* Show section and document context */}
-                        {section && document && (
+                        {section && doc && (
                             <div className="mb-2 pb-2 border-b border-gray-200">
                                 <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
                                     {section.name || 'Section'}
                                 </div>
                                 <div className="text-[9px] text-gray-500">
-                                    {document.name || 'Document'} • {month}
+                                    {doc.name || 'Document'} • {month}
                                 </div>
                             </div>
                         )}
@@ -3003,8 +3003,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    if (!section || !document) return;
-                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                    if (!section || !doc) return;
+                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
@@ -3019,11 +3019,11 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && section && document ? (
+                            {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, document.id, month, commentText);
+                                            handleAddComment(section.id, doc.id, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3037,8 +3037,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey && section && document) {
-                                                handleAddComment(section.id, document.id, month, quickComment);
+                                            if (e.key === 'Enter' && e.ctrlKey && section && doc) {
+                                                handleAddComment(section.id, doc.id, month, quickComment);
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3048,8 +3048,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     />
                                     <button
                                         onClick={() => {
-                                            if (!section || !document) return;
-                                            handleAddComment(section.id, document.id, month, quickComment);
+                                            if (!section || !doc) return;
+                                            handleAddComment(section.id, doc.id, month, quickComment);
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
