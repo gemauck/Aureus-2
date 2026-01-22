@@ -1,6 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
+const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
 // Derive a human‑readable facilities label from the project, handling both
@@ -2268,7 +2269,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Throttled position update - only runs once when popup opens, not on every render
         const updatePopupPosition = () => {
-            const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            const commentButton = documentRef.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
@@ -2366,8 +2367,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         };
         
-        window.document.addEventListener('mousedown', handleClickOutside);
-        return () => window.document.removeEventListener('mousedown', handleClickOutside);
+        documentRef.addEventListener('mousedown', handleClickOutside);
+        return () => documentRef.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
@@ -2426,7 +2427,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
-                    const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -2462,7 +2463,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
                         // Fallback: try to find the cell and position relative to it
-                        const cell = window.document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        const cell = documentRef.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
                         if (cell) {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2528,10 +2529,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         // Try multiple selectors to find the comment (handle both string and number IDs)
                         const commentElement = 
-                            window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            window.document.querySelector(`#comment-${targetCommentId}`) ||
-                            window.document.querySelector(`#comment-${Number(targetCommentId)}`);
+                            documentRef.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            documentRef.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            documentRef.querySelector(`#comment-${targetCommentId}`) ||
+                            documentRef.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             // Only scroll if we haven't already scrolled to this comment
@@ -2777,7 +2778,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;
