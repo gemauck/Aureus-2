@@ -5859,7 +5859,34 @@ function initializeProjectDetail() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={() => handleAddTask(list.id)}
+                                            onClick={(e) => {
+                                                try {
+                                                    console.log('🖱️ + Task button clicked - event:', e);
+                                                    console.log('🖱️ + Task button clicked for list:', list.id);
+                                                    console.log('🖱️ handleAddTask type:', typeof handleAddTask);
+                                                    
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    
+                                                    if (typeof handleAddTask === 'function') {
+                                                        console.log('✅ Calling handleAddTask with listId:', list.id);
+                                                        const result = handleAddTask(list.id);
+                                                        console.log('✅ handleAddTask returned:', result);
+                                                        if (result && typeof result.catch === 'function') {
+                                                            result.catch(err => {
+                                                                console.error('❌ Error in handleAddTask promise:', err);
+                                                                alert('Failed to add task: ' + (err?.message || 'Unknown error'));
+                                                            });
+                                                        }
+                                                    } else {
+                                                        console.error('❌ handleAddTask is not a function, type:', typeof handleAddTask);
+                                                        alert('Task functionality is not available. Please refresh the page.');
+                                                    }
+                                                } catch (error) {
+                                                    console.error('❌ Error in + Task button onClick handler:', error);
+                                                    alert('Failed to add task: ' + (error?.message || 'Unknown error'));
+                                                }
+                                            }}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
                                         >
                                             <i className="fas fa-plus text-[10px]"></i>
@@ -5909,7 +5936,34 @@ function initializeProjectDetail() {
                                                                 </p>
                                                                 {!hasActiveTaskFilters && (
                                                                     <button
-                                                                        onClick={() => handleAddTask(list.id)}
+                                                                        onClick={(e) => {
+                                                                            try {
+                                                                                console.log('🖱️ Add first task button clicked - event:', e);
+                                                                                console.log('🖱️ Add first task button clicked for list:', list.id);
+                                                                                console.log('🖱️ handleAddTask type:', typeof handleAddTask);
+                                                                                
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                
+                                                                                if (typeof handleAddTask === 'function') {
+                                                                                    console.log('✅ Calling handleAddTask with listId:', list.id);
+                                                                                    const result = handleAddTask(list.id);
+                                                                                    console.log('✅ handleAddTask returned:', result);
+                                                                                    if (result && typeof result.catch === 'function') {
+                                                                                        result.catch(err => {
+                                                                                            console.error('❌ Error in handleAddTask promise:', err);
+                                                                                            alert('Failed to add task: ' + (err?.message || 'Unknown error'));
+                                                                                        });
+                                                                                    }
+                                                                                } else {
+                                                                                    console.error('❌ handleAddTask is not a function, type:', typeof handleAddTask);
+                                                                                    alert('Task functionality is not available. Please refresh the page.');
+                                                                                }
+                                                                            } catch (error) {
+                                                                                console.error('❌ Error in Add first task button onClick handler:', error);
+                                                                                alert('Failed to add task: ' + (error?.message || 'Unknown error'));
+                                                                            }
+                                                                        }}
                                                                         className="mt-4 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors"
                                                                     >
                                                                         Add your first task
@@ -5926,7 +5980,34 @@ function initializeProjectDetail() {
                                                         return (
                                                             <Fragment key={task.id}>
                                                                 <tr
-                                                                    onClick={() => handleViewTaskDetail(task)}
+                                                                    onClick={(e) => {
+                                                                        try {
+                                                                            console.log('🖱️ Table row clicked - event:', e);
+                                                                            console.log('🖱️ Table row clicked:', task.id);
+                                                                            console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
+                                                                            
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            
+                                                                            if (typeof handleViewTaskDetail === 'function') {
+                                                                                console.log('✅ Calling handleViewTaskDetail with task:', task.id);
+                                                                                const result = handleViewTaskDetail(task);
+                                                                                console.log('✅ handleViewTaskDetail returned:', result);
+                                                                                if (result && typeof result.catch === 'function') {
+                                                                                    result.catch(err => {
+                                                                                        console.error('❌ Error in handleViewTaskDetail promise:', err);
+                                                                                        alert('Failed to open task: ' + (err?.message || 'Unknown error'));
+                                                                                    });
+                                                                                }
+                                                                            } else {
+                                                                                console.error('❌ handleViewTaskDetail is not a function, type:', typeof handleViewTaskDetail);
+                                                                                alert('Task functionality is not available. Please refresh the page.');
+                                                                            }
+                                                                        } catch (error) {
+                                                                            console.error('❌ Error in Table row onClick handler:', error);
+                                                                            alert('Failed to open task: ' + (error?.message || 'Unknown error'));
+                                                                        }
+                                                                    }}
                                                                     className="hover:bg-gray-50 cursor-pointer transition"
                                                                 >
                                                                     <td className="px-4 py-2 whitespace-nowrap">
@@ -5984,8 +6065,32 @@ function initializeProjectDetail() {
                                                                             </button>
                                                                             <button
                                                                                 onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleAddSubtask(task);
+                                                                                    try {
+                                                                                        console.log('🖱️ Add subtask button clicked - event:', e);
+                                                                                        console.log('🖱️ Add subtask button clicked for task:', task.id);
+                                                                                        console.log('🖱️ handleAddSubtask type:', typeof handleAddSubtask);
+                                                                                        
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        
+                                                                                        if (typeof handleAddSubtask === 'function') {
+                                                                                            console.log('✅ Calling handleAddSubtask with task:', task.id);
+                                                                                            const result = handleAddSubtask(task);
+                                                                                            console.log('✅ handleAddSubtask returned:', result);
+                                                                                            if (result && typeof result.catch === 'function') {
+                                                                                                result.catch(err => {
+                                                                                                    console.error('❌ Error in handleAddSubtask promise:', err);
+                                                                                                    alert('Failed to add subtask: ' + (err?.message || 'Unknown error'));
+                                                                                                });
+                                                                                            }
+                                                                                        } else {
+                                                                                            console.error('❌ handleAddSubtask is not a function, type:', typeof handleAddSubtask);
+                                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                                        }
+                                                                                    } catch (error) {
+                                                                                        console.error('❌ Error in Add subtask button onClick handler:', error);
+                                                                                        alert('Failed to add subtask: ' + (error?.message || 'Unknown error'));
+                                                                                    }
                                                                                 }}
                                                                                 className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
                                                                                 title="Add subtask"
@@ -5995,8 +6100,32 @@ function initializeProjectDetail() {
                                                                             </button>
                                                                             <button
                                                                                 onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleViewTaskDetail(task);
+                                                                                    try {
+                                                                                        console.log('🖱️ View button clicked - event:', e);
+                                                                                        console.log('🖱️ View button clicked for task:', task.id);
+                                                                                        console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
+                                                                                        
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        
+                                                                                        if (typeof handleViewTaskDetail === 'function') {
+                                                                                            console.log('✅ Calling handleViewTaskDetail with task:', task.id);
+                                                                                            const result = handleViewTaskDetail(task);
+                                                                                            console.log('✅ handleViewTaskDetail returned:', result);
+                                                                                            if (result && typeof result.catch === 'function') {
+                                                                                                result.catch(err => {
+                                                                                                    console.error('❌ Error in handleViewTaskDetail promise:', err);
+                                                                                                    alert('Failed to open task: ' + (err?.message || 'Unknown error'));
+                                                                                                });
+                                                                                            }
+                                                                                        } else {
+                                                                                            console.error('❌ handleViewTaskDetail is not a function, type:', typeof handleViewTaskDetail);
+                                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                                        }
+                                                                                    } catch (error) {
+                                                                                        console.error('❌ Error in View button onClick handler:', error);
+                                                                                        alert('Failed to open task: ' + (error?.message || 'Unknown error'));
+                                                                                    }
                                                                                 }}
                                                                                 className="text-[10px] text-primary-600 hover:text-primary-700 font-semibold px-1.5"
                                                                             >
@@ -6004,8 +6133,32 @@ function initializeProjectDetail() {
                                                                             </button>
                                                                             <button
                                                                                 onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleDeleteTask(task.id);
+                                                                                    try {
+                                                                                        console.log('🖱️ Delete button clicked - event:', e);
+                                                                                        console.log('🖱️ Delete button clicked for task:', task.id);
+                                                                                        console.log('🖱️ handleDeleteTask type:', typeof handleDeleteTask);
+                                                                                        
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        
+                                                                                        if (typeof handleDeleteTask === 'function') {
+                                                                                            console.log('✅ Calling handleDeleteTask with taskId:', task.id);
+                                                                                            const result = handleDeleteTask(task.id);
+                                                                                            console.log('✅ handleDeleteTask returned:', result);
+                                                                                            if (result && typeof result.catch === 'function') {
+                                                                                                result.catch(err => {
+                                                                                                    console.error('❌ Error in handleDeleteTask promise:', err);
+                                                                                                    alert('Failed to delete task: ' + (err?.message || 'Unknown error'));
+                                                                                                });
+                                                                                            }
+                                                                                        } else {
+                                                                                            console.error('❌ handleDeleteTask is not a function, type:', typeof handleDeleteTask);
+                                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                                        }
+                                                                                    } catch (error) {
+                                                                                        console.error('❌ Error in Delete button onClick handler:', error);
+                                                                                        alert('Failed to delete task: ' + (error?.message || 'Unknown error'));
+                                                                                    }
                                                                                 }}
                                                                                 className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-red-500 text-white rounded hover:bg-red-600 transition-all font-medium"
                                                                                 title="Delete task"
@@ -6020,7 +6173,34 @@ function initializeProjectDetail() {
                                                                     return (
                                                                         <tr
                                                                             key={`subtask-${subtask.id}`}
-                                                                            onClick={() => handleViewTaskDetail(subtask, task)}
+                                                                            onClick={(e) => {
+                                                                                try {
+                                                                                    console.log('🖱️ Subtask row clicked - event:', e);
+                                                                                    console.log('🖱️ Subtask row clicked:', subtask.id);
+                                                                                    console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
+                                                                                    
+                                                                                    e.preventDefault();
+                                                                                    e.stopPropagation();
+                                                                                    
+                                                                                    if (typeof handleViewTaskDetail === 'function') {
+                                                                                        console.log('✅ Calling handleViewTaskDetail with subtask:', subtask.id);
+                                                                                        const result = handleViewTaskDetail(subtask, task);
+                                                                                        console.log('✅ handleViewTaskDetail returned:', result);
+                                                                                        if (result && typeof result.catch === 'function') {
+                                                                                            result.catch(err => {
+                                                                                                console.error('❌ Error in handleViewTaskDetail promise:', err);
+                                                                                                alert('Failed to open subtask: ' + (err?.message || 'Unknown error'));
+                                                                                            });
+                                                                                        }
+                                                                                    } else {
+                                                                                        console.error('❌ handleViewTaskDetail is not a function, type:', typeof handleViewTaskDetail);
+                                                                                        alert('Task functionality is not available. Please refresh the page.');
+                                                                                    }
+                                                                                } catch (error) {
+                                                                                    console.error('❌ Error in Subtask row onClick handler:', error);
+                                                                                    alert('Failed to open subtask: ' + (error?.message || 'Unknown error'));
+                                                                                }
+                                                                            }}
                                                                             className="bg-gray-50 hover:bg-gray-100 cursor-pointer transition"
                                                                         >
                                                                             <td className="px-4 py-1.5 whitespace-nowrap pl-10">
