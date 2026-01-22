@@ -237,13 +237,27 @@ try:
     print("Initializing review...")
     review = POAReview(data)
     
+    print("Marking consecutive transactions...")
+    review.mark_consecutive_transactions()
+    
+    print("Creating labels for transactions...")
+    review.label_rows()
+    
     print("Marking no POA assets...")
     review.mark_no_poa_assets()
+    
+    print("Counting proof before transactions...")
+    review.count_proof_before_transaction()
     
     print("Calculating time since last activity...")
     review.time_since_last_activity()
     
     print("Calculating total SMR...")
+    # CRITICAL: total_smr requires 'label' column which is created by label_rows()
+    # Ensure label column exists before calling total_smr
+    if "label" not in review.data.columns:
+        print("Warning: label column missing, recreating labels...")
+        review.label_rows()
     review.total_smr(sources)
     
     print("Formatting review...")
