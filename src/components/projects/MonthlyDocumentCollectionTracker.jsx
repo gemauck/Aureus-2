@@ -1837,6 +1837,53 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                      deepDocumentId !== 'undefined' && 
                                      deepDocumentId.trim() !== '';
             
+            // If we have commentId but missing other params, search for the comment
+            if (deepCommentId && (!deepSectionId || !isValidDocumentId || !deepMonth)) {
+                // Search through all sections, documents, and months to find the comment
+                let foundComment = null;
+                let foundSectionId = null;
+                let foundDocumentId = null;
+                let foundMonth = null;
+                
+                const commentIdToFind = String(deepCommentId);
+                
+                // Search through all sections
+                for (const section of sections) {
+                    if (!section.documents) continue;
+                    
+                    // Search through all documents in this section
+                    for (const doc of section.documents) {
+                        if (!doc.comments) continue;
+                        
+                        // Search through all months
+                        for (const month of months) {
+                            const comments = getCommentsForYear(doc.comments, month, selectedYear);
+                            
+                            // Check if any comment matches the ID
+                            const matchingComment = comments.find(c => String(c.id) === commentIdToFind);
+                            if (matchingComment) {
+                                foundComment = matchingComment;
+                                foundSectionId = section.id;
+                                foundDocumentId = doc.id;
+                                foundMonth = month;
+                                break;
+                            }
+                        }
+                        
+                        if (foundComment) break;
+                    }
+                    
+                    if (foundComment) break;
+                }
+                
+                // If comment was found, use the found location
+                if (foundComment && foundSectionId && foundDocumentId && foundMonth) {
+                    deepSectionId = foundSectionId;
+                    deepDocumentId = foundDocumentId;
+                    deepMonth = foundMonth;
+                }
+            }
+            
             if (deepSectionId && isValidDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
                 
@@ -3101,7 +3148,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <tr>
                                             <th
                                                 className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '450px', width: '450px' }}
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                             >
                                                 Document / Data
                                             </th>
@@ -3140,9 +3187,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 <tr key={doc.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '450px', width: '450px' }}
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
-                                                        <div className="min-w-[450px]">
+                                                        <div className="min-w-[200px]">
                                                             <div className="text-xs font-medium text-gray-900">{doc.name}</div>
                                                             {doc.description && (
                                                                 <div className="text-[10px] text-gray-500">{doc.description}</div>
