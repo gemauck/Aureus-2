@@ -2023,8 +2023,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     } else {
                         console.warn('⚠️ MonthlyDocumentCollectionTracker: Comment not found:', deepCommentId, {
                             searchedYears: yearsToSearch,
-                            sectionsCount: sections.length
+                            sectionsCount: sections.length,
+                            sectionsByYearKeys: Object.keys(sectionsByYear),
+                            selectedYear: selectedYear
                         });
+                        
+                        // Debug: Log all comment IDs we found during search
+                        console.log('🔍 MonthlyDocumentCollectionTracker: Debug - Searching for comment IDs in all sections...');
+                        let totalComments = 0;
+                        for (const year of yearsToSearch) {
+                            const yearSections = sectionsByYear[year] || [];
+                            for (const section of yearSections) {
+                                if (!section.documents) continue;
+                                for (const doc of section.documents) {
+                                    if (!doc.comments) continue;
+                                    for (const month of months) {
+                                        const comments = getCommentsForYear(doc.comments, month, parseInt(year, 10));
+                                        totalComments += comments.length;
+                                        if (comments.length > 0) {
+                                            console.log(`  Found ${comments.length} comment(s) in ${section.name}/${doc.name}/${month}/${year}:`, 
+                                                comments.map(c => ({ id: c.id, idType: typeof c.id, text: c.text?.substring(0, 30) }))
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        console.log(`🔍 MonthlyDocumentCollectionTracker: Total comments found: ${totalComments}`);
                     }
                 } else {
                     console.log('✅ MonthlyDocumentCollectionTracker: Comment found at specified location, using existing params');
@@ -2043,7 +2068,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 });
                 
                 // Open the popup immediately
+                console.log('🎯 MonthlyDocumentCollectionTracker: Setting hoverCommentCell to:', cellKey);
                 setHoverCommentCell(cellKey);
+                
+                // Verify the state was set (check in next tick)
+                setTimeout(() => {
+                    console.log('🎯 MonthlyDocumentCollectionTracker: hoverCommentCell state after set:', hoverCommentCell);
+                }, 0);
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
@@ -2144,6 +2175,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         // Wait a bit for component to fully render and sections to load
         const timer = setTimeout(() => {
+            console.log('🔍 MonthlyDocumentCollectionTracker: Initial deep link check');
             checkAndOpenDeepLink();
         }, 500);
         return () => clearTimeout(timer);
@@ -2153,9 +2185,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         if (sections && sections.length > 0) {
             const timer = setTimeout(() => {
+                console.log('🔍 MonthlyDocumentCollectionTracker: Sections loaded, checking deep link');
                 checkAndOpenDeepLink();
             }, 300);
             return () => clearTimeout(timer);
+        }
+    }, [sections.length, checkAndOpenDeepLink]);
+    
+    // Aggressive retry: Check multiple times with increasing delays to catch late-loading sections
+    useEffect(() => {
+        if (!sections || sections.length === 0) {
+            // If sections aren't loaded, retry several times
+            const retries = [800, 1500, 2500];
+            const timers = retries.map(delay => 
+                setTimeout(() => {
+                    console.log(`🔍 MonthlyDocumentCollectionTracker: Retry check (${delay}ms delay)`);
+                    checkAndOpenDeepLink();
+                }, delay)
+            );
+            return () => timers.forEach(clearTimeout);
         }
     }, [sections.length, checkAndOpenDeepLink]);
     
@@ -2172,22 +2220,50 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Also listen for hash changes in case URL is updated after component mounts
     useEffect(() => {
         const handleHashChange = () => {
+            console.log('🔍 MonthlyDocumentCollectionTracker: Hash changed, checking deep link');
             setTimeout(() => {
                 checkAndOpenDeepLink();
             }, 100);
         };
         
         const handlePopState = () => {
+            console.log('🔍 MonthlyDocumentCollectionTracker: PopState event, checking deep link');
             setTimeout(() => {
                 checkAndOpenDeepLink();
             }, 100);
         };
         
+        // Also listen for pushState/replaceState by intercepting them
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+        
+        const handlePushState = (...args) => {
+            originalPushState.apply(history, args);
+            setTimeout(() => {
+                console.log('🔍 MonthlyDocumentCollectionTracker: PushState detected, checking deep link');
+                checkAndOpenDeepLink();
+            }, 100);
+        };
+        
+        const handleReplaceState = (...args) => {
+            originalReplaceState.apply(history, args);
+            setTimeout(() => {
+                console.log('🔍 MonthlyDocumentCollectionTracker: ReplaceState detected, checking deep link');
+                checkAndOpenDeepLink();
+            }, 100);
+        };
+        
+        history.pushState = handlePushState;
+        history.replaceState = handleReplaceState;
+        
         window.addEventListener('hashchange', handleHashChange);
         window.addEventListener('popstate', handlePopState);
+        
         return () => {
             window.removeEventListener('hashchange', handleHashChange);
             window.removeEventListener('popstate', handlePopState);
+            history.pushState = originalPushState;
+            history.replaceState = originalReplaceState;
         };
     }, [checkAndOpenDeepLink]);
     

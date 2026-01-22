@@ -1976,16 +1976,15 @@ function initializeProjectDetail() {
                     }
                 }
                 
-                // If not found in hash, check window.location.search (for regular URLs)
-                if (!deepSectionId && !deepDocumentId && !deepMonth) {
-                    const search = window.location.search || '';
-                    if (search) {
-                        params = new URLSearchParams(search);
-                        if (!deepSectionId) deepSectionId = params.get('docSectionId');
-                        if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
-                        if (!deepMonth) deepMonth = params.get('docMonth');
-                        if (!deepCommentId) deepCommentId = params.get('commentId');
-                    }
+                // Also check window.location.search (for regular URLs like ?commentId=...)
+                // Always check search params, especially for commentId which might be the only param
+                const search = window.location.search || '';
+                if (search) {
+                    const searchParams = new URLSearchParams(search);
+                    if (!deepSectionId) deepSectionId = searchParams.get('docSectionId');
+                    if (!deepDocumentId) deepDocumentId = searchParams.get('docDocumentId');
+                    if (!deepMonth) deepMonth = searchParams.get('docMonth');
+                    if (!deepCommentId) deepCommentId = searchParams.get('commentId');
                 }
                 
                 // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
