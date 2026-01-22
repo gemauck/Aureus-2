@@ -120,9 +120,16 @@ const POAReview = () => {
             }
 
             const arrayBuffer = await file.arrayBuffer();
+            console.log('POA Review - Excel file size:', file.size, 'bytes');
+            
             const workbook = XLSXLib.read(arrayBuffer, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
+            
+            // Get the range of the worksheet to see how many rows Excel thinks there are
+            const range = XLSXLib.utils.decode_range(worksheet['!ref'] || 'A1');
+            const excelRowCount = range.e.r + 1; // Excel is 1-indexed, range.e.r is 0-indexed
+            console.log('POA Review - Excel worksheet range:', worksheet['!ref'], 'Total rows in Excel:', excelRowCount);
             
             // CRITICAL: Excel files often have title rows before headers
             // The Python script uses skiprows=1, meaning it skips the first row
@@ -133,8 +140,15 @@ const POAReview = () => {
                 raw: false
             });
             
+            console.log('POA Review - Raw data rows from XLSX:', rawData.length);
+            console.log('POA Review - Expected rows from Excel range:', excelRowCount);
+            
             if (rawData.length === 0) {
                 throw new Error('Excel file appears to be empty');
+            }
+            
+            if (rawData.length < excelRowCount) {
+                console.warn(`POA Review - WARNING: XLSX parsed ${rawData.length} rows but Excel shows ${excelRowCount} rows. Some rows may have been skipped.`);
             }
             
             // Find the header row by looking for required columns
@@ -169,6 +183,7 @@ const POAReview = () => {
             
             // Data rows start after the header row
             const dataRows = rawData.slice(headerRowIndex + 1);
+            console.log('POA Review - Data rows after slicing (excluding header):', dataRows.length);
             
             // Filter out empty column headers and handle duplicates (like pandas does)
             const validHeaderIndices = [];
@@ -201,25 +216,31 @@ const POAReview = () => {
             }
             
             // Convert to array of objects with proper column names (only valid columns)
-            const rows = dataRows
-                .filter(row => row && row.length > 0) // Filter out completely empty rows
-                .map(row => {
-                    const rowObj = {};
-                    validHeaders.forEach((header, validIdx) => {
-                        const origIdx = validHeaderIndices[validIdx];
-                        rowObj[header] = row[origIdx] !== undefined ? String(row[origIdx] || '').trim() : '';
-                    });
-                    return rowObj;
-                })
-                .filter(row => {
-                    // Filter out rows that are completely empty
-                    return Object.values(row).some(val => val && val.trim() !== '');
+            const rowsAfterLengthCheck = dataRows.filter(row => row && row.length > 0);
+            console.log('POA Review - Rows after length check:', rowsAfterLengthCheck.length);
+            
+            const rowsAfterMapping = rowsAfterLengthCheck.map(row => {
+                const rowObj = {};
+                validHeaders.forEach((header, validIdx) => {
+                    const origIdx = validHeaderIndices[validIdx];
+                    rowObj[header] = row[origIdx] !== undefined ? String(row[origIdx] || '').trim() : '';
                 });
+                return rowObj;
+            });
+            console.log('POA Review - Rows after mapping to objects:', rowsAfterMapping.length);
+            
+            const rows = rowsAfterMapping.filter(row => {
+                // Filter out rows that are completely empty
+                return Object.values(row).some(val => val && val.trim() !== '');
+            });
+            
+            console.log('POA Review - Rows after filtering empty rows:', rows.length);
+            console.log('POA Review - Rows filtered out:', rowsAfterMapping.length - rows.length);
             
             // Log column names for debugging
             console.log('POA Review - Header row index:', headerRowIndex);
             console.log('POA Review - Parsed Excel columns (filtered):', validHeaders);
-            console.log('POA Review - Total data rows:', rows.length);
+            console.log('POA Review - Total data rows (final):', rows.length);
             if (rows.length > 0) {
                 console.log('POA Review - First row sample:', rows[0]);
             }
