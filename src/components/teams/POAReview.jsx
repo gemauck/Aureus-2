@@ -242,17 +242,31 @@ const POAReview = () => {
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
         const batchId = `poa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+        console.log('POA Review - Starting chunked upload:', {
+            totalRows,
+            totalBatches,
+            batchId,
+            fileName
+        });
+
         setProcessingProgress(`Processing ${totalRows} rows in ${totalBatches} batches...`);
         setProcessingProgressPercent(0);
 
         try {
             // Send batches
+            console.log('POA Review - Starting batch loop, totalBatches:', totalBatches);
             for (let i = 0; i < totalBatches; i++) {
                 const start = i * BATCH_SIZE;
                 const end = Math.min(start + BATCH_SIZE, totalRows);
                 const batch = rows.slice(start, end);
                 const batchNumber = i + 1;
                 const isFinal = batchNumber === totalBatches;
+
+                console.log(`POA Review - Sending batch ${batchNumber}/${totalBatches}`, {
+                    batchSize: batch.length,
+                    isFinal,
+                    batchId
+                });
 
                 setProcessingProgress(`Sending batch ${batchNumber} of ${totalBatches} (${end} of ${totalRows} rows)...`);
                 setProcessingProgressPercent(Math.round((batchNumber / totalBatches) * 50)); // 50% for sending
@@ -424,15 +438,20 @@ const POAReview = () => {
         try {
             if (useChunkedProcessing) {
                 // New chunked processing approach
+                console.log('POA Review - Starting chunked processing mode');
                 setProcessingProgress('Reading file...');
                 const rows = await parseFileToRows(uploadedFile);
+                
+                console.log('POA Review - File parsed, rows:', rows.length);
                 
                 if (rows.length === 0) {
                     throw new Error('No data rows found in file');
                 }
 
                 setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...`);
+                console.log('POA Review - Calling handleChunkedUpload...');
                 await handleChunkedUpload(rows, uploadedFile.name);
+                console.log('POA Review - handleChunkedUpload completed');
             } else {
                 // Legacy approach
                 await handleLegacyUpload();
