@@ -5678,61 +5678,21 @@ function initializeProjectDetail() {
         }
     }, [taskLists, persistProjectData]);
 
-    // List View Component - Memoized to prevent recreation on every render
-    const ListView = useMemo(() => {
-        return () => {
-            // Diagnostic check for table version - runs after component mounts with retries
-            const { useEffect } = window.React;
-            useEffect(() => {
-                // Only check if we're in a browser environment
-                if (typeof window === 'undefined') return;
-                
-                // Check if there are any tasks - if not, no table will be rendered (expected)
-                const hasTasks = taskLists.some(list => list.tasks && list.tasks.length > 0);
-                if (!hasTasks) {
-                    // No tasks means no table - this is expected, no need to check or warn
-                    return;
-                }
-                
-                let attempts = 0;
-                const maxAttempts = 5;
-                const delays = [500, 1000, 2000, 3000, 5000]; // Progressive delays
-                
-                const checkTable = () => {
-                    attempts++;
-                    const tables = document.querySelectorAll('[data-task-table-version="3.0"]');
-                    if (tables.length > 0) {
-                        // Table found, no need to continue checking
-                        return;
-                    }
-                    
-                    if (attempts < maxAttempts) {
-                        // Retry with next delay
-                        const delay = attempts === 1 ? delays[0] : delays[attempts] - delays[attempts - 1];
-                        setTimeout(checkTable, delay);
-                    } else {
-                        // Only warn if we have tasks but no table found after multiple attempts
-                        // This indicates a potential issue since we expect a table when tasks exist
-                        console.warn('⚠️ Table version check: No table with data-task-table-version="3.0" found after multiple attempts, but tasks exist. This may indicate a rendering issue.');
-                    }
-                };
-                
-                // Start checking after initial delay
-                setTimeout(checkTable, delays[0]);
-            }, [taskLists]);
-            
-            const formatChecklistProgress = (checklist = []) => {
-                if (!Array.isArray(checklist) || checklist.length === 0) {
-                    return { percent: 0, label: '0/0 complete' };
-                }
-                const completed = checklist.filter(item => item.completed).length;
-                return {
-                    percent: Math.round((completed / checklist.length) * 100),
-                    label: `${completed}/${checklist.length} complete`
-                };
-            };
+    // Format checklist progress helper
+    const formatChecklistProgress = useCallback((checklist = []) => {
+        if (!Array.isArray(checklist) || checklist.length === 0) {
+            return { percent: 0, label: '0/0 complete' };
+        }
+        const completed = checklist.filter(item => item.completed).length;
+        return {
+            percent: Math.round((completed / checklist.length) * 100),
+            label: `${completed}/${checklist.length} complete`
+        };
+    }, []);
 
-            return (
+    // List View Component - Proper React component
+    const ListView = useCallback(() => {
+        return (
             <div className="space-y-4">
                 <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -5980,7 +5940,6 @@ function initializeProjectDetail() {
                                                 ) : (
                                                     list.tasks.map(({ task, matchingSubtasks, matchedBySubtasks }) => {
                                                         const dueMeta = getDueDateMeta(task.dueDate);
-                                                        const checklistMeta = formatChecklistProgress(task.checklist);
                                                         const subtasksForCard = matchingSubtasks || [];
                                                         return (
                                                             <Fragment key={task.id}>
@@ -6291,9 +6250,8 @@ function initializeProjectDetail() {
                     })}
                 </div>
             </div>
-            );
-        };
-    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta]);
+        );
+    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);
