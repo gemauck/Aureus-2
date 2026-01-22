@@ -311,24 +311,36 @@ const POAReview = () => {
                 }
 
                 const batchResult = await batchResponse.json();
+                console.log(`POA Review - Batch ${batchNumber} result:`, batchResult);
 
-                if (isFinal && batchResult.downloadUrl) {
-                    // Final batch - processing complete
-                    setProcessingProgress('Generating final report...');
-                    setProcessingProgressPercent(90);
+                if (isFinal) {
+                    console.log('POA Review - Final batch received, checking for download URL...');
+                    if (batchResult.data?.downloadUrl || batchResult.downloadUrl) {
+                        // Final batch - processing complete
+                        const downloadUrl = batchResult.data?.downloadUrl || batchResult.downloadUrl;
+                        console.log('POA Review - Download URL received:', downloadUrl);
+                        
+                        setProcessingProgress('Generating final report...');
+                        setProcessingProgressPercent(90);
 
-                    // Wait a moment for server to finish processing
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                        // Wait a moment for server to finish processing
+                        await new Promise(resolve => setTimeout(resolve, 2000));
 
-                    // Check for final result
-                    setDownloadUrl(batchResult.downloadUrl);
-                    setProcessingProgress('Complete!');
-                    setProcessingProgressPercent(100);
-            return;
+                        // Check for final result
+                        setDownloadUrl(downloadUrl);
+                        setProcessingProgress('Complete!');
+                        setProcessingProgressPercent(100);
+                        console.log('POA Review - Processing complete, download URL set');
+                        return;
+                    } else {
+                        console.warn('POA Review - Final batch received but no download URL:', batchResult);
+                        throw new Error('Final batch processed but no download URL received. Server may still be processing.');
+                    }
                 } else {
-                    // Update progress
-                    const progress = batchResult.progress || Math.round((batchNumber / totalBatches) * 50);
+                    // Update progress for non-final batches
+                    const progress = batchResult.data?.progress || batchResult.progress || Math.round((batchNumber / totalBatches) * 50);
                     setProcessingProgressPercent(progress);
+                    console.log(`POA Review - Batch ${batchNumber} acknowledged, progress: ${progress}%`);
                 }
             }
         } catch (error) {
