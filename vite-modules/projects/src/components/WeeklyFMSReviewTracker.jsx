@@ -345,8 +345,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     const deepLinkScrolledRef = useRef(new Set()); // Track which comments we've already scrolled to (prevent re-scrolling)
-    const hasScrolledToBottomRef = useRef(false); // Track if we've scrolled to bottom on this popup open
-    const userHasScrolledRef = useRef(false); // Track if user has manually scrolled (if true, never auto-scroll)
     const commentTouchStartYRef = useRef(0); // Track touch start position for mobile scrolling
     const savedScrollPositionRef = useRef(null); // Save scroll position for restoration
     const [users, setUsers] = useState([]);
@@ -2411,9 +2409,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const container = commentPopupContainerRef.current;
         if (!container) return;
 
-        // Mark that user is manually scrolling - disable all auto-scroll
-        userHasScrolledRef.current = true;
-
         const deltaY = event.deltaY;
         if (deltaY === 0) return;
 
@@ -2444,9 +2439,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const container = commentPopupContainerRef.current;
         if (!container || !(event.touches && event.touches.length > 0)) return;
 
-        // Mark that user is manually scrolling - disable all auto-scroll
-        userHasScrolledRef.current = true;
-
         const currentY = event.touches[0].clientY;
         const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
 
@@ -2469,103 +2461,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // Otherwise, allow the page to handle the scroll when we've hit the edge
     }, []);
     
-    // When popup opens: Auto-scroll to bottom to show latest comment ONCE
-    // After that: User can freely scroll up and down - NO MORE AUTO-SCROLL
-    useEffect(() => {
-        if (!hoverCommentCell) {
-            // Reset flags when popup closes
-            hasScrolledToBottomRef.current = false;
-            userHasScrolledRef.current = false;
-            savedScrollPositionRef.current = null;
-            return;
-        }
-        
-        // Check if there's a commentId in the URL (deep-link scenario)
-        const urlHash = window.location.hash || '';
-        const urlSearch = window.location.search || '';
-        const hasCommentId = urlHash.includes('commentId=') || urlSearch.includes('commentId=');
-        
-        // If deep-link, don't auto-scroll to bottom (deep-link code will handle scrolling)
-        if (hasCommentId) {
-            return;
-        }
-        
-        // Only auto-scroll ONCE when popup first opens, and only if user hasn't manually scrolled
-        if (hasScrolledToBottomRef.current || userHasScrolledRef.current) {
-            return;
-        }
-        
-        // Auto-scroll to bottom to show latest comment (only once, immediately on open)
-        const scrollToBottom = () => {
-            const container = commentPopupContainerRef.current;
-            // Double-check user hasn't scrolled in the meantime
-            if (container && !hasScrolledToBottomRef.current && !userHasScrolledRef.current) {
-                // Scroll to bottom to show latest comment
-                container.scrollTop = container.scrollHeight;
-                hasScrolledToBottomRef.current = true;
-            }
-        };
-        
-        // Try immediately, then once more after a brief delay to catch late renders
-        scrollToBottom();
-        const timeout = setTimeout(() => {
-            // Only scroll if we haven't already and user still hasn't scrolled
-            if (!hasScrolledToBottomRef.current && !userHasScrolledRef.current) {
-                scrollToBottom();
-            }
-        }, 100);
-        
-        return () => {
-            clearTimeout(timeout);
-        };
-    }, [hoverCommentCell]);
-    
-    // Track user manual scrolling - if user scrolls, never auto-scroll again
-    // This catches ALL types of manual scrolling: mouse wheel, scrollbar dragging, touch, etc.
+    // Track scroll position for restoration when popup reopens
     useEffect(() => {
         if (!hoverCommentCell || !commentPopupContainerRef.current) return;
         
         const container = commentPopupContainerRef.current;
         let lastScrollTop = container.scrollTop;
-        let scrollTimeout = null;
         
         const handleScroll = () => {
             const currentScrollTop = container.scrollTop;
-            // Only mark as user scroll if scroll position actually changed (not just programmatic)
-            // Check if scroll changed by more than 1px to avoid false positives
+            // Save scroll position for restoration
             if (Math.abs(currentScrollTop - lastScrollTop) > 1) {
-                // User is manually scrolling - disable all auto-scroll immediately
-                userHasScrolledRef.current = true;
                 savedScrollPositionRef.current = currentScrollTop;
-                // Cancel any pending auto-scroll attempts
-                hasScrolledToBottomRef.current = true; // Mark as done so no more auto-scrolls happen
             }
             lastScrollTop = currentScrollTop;
         };
         
-        // Also handle mousedown on scrollbar to immediately disable auto-scroll
-        const handleMouseDown = (e) => {
-            // If clicking on or near the scrollbar, disable auto-scroll immediately
-            const rect = container.getBoundingClientRect();
-            const scrollbarWidth = container.offsetWidth - container.clientWidth;
-            if (scrollbarWidth > 0) {
-                const clickX = e.clientX - rect.left;
-                // If click is in the scrollbar area (right side of container)
-                if (clickX > rect.width - scrollbarWidth - 5) {
-                    userHasScrolledRef.current = true;
-                    hasScrolledToBottomRef.current = true;
-                }
-            }
-        };
-        
         container.addEventListener('scroll', handleScroll, { passive: true });
-        container.addEventListener('mousedown', handleMouseDown);
         
         return () => {
             container.removeEventListener('scroll', handleScroll);
-            container.removeEventListener('mousedown', handleMouseDown);
-            if (scrollTimeout) clearTimeout(scrollTimeout);
         };
+    }, [hoverCommentCell]);
+    
+    // Reset saved scroll position when popup closes
+    useEffect(() => {
+        if (!hoverCommentCell) {
+            savedScrollPositionRef.current = null;
+        }
     }, [hoverCommentCell]);
     
     // Smart positioning for comment popup - REFACTORED to prevent jitter and scroll interference
@@ -2828,8 +2751,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
-                    // Mark as done so auto-scroll to bottom doesn't interfere
-                    hasScrolledToBottomRef.current = true;
                     
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
