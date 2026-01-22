@@ -2136,8 +2136,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             setQuickComment('');
         
-        // DO NOT auto-scroll after adding comment - let user stay where they are
-        // User can manually scroll to see new comments if they want
+        // Scroll to bottom to show the new comment
+        setTimeout(() => {
+            const container = commentPopupContainerRef.current;
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }, 100);
 
             // ========================================================
             // @MENTIONS - Process mentions and create notifications
@@ -2428,22 +2433,35 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const scrollToBottom = () => {
             const container = commentPopupContainerRef.current;
             if (container && !hasScrolledToBottomRef.current) {
-                // Scroll to bottom smoothly
+                // Scroll to bottom to show latest comment
                 container.scrollTop = container.scrollHeight;
                 hasScrolledToBottomRef.current = true;
             }
         };
         
-        // Wait for container to be ready, then scroll
-        const timeout = setTimeout(() => {
-            scrollToBottom();
-            // Also try after a brief delay to ensure content is rendered
-            requestAnimationFrame(() => {
+        // Wait for container and comments to be ready, then scroll
+        // Use multiple attempts to ensure content is fully rendered
+        const attemptScroll = () => {
+            const container = commentPopupContainerRef.current;
+            if (container && container.scrollHeight > 0) {
                 scrollToBottom();
-            });
-        }, 100);
+            }
+        };
         
-        return () => clearTimeout(timeout);
+        // Try immediately
+        attemptScroll();
+        
+        // Try after DOM update
+        requestAnimationFrame(attemptScroll);
+        
+        // Try after a brief delay to ensure comments are rendered
+        const timeout1 = setTimeout(attemptScroll, 100);
+        const timeout2 = setTimeout(attemptScroll, 300);
+        
+        return () => {
+            clearTimeout(timeout1);
+            clearTimeout(timeout2);
+        };
     }, [hoverCommentCell]);
     
     // Smart positioning for comment popup - REFACTORED to prevent jitter and scroll interference
