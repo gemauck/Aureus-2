@@ -1957,20 +1957,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             window.document.querySelector(`#comment-${targetCommentId}`) ||
                             window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
-                        if (commentElement && commentPopupContainerRef.current) {
-                            // Scroll the comment into view within the popup
-                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            // Also scroll the popup container to ensure visibility
-                            if (commentPopupContainerRef.current) {
-                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
-                                const commentRect = commentElement.getBoundingClientRect();
-                                const scrollTop = commentPopupContainerRef.current.scrollTop;
-                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                commentPopupContainerRef.current.scrollTo({
-                                    top: commentOffset - 20, // 20px padding from top
-                                    behavior: 'smooth'
-                                });
-                            }
+                        if (commentElement) {
                             // Highlight the comment briefly
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
                             commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
@@ -2012,9 +1999,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                     
                     if (commentElement) {
-                        // Scroll the comment into view
-                        commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        
                         // Highlight the comment briefly
                         const originalBg = window.getComputedStyle(commentElement).backgroundColor;
                         commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';

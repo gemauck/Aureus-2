@@ -2406,27 +2406,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             window.document.querySelector(`#comment-${targetCommentId}`) ||
                             window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
-                        if (commentElement && commentPopupContainerRef.current) {
-                            // Only scroll if we haven't already scrolled to this comment
-                            if (!deepLinkScrolledRef.current.has(targetCommentId)) {
-                                const container = commentPopupContainerRef.current;
-                                const containerRect = container.getBoundingClientRect();
-                                const commentRect = commentElement.getBoundingClientRect();
-                                
-                                // Only scroll if comment is not already visible
-                                const isVisible = commentRect.top >= containerRect.top && 
-                                                 commentRect.bottom <= containerRect.bottom;
-                                if (!isVisible) {
-                                    const scrollTop = container.scrollTop;
-                                    const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                    container.scrollTo({
-                                        top: Math.max(0, commentOffset - 20), // 20px padding from top
-                                        behavior: 'smooth'
-                                    });
-                                }
-                                // Mark as scrolled to prevent re-scrolling
-                                deepLinkScrolledRef.current.add(targetCommentId);
-                            }
+                        if (commentElement) {
                             // Highlight the comment briefly
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
                             commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
@@ -2503,10 +2483,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // First, try to scroll the table to make the cell visible
                     // Find the cell element in the table and scroll it into view
                     setTimeout(() => {
-                        const cellElement = window.document.querySelector(`[data-section-id="${foundSectionId}"][data-document-id="${foundDocumentId}"][data-month="${foundMonth}"]`);
-                        if (cellElement) {
-                            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
+                        // Cell element found - no scrolling needed
                     }, 100);
                     
                     // Set initial position
@@ -2587,31 +2564,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             console.log('✅ Found comment element, scrolling into view');
-                            // Scroll the comment into view within the popup container
-                            // Only scroll if we haven't already scrolled to this comment
-                            if (!deepLinkScrolledRef.current.has(targetCommentId)) {
-                                const container = commentPopupContainerRef.current;
-                                if (container) {
-                                    const containerRect = container.getBoundingClientRect();
-                                    const commentRect = commentElement.getBoundingClientRect();
-                                    
-                                    // Only scroll if comment is not already visible
-                                    const isVisible = commentRect.top >= containerRect.top && 
-                                                     commentRect.bottom <= containerRect.bottom;
-                                    
-                                    if (!isVisible) {
-                                        const scrollTop = container.scrollTop;
-                                        const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                        container.scrollTo({
-                                            top: Math.max(0, commentOffset - 20),
-                                            behavior: 'smooth'
-                                        });
-                                    }
-                                }
-                                // Mark as scrolled to prevent re-scrolling
-                                deepLinkScrolledRef.current.add(targetCommentId);
-                            }
-                            
                             // Highlight the comment with a blue background
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
                             commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';

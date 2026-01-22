@@ -2687,18 +2687,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 const containerRect = container.getBoundingClientRect();
                                 const commentRect = commentElement.getBoundingClientRect();
                                 
-                                // Only scroll if comment is not already visible
-                                const isVisible = commentRect.top >= containerRect.top && 
-                                                 commentRect.bottom <= containerRect.bottom;
-                                if (!isVisible) {
-                                    const scrollTop = container.scrollTop;
-                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                    container.scrollTo({
-                                        top: Math.max(0, commentOffset - 20), // 20px padding from top
-                                    behavior: 'smooth'
-                                });
-                                }
-                                // Mark as scrolled to prevent re-scrolling
+                                // Mark as processed to prevent re-processing
                                 deepLinkScrolledRef.current.add(targetCommentId);
                             }
                             // Highlight the comment briefly
