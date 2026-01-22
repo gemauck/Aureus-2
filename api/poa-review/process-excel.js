@@ -121,53 +121,50 @@ input_file = r'${inputFilePath.replace(/\\/g, '/')}'
 output_csv = r'${tempCsvPath.replace(/\\/g, '/')}'
 
 try:
-    print("Converting Excel to CSV (chunked for memory efficiency)...")
+    print("Converting Excel to CSV (streaming for memory efficiency)...")
     
-    # Read Excel in chunks to avoid memory issues
-    chunk_size = 50000  # Process 50k rows at a time
-    chunks = []
+    # Read Excel in chunks and write directly to CSV (no memory accumulation)
+    chunk_size = 100000  # Process 100k rows at a time (larger chunks = faster)
     header_row = None
+    first_chunk = True
+    total_rows = 0
     
     # First, read just the header to get column names
     print("Reading header row...")
     header_df = pd.read_excel(input_file, nrows=0)
     header_row = list(header_df.columns)
-    print(f"Found {len(header_row)} columns: {header_row[:5]}...")
+    print(f"Found {len(header_row)} columns")
     
-    # Now read in chunks
-    skip_rows = 0
-    total_rows = 0
-    
-    while True:
-        print(f"Reading chunk starting at row {skip_rows}...")
-        chunk = pd.read_excel(input_file, skiprows=skip_rows, nrows=chunk_size)
+    # Open CSV file for writing
+    with open(output_csv, 'w', encoding='utf-8') as csv_file:
+        # Write header
+        csv_file.write(','.join([f'"{h}"' if ',' in str(h) or '"' in str(h) else str(h) for h in header_row]) + '\\n')
         
-        if len(chunk) == 0:
-            break
-        
-        # Set column names if this is the first chunk
-        if skip_rows == 0:
+        # Read and write chunks directly (no memory accumulation)
+        skip_rows = 1  # Skip header row
+        while True:
+            print(f"Reading chunk starting at row {skip_rows}...")
+            chunk = pd.read_excel(input_file, skiprows=skip_rows, nrows=chunk_size, header=None)
+            
+            if len(chunk) == 0:
+                break
+            
+            # Set column names
             chunk.columns = header_row
-        
-        chunks.append(chunk)
-        total_rows += len(chunk)
-        skip_rows += chunk_size
-        
-        print(f"Processed {total_rows} rows so far...")
-        
-        # If we got fewer rows than chunk_size, we're done
-        if len(chunk) < chunk_size:
-            break
+            
+            # Write chunk directly to CSV (append mode)
+            chunk.to_csv(csv_file, index=False, header=False, mode='a', lineterminator='\\n')
+            
+            total_rows += len(chunk)
+            skip_rows += chunk_size
+            
+            print(f"Processed {total_rows} rows so far...")
+            
+            # If we got fewer rows than chunk_size, we're done
+            if len(chunk) < chunk_size:
+                break
     
-    # Combine all chunks
-    print(f"Combining {len(chunks)} chunks...")
-    data = pd.concat(chunks, ignore_index=True)
-    print(f"Total rows: {len(data)}")
-    
-    # Write to CSV
-    print(f"Writing to CSV: {output_csv}")
-    data.to_csv(output_csv, index=False)
-    print(f"Success! CSV created with {len(data)} rows")
+    print(f"Success! CSV created with {total_rows} rows")
     sys.exit(0)
     
 except Exception as e:
@@ -202,133 +199,12 @@ except Exception as e:
             fs.unlinkSync(convertScript);
         }
         
-        // Step 2: Process CSV using the same logic as process-batch.js
-        // Import and reuse the batch processing logic
-        const { default: processBatchCSV } = await import('./process-batch.js');
+        // Step 2: Process CSV directly using Python (streaming, no memory accumulation)
+        // This is faster and more memory-efficient than loading CSV into Node.js memory
+        console.log('POA Review Excel API - Processing CSV directly with Python...');
         
-        // Read CSV and convert to rows array
-        console.log('POA Review Excel API - Reading CSV for processing...');
-        const csvContent = fs.readFileSync(tempCsvPath, 'utf8');
-        const csvLines = csvContent.split('\n').filter(line => line.trim());
-        
-        if (csvLines.length < 2) {
-            throw new Error('CSV file has no data rows');
-        }
-        
-        // Parse header
-        const headerLine = csvLines[0];
-        const headers = [];
-        let currentHeader = '';
-        let inQuotes = false;
-        
-        for (let j = 0; j < headerLine.length; j++) {
-            const char = headerLine[j];
-            if (char === '"') {
-                if (inQuotes && headerLine[j + 1] === '"') {
-                    currentHeader += '"';
-                    j++;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (char === ',' && !inQuotes) {
-                headers.push(currentHeader.trim().replace(/^"|"$/g, ''));
-                currentHeader = '';
-            } else {
-                currentHeader += char;
-            }
-        }
-        headers.push(currentHeader.trim().replace(/^"|"$/g, ''));
-        
-        // Parse data rows
-        const rows = [];
-        for (let i = 1; i < csvLines.length; i++) {
-            const line = csvLines[i];
-            const values = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let j = 0; j < line.length; j++) {
-                const char = line[j];
-                if (char === '"') {
-                    if (inQuotes && line[j + 1] === '"') {
-                        current += '"';
-                        j++;
-                    } else {
-                        inQuotes = !inQuotes;
-                    }
-                } else if (char === ',' && !inQuotes) {
-                    values.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            values.push(current.trim());
-            
-            const row = {};
-            headers.forEach((header, idx) => {
-                row[header] = values[idx] || '';
-            });
-            rows.push(row);
-        }
-        
-        console.log('POA Review Excel API - Parsed rows:', rows.length);
-        
-        // Now use batch processing - send all rows as a single "batch" but let the batch processor handle it
-        // Actually, we should split into batches to avoid memory issues
-        const BATCH_SIZE = 2000;
-        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
-        const batchId = `excel_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Create our own batch store for this Excel processing
-        const batchStore = new Map();
-        
-        if (!batchStore.has(batchId)) {
-            batchStore.set(batchId, {
-                batches: [],
-                totalBatches: totalBatches,
-                sources: sources,
-                fileName: fileName,
-                receivedBatches: 0,
-                startTime: Date.now()
-            });
-        }
-        
-        const batchData = batchStore.get(batchId);
-        
-        // Send all batches
-        for (let i = 0; i < totalBatches; i++) {
-            const start = i * BATCH_SIZE;
-            const end = Math.min(start + BATCH_SIZE, rows.length);
-            const batch = rows.slice(start, end);
-            const batchNumber = i + 1;
-            const isFinal = batchNumber === totalBatches;
-            
-            batchData.batches.push({
-                batchNumber,
-                rows: batch
-            });
-            batchData.receivedBatches++;
-        }
-        
-        // Now trigger processing (reuse logic from process-batch.js)
-        // We'll call the processing logic directly
-        const allBatchesReceived = true;
-        
-        if (allBatchesReceived) {
-            // Import the processing logic from process-batch.js
-            // For now, let's just call the batch endpoint internally
-            // Actually, simpler: just return the CSV path and let client handle it
-            // OR: process it here using the same Python script as process-batch.js
-            
-            // Use the same processing approach as process-batch.js
-            const sortedBatches = batchData.batches.sort((a, b) => a.batchNumber - b.batchNumber);
-            const allRows = sortedBatches.flatMap(batch => batch.rows);
-            
-            console.log('POA Review Excel API - Processing', allRows.length, 'rows...');
-            
-            // Use the same Python processing script as process-batch.js
-            const tempProcessScript = path.join(scriptsDir, `process_excel_csv_${timestamp}.py`);
+        // Use the same Python processing script as process-batch.js (reads CSV directly)
+        const tempProcessScript = path.join(scriptsDir, `process_excel_csv_${timestamp}.py`);
             
             const pythonScript = `
 import sys
@@ -343,8 +219,9 @@ input_file = r'${tempCsvPath.replace(/\\/g, '/')}'
 output_file = r'${outputFilePath.replace(/\\/g, '/')}'
 sources = ${JSON.stringify(sources)}
 
-# Same processing logic as process-batch.js
-data = pd.read_csv(input_file, skiprows=0)
+# Read CSV directly (pandas is optimized for this, faster than Node.js parsing)
+print("Reading CSV file...")
+data = pd.read_csv(input_file, skiprows=0, low_memory=False)
 print(f"Read {len(data)} rows from CSV")
 
 # Required columns check (same as process-batch.js)
