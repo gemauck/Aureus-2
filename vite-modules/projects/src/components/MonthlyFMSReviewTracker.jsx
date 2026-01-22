@@ -2123,41 +2123,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
                     
-                    // Wait for the popup to render and comments to load - use multiple attempts
-                    let attempts = 0;
-                    const maxAttempts = 10; // Try for up to 2 seconds
-                    const findAndScrollToComment = () => {
-                        attempts++;
-                        
-                        // Try multiple selectors to find the comment (handle both string and number IDs)
-                        const commentElement = 
-                            document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            document.querySelector(`#comment-${targetCommentId}`) ||
-                            document.querySelector(`#comment-${Number(targetCommentId)}`);
-                        
-                        if (commentElement) {
-                            // Highlight the comment briefly
-                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
-                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
-                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
-                            setTimeout(() => {
-                                commentElement.style.backgroundColor = originalBg;
-                                commentElement.style.boxShadow = '';
-                                commentElement.style.transition = '';
-                            }, 2000);
-                            console.log('✅ Deep link: Scrolled to comment', targetCommentId);
-                        } else if (attempts < maxAttempts) {
-                            // Comment not found yet, try again
-                            setTimeout(findAndScrollToComment, 200);
-                        } else {
-                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
-                        }
-                    };
-                    
-                    // Start looking for the comment after a short delay
-                    setTimeout(findAndScrollToComment, 300);
+                    // Comment deep linking removed - no scrolling functionality
                 }
             }
         } catch (error) {

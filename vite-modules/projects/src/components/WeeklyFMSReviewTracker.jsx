@@ -2667,50 +2667,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
                     
-                    // Wait for the popup to render and comments to load - use multiple attempts
-                    let attempts = 0;
-                    const maxAttempts = 10; // Try for up to 2 seconds
-                    const findAndScrollToComment = () => {
-                        attempts++;
-                        
-                        // Try multiple selectors to find the comment (handle both string and number IDs)
-                        const commentElement = 
-                            documentRef.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            documentRef.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            documentRef.querySelector(`#comment-${targetCommentId}`) ||
-                            documentRef.querySelector(`#comment-${Number(targetCommentId)}`);
-                        
-                        if (commentElement && commentPopupContainerRef.current) {
-                            // Only scroll if we haven't already scrolled to this comment
-                            if (!deepLinkScrolledRef.current.has(targetCommentId)) {
-                                const container = commentPopupContainerRef.current;
-                                const containerRect = container.getBoundingClientRect();
-                                const commentRect = commentElement.getBoundingClientRect();
-                                
-                                // Mark as processed to prevent re-processing
-                                deepLinkScrolledRef.current.add(targetCommentId);
-                            }
-                            // Highlight the comment briefly
-                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
-                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
-                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
-                            setTimeout(() => {
-                                commentElement.style.backgroundColor = originalBg;
-                                commentElement.style.boxShadow = '';
-                                commentElement.style.transition = '';
-                            }, 2000);
-                            console.log('✅ Deep link: Scrolled to comment', targetCommentId);
-                        } else if (attempts < maxAttempts) {
-                            // Comment not found yet, try again
-                            setTimeout(findAndScrollToComment, 200);
-                        } else {
-                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
-                        }
-                    };
-                    
-                    // Start looking for the comment after a short delay
-                    setTimeout(findAndScrollToComment, 300);
+                    // Comment deep linking removed - no scrolling functionality
                 }
             }
         } catch (error) {

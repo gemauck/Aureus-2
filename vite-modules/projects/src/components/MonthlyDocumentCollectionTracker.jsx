@@ -2393,41 +2393,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
                     
-                    // Wait for the popup to render and comments to load - use multiple attempts
-                    let attempts = 0;
-                    const maxAttempts = 10; // Try for up to 2 seconds
-                    const findAndScrollToComment = () => {
-                        attempts++;
-                        
-                        // Try multiple selectors to find the comment (handle both string and number IDs)
-                        const commentElement = 
-                            window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            window.document.querySelector(`#comment-${targetCommentId}`) ||
-                            window.document.querySelector(`#comment-${Number(targetCommentId)}`);
-                        
-                        if (commentElement) {
-                            // Highlight the comment briefly
-                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
-                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
-                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
-                            setTimeout(() => {
-                                commentElement.style.backgroundColor = originalBg;
-                                commentElement.style.boxShadow = '';
-                                commentElement.style.transition = '';
-                            }, 2000);
-                            console.log('✅ Deep link: Scrolled to comment', targetCommentId);
-                        } else if (attempts < maxAttempts) {
-                            // Comment not found yet, try again
-                            setTimeout(findAndScrollToComment, 200);
-                        } else {
-                            console.warn('⚠️ Deep link: Could not find comment with ID', targetCommentId, 'after', attempts, 'attempts');
-                        }
-                    };
-                    
-                    // Start looking for the comment after a short delay
-                    setTimeout(findAndScrollToComment, 300);
+                    // Comment deep linking removed - no scrolling functionality
                 }
             } 
             // Fallback: If we only have commentId (missing section/doc/month), search for it
@@ -2547,51 +2513,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // Mark as done so initial page load scroll doesn't interfere
                     hasAutoScrolledOnPageLoadRef.current = true;
                     
-                    // Scroll to the comment within the popup
-                    const targetCommentId = String(deepCommentId);
-                    let scrollAttempts = 0;
-                    const maxScrollAttempts = 20; // Increased attempts to wait longer for popup to render
-                    const findAndScrollToComment = () => {
-                        scrollAttempts++;
-                        console.log(`🔍 Attempt ${scrollAttempts}/${maxScrollAttempts} to find comment element with ID:`, targetCommentId);
-                        
-                        // Try multiple selectors to find the comment element
-                        const commentElement = 
-                            window.document.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            window.document.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            window.document.querySelector(`#comment-${targetCommentId}`) ||
-                            window.document.querySelector(`#comment-${Number(targetCommentId)}`);
-                        
-                        if (commentElement && commentPopupContainerRef.current) {
-                            console.log('✅ Found comment element, scrolling into view');
-                            // Highlight the comment with a blue background
-                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
-                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
-                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
-                            setTimeout(() => {
-                                commentElement.style.backgroundColor = originalBg;
-                                commentElement.style.boxShadow = '';
-                                commentElement.style.transition = '';
-                            }, 3000); // Increased highlight duration
-                            console.log('✅ Deep link: Successfully scrolled to and highlighted comment', targetCommentId);
-                            return; // Exit once found
-                        } else {
-                            console.log(`⚠️ Comment element not found yet. Popup container exists:`, !!commentPopupContainerRef.current);
-                        }
-                        
-                        if (scrollAttempts < maxScrollAttempts) {
-                            // Wait a bit longer between attempts to allow popup to render
-                            setTimeout(findAndScrollToComment, 300);
-                        } else {
-                            console.warn('⚠️ Deep link: Could not find comment element with ID', targetCommentId, 'after', maxScrollAttempts, 'attempts');
-                            console.warn('🔍 Debug: Popup container ref:', commentPopupContainerRef.current);
-                            console.warn('🔍 Debug: All comment elements in popup:', window.document.querySelectorAll('[data-comment-id]'));
-                        }
-                    };
-                    
-                    // Wait a bit longer before starting to search (popup needs time to render)
-                    setTimeout(findAndScrollToComment, 500);
+                    // Comment deep linking removed - no scrolling functionality
                 } else {
                     console.warn('⚠️ Deep link: Could not find comment with ID', deepCommentId, 'in any section');
                 }
