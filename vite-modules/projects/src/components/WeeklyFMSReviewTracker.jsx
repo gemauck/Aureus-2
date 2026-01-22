@@ -2514,6 +2514,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // If a specific comment ID is provided, scroll to it after the popup opens
                 if (deepCommentId) {
+                    // Mark as done so initial page load scroll doesn't interfere
+                    hasAutoScrolledOnPageLoadRef.current = true;
+                    
                     // Convert commentId to string for comparison (URL params are always strings)
                     const targetCommentId = String(deepCommentId);
                     
@@ -2531,18 +2534,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             window.document.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
-                            // Scroll the comment into view within the popup
-                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            // Also scroll the popup container to ensure visibility
-                            if (commentPopupContainerRef.current) {
-                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
+                            // Only scroll if we haven't already scrolled to this comment
+                            if (!deepLinkScrolledRef.current.has(targetCommentId)) {
+                                const container = commentPopupContainerRef.current;
+                                const containerRect = container.getBoundingClientRect();
                                 const commentRect = commentElement.getBoundingClientRect();
-                                const scrollTop = commentPopupContainerRef.current.scrollTop;
-                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
-                                commentPopupContainerRef.current.scrollTo({
-                                    top: commentOffset - 20, // 20px padding from top
-                                    behavior: 'smooth'
-                                });
+                                
+                                // Only scroll if comment is not already visible
+                                const isVisible = commentRect.top >= containerRect.top && 
+                                                 commentRect.bottom <= containerRect.bottom;
+                                if (!isVisible) {
+                                    const scrollTop = container.scrollTop;
+                                    const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                    container.scrollTo({
+                                        top: Math.max(0, commentOffset - 20), // 20px padding from top
+                                        behavior: 'smooth'
+                                    });
+                                }
+                                // Mark as scrolled to prevent re-scrolling
+                                deepLinkScrolledRef.current.add(targetCommentId);
                             }
                             // Highlight the comment briefly
                             const originalBg = window.getComputedStyle(commentElement).backgroundColor;
@@ -3495,7 +3505,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             });
                                         }
                                     }}
-                                    className="comment-scroll-container space-y-2 mb-2 pr-1"
+                                    className="comment-scroll-container max-h-32 overflow-y-auto space-y-2 mb-2 pr-1"
                                     onWheel={handleCommentWheel}
                                     onTouchStart={handleCommentTouchStart}
                                     onTouchMove={handleCommentTouchMove}
