@@ -352,6 +352,55 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [selectedCells]);
     
     // ============================================================
+    // NETWORK ERROR HANDLING HELPERS
+    // ============================================================
+    
+    // Helper function to detect network errors
+    const isNetworkError = (error) => {
+        if (!error) return false;
+        const errorMessage = error.message?.toLowerCase() || '';
+        const errorName = error.name?.toLowerCase() || '';
+        return (
+            errorMessage.includes('failed to fetch') ||
+            errorMessage.includes('network error') ||
+            errorMessage.includes('network request failed') ||
+            errorName === 'typeerror' ||
+            error.code === 'NETWORK_ERROR' ||
+            error.code === 'ECONNREFUSED'
+        );
+    };
+    
+    // Helper function to retry a fetch operation with exponential backoff
+    const fetchWithRetry = async (url, options = {}, maxRetries = 3) => {
+        let lastError;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok && attempt < maxRetries) {
+                    // Retry on 5xx errors (server errors)
+                    if (response.status >= 500) {
+                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                        console.log(`⚠️ Server error ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                }
+                return response;
+            } catch (error) {
+                lastError = error;
+                if (isNetworkError(error) && attempt < maxRetries) {
+                    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                    console.log(`⚠️ Network error, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } else {
+                    throw error;
+                }
+            }
+        }
+        throw lastError;
+    };
+    
+    // ============================================================
     // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
     // ============================================================
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
@@ -453,8 +502,36 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             console.error('❌ Error details:', {
                 message: error.message,
                 stack: error.stack,
-                projectId: project.id
+                projectId: project.id,
+                isNetworkError: isNetworkError(error)
             });
+            
+            // If it's a network error, try to use cached data from localStorage
+            if (isNetworkError(error)) {
+                console.warn('⚠️ Network error detected, attempting to load from localStorage cache...');
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        const stored = window.localStorage.getItem(snapshotKey);
+                        if (stored && stored.trim() && stored !== '{}' && stored !== 'null') {
+                            console.log('✅ Loaded from localStorage cache due to network error');
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            // Show a warning to the user
+                            console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
+                            return;
+                        }
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to load from localStorage cache:', storageError);
+                    }
+                }
+            }
+            
+            // Fallback to empty state if all else fails
             setSectionsByYear({});
             sectionsRef.current = {};
         } finally {
@@ -690,6 +767,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         } catch (error) {
             console.error('❌ Error saving to database:', error);
+            const isNetworkErr = isNetworkError(error);
             console.error('❌ Error details:', {
                 message: error.message,
                 stack: error.stack,
@@ -699,13 +777,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 errorName: error.name,
                 errorCode: error.code,
                 responseStatus: error.response?.status,
-                responseData: error.response?.data
+                responseData: error.response?.data,
+                isNetworkError: isNetworkErr
             });
-            // Don't reset lastSavedDataRef on error - keep the previous successful save state
-            // This prevents infinite retry loops if there's a persistent error
-            // Only reset if this is a network/client error, not a server error
-            if (error.message?.includes('network') || error.message?.includes('fetch')) {
+            
+            // For network errors, save to localStorage as backup and show user warning
+            if (isNetworkErr) {
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, serialized);
+                        console.warn('⚠️ Network error: Saved to localStorage as backup. Data will be synced when connection is restored.');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save to localStorage backup:', storageError);
+                    }
+                }
+                // Reset lastSavedDataRef so it will retry when connection is restored
                 lastSavedDataRef.current = null;
+            } else {
+                // For non-network errors, don't reset lastSavedDataRef to prevent infinite retry loops
+                // Only reset if this is a network/client error
+                if (error.message?.includes('network') || error.message?.includes('fetch')) {
+                    lastSavedDataRef.current = null;
+                }
             }
             // Don't re-throw - this function is called without await, so errors are handled via .catch()
         } finally {
@@ -783,7 +877,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const response = await fetch('/api/document-collection-templates', {
+            const response = await fetchWithRetry('/api/document-collection-templates', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -807,7 +901,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             setTemplates(parsedTemplates);
         } catch (error) {
             console.error('❌ Error loading templates:', error);
-            alert('Failed to load templates: ' + error.message);
+            const errorMessage = isNetworkError(error) 
+                ? 'Network error: Unable to connect to server. Please check your internet connection and try again.'
+                : `Failed to load templates: ${error.message}`;
+            alert(errorMessage);
             setTemplates([]);
         } finally {
             setIsLoadingTemplates(false);
@@ -847,7 +944,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             if (isEditingExisting) {
                 // Update existing template in database
-                const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
+                const response = await fetchWithRetry(`/api/document-collection-templates/${editingTemplate.id}`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -865,7 +962,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
             } else {
                 // Create new template in database
-                const response = await fetch('/api/document-collection-templates', {
+                const response = await fetchWithRetry('/api/document-collection-templates', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -895,7 +992,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
         } catch (error) {
             console.error('❌ Error saving template:', error);
-            alert('Failed to save template: ' + error.message);
+            const errorMessage = isNetworkError(error)
+                ? 'Network error: Unable to save template. Please check your internet connection and try again.'
+                : `Failed to save template: ${error.message}`;
+            alert(errorMessage);
         }
     };
     
@@ -916,7 +1016,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
             
             // Delete from database
-            const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+            const response = await fetchWithRetry(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -936,7 +1036,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
         } catch (error) {
             console.error('❌ Error deleting template:', error);
-            alert('Failed to delete template: ' + error.message);
+            const errorMessage = isNetworkError(error)
+                ? 'Network error: Unable to delete template. Please check your internet connection and try again.'
+                : `Failed to delete template: ${error.message}`;
+            alert(errorMessage);
         }
     };
     
