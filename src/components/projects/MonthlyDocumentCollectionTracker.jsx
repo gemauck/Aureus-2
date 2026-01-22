@@ -337,6 +337,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const pendingCommentOpenRef = useRef(null); // Store comment location to open after year switch
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -1795,8 +1796,67 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // immediately see the relevant discussion.
     const checkAndOpenDeepLink = useCallback(() => {
         try {
+            // Check if we have a pending comment to open after year switch
+            if (pendingCommentOpenRef.current) {
+                const pending = pendingCommentOpenRef.current;
+                console.log('🔄 MonthlyDocumentCollectionTracker: Opening pending comment after year switch:', pending);
+                
+                // Only proceed if sections are loaded for the new year
+                if (sections && sections.length > 0) {
+                    const cellKey = `${pending.sectionId}-${pending.documentId}-${pending.month}`;
+                    
+                    // Clear the pending ref
+                    pendingCommentOpenRef.current = null;
+                    
+                    // Open the popup
+                    setCommentPopupPosition({
+                        top: Math.max(window.innerHeight / 2 - 160, 60),
+                        left: Math.max(window.innerWidth / 2 - 180, 20)
+                    });
+                    setHoverCommentCell(cellKey);
+                    
+                    // Position the popup
+                    setTimeout(() => {
+                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                        if (commentButton) {
+                            const buttonRect = commentButton.getBoundingClientRect();
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+                            const popupWidth = 288;
+                            const popupHeight = 300;
+                            const spacing = 8;
+                            const tailSize = 12;
+                            
+                            const spaceBelow = viewportHeight - buttonRect.bottom;
+                            const spaceAbove = buttonRect.top;
+                            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+                            
+                            let popupTop = positionAbove 
+                                ? buttonRect.top - popupHeight - spacing - tailSize
+                                : buttonRect.bottom + spacing + tailSize;
+                            
+                            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+                            let preferredLeft = buttonCenterX - popupWidth / 2;
+                            
+                            if (preferredLeft < 10) preferredLeft = 10;
+                            else if (preferredLeft + popupWidth > viewportWidth - 10) {
+                                preferredLeft = viewportWidth - popupWidth - 10;
+                            }
+                            
+                            setCommentPopupPosition({ top: popupTop, left: preferredLeft });
+                        }
+                    }, 100);
+                    
+                    return;
+                } else {
+                    console.log('⏳ MonthlyDocumentCollectionTracker: Waiting for sections to load after year switch');
+                    return;
+                }
+            }
+            
             // Only proceed if sections are loaded
             if (!sections || sections.length === 0) {
+                console.log('🔍 MonthlyDocumentCollectionTracker: Sections not loaded yet, skipping deep link check');
                 return;
             }
             
@@ -1820,72 +1880,161 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            // If not found in hash, check window.location.search (for regular URLs)
-            if (!deepSectionId || !deepDocumentId || !deepMonth) {
-                const search = window.location.search || '';
-                if (search) {
-                    params = new URLSearchParams(search);
-                    if (!deepSectionId) deepSectionId = params.get('docSectionId');
-                    if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
-                    if (!deepMonth) deepMonth = params.get('docMonth');
-                    if (!deepCommentId) deepCommentId = params.get('commentId');
-                }
+            // Also check window.location.search (for regular URLs like ?commentId=...)
+            // This is important because some URLs might only have search params, not hash params
+            const search = window.location.search || '';
+            if (search) {
+                const searchParams = new URLSearchParams(search);
+                if (!deepSectionId) deepSectionId = searchParams.get('docSectionId');
+                if (!deepDocumentId) deepDocumentId = searchParams.get('docDocumentId');
+                if (!deepMonth) deepMonth = searchParams.get('docMonth');
+                if (!deepCommentId) deepCommentId = searchParams.get('commentId');
             }
             
+            console.log('🔍 MonthlyDocumentCollectionTracker: Deep link params:', {
+                deepSectionId,
+                deepDocumentId,
+                deepMonth,
+                deepCommentId,
+                sectionsCount: sections.length
+            });
+            
             // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
-            const isValidDocumentId = deepDocumentId && 
+            let isValidDocumentId = deepDocumentId && 
                                      deepDocumentId !== 'undefined' && 
                                      deepDocumentId.trim() !== '';
             
-            // If we have commentId but missing other params, search for the comment
-            if (deepCommentId && (!deepSectionId || !isValidDocumentId || !deepMonth)) {
-                // Search through all sections, documents, and months to find the comment
-                let foundComment = null;
-                let foundSectionId = null;
-                let foundDocumentId = null;
-                let foundMonth = null;
+            // If we have commentId, search for the comment (even if we have some params, verify they're correct)
+            // This handles cases where commentId is present but other params might be wrong or missing
+            if (deepCommentId) {
+                // If we have all params, first verify the comment exists at that location
+                let commentFoundAtLocation = false;
+                if (deepSectionId && isValidDocumentId && deepMonth) {
+                    const section = sections.find(s => String(s.id) === String(deepSectionId));
+                    const doc = section?.documents?.find(d => String(d.id) === String(deepDocumentId));
+                    if (doc) {
+                        const comments = getCommentsForYear(doc.comments, deepMonth, selectedYear);
+                        const commentIdToFind = String(deepCommentId);
+                        const commentIdNum = parseInt(deepCommentId, 10);
+                        commentFoundAtLocation = comments.some(c => {
+                            const cId = c.id;
+                            return String(cId) === commentIdToFind || 
+                                   (typeof cId === 'number' && cId === commentIdNum) ||
+                                   (typeof commentIdNum === 'number' && !isNaN(commentIdNum) && cId === commentIdNum);
+                        });
+                    }
+                }
                 
-                const commentIdToFind = String(deepCommentId);
-                
-                // Search through all sections
-                for (const section of sections) {
-                    if (!section.documents) continue;
+                // If comment not found at specified location, or if params are missing, search for it
+                if (!commentFoundAtLocation) {
+                    console.log('🔍 MonthlyDocumentCollectionTracker: Searching for commentId:', deepCommentId);
                     
-                    // Search through all documents in this section
-                    for (const doc of section.documents) {
-                        if (!doc.comments) continue;
+                    // Search through all sections, documents, and months to find the comment
+                    let foundComment = null;
+                    let foundSectionId = null;
+                    let foundDocumentId = null;
+                    let foundMonth = null;
+                    let foundYear = null;
+                    
+                    const commentIdToFind = String(deepCommentId);
+                    const commentIdNum = parseInt(deepCommentId, 10);
+                    
+                    // Search through all years in sectionsByYear
+                    const yearsToSearch = Object.keys(sectionsByYear);
+                    if (yearsToSearch.length === 0) {
+                        yearsToSearch.push(String(selectedYear));
+                    }
+                    
+                    console.log('🔍 MonthlyDocumentCollectionTracker: Searching in years:', yearsToSearch);
+                    
+                    // Search through all years
+                    for (const year of yearsToSearch) {
+                        const yearSections = sectionsByYear[year] || [];
                         
-                        // Search through all months
-                        for (const month of months) {
-                            const comments = getCommentsForYear(doc.comments, month, selectedYear);
+                        // Search through all sections
+                        for (const section of yearSections) {
+                            if (!section.documents) continue;
                             
-                            // Check if any comment matches the ID
-                            const matchingComment = comments.find(c => String(c.id) === commentIdToFind);
-                            if (matchingComment) {
-                                foundComment = matchingComment;
-                                foundSectionId = section.id;
-                                foundDocumentId = doc.id;
-                                foundMonth = month;
-                                break;
+                            // Search through all documents in this section
+                            for (const doc of section.documents) {
+                                if (!doc.comments) continue;
+                                
+                                // Search through all months
+                                for (const month of months) {
+                                    const comments = getCommentsForYear(doc.comments, month, parseInt(year, 10));
+                                    
+                                    // Check if any comment matches the ID (try both string and number comparison)
+                                    const matchingComment = comments.find(c => {
+                                        const cId = c.id;
+                                        return String(cId) === commentIdToFind || 
+                                               (typeof cId === 'number' && cId === commentIdNum) ||
+                                               (typeof commentIdNum === 'number' && !isNaN(commentIdNum) && cId === commentIdNum);
+                                    });
+                                    
+                                    if (matchingComment) {
+                                        foundComment = matchingComment;
+                                        foundSectionId = section.id;
+                                        foundDocumentId = doc.id;
+                                        foundMonth = month;
+                                        foundYear = parseInt(year, 10);
+                                        console.log('✅ MonthlyDocumentCollectionTracker: Found comment!', {
+                                            sectionId: foundSectionId,
+                                            documentId: foundDocumentId,
+                                            month: foundMonth,
+                                            year: foundYear
+                                        });
+                                        break;
+                                    }
+                                }
+                                
+                                if (foundComment) break;
                             }
+                            
+                            if (foundComment) break;
                         }
                         
                         if (foundComment) break;
                     }
                     
-                    if (foundComment) break;
-                }
-                
-                // If comment was found, use the found location
-                if (foundComment && foundSectionId && foundDocumentId && foundMonth) {
-                    deepSectionId = foundSectionId;
-                    deepDocumentId = foundDocumentId;
-                    deepMonth = foundMonth;
+                    // If comment was found, use the found location
+                    if (foundComment && foundSectionId && foundDocumentId && foundMonth) {
+                        deepSectionId = foundSectionId;
+                        deepDocumentId = foundDocumentId;
+                        deepMonth = foundMonth;
+                        
+                        // Switch to the correct year if needed, then retry opening the popup
+                        if (foundYear && foundYear !== selectedYear) {
+                            console.log('📅 MonthlyDocumentCollectionTracker: Switching year from', selectedYear, 'to', foundYear);
+                            // Store the location to open after year switch
+                            pendingCommentOpenRef.current = {
+                                sectionId: foundSectionId,
+                                documentId: foundDocumentId,
+                                month: foundMonth
+                            };
+                            setSelectedYear(foundYear);
+                            // Retry opening the popup after year switch (will be triggered by useEffect)
+                            return;
+                        }
+                        
+                        // Re-validate document ID after finding it
+                        isValidDocumentId = deepDocumentId && 
+                                           deepDocumentId !== 'undefined' && 
+                                           deepDocumentId.trim() !== '';
+                    } else {
+                        console.warn('⚠️ MonthlyDocumentCollectionTracker: Comment not found:', deepCommentId, {
+                            searchedYears: yearsToSearch,
+                            sectionsCount: sections.length
+                        });
+                    }
+                } else {
+                    console.log('✅ MonthlyDocumentCollectionTracker: Comment found at specified location, using existing params');
                 }
             }
             
             if (deepSectionId && isValidDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
+                
+                console.log('🎯 MonthlyDocumentCollectionTracker: Opening comment popup for cell:', cellKey);
                 
                 // Set initial position (will be updated once cell is found)
                 setCommentPopupPosition({
@@ -1989,16 +2138,36 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);
         }
-    }, [sections]);
+    }, [sections, sectionsByYear, selectedYear, months]);
     
     // Check for deep link on mount and when sections load
     useEffect(() => {
-        // Wait a bit for component to fully render
+        // Wait a bit for component to fully render and sections to load
         const timer = setTimeout(() => {
             checkAndOpenDeepLink();
-        }, 300);
+        }, 500);
         return () => clearTimeout(timer);
     }, [checkAndOpenDeepLink]);
+    
+    // Also retry if sections load after initial mount
+    useEffect(() => {
+        if (sections && sections.length > 0) {
+            const timer = setTimeout(() => {
+                checkAndOpenDeepLink();
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [sections.length, checkAndOpenDeepLink]);
+    
+    // When year changes, check if we have a pending comment to open
+    useEffect(() => {
+        if (pendingCommentOpenRef.current && sections && sections.length > 0) {
+            const timer = setTimeout(() => {
+                checkAndOpenDeepLink();
+            }, 500); // Wait a bit longer for sections to render after year change
+            return () => clearTimeout(timer);
+        }
+    }, [selectedYear, sections.length, checkAndOpenDeepLink]);
     
     // Also listen for hash changes in case URL is updated after component mounts
     useEffect(() => {
@@ -2008,8 +2177,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }, 100);
         };
         
+        const handlePopState = () => {
+            setTimeout(() => {
+                checkAndOpenDeepLink();
+            }, 100);
+        };
+        
         window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
+        window.addEventListener('popstate', handlePopState);
+        return () => {
+            window.removeEventListener('hashchange', handleHashChange);
+            window.removeEventListener('popstate', handlePopState);
+        };
     }, [checkAndOpenDeepLink]);
     
     // ============================================================
