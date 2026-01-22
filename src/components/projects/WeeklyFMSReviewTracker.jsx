@@ -2351,9 +2351,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     }
                 }, 200);
                 
-                // If a specific comment ID is provided, scroll to it after the popup opens
                 // Comment deep linking removed - no scrolling functionality
-            }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply weekly FMS review deep-link:', error);

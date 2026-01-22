@@ -2036,7 +2036,6 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // Comment deep linking removed - no scrolling functionality
             }
-            }
         } catch (error) {
             console.warn('⚠️ Failed to apply monthly FMS review deep-link:', error);
         }
