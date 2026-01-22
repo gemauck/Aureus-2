@@ -1313,6 +1313,13 @@ async function handler(req, res) {
         
         const userRole = req.user?.role?.toLowerCase();
         
+        // Parse pagination parameters
+        const page = parseInt(req.query?.page) || 1;
+        const limit = Math.min(parseInt(req.query?.limit) || 100, 500); // Default 100, max 500
+        const skip = (page - 1) * limit;
+        const includeCount = req.query?.includeCount === 'true';
+        const includeTaskCount = req.query?.includeTaskCount !== 'false'; // Default true, can be disabled for speed
+        
         // Build where clause
         let whereClause = {};
         
@@ -1331,7 +1338,7 @@ async function handler(req, res) {
             
             // If no accessible projects specified, return empty array
             if (!accessibleProjectIds || accessibleProjectIds.length === 0) {
-              return ok(res, { projects: [] });
+              return ok(res, { projects: [], total: 0, page, limit });
             }
             
             // Filter by accessible project IDs
@@ -1343,7 +1350,17 @@ async function handler(req, res) {
             
           } catch (parseError) {
             console.error('❌ Error parsing accessibleProjectIds:', parseError);
-            return ok(res, { projects: [] });
+            return ok(res, { projects: [], total: 0, page, limit });
+          }
+        }
+        
+        // Get total count if requested (only for first page to avoid performance hit)
+        let total = null;
+        if (includeCount && page === 1) {
+          try {
+            total = await prisma.project.count({ where: whereClause });
+          } catch (countError) {
+            console.warn('⚠️ Could not get project count:', countError.message);
           }
         }
         
@@ -1370,11 +1387,13 @@ async function handler(req, res) {
               hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
               hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
               // hasMonthlyFMSReviewProcess: true, // Temporarily commented - column may not exist yet
-              _count: {
-                select: {
-                  tasks: true // Count tasks from Task table (source of truth)
+              ...(includeTaskCount ? {
+                _count: {
+                  select: {
+                    tasks: true // Count tasks from Task table (source of truth)
+                  }
                 }
-              }
+              } : {})
               // Exclude all JSON fields - data is now in separate tables:
               // - tasksList → Task table
               // - taskLists → ProjectTaskList table
@@ -1384,7 +1403,9 @@ async function handler(req, res) {
               // - activityLog → ProjectActivityLog table
               // - team → ProjectTeamMember table
             },
-            orderBy: { createdAt: 'desc' } 
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: skip
           });
         } catch (queryError) {
           // If query fails due to missing column, retry without problematic fields
@@ -1407,13 +1428,17 @@ async function handler(req, res) {
                 monthlyProgress: true,
                 hasDocumentCollectionProcess: true,
                 hasWeeklyFMSReviewProcess: true,
-                _count: {
-                  select: {
-                    tasks: true
+                ...(includeTaskCount ? {
+                  _count: {
+                    select: {
+                      tasks: true
+                    }
                   }
-                }
+                } : {})
               },
-              orderBy: { createdAt: 'desc' } 
+              orderBy: { createdAt: 'desc' },
+              take: limit,
+              skip: skip
             });
           } else {
             throw queryError; // Re-throw if it's a different error
@@ -1423,15 +1448,28 @@ async function handler(req, res) {
         // Calculate tasksCount from Task table only (no JSON fallback)
         const projectsWithTaskCount = projects.map(project => {
           // Tasks are now only stored in Task table - use the count from relation
-          const tasksCount = project._count?.tasks || 0;
+          const tasksCount = includeTaskCount ? (project._count?.tasks || 0) : 0;
           
-          return {
-            ...project,
-            tasksCount
-          };
+          const result = { ...project };
+          if (includeTaskCount) {
+            result.tasksCount = tasksCount;
+          }
+          // Remove _count from response to reduce payload size
+          delete result._count;
+          
+          return result;
         })
         
-        return ok(res, { projects: projectsWithTaskCount })
+        // Return paginated response
+        const response = { projects: projectsWithTaskCount };
+        if (total !== null) {
+          response.total = total;
+          response.page = page;
+          response.limit = limit;
+          response.totalPages = Math.ceil(total / limit);
+        }
+        
+        return ok(res, response)
       } catch (dbError) {
         console.error('❌ Database error listing projects:', {
           message: dbError.message,

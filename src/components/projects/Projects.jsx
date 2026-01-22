@@ -912,7 +912,9 @@ const Projects = () => {
                 
                 let response;
                 try {
-                    response = await window.DatabaseAPI.getProjects();
+                    // Request only first 100 projects for faster initial load
+                    // Full list can be loaded on demand if needed
+                    response = await window.DatabaseAPI.getProjects({ limit: 100, page: 1 });
                     
                     // Validate response exists
                     if (!response) {

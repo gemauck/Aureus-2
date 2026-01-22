@@ -1273,8 +1273,16 @@ const DatabaseAPI = {
     },
 
     // PROJECT OPERATIONS
-    async getProjects() {
-        const response = await this.makeRequest('/projects');
+    async getProjects(options = {}) {
+        const { limit = 100, page = 1, includeCount = false } = options;
+        const params = new URLSearchParams();
+        if (limit) params.set('limit', limit.toString());
+        if (page > 1) params.set('page', page.toString());
+        if (includeCount) params.set('includeCount', 'true');
+        
+        const queryString = params.toString();
+        const url = `/projects${queryString ? `?${queryString}` : ''}`;
+        const response = await this.makeRequest(url);
         const projectsCount = response?.data?.projects?.length || response?.data?.length || response?.projects?.length || 0;
         return response;
     },
