@@ -1154,38 +1154,31 @@ function initializeProjectDetail() {
     
     // Wrapper function to update both section state and URL
     const switchSection = useCallback((section, options = {}) => {
-        console.log('🟢 switchSection called with:', section, 'options:', options);
-        console.log('🟢 Current activeSection:', activeSection);
-        
         try {
-            setActiveSection(section);
-            console.log('🟢 setActiveSection called with:', section);
-            
-            // Update URL if updateProjectUrl function is available
-            // BUT: Don't overwrite hash-based deep link parameters (docSectionId, etc.)
-            // These should be preserved for document collection tracker navigation
-            const hash = window.location.hash || '';
-            const hasDeepLinkParams = hash.includes('docSectionId=') || 
-                                       hash.includes('weeklySectionId=') ||
-                                       hash.includes('docDocumentId=') ||
-                                       hash.includes('weeklyDocumentId=');
-            
-            if (window.updateProjectUrl && project?.id && !hasDeepLinkParams) {
-                // Only update URL if there are no deep link params to preserve
-                console.log('🟢 Updating URL with tab:', section);
-                window.updateProjectUrl({
-                    tab: section,
-                    section: options.section,
-                    commentId: options.commentId
-                });
-            } else {
-                console.log('🟢 Not updating URL - updateProjectUrl:', !!window.updateProjectUrl, 'project.id:', project?.id, 'hasDeepLinkParams:', hasDeepLinkParams);
+        setActiveSection(section);
+        
+        // Update URL if updateProjectUrl function is available
+        // BUT: Don't overwrite hash-based deep link parameters (docSectionId, etc.)
+        // These should be preserved for document collection tracker navigation
+        const hash = window.location.hash || '';
+        const hasDeepLinkParams = hash.includes('docSectionId=') || 
+                                   hash.includes('weeklySectionId=') ||
+                                   hash.includes('docDocumentId=') ||
+                                   hash.includes('weeklyDocumentId=');
+        
+        if (window.updateProjectUrl && project?.id && !hasDeepLinkParams) {
+            // Only update URL if there are no deep link params to preserve
+            window.updateProjectUrl({
+                tab: section,
+                section: options.section,
+                commentId: options.commentId
+            });
             }
         } catch (error) {
             console.error('❌ Error in switchSection:', error);
             alert('Failed to switch section: ' + (error?.message || 'Unknown error'));
         }
-    }, [project?.id, activeSection]);
+    }, [project?.id]);
     
     // Helper function to update URL with task and/or comment parameters
     // CRITICAL: Always ensures project ID is in the path, not just query params
@@ -1303,7 +1296,7 @@ function initializeProjectDetail() {
                     window.history.replaceState({}, '', url);
                     console.log('✅ URL updated via replaceState (no navigation):', url.href);
                 } else {
-                    window.history.pushState({}, '', url);
+                window.history.pushState({}, '', url);
                     console.log('✅ URL updated via pushState:', url.href, '(was:', window.location.href + ')');
                 }
                 
@@ -1855,13 +1848,6 @@ function initializeProjectDetail() {
         // Only skip sync if ref is set AND we're not switching projects
         // This ensures that when navigating back, we always sync from the database
         if (normalizedValue !== hasWeeklyFMSReviewProcess) {
-            console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess from prop', {
-                projectId: project?.id,
-                propValue: project.hasWeeklyFMSReviewProcess,
-                normalizedValue,
-                currentState: hasWeeklyFMSReviewProcess,
-                refValue: hasWeeklyFMSReviewProcessChangedRef.current
-            });
             // Always sync - the ref is reset when project.id changes anyway
             setHasWeeklyFMSReviewProcess(normalizedValue);
             // Reset the ref after syncing from prop to allow future syncs
@@ -2076,11 +2062,6 @@ function initializeProjectDetail() {
         };
         
         // Check immediately
-        console.log('🔍 ProjectDetail: Running deep link checks', {
-            projectId: project?.id,
-            hasDocCollection: project?.hasDocumentCollectionProcess,
-            activeSection
-        });
         checkAndSwitchToDocumentCollection();
         checkAndSwitchToWeeklyFMSReview();
         
@@ -4077,8 +4058,8 @@ function initializeProjectDetail() {
         url.search = expectedSearch; // Always set search with task ID
         
         // Update immediately using replaceState to avoid triggering route navigation
-        try {
-            window.history.replaceState({}, '', url);
+            try {
+                window.history.replaceState({}, '', url);
             console.log('✅ URL updated via replaceState (no navigation trigger):', url.href);
         } catch (e) {
             console.error('❌ replaceState failed:', e);
@@ -5718,19 +5699,19 @@ function initializeProjectDetail() {
 
     // Format checklist progress helper
     const formatChecklistProgress = useCallback((checklist = []) => {
-        if (!Array.isArray(checklist) || checklist.length === 0) {
-            return { percent: 0, label: '0/0 complete' };
-        }
-        const completed = checklist.filter(item => item.completed).length;
-        return {
-            percent: Math.round((completed / checklist.length) * 100),
-            label: `${completed}/${checklist.length} complete`
-        };
+                if (!Array.isArray(checklist) || checklist.length === 0) {
+                    return { percent: 0, label: '0/0 complete' };
+                }
+                const completed = checklist.filter(item => item.completed).length;
+                return {
+                    percent: Math.round((completed / checklist.length) * 100),
+                    label: `${completed}/${checklist.length} complete`
+                };
     }, []);
 
     // List View Component - Proper React component
     const ListView = useCallback(() => {
-        return (
+            return (
             <div className="space-y-4">
                 <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -6073,7 +6054,7 @@ function initializeProjectDetail() {
                                                                                         console.log('🖱️ handleAddSubtask type:', typeof handleAddSubtask);
                                                                                         
                                                                                         e.preventDefault();
-                                                                                        e.stopPropagation();
+                                                                                    e.stopPropagation();
                                                                                         
                                                                                         if (typeof handleAddSubtask === 'function') {
                                                                                             console.log('✅ Calling handleAddSubtask with task:', task.id);
@@ -6108,7 +6089,7 @@ function initializeProjectDetail() {
                                                                                         console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
                                                                                         
                                                                                         e.preventDefault();
-                                                                                        e.stopPropagation();
+                                                                                    e.stopPropagation();
                                                                                         
                                                                                         if (typeof handleViewTaskDetail === 'function') {
                                                                                             console.log('✅ Calling handleViewTaskDetail with task:', task.id);
@@ -6141,7 +6122,7 @@ function initializeProjectDetail() {
                                                                                         console.log('🖱️ handleDeleteTask type:', typeof handleDeleteTask);
                                                                                         
                                                                                         e.preventDefault();
-                                                                                        e.stopPropagation();
+                                                                                    e.stopPropagation();
                                                                                         
                                                                                         if (typeof handleDeleteTask === 'function') {
                                                                                             console.log('✅ Calling handleDeleteTask with taskId:', task.id);
@@ -6288,7 +6269,7 @@ function initializeProjectDetail() {
                     })}
                 </div>
             </div>
-        );
+            );
     }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
@@ -6351,14 +6332,10 @@ function initializeProjectDetail() {
                             try {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('🖱️ Tasks button clicked - event:', e);
-                                console.log('🖱️ Current activeSection:', activeSection);
-                                console.log('🖱️ switchSection type:', typeof switchSection);
                                 if (typeof switchSection === 'function') {
                                     switchSection('tasks');
-                                    console.log('✅ switchSection called with tasks');
                                 } else {
-                                    console.error('❌ switchSection is not a function', typeof switchSection);
+                                    console.error('❌ switchSection is not a function');
                                     alert('Failed to switch to tasks: Handler not available.');
                                 }
                             } catch (error) {
