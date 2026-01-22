@@ -125,8 +125,53 @@ const POAReview = () => {
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             
-            // Convert to JSON (array of objects)
-            const rows = XLSXLib.utils.sheet_to_json(worksheet, { defval: '' });
+            // CRITICAL: The Python script uses skiprows=1, so we need to handle the first row
+            // Try to detect if first row is a header or data
+            // First, get raw data to check first row
+            const rawData = XLSXLib.utils.sheet_to_json(worksheet, { 
+                header: 1, // Get as array of arrays
+                defval: '',
+                raw: false
+            });
+            
+            if (rawData.length === 0) {
+                throw new Error('Excel file appears to be empty');
+            }
+            
+            // Check if first row looks like headers (contains common header keywords)
+            const firstRow = rawData[0] || [];
+            const firstRowStr = firstRow.join(' ').toLowerCase();
+            const hasHeaderKeywords = firstRowStr.includes('transaction') || 
+                                     firstRowStr.includes('asset') || 
+                                     firstRowStr.includes('date') ||
+                                     firstRowStr.includes('time');
+            
+            let headers, dataRows;
+            if (hasHeaderKeywords && rawData.length > 1) {
+                // First row is headers, use it
+                headers = firstRow.map(h => String(h || '').trim());
+                dataRows = rawData.slice(1);
+            } else {
+                // No clear header row, try to use first row as headers anyway
+                // This matches Python's behavior of using first row as headers
+                headers = firstRow.map(h => String(h || '').trim());
+                dataRows = rawData.slice(1);
+            }
+            
+            // Convert to array of objects with proper column names
+            const rows = dataRows.map(row => {
+                const rowObj = {};
+                headers.forEach((header, idx) => {
+                    // Preserve original column names exactly as they appear
+                    rowObj[header] = row[idx] !== undefined ? String(row[idx] || '').trim() : '';
+                });
+                return rowObj;
+            });
+            
+            // Log column names for debugging
+            console.log('POA Review - Parsed Excel columns:', headers);
+            console.log('POA Review - First row sample:', rows[0]);
+            
             return rows;
         } else {
             throw new Error('Unsupported file type. Please use CSV or Excel files.');

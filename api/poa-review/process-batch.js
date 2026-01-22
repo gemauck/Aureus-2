@@ -101,12 +101,32 @@ async function handler(req, res) {
                 // Create temporary CSV file for processing
                 const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
                 
-                // Write CSV header
+                // Write CSV header - preserve original column names
                 if (allRows.length > 0) {
-                    const headers = Object.keys(allRows[0]).join(',');
+                    // Get all unique headers from all rows (in case some rows have different keys)
+                    const allHeaders = new Set();
+                    allRows.forEach(row => {
+                        Object.keys(row).forEach(key => allHeaders.add(key));
+                    });
+                    const headers = Array.from(allHeaders);
+                    
+                    // Log headers for debugging
+                    console.log('POA Review Batch API - CSV Headers:', headers);
+                    console.log('POA Review Batch API - First row keys:', Object.keys(allRows[0]));
+                    
+                    const headerRow = headers.map(h => {
+                        // Escape header names if needed
+                        const header = String(h || '').trim();
+                        if (header.includes(',') || header.includes('"') || header.includes('\n')) {
+                            return `"${header.replace(/"/g, '""')}"`;
+                        }
+                        return header;
+                    }).join(',');
+                    
                     const csvRows = allRows.map(row => {
-                        return Object.values(row).map(val => {
-                            // Escape commas and quotes in CSV
+                        return headers.map(header => {
+                            const val = row[header] !== undefined ? row[header] : '';
+                            // Escape commas and quotes in CSV values
                             const str = String(val || '');
                             if (str.includes(',') || str.includes('"') || str.includes('\n')) {
                                 return `"${str.replace(/"/g, '""')}"`;
@@ -115,9 +135,10 @@ async function handler(req, res) {
                         }).join(',');
                     });
                     
-                    const csvContent = [headers, ...csvRows].join('\n');
+                    const csvContent = [headerRow, ...csvRows].join('\n');
                     fs.writeFileSync(tempCsvPath, csvContent, 'utf8');
                     console.log('POA Review Batch API - Created temp CSV:', tempCsvPath);
+                    console.log('POA Review Batch API - CSV first line:', csvContent.split('\n')[0]);
                 } else {
                     return badRequest(res, 'No data rows received');
                 }
@@ -160,12 +181,16 @@ def find_column(df, target_name):
     return None
 
 try:
-    # Read the CSV file
+    # Read the CSV file - don't skip rows since we already have headers
     print("Reading CSV file...")
-    data = pd.read_csv(input_file)
+    data = pd.read_csv(input_file, skiprows=0)
     
     print(f"Found columns: {list(data.columns)}")
     print(f"Total rows: {len(data)}")
+    
+    # Debug: Print first few rows to verify data structure
+    if len(data) > 0:
+        print(f"First row sample: {data.iloc[0].to_dict()}")
     
     # Required columns and their normalized names
     required_columns = {
