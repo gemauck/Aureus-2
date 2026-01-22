@@ -2156,10 +2156,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         // Don't trigger card click if:
                                                         // 1. Clicking button
                                                         // 2. We just dragged (mouse or touch)
+                                                        // 3. This item is currently being dragged
                                                         if (e.target.closest('button')) {
                                                             return;
                                                         }
-                                                        if (justDragged || mouseDragState || touchDragState) {
+                                                        if (justDragged) {
+                                                            return;
+                                                        }
+                                                        if (isDragging && draggedItem?.id === item.id) {
                                                             return;
                                                         }
                                                         if (onItemClick) {
@@ -2307,7 +2311,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
                     // Prevent click event if we just finished dragging (like TaskManagement)
-                    if (wasDraggedRef.current || justDragged || touchDragState) {
+                    if (wasDraggedRef.current || justDragged) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                    if (isDragging && draggedItem?.id === item.id) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
