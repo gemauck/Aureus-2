@@ -2403,65 +2403,41 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     // ============================================================
-    // REFACTORED SCROLL HANDLERS - Properly handle scroll events
+    // SIMPLIFIED SCROLL HANDLERS - Let browser handle scrolling naturally
     // ============================================================
     
-    // Dedicated scroll handler for the comment popup container (wheel)
-    // Handles mouse wheel scrolling within the comment container
+    // Simple wheel handler - just save position, don't interfere with native scrolling
     const handleCommentWheel = useCallback((event) => {
+        // Let browser handle scrolling naturally - just save position
         const container = commentPopupContainerRef.current;
-        if (!container) return;
-
-        const deltaY = event.deltaY;
-        if (deltaY === 0) return;
-
-        const atTop = container.scrollTop === 0;
-        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
-        const scrollingUp = deltaY < 0;
-        const scrollingDown = deltaY > 0;
-
-        // If the container can scroll in the direction of the wheel, handle it here
-        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
-            event.preventDefault();
-            event.stopPropagation();
-            container.scrollTop += deltaY;
-            // Save scroll position for restoration
-            savedScrollPositionRef.current = container.scrollTop;
+        if (container) {
+            // Use a small delay to capture position after browser scrolls
+            setTimeout(() => {
+                if (container) {
+                    savedScrollPositionRef.current = container.scrollTop;
+                }
+            }, 0);
         }
-        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
     }, []);
 
-    // Touch scrolling for mobile inside the comment popup container
+    // Simple touch handlers - just save position, don't interfere
     const handleCommentTouchStart = useCallback((event) => {
+        // Just track touch start for potential future use
         if (event.touches && event.touches.length > 0) {
             commentTouchStartYRef.current = event.touches[0].clientY;
         }
     }, []);
 
     const handleCommentTouchMove = useCallback((event) => {
+        // Let browser handle touch scrolling naturally - just save position
         const container = commentPopupContainerRef.current;
-        if (!container || !(event.touches && event.touches.length > 0)) return;
-
-        const currentY = event.touches[0].clientY;
-        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
-
-        if (deltaY === 0) return;
-
-        const atTop = container.scrollTop === 0;
-        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
-        const scrollingDown = deltaY > 0;
-        const scrollingUp = deltaY < 0;
-
-        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
-            // There is room to scroll inside the container – keep the scroll local
-            event.preventDefault();
-            event.stopPropagation();
-            container.scrollTop += deltaY;
-            commentTouchStartYRef.current = currentY;
-            // Save scroll position for restoration
-            savedScrollPositionRef.current = container.scrollTop;
+        if (container) {
+            setTimeout(() => {
+                if (container) {
+                    savedScrollPositionRef.current = container.scrollTop;
+                }
+            }, 0);
         }
-        // Otherwise, allow the page to handle the scroll when we've hit the edge
     }, []);
     
     // Save scroll position on scroll (for restoration across re-renders)
@@ -3763,14 +3739,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     }}
                                     className="comment-scroll-container max-h-32 overflow-y-auto space-y-2 mb-2 pr-1"
                                     style={{
-                                        maxHeight: '8rem', // 32 * 0.25rem = 8rem
+                                        maxHeight: '8rem',
                                         overflowY: 'auto',
-                                        WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
-                                        scrollBehavior: 'smooth'
+                                        WebkitOverflowScrolling: 'touch',
+                                        scrollBehavior: 'auto' // Use 'auto' for instant scrolling
                                     }}
-                                    onWheel={handleCommentWheel}
-                                    onTouchStart={handleCommentTouchStart}
-                                    onTouchMove={handleCommentTouchMove}
+                                    onScroll={() => {
+                                        // Save scroll position on scroll event
+                                        if (commentPopupContainerRef.current) {
+                                            savedScrollPositionRef.current = commentPopupContainerRef.current.scrollTop;
+                                        }
+                                    }}
                                 >
                                     {comments.map((comment, idx) => (
                                         <div 

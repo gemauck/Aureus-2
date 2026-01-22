@@ -171,14 +171,29 @@ const POAReview = () => {
             // Data rows start after the header row
             const dataRows = rawData.slice(headerRowIndex + 1);
             
-            // Filter out empty column headers (common in Excel files)
+            // Filter out empty column headers and handle duplicates (like pandas does)
             const validHeaderIndices = [];
             const validHeaders = [];
+            const headerCounts = {}; // Track how many times we've seen each header
+            
             headers.forEach((header, idx) => {
                 const trimmed = String(header || '').trim();
                 if (trimmed && trimmed !== '' && !trimmed.match(/^Unnamed:/i)) {
                     validHeaderIndices.push(idx);
-                    validHeaders.push(trimmed);
+                    
+                    // Handle duplicate column names like pandas does
+                    // First occurrence: "Location"
+                    // Second occurrence: "Location.1"
+                    // Third occurrence: "Location.2", etc.
+                    let finalHeader = trimmed;
+                    if (headerCounts[trimmed] !== undefined) {
+                        headerCounts[trimmed]++;
+                        finalHeader = `${trimmed}.${headerCounts[trimmed]}`;
+                    } else {
+                        headerCounts[trimmed] = 0; // First occurrence, next will be .1
+                    }
+                    
+                    validHeaders.push(finalHeader);
                 }
             });
             
