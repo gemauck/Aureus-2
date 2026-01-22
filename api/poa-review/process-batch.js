@@ -303,23 +303,29 @@ try:
         print(f"Renaming columns: {column_mapping}")
         data = data.rename(columns=column_mapping)
     
-    print("Initializing review...")
+    print(f"Initializing review with {len(data)} rows...")
     review = POAReview(data)
+    print(f"After initialization: {len(review.data)} rows")
     
     print("Marking consecutive transactions...")
     review.mark_consecutive_transactions()
+    print(f"After mark_consecutive_transactions: {len(review.data)} rows")
     
     print("Creating labels for transactions...")
     review.label_rows()
+    print(f"After label_rows: {len(review.data)} rows")
     
     print("Marking no POA assets...")
     review.mark_no_poa_assets()
+    print(f"After mark_no_poa_assets: {len(review.data)} rows")
     
     print("Counting proof before transactions...")
     review.count_proof_before_transaction()
+    print(f"After count_proof_before_transaction: {len(review.data)} rows")
     
     print("Calculating time since last activity...")
     review.time_since_last_activity()
+    print(f"After time_since_last_activity: {len(review.data)} rows")
     
     print("Calculating total SMR...")
     # CRITICAL: total_smr requires 'label' column which is created by label_rows()
@@ -328,6 +334,16 @@ try:
         print("Warning: label column missing, recreating labels...")
         review.label_rows()
     review.total_smr(sources)
+    print(f"After total_smr: {len(review.data)} rows")
+    
+    print(f"Before format_review: {len(review.data)} rows, {len(review.data.columns)} columns")
+    print(f"Transaction rows: {review.transaction_mask.sum()}")
+    print(f"Proof rows: {review.proof_mask.sum()}")
+    print(f"Total rows (transaction + proof): {review.transaction_mask.sum() + review.proof_mask.sum()}")
+    
+    # Verify we have all rows
+    if len(review.data) != len(data):
+        print(f"WARNING: Row count changed during processing! Started with {len(data)}, now have {len(review.data)}")
     
     print("Formatting review...")
     # Create output directory if it doesn't exist
@@ -335,6 +351,21 @@ try:
     
     # Format and save - pass output_path directly
     format_review(review.data, os.path.basename(input_file), output_file)
+    
+    # Verify output file was created and check row count
+    import openpyxl
+    if os.path.exists(output_file):
+        wb = openpyxl.load_workbook(output_file)
+        ws = wb.active
+        output_row_count = ws.max_row - 1  # Subtract header row
+        print(f"Output Excel file created: {output_file}")
+        print(f"Output Excel row count (excluding header): {output_row_count}")
+        print(f"Input row count: {len(data)}")
+        if output_row_count != len(data):
+            print(f"WARNING: Row count mismatch! Input: {len(data)}, Output: {output_row_count}")
+        wb.close()
+    else:
+        print(f"ERROR: Output file not found at {output_file}")
     
     print(f"Success! Output saved to: {output_file}")
     sys.exit(0)
