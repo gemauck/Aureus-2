@@ -304,23 +304,59 @@ except Exception as e:
                 const venvPython = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
                 const pythonCommand = `"${venvPython}" "${tempProcessScript}" 2>&1`;
                 
-                let stdout, stderr;
+                let stdout, stderr, exitCode;
                 try {
                     const result = await execAsync(pythonCommand, {
                         cwd: scriptsDir,
                         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
                         timeout: 300000 // 5 minutes timeout
                     });
-                    stdout = result.stdout;
-                    stderr = result.stderr;
+                    stdout = result.stdout || '';
+                    stderr = result.stderr || '';
+                    exitCode = 0;
                 } catch (execError) {
                     stdout = execError.stdout || '';
-                    stderr = execError.stderr || execError.message || '';
-                    console.error('POA Review Batch API - Python execution error:', execError);
-                    throw new Error(`Python script execution failed: ${stderr || execError.message}`);
+                    stderr = execError.stderr || '';
+                    exitCode = execError.code || 1;
+                    
+                    // Log full error details
+                    console.error('POA Review Batch API - Python execution error:', {
+                        message: execError.message,
+                        code: execError.code,
+                        signal: execError.signal,
+                        stdout: stdout.substring(0, 2000),
+                        stderr: stderr.substring(0, 2000),
+                        fullStdout: stdout.length,
+                        fullStderr: stderr.length
+                    });
+                    
+                    // Combine stdout and stderr for full error message
+                    // Python errors often go to stdout when using 2>&1
+                    const fullError = stdout || stderr || execError.message || 'Unknown Python error';
+                    
+                    // Extract the actual error message (usually after "Error:" or in traceback)
+                    let errorMessage = fullError;
+                    const errorMatch = fullError.match(/Error[:\s]+(.+?)(?:\n|$)/i) || 
+                                      fullError.match(/Traceback.*?\n(.+?)(?:\n|$)/s);
+                    if (errorMatch) {
+                        errorMessage = errorMatch[1] || errorMatch[0];
+                    }
+                    
+                    // Limit error message length but include key info
+                    const truncatedError = fullError.length > 2000 
+                        ? fullError.substring(0, 2000) + '... (truncated)'
+                        : fullError;
+                    
+                    throw new Error(`Python script execution failed (exit code ${exitCode}):\n${truncatedError}`);
                 }
 
-                console.log('POA Review Batch API - Python script output:', stdout);
+                // Check exit code - if Python script exited with non-zero, it failed
+                if (exitCode !== 0) {
+                    const fullError = [stdout, stderr].filter(Boolean).join('\n');
+                    throw new Error(`Python script exited with code ${exitCode}:\n${fullError.substring(0, 2000)}`);
+                }
+
+                console.log('POA Review Batch API - Python script output:', stdout.substring(0, 500));
 
                 // Check if output file was created
                 if (!fs.existsSync(outputFilePath)) {
