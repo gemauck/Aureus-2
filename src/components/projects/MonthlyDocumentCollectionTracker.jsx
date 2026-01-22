@@ -1649,11 +1649,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         const comments = getCommentsForYear(doc.comments, month, selectedYear);
                         const commentsText = comments.map(c => {
-                            const date = new Date(c.date).toLocaleString('en-ZA', {
-                                year: 'numeric', month: 'short', day: '2-digit',
-                                hour: '2-digit', minute: '2-digit'
-                            });
-                            return `[${date}] ${c.author}: ${c.text}`;
+                            try {
+                                const dateValue = c.date || c.createdAt;
+                                if (!dateValue) return `${c.author}: ${c.text}`;
+                                const date = new Date(dateValue);
+                                if (isNaN(date.getTime())) return `${c.author}: ${c.text}`;
+                                const formattedDate = date.toLocaleString('en-ZA', {
+                                    year: 'numeric', month: 'short', day: '2-digit',
+                                    hour: '2-digit', minute: '2-digit'
+                                });
+                                return `[${formattedDate}] ${c.author}: ${c.text}`;
+                            } catch (e) {
+                                return `${c.author}: ${c.text}`;
+                            }
                         }).join('\n\n');
                         row.push(commentsText);
                     });
@@ -2813,9 +2821,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             />
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
-                                                <span>{comment.date ? (() => {
+                                                <span>{(comment.date || comment.createdAt) ? (() => {
                                                     try {
-                                                        const date = new Date(comment.date);
+                                                        const date = new Date(comment.date || comment.createdAt);
                                                         if (isNaN(date.getTime())) return 'Invalid Date';
                                                         return date.toLocaleString('en-ZA', { 
                                                             month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
@@ -3093,7 +3101,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <tr>
                                             <th
                                                 className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '350px', width: '350px' }}
                                             >
                                                 Document / Data
                                             </th>
@@ -3132,9 +3140,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 <tr key={doc.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '350px', width: '350px' }}
                                                     >
-                                                        <div className="min-w-[200px]">
+                                                        <div className="min-w-[350px]">
                                                             <div className="text-xs font-medium text-gray-900">{doc.name}</div>
                                                             {doc.description && (
                                                                 <div className="text-[10px] text-gray-500">{doc.description}</div>
