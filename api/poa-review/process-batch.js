@@ -84,11 +84,35 @@ async function handler(req, res) {
         const allBatchesReceived = isFinal || batchData.receivedBatches >= batchData.totalBatches;
 
         if (allBatchesReceived) {
+            const totalRowsReceived = batchData.batches.reduce((sum, b) => sum + b.rows.length, 0);
+            const expectedBatches = batchData.totalBatches;
+            const receivedBatches = batchData.receivedBatches;
+            
             console.log('POA Review Batch API - All batches received, processing...', {
                 batchId,
-                totalBatches: batchData.receivedBatches,
-                totalRows: batchData.batches.reduce((sum, b) => sum + b.rows.length, 0)
+                expectedBatches,
+                receivedBatches,
+                totalRowsReceived,
+                isFinal,
+                batchNumbers: batchData.batches.map(b => b.batchNumber).sort((a, b) => a - b)
             });
+            
+            // Validate we have all expected batches
+            if (receivedBatches < expectedBatches && !isFinal) {
+                console.warn(`POA Review Batch API - WARNING: Only received ${receivedBatches} of ${expectedBatches} batches, but processing anyway due to allBatchesReceived condition`);
+            }
+            
+            // Check for missing batch numbers
+            const batchNumbers = batchData.batches.map(b => b.batchNumber).sort((a, b) => a - b);
+            const missingBatches = [];
+            for (let i = 1; i <= expectedBatches; i++) {
+                if (!batchNumbers.includes(i)) {
+                    missingBatches.push(i);
+                }
+            }
+            if (missingBatches.length > 0) {
+                console.warn(`POA Review Batch API - WARNING: Missing batch numbers: ${missingBatches.join(', ')}`);
+            }
 
             try {
                 // Combine all batches into single array
@@ -97,7 +121,20 @@ async function handler(req, res) {
 
                 console.log('POA Review Batch API - Combined rows:', allRows.length);
                 console.log('POA Review Batch API - Batch count:', sortedBatches.length);
+                console.log('POA Review Batch API - Expected batches:', batchData.totalBatches);
                 console.log('POA Review Batch API - Rows per batch:', sortedBatches.map(b => ({ batch: b.batchNumber, rows: b.rows.length })));
+                
+                // Calculate total rows from all batches
+                const totalRowsFromBatches = sortedBatches.reduce((sum, b) => sum + b.rows.length, 0);
+                console.log('POA Review Batch API - Total rows from batches:', totalRowsFromBatches);
+                console.log('POA Review Batch API - All rows array length:', allRows.length);
+                
+                if (totalRowsFromBatches !== allRows.length) {
+                    console.error('POA Review Batch API - ERROR: Row count mismatch!', {
+                        totalRowsFromBatches,
+                        allRowsLength: allRows.length
+                    });
+                }
                 
                 // Validate that we have data
                 if (allRows.length === 0) {
@@ -157,9 +194,20 @@ async function handler(req, res) {
                     });
                     
                     const csvContent = [headerRow, ...csvRows].join('\n');
+                    const csvLineCount = csvContent.split('\n').length;
                     fs.writeFileSync(tempCsvPath, csvContent, 'utf8');
                     console.log('POA Review Batch API - Created temp CSV:', tempCsvPath);
+                    console.log('POA Review Batch API - CSV line count (including header):', csvLineCount);
+                    console.log('POA Review Batch API - CSV data rows:', csvLineCount - 1);
+                    console.log('POA Review Batch API - Expected data rows:', allRows.length);
                     console.log('POA Review Batch API - CSV first line:', csvContent.split('\n')[0]);
+                    
+                    if (csvLineCount - 1 !== allRows.length) {
+                        console.error('POA Review Batch API - ERROR: CSV row count mismatch!', {
+                            csvDataRows: csvLineCount - 1,
+                            expectedRows: allRows.length
+                        });
+                    }
                 } else {
                     return badRequest(res, 'No data rows received');
                 }
