@@ -1,8 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
-// Use a function to always get the global document object, avoiding minification/shadowing issues
-const getDocument = () => window.document;
+const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
 // Derive a human‑readable facilities label from the project, handling both
@@ -449,7 +448,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         return false;
     };
-    
+
     // Simplified loading - load from database, use prop as fallback
     const loadData = useCallback(async (retryCount = 0) => {
         if (!project?.id) return;
@@ -533,15 +532,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     } else {
                         // Small data - process immediately
                         const normalized = normalizeSectionsByYear(rawData);
-                    console.log('📥 Normalized sections:', { 
-                        yearKeys: Object.keys(normalized),
-                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                    });
-                    setSectionsByYear(normalized);
-                    sectionsRef.current = normalized;
-                    lastSavedDataRef.current = JSON.stringify(normalized);
-                    setIsLoading(false);
-                    return;
+                        console.log('📥 Normalized sections:', { 
+                            yearKeys: Object.keys(normalized),
+                            totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                        });
+                        setSectionsByYear(normalized);
+                        sectionsRef.current = normalized;
+                        lastSavedDataRef.current = JSON.stringify(normalized);
+                        setIsLoading(false);
+                        return;
                     }
                 }
             }
@@ -592,15 +591,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     return;
                 } else {
                     const normalized = normalizeSectionsByYear(rawData);
-                console.log('📥 Normalized prop data:', { 
-                    yearKeys: Object.keys(normalized),
-                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                });
-                setSectionsByYear(normalized);
-                sectionsRef.current = normalized;
-                lastSavedDataRef.current = JSON.stringify(normalized);
-                setIsLoading(false);
-                return;
+                    console.log('📥 Normalized prop data:', { 
+                        yearKeys: Object.keys(normalized),
+                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                    });
+                    setSectionsByYear(normalized);
+                    sectionsRef.current = normalized;
+                    lastSavedDataRef.current = JSON.stringify(normalized);
+                    setIsLoading(false);
+                    return;
                 }
             } else {
                 // Check localStorage as backup before initializing empty
@@ -640,17 +639,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                                 return;
                             } else {
-                            const parsed = JSON.parse(stored);
-                            const normalized = normalizeSectionsByYear(parsed);
-                            console.log('📥 Loaded from localStorage:', { 
-                                yearKeys: Object.keys(normalized),
-                                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                            });
-                            setSectionsByYear(normalized);
-                            sectionsRef.current = normalized;
-                            lastSavedDataRef.current = stored;
-                            setIsLoading(false);
-                            return;
+                                const parsed = JSON.parse(stored);
+                                const normalized = normalizeSectionsByYear(parsed);
+                                console.log('📥 Loaded from localStorage:', { 
+                                    yearKeys: Object.keys(normalized),
+                                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                                });
+                                setSectionsByYear(normalized);
+                                sectionsRef.current = normalized;
+                                lastSavedDataRef.current = stored;
+                                setIsLoading(false);
+                                return;
                             }
                         }
                     } catch (storageError) {
@@ -708,14 +707,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                                 return;
                             } else {
-                            const parsed = JSON.parse(stored);
-                            const normalized = normalizeSectionsByYear(parsed);
-                            setSectionsByYear(normalized);
-                            sectionsRef.current = normalized;
-                            lastSavedDataRef.current = stored;
-                            setIsLoading(false);
-                            console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
-                            return;
+                                const parsed = JSON.parse(stored);
+                                const normalized = normalizeSectionsByYear(parsed);
+                                setSectionsByYear(normalized);
+                                sectionsRef.current = normalized;
+                                lastSavedDataRef.current = stored;
+                                setIsLoading(false);
+                                console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
+                                return;
                             }
                         }
                     } catch (storageError) {
@@ -778,7 +777,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                  error.message?.toLowerCase().includes('timeout') ||
                                  error.code === 'TIMEOUT';
                 if (!isTimeout && !error.suppressLog) {
-                console.error('❌ Error loading users:', error);
+                    console.error('❌ Error loading users:', error);
                 } else if (!error.suppressLog) {
                     console.warn('⏱️ Timeout loading users (server may be slow), will retry later');
                 }
@@ -999,19 +998,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 } else {
                     console.error('❌ Error saving to database:', error);
                 }
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                projectId: project.id,
-                payloadSize: serialized.length,
-                payloadPreview: serialized.substring(0, 200),
-                errorName: error.name,
-                errorCode: error.code,
-                responseStatus: error.response?.status,
-                responseData: error.response?.data,
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    projectId: project.id,
+                    payloadSize: serialized.length,
+                    payloadPreview: serialized.substring(0, 200),
+                    errorName: error.name,
+                    errorCode: error.code,
+                    responseStatus: error.response?.status,
+                    responseData: error.response?.data,
                     isNetworkError: isNetworkErr,
                     isTimeout: isTimeoutErr
-            });
+                });
             }
             
             // For network/timeout errors, save to localStorage as backup
@@ -2151,45 +2150,45 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     if (token && window.DatabaseAPI?.getUsers) {
                         try {
-                        // Fetch all users once for matching mentions
-                        const usersResponse = await window.DatabaseAPI.getUsers();
-                        const allUsers =
-                            usersResponse?.data?.users ||
-                            usersResponse?.data?.data?.users ||
-                            usersResponse?.users ||
-                            [];
-                        
-                        const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
-                        // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                        const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
-                        const projectInfo = {
-                            projectId: project?.id,
-                            projectName: project?.name,
-                            sectionId,
-                            documentId,
-                            month,
-                            commentId: newCommentId
-                        };
-                        
-                        // Fire mention notifications (do not block UI on errors)
-                        window.MentionHelper.processMentions(
-                            commentText,
-                            contextTitle,
-                            contextLink,
-                            currentUser.name || currentUser.email || 'Unknown',
-                            allUsers,
-                            projectInfo
-                        ).then(() => {
-                        }).catch(error => {
+                            // Fetch all users once for matching mentions
+                            const usersResponse = await window.DatabaseAPI.getUsers();
+                            const allUsers =
+                                usersResponse?.data?.users ||
+                                usersResponse?.data?.data?.users ||
+                                usersResponse?.users ||
+                                [];
+                            
+                            const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
+                            // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
+                            const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                            const projectInfo = {
+                                projectId: project?.id,
+                                projectName: project?.name,
+                                sectionId,
+                                documentId,
+                                month,
+                                commentId: newCommentId
+                            };
+                            
+                            // Fire mention notifications (do not block UI on errors)
+                            window.MentionHelper.processMentions(
+                                commentText,
+                                contextTitle,
+                                contextLink,
+                                currentUser.name || currentUser.email || 'Unknown',
+                                allUsers,
+                                projectInfo
+                            ).then(() => {
+                            }).catch(error => {
                                 // Suppress timeout errors for mention processing
                                 const isTimeout = error.name === 'TimeoutError' || 
                                                  error.isTimeout === true || 
                                                  error.message?.toLowerCase().includes('timeout') ||
                                                  error.code === 'TIMEOUT';
                                 if (!isTimeout && !error.suppressLog) {
-                            console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
+                                    console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
                                 }
-                        });
+                            });
                         } catch (usersError) {
                             // Handle timeout/network errors when fetching users for mentions
                             const isTimeout = usersError.name === 'TimeoutError' || 
@@ -2404,27 +2403,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     // Dedicated scroll handler for the comment popup container (wheel)
+    // REMOVED - Let browser handle scrolling naturally to prevent conflicts
+    // The custom handler was causing issues with smooth scrolling
     const handleCommentWheel = useCallback((event) => {
+        // Just save scroll position, don't interfere with native scrolling
         const container = commentPopupContainerRef.current;
-        if (!container) return;
-
-        const deltaY = event.deltaY;
-        if (deltaY === 0) return;
-
-        const atTop = container.scrollTop === 0;
-        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
-        const scrollingUp = deltaY < 0;
-        const scrollingDown = deltaY > 0;
-
-        // If the container can scroll in the direction of the wheel, handle it here
-        if ((scrollingUp && !atTop) || (scrollingDown && !atBottom)) {
-            event.preventDefault();
-            event.stopPropagation();
-            container.scrollTop += deltaY;
-            // Save scroll position for restoration
-            savedScrollPositionRef.current = container.scrollTop;
+        if (container) {
+            // Use requestAnimationFrame to save position after browser scrolls
+            requestAnimationFrame(() => {
+                if (container) {
+                    savedScrollPositionRef.current = container.scrollTop;
+                }
+            });
         }
-        // Otherwise, let the event bubble so the page can scroll when container is fully at an edge
     }, []);
 
     // Touch scrolling for mobile inside the comment popup container
@@ -2435,29 +2426,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, []);
 
     const handleCommentTouchMove = useCallback((event) => {
+        // Just save scroll position, let browser handle touch scrolling naturally
         const container = commentPopupContainerRef.current;
-        if (!container || !(event.touches && event.touches.length > 0)) return;
-
-        const currentY = event.touches[0].clientY;
-        const deltaY = commentTouchStartYRef.current - currentY; // positive = swipe up (scroll down)
-
-        if (deltaY === 0) return;
-
-        const atTop = container.scrollTop === 0;
-        const atBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight;
-        const scrollingDown = deltaY > 0;
-        const scrollingUp = deltaY < 0;
-
-        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
-            // There is room to scroll inside the container – keep the scroll local
-            event.preventDefault();
-            event.stopPropagation();
-            container.scrollTop += deltaY;
-            commentTouchStartYRef.current = currentY;
-            // Save scroll position for restoration
-            savedScrollPositionRef.current = container.scrollTop;
+        if (container && event.touches && event.touches.length > 0) {
+            requestAnimationFrame(() => {
+                if (container) {
+                    savedScrollPositionRef.current = container.scrollTop;
+                }
+            });
         }
-        // Otherwise, allow the page to handle the scroll when we've hit the edge
     }, []);
     
     // Save scroll position on scroll (for restoration across re-renders)
@@ -2520,7 +2497,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Throttled position update - only runs once when popup opens, not on every render
         const updatePopupPosition = () => {
-            const commentButton = getDocument().querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            const commentButton = documentRef.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
@@ -2618,8 +2595,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         };
         
-        getDocument().addEventListener('mousedown', handleClickOutside);
-        return () => getDocument().removeEventListener('mousedown', handleClickOutside);
+        documentRef.addEventListener('mousedown', handleClickOutside);
+        return () => documentRef.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
@@ -2678,7 +2655,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
-                    const commentButton = getDocument().querySelector(`[data-comment-cell="${cellKey}"]`);
+                    const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -2714,7 +2691,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         setCommentPopupPosition({ top: popupTop, left: preferredLeft });
                     } else {
                         // Fallback: try to find the cell and position relative to it
-                        const cell = getDocument().querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
+                        const cell = documentRef.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-month="${deepMonth}"]`);
                         if (cell) {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
@@ -2780,10 +2757,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         
                         // Try multiple selectors to find the comment (handle both string and number IDs)
                         const commentElement = 
-                            getDocument().querySelector(`[data-comment-id="${targetCommentId}"]`) ||
-                            getDocument().querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
-                            getDocument().querySelector(`#comment-${targetCommentId}`) ||
-                            getDocument().querySelector(`#comment-${Number(targetCommentId)}`);
+                            documentRef.querySelector(`[data-comment-id="${targetCommentId}"]`) ||
+                            documentRef.querySelector(`[data-comment-id="${Number(targetCommentId)}"]`) ||
+                            documentRef.querySelector(`#comment-${targetCommentId}`) ||
+                            documentRef.querySelector(`#comment-${Number(targetCommentId)}`);
                         
                         if (commentElement && commentPopupContainerRef.current) {
                             // Only scroll if we haven't already scrolled to this comment
@@ -3029,7 +3006,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = getDocument().querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;

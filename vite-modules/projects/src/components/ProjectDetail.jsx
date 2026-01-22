@@ -2506,18 +2506,37 @@ export function ProjectDetail({ project, onBack, onDelete }) {
 
     // List View Component
     const ListView = () => {
-        // Defensive checks to ensure handlers are available
+        // Defensive checks to ensure handlers are available - log on every render to catch issues
+        console.log('🔍 ListView render: Checking handler availability:', {
+            handleAddTask: typeof handleAddTask,
+            handleViewTaskDetail: typeof handleViewTaskDetail,
+            handleDeleteTask: typeof handleDeleteTask,
+            handleAddSubtask: typeof handleAddSubtask,
+            handleAddTaskIsFunction: typeof handleAddTask === 'function',
+            handleViewTaskDetailIsFunction: typeof handleViewTaskDetail === 'function',
+            handleDeleteTaskIsFunction: typeof handleDeleteTask === 'function',
+            handleAddSubtaskIsFunction: typeof handleAddSubtask === 'function'
+        });
+        
         if (typeof handleAddTask !== 'function') {
-            console.error('❌ ListView: handleAddTask is not a function', typeof handleAddTask);
+            console.error('❌ ListView: handleAddTask is not a function', typeof handleAddTask, handleAddTask);
+        } else {
+            console.log('✅ ListView: handleAddTask is available and callable');
         }
         if (typeof handleViewTaskDetail !== 'function') {
-            console.error('❌ ListView: handleViewTaskDetail is not a function', typeof handleViewTaskDetail);
+            console.error('❌ ListView: handleViewTaskDetail is not a function', typeof handleViewTaskDetail, handleViewTaskDetail);
+        } else {
+            console.log('✅ ListView: handleViewTaskDetail is available and callable');
         }
         if (typeof handleDeleteTask !== 'function') {
-            console.error('❌ ListView: handleDeleteTask is not a function', typeof handleDeleteTask);
+            console.error('❌ ListView: handleDeleteTask is not a function', typeof handleDeleteTask, handleDeleteTask);
+        } else {
+            console.log('✅ ListView: handleDeleteTask is available and callable');
         }
         if (typeof handleAddSubtask !== 'function') {
-            console.error('❌ ListView: handleAddSubtask is not a function', typeof handleAddSubtask);
+            console.error('❌ ListView: handleAddSubtask is not a function', typeof handleAddSubtask, handleAddSubtask);
+        } else {
+            console.log('✅ ListView: handleAddSubtask is available and callable');
         }
 
         const formatChecklistProgress = (checklist = []) => {
