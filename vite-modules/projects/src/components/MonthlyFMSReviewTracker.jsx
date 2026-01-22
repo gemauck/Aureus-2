@@ -2417,7 +2417,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;

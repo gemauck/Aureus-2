@@ -287,19 +287,52 @@ const POAReview = () => {
 
                 console.log(`POA Review - Sending batch ${batchNumber}/${totalBatches} to server...`);
                 
-                // Retry logic for 502/503/504 errors (server/gateway errors)
+                // Retry logic for 401 (auth), 502/503/504 errors (server/gateway errors)
                 let batchResponse;
                 let retries = 0;
                 const maxRetries = 3;
                 const retryDelay = 2000; // 2 seconds between retries
                 
+                // Helper function to get fresh token
+                const getAuthToken = () => window.storage?.getToken?.() || '';
+                
+                // Helper function to refresh token
+                const refreshToken = async () => {
+                    try {
+                        const refreshUrl = '/api/auth/refresh';
+                        const refreshRes = await fetch(refreshUrl, { 
+                            method: 'POST', 
+                            credentials: 'include', 
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        
+                        if (refreshRes.ok) {
+                            const text = await refreshRes.text();
+                            const refreshData = text ? JSON.parse(text) : {};
+                            const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                            if (newToken && window.storage?.setToken) {
+                                window.storage.setToken(newToken);
+                                console.log('POA Review - Token refreshed successfully');
+                                return newToken;
+                            }
+                        }
+                        console.warn('POA Review - Token refresh failed');
+                        return null;
+                    } catch (error) {
+                        console.error('POA Review - Token refresh error:', error);
+                        return null;
+                    }
+                };
+                
                 while (retries <= maxRetries) {
                     try {
+                        let token = getAuthToken();
+                        
                         batchResponse = await fetch('/api/poa-review/process-batch', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
+                                'Authorization': `Bearer ${token}`
                             },
                             body: JSON.stringify({
                                 batchId,
@@ -312,13 +345,39 @@ const POAReview = () => {
                             })
                         });
                         
-                        // If successful or client error (4xx), don't retry
-                        if (batchResponse.ok || (batchResponse.status >= 400 && batchResponse.status < 500)) {
+                        // Handle 401 Unauthorized - try to refresh token once
+                        if (batchResponse.status === 401 && retries === 0) {
+                            console.warn(`POA Review - Batch ${batchNumber} got 401, attempting token refresh...`);
+                            const newToken = await refreshToken();
+                            if (newToken) {
+                                // Retry immediately with new token (don't count as retry)
+                                token = newToken;
+                                batchResponse = await fetch('/api/poa-review/process-batch', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({
+                                        batchId,
+                                        batchNumber,
+                                        totalBatches,
+                                        rows: batch,
+                                        sources: sources || ['Inmine: Daily Diesel Issues'],
+                                        fileName,
+                                        isFinal
+                                    })
+                                });
+                            }
+                        }
+                        
+                        // If successful or client error (4xx except 401), don't retry
+                        if (batchResponse.ok || (batchResponse.status >= 400 && batchResponse.status < 500 && batchResponse.status !== 401)) {
                             break;
                         }
                         
-                        // Retry on server/gateway errors (5xx)
-                        if (batchResponse.status >= 500 && retries < maxRetries) {
+                        // Retry on server/gateway errors (5xx) or 401 after refresh failed
+                        if ((batchResponse.status >= 500 || batchResponse.status === 401) && retries < maxRetries) {
                             retries++;
                             console.warn(`POA Review - Batch ${batchNumber} got ${batchResponse.status}, retrying (${retries}/${maxRetries})...`);
                             await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
