@@ -3101,7 +3101,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <tr>
                                             <th
                                                 className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '350px', width: '350px' }}
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '450px', width: '450px' }}
                                             >
                                                 Document / Data
                                             </th>
@@ -3140,9 +3140,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 <tr key={doc.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '350px', width: '350px' }}
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, minWidth: '450px', width: '450px' }}
                                                     >
-                                                        <div className="min-w-[350px]">
+                                                        <div className="min-w-[450px]">
                                                             <div className="text-xs font-medium text-gray-900">{doc.name}</div>
                                                             {doc.description && (
                                                                 <div className="text-[10px] text-gray-500">{doc.description}</div>
