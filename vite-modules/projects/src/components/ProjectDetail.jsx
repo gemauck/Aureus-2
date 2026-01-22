@@ -2690,18 +2690,34 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button
+                                            type="button"
                                             onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                console.log('➕ Add Task button clicked for list:', list.id);
-                                                if (typeof handleAddTask === 'function') {
-                                                    handleAddTask(list.id).catch(err => {
-                                                        console.error('Error adding task:', err);
-                                                        alert('Failed to add task: ' + (err?.message || 'Unknown error'));
-                                                    });
-                                                } else {
-                                                    console.error('❌ handleAddTask is not a function');
-                                                    alert('Task functionality is not available. Please refresh the page.');
+                                                try {
+                                                    console.log('🖱️ Add Task button clicked - event:', e);
+                                                    console.log('🖱️ Add Task button clicked for list:', list.id);
+                                                    console.log('🖱️ handleAddTask type:', typeof handleAddTask);
+                                                    console.log('🖱️ handleAddTask value:', handleAddTask);
+                                                    
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    
+                                                    if (typeof handleAddTask === 'function') {
+                                                        console.log('✅ Calling handleAddTask with listId:', list.id);
+                                                        const result = handleAddTask(list.id);
+                                                        console.log('✅ handleAddTask returned:', result);
+                                                        if (result && typeof result.catch === 'function') {
+                                                            result.catch(err => {
+                                                                console.error('❌ Error in handleAddTask promise:', err);
+                                                                alert('Failed to add task: ' + (err?.message || 'Unknown error'));
+                                                            });
+                                                        }
+                                                    } else {
+                                                        console.error('❌ handleAddTask is not a function, type:', typeof handleAddTask);
+                                                        alert('Task functionality is not available. Please refresh the page.');
+                                                    }
+                                                } catch (error) {
+                                                    console.error('❌ Error in Add Task button onClick handler:', error);
+                                                    alert('Failed to add task: ' + (error?.message || 'Unknown error'));
                                                 }
                                             }}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
@@ -2727,18 +2743,33 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                             </p>
                                             {!hasActiveTaskFilters && (
                                                 <button
+                                                    type="button"
                                                     onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        console.log('➕ Add first task button clicked for list:', list.id);
-                                                        if (typeof handleAddTask === 'function') {
-                                                            handleAddTask(list.id).catch(err => {
-                                                                console.error('Error adding task:', err);
-                                                                alert('Failed to add task: ' + (err?.message || 'Unknown error'));
-                                                            });
-                                                        } else {
-                                                            console.error('❌ handleAddTask is not a function');
-                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                        try {
+                                                            console.log('🖱️ Add first task button clicked - event:', e);
+                                                            console.log('🖱️ Add first task button clicked for list:', list.id);
+                                                            console.log('🖱️ handleAddTask type:', typeof handleAddTask);
+                                                            
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            
+                                                            if (typeof handleAddTask === 'function') {
+                                                                console.log('✅ Calling handleAddTask with listId:', list.id);
+                                                                const result = handleAddTask(list.id);
+                                                                console.log('✅ handleAddTask returned:', result);
+                                                                if (result && typeof result.catch === 'function') {
+                                                                    result.catch(err => {
+                                                                        console.error('❌ Error in handleAddTask promise:', err);
+                                                                        alert('Failed to add task: ' + (err?.message || 'Unknown error'));
+                                                                    });
+                                                                }
+                                                            } else {
+                                                                console.error('❌ handleAddTask is not a function, type:', typeof handleAddTask);
+                                                                alert('Task functionality is not available. Please refresh the page.');
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('❌ Error in Add first task button onClick handler:', error);
+                                                            alert('Failed to add task: ' + (error?.message || 'Unknown error'));
                                                         }
                                                     }}
                                                     className="mt-4 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors"
@@ -2756,17 +2787,31 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                 <article
                                                     key={task.id}
                                                     onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        console.log('👁️ Task row clicked:', task.id);
-                                                        if (typeof handleViewTaskDetail === 'function') {
-                                                            handleViewTaskDetail(task).catch(err => {
-                                                                console.error('Error opening task detail:', err);
-                                                                alert('Failed to open task: ' + (err?.message || 'Unknown error'));
-                                                            });
-                                                        } else {
-                                                            console.error('❌ handleViewTaskDetail is not a function');
-                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                        try {
+                                                            console.log('🖱️ Task row clicked - event:', e);
+                                                            console.log('🖱️ Task row clicked:', task.id);
+                                                            console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
+                                                            
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            
+                                                            if (typeof handleViewTaskDetail === 'function') {
+                                                                console.log('✅ Calling handleViewTaskDetail with task:', task.id);
+                                                                const result = handleViewTaskDetail(task);
+                                                                console.log('✅ handleViewTaskDetail returned:', result);
+                                                                if (result && typeof result.catch === 'function') {
+                                                                    result.catch(err => {
+                                                                        console.error('❌ Error in handleViewTaskDetail promise:', err);
+                                                                        alert('Failed to open task: ' + (err?.message || 'Unknown error'));
+                                                                    });
+                                                                }
+                                                            } else {
+                                                                console.error('❌ handleViewTaskDetail is not a function, type:', typeof handleViewTaskDetail);
+                                                                alert('Task functionality is not available. Please refresh the page.');
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('❌ Error in Task row onClick handler:', error);
+                                                            alert('Failed to open task: ' + (error?.message || 'Unknown error'));
                                                         }
                                                     }}
                                                     className="p-4 hover:bg-primary-50/40 transition-colors cursor-pointer"
@@ -2865,18 +2910,33 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                     {task.comments?.length || 0}
                                                                 </button>
                                                                 <button
+                                                                    type="button"
                                                                     onClick={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        console.log('➕ Add subtask button clicked for task:', task.id);
-                                                                        if (typeof handleAddSubtask === 'function') {
-                                                                            handleAddSubtask(task).catch(err => {
-                                                                                console.error('Error adding subtask:', err);
-                                                                                alert('Failed to add subtask: ' + (err?.message || 'Unknown error'));
-                                                                            });
-                                                                        } else {
-                                                                            console.error('❌ handleAddSubtask is not a function');
-                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                        try {
+                                                                            console.log('🖱️ Add subtask button clicked - event:', e);
+                                                                            console.log('🖱️ Add subtask button clicked for task:', task.id);
+                                                                            console.log('🖱️ handleAddSubtask type:', typeof handleAddSubtask);
+                                                                            
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            
+                                                                            if (typeof handleAddSubtask === 'function') {
+                                                                                console.log('✅ Calling handleAddSubtask with task:', task.id);
+                                                                                const result = handleAddSubtask(task);
+                                                                                console.log('✅ handleAddSubtask returned:', result);
+                                                                                if (result && typeof result.catch === 'function') {
+                                                                                    result.catch(err => {
+                                                                                        console.error('❌ Error in handleAddSubtask promise:', err);
+                                                                                        alert('Failed to add subtask: ' + (err?.message || 'Unknown error'));
+                                                                                    });
+                                                                                }
+                                                                            } else {
+                                                                                console.error('❌ handleAddSubtask is not a function, type:', typeof handleAddSubtask);
+                                                                                alert('Task functionality is not available. Please refresh the page.');
+                                                                            }
+                                                                        } catch (error) {
+                                                                            console.error('❌ Error in Add subtask button onClick handler:', error);
+                                                                            alert('Failed to add subtask: ' + (error?.message || 'Unknown error'));
                                                                         }
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
@@ -2887,17 +2947,31 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                                 </button>
                                                                 <button
                                                                     onClick={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        console.log('🗑️ Delete task button clicked:', task.id);
-                                                                        if (typeof handleDeleteTask === 'function') {
-                                                                            handleDeleteTask(task.id).catch(err => {
-                                                                                console.error('Error deleting task:', err);
-                                                                                alert('Failed to delete task: ' + (err?.message || 'Unknown error'));
-                                                                            });
-                                                                        } else {
-                                                                            console.error('❌ handleDeleteTask is not a function');
-                                                                            alert('Task functionality is not available. Please refresh the page.');
+                                                                        try {
+                                                                            console.log('🖱️ Delete task button clicked - event:', e);
+                                                                            console.log('🖱️ Delete task button clicked:', task.id);
+                                                                            console.log('🖱️ handleDeleteTask type:', typeof handleDeleteTask);
+                                                                            
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            
+                                                                            if (typeof handleDeleteTask === 'function') {
+                                                                                console.log('✅ Calling handleDeleteTask with taskId:', task.id);
+                                                                                const result = handleDeleteTask(task.id);
+                                                                                console.log('✅ handleDeleteTask returned:', result);
+                                                                                if (result && typeof result.catch === 'function') {
+                                                                                    result.catch(err => {
+                                                                                        console.error('❌ Error in handleDeleteTask promise:', err);
+                                                                                        alert('Failed to delete task: ' + (err?.message || 'Unknown error'));
+                                                                                    });
+                                                                                }
+                                                                            } else {
+                                                                                console.error('❌ handleDeleteTask is not a function, type:', typeof handleDeleteTask);
+                                                                                alert('Task functionality is not available. Please refresh the page.');
+                                                                            }
+                                                                        } catch (error) {
+                                                                            console.error('❌ Error in Delete task button onClick handler:', error);
+                                                                            alert('Failed to delete task: ' + (error?.message || 'Unknown error'));
                                                                         }
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-500 text-white rounded-lg hover:bg-red-600 hover:shadow-md transition-all font-medium"
