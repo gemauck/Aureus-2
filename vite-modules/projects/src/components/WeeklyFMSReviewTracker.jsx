@@ -3741,13 +3741,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={(el) => {
                                         commentPopupContainerRef.current = el;
-                                        // Restore scroll position when container is mounted/re-mounted
-                                        if (el && savedScrollPositionRef.current !== null) {
-                                            requestAnimationFrame(() => {
-                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
-                                                    el.scrollTop = savedScrollPositionRef.current;
-                                                }
-                                            });
+                                        if (el) {
+                                            // Restore scroll position if we have one saved, otherwise start at top
+                                            if (savedScrollPositionRef.current !== null) {
+                                                requestAnimationFrame(() => {
+                                                    if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
+                                                        el.scrollTop = savedScrollPositionRef.current;
+                                                    }
+                                                });
+                                            } else {
+                                                // Explicitly set to top when popup first opens (no saved position)
+                                                requestAnimationFrame(() => {
+                                                    if (el) {
+                                                        el.scrollTop = 0;
+                                                    }
+                                                });
+                                            }
                                         }
                                     }}
                                     className="comment-scroll-container space-y-2 mb-2 pr-1"
