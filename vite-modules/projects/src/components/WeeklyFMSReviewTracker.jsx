@@ -448,7 +448,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         return false;
     };
-
+    
     // Simplified loading - load from database, use prop as fallback
     const loadData = useCallback(async (retryCount = 0) => {
         if (!project?.id) return;
@@ -532,15 +532,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     } else {
                         // Small data - process immediately
                         const normalized = normalizeSectionsByYear(rawData);
-                        console.log('📥 Normalized sections:', { 
-                            yearKeys: Object.keys(normalized),
-                            totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                        });
-                        setSectionsByYear(normalized);
-                        sectionsRef.current = normalized;
-                        lastSavedDataRef.current = JSON.stringify(normalized);
-                        setIsLoading(false);
-                        return;
+                    console.log('📥 Normalized sections:', { 
+                        yearKeys: Object.keys(normalized),
+                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                    });
+                    setSectionsByYear(normalized);
+                    sectionsRef.current = normalized;
+                    lastSavedDataRef.current = JSON.stringify(normalized);
+                    setIsLoading(false);
+                    return;
                     }
                 }
             }
@@ -591,15 +591,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     return;
                 } else {
                     const normalized = normalizeSectionsByYear(rawData);
-                    console.log('📥 Normalized prop data:', { 
-                        yearKeys: Object.keys(normalized),
-                        totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                    });
-                    setSectionsByYear(normalized);
-                    sectionsRef.current = normalized;
-                    lastSavedDataRef.current = JSON.stringify(normalized);
-                    setIsLoading(false);
-                    return;
+                console.log('📥 Normalized prop data:', { 
+                    yearKeys: Object.keys(normalized),
+                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                });
+                setSectionsByYear(normalized);
+                sectionsRef.current = normalized;
+                lastSavedDataRef.current = JSON.stringify(normalized);
+                setIsLoading(false);
+                return;
                 }
             } else {
                 // Check localStorage as backup before initializing empty
@@ -639,17 +639,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                                 return;
                             } else {
-                                const parsed = JSON.parse(stored);
-                                const normalized = normalizeSectionsByYear(parsed);
-                                console.log('📥 Loaded from localStorage:', { 
-                                    yearKeys: Object.keys(normalized),
-                                    totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-                                });
-                                setSectionsByYear(normalized);
-                                sectionsRef.current = normalized;
-                                lastSavedDataRef.current = stored;
-                                setIsLoading(false);
-                                return;
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            console.log('📥 Loaded from localStorage:', { 
+                                yearKeys: Object.keys(normalized),
+                                totalSections: Object.values(normalized).reduce((sum, arr) => sum + (arr?.length || 0), 0)
+                            });
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            return;
                             }
                         }
                     } catch (storageError) {
@@ -707,14 +707,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                 }
                                 return;
                             } else {
-                                const parsed = JSON.parse(stored);
-                                const normalized = normalizeSectionsByYear(parsed);
-                                setSectionsByYear(normalized);
-                                sectionsRef.current = normalized;
-                                lastSavedDataRef.current = stored;
-                                setIsLoading(false);
-                                console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
-                                return;
+                            const parsed = JSON.parse(stored);
+                            const normalized = normalizeSectionsByYear(parsed);
+                            setSectionsByYear(normalized);
+                            sectionsRef.current = normalized;
+                            lastSavedDataRef.current = stored;
+                            setIsLoading(false);
+                            console.warn('⚠️ Using cached data due to network error. Changes may not be saved until connection is restored.');
+                            return;
                             }
                         }
                     } catch (storageError) {
@@ -777,7 +777,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                  error.message?.toLowerCase().includes('timeout') ||
                                  error.code === 'TIMEOUT';
                 if (!isTimeout && !error.suppressLog) {
-                    console.error('❌ Error loading users:', error);
+                console.error('❌ Error loading users:', error);
                 } else if (!error.suppressLog) {
                     console.warn('⏱️ Timeout loading users (server may be slow), will retry later');
                 }
@@ -998,19 +998,19 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 } else {
                     console.error('❌ Error saving to database:', error);
                 }
-                console.error('❌ Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    projectId: project.id,
-                    payloadSize: serialized.length,
-                    payloadPreview: serialized.substring(0, 200),
-                    errorName: error.name,
-                    errorCode: error.code,
-                    responseStatus: error.response?.status,
-                    responseData: error.response?.data,
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                projectId: project.id,
+                payloadSize: serialized.length,
+                payloadPreview: serialized.substring(0, 200),
+                errorName: error.name,
+                errorCode: error.code,
+                responseStatus: error.response?.status,
+                responseData: error.response?.data,
                     isNetworkError: isNetworkErr,
                     isTimeout: isTimeoutErr
-                });
+            });
             }
             
             // For network/timeout errors, save to localStorage as backup
@@ -2136,13 +2136,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             })();
             
-        setQuickComment('');
+            setQuickComment('');
         
         // DO NOT auto-scroll after adding comment - let user stay where they are
         // User can manually scroll to see new comments if they want
 
-        // ========================================================
-        // @MENTIONS - Process mentions and create notifications
+            // ========================================================
+            // @MENTIONS - Process mentions and create notifications
             // ========================================================
             try {
                 if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
@@ -2150,43 +2150,43 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     if (token && window.DatabaseAPI?.getUsers) {
                         try {
-                            // Fetch all users once for matching mentions
-                            const usersResponse = await window.DatabaseAPI.getUsers();
-                            const allUsers =
-                                usersResponse?.data?.users ||
-                                usersResponse?.data?.data?.users ||
-                                usersResponse?.users ||
-                                [];
-                            
-                            const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
-                            // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                            const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
-                            const projectInfo = {
-                                projectId: project?.id,
-                                projectName: project?.name,
-                                sectionId,
-                                documentId,
-                                month,
-                                commentId: newCommentId
-                            };
-                            
-                            // Fire mention notifications (do not block UI on errors)
-                            window.MentionHelper.processMentions(
-                                commentText,
-                                contextTitle,
-                                contextLink,
-                                currentUser.name || currentUser.email || 'Unknown',
-                                allUsers,
-                                projectInfo
-                            ).then(() => {
-                            }).catch(error => {
+                        // Fetch all users once for matching mentions
+                        const usersResponse = await window.DatabaseAPI.getUsers();
+                        const allUsers =
+                            usersResponse?.data?.users ||
+                            usersResponse?.data?.data?.users ||
+                            usersResponse?.users ||
+                            [];
+                        
+                        const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
+                        // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
+                        const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                        const projectInfo = {
+                            projectId: project?.id,
+                            projectName: project?.name,
+                            sectionId,
+                            documentId,
+                            month,
+                            commentId: newCommentId
+                        };
+                        
+                        // Fire mention notifications (do not block UI on errors)
+                        window.MentionHelper.processMentions(
+                            commentText,
+                            contextTitle,
+                            contextLink,
+                            currentUser.name || currentUser.email || 'Unknown',
+                            allUsers,
+                            projectInfo
+                        ).then(() => {
+                        }).catch(error => {
                                 // Suppress timeout errors for mention processing
                                 const isTimeout = error.name === 'TimeoutError' || 
                                                  error.isTimeout === true || 
                                                  error.message?.toLowerCase().includes('timeout') ||
                                                  error.code === 'TIMEOUT';
                                 if (!isTimeout && !error.suppressLog) {
-                                    console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
+                            console.error('❌ Error processing @mentions for weekly FMS review comment:', error);
                                 }
                             });
                         } catch (usersError) {
@@ -2403,58 +2403,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ============================================================
     
     // ============================================================
-    // SIMPLIFIED SCROLL HANDLERS - Let browser handle scrolling naturally
+    // SCROLL FUNCTIONALITY - Pure CSS, no JavaScript interference
     // ============================================================
-    
-    // Simple wheel handler - just save position, don't interfere with native scrolling
-    const handleCommentWheel = useCallback((event) => {
-        // Let browser handle scrolling naturally - just save position
-        const container = commentPopupContainerRef.current;
-        if (container) {
-            // Use a small delay to capture position after browser scrolls
-            setTimeout(() => {
-                if (container) {
-                    savedScrollPositionRef.current = container.scrollTop;
-                }
-            }, 0);
-        }
-    }, []);
-
-    // Simple touch handlers - just save position, don't interfere
-    const handleCommentTouchStart = useCallback((event) => {
-        // Just track touch start for potential future use
-        if (event.touches && event.touches.length > 0) {
-            commentTouchStartYRef.current = event.touches[0].clientY;
-        }
-    }, []);
-
-    const handleCommentTouchMove = useCallback((event) => {
-        // Let browser handle touch scrolling naturally - just save position
-        const container = commentPopupContainerRef.current;
-        if (container) {
-            setTimeout(() => {
-                if (container) {
-                    savedScrollPositionRef.current = container.scrollTop;
-                }
-            }, 0);
-        }
-    }, []);
-    
-    // Save scroll position on scroll (for restoration across re-renders)
-    useEffect(() => {
-        const container = commentPopupContainerRef.current;
-        if (!container || !hoverCommentCell) return;
-        
-        const handleScroll = () => {
-            savedScrollPositionRef.current = container.scrollTop;
-        };
-        
-        container.addEventListener('scroll', handleScroll, { passive: true });
-        
-        return () => {
-            container.removeEventListener('scroll', handleScroll);
-        };
-    }, [hoverCommentCell]);
+    // Scroll is handled entirely by browser using CSS overflow-y: auto
+    // No JavaScript handlers needed - browser handles everything naturally
     
     // Auto-scroll to bottom only when popup first opens (not on position updates)
     // Auto-scroll to bottom only when popup first opens (not on every render)
@@ -2489,15 +2441,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Smart positioning for comment popup - REFACTORED to prevent jitter and scroll interference
     const positionUpdateTimeoutRef = useRef(null);
     useEffect(() => {
-        if (!hoverCommentCell) {
+            if (!hoverCommentCell) {
             // Clear any pending updates when popup closes
             if (positionUpdateTimeoutRef.current) {
                 clearTimeout(positionUpdateTimeoutRef.current);
                 positionUpdateTimeoutRef.current = null;
             }
-            return;
-        }
-        
+                return;
+            }
+            
         // Throttled position update - only runs once when popup opens, not on every render
         const updatePopupPosition = () => {
             const commentButton = documentRef.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
@@ -2561,8 +2513,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Listen to resize only - NO scroll listener
         window.addEventListener('resize', handleResize);
-        
-        return () => {
+            
+            return () => {
             window.removeEventListener('resize', handleResize);
             clearTimeout(resizeTimeout);
             if (positionUpdateTimeoutRef.current) {
@@ -2777,11 +2729,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                  commentRect.bottom <= containerRect.bottom;
                                 if (!isVisible) {
                                     const scrollTop = container.scrollTop;
-                                    const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
                                     container.scrollTo({
                                         top: Math.max(0, commentOffset - 20), // 20px padding from top
-                                        behavior: 'smooth'
-                                    });
+                                    behavior: 'smooth'
+                                });
                                 }
                                 // Mark as scrolled to prevent re-scrolling
                                 deepLinkScrolledRef.current.add(targetCommentId);
@@ -3728,27 +3680,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={(el) => {
                                         commentPopupContainerRef.current = el;
-                                        // Restore scroll position when container is mounted/re-mounted
-                                        if (el && savedScrollPositionRef.current !== null) {
-                                            requestAnimationFrame(() => {
-                                                if (el && Math.abs(el.scrollTop - savedScrollPositionRef.current) > 2) {
-                                                    el.scrollTop = savedScrollPositionRef.current;
-                                                }
-                                            });
-                                        }
                                     }}
-                                    className="comment-scroll-container max-h-32 overflow-y-auto space-y-2 mb-2 pr-1"
+                                    className="comment-scroll-container space-y-2 mb-2 pr-1"
                                     style={{
                                         maxHeight: '8rem',
                                         overflowY: 'auto',
+                                        overflowX: 'hidden',
                                         WebkitOverflowScrolling: 'touch',
-                                        scrollBehavior: 'auto' // Use 'auto' for instant scrolling
-                                    }}
-                                    onScroll={() => {
-                                        // Save scroll position on scroll event
-                                        if (commentPopupContainerRef.current) {
-                                            savedScrollPositionRef.current = commentPopupContainerRef.current.scrollTop;
-                                        }
+                                        overscrollBehavior: 'contain'
                                     }}
                                 >
                                     {comments.map((comment, idx) => (
