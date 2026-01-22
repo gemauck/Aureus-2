@@ -253,7 +253,7 @@ const POAReview = () => {
         setProcessingProgressPercent(0);
 
         try {
-            // Send batches
+            // Send batches sequentially (await each one before sending the next)
             console.log('POA Review - Starting batch loop, totalBatches:', totalBatches);
             for (let i = 0; i < totalBatches; i++) {
                 const start = i * BATCH_SIZE;
@@ -262,7 +262,7 @@ const POAReview = () => {
                 const batchNumber = i + 1;
                 const isFinal = batchNumber === totalBatches;
 
-                console.log(`POA Review - Sending batch ${batchNumber}/${totalBatches}`, {
+                console.log(`POA Review - Preparing batch ${batchNumber}/${totalBatches}`, {
                     batchSize: batch.length,
                     isFinal,
                     batchId
@@ -271,6 +271,7 @@ const POAReview = () => {
                 setProcessingProgress(`Sending batch ${batchNumber} of ${totalBatches} (${end} of ${totalRows} rows)...`);
                 setProcessingProgressPercent(Math.round((batchNumber / totalBatches) * 50)); // 50% for sending
 
+                console.log(`POA Review - Sending batch ${batchNumber}/${totalBatches} to server...`);
                 const batchResponse = await fetch('/api/poa-review/process-batch', {
                     method: 'POST',
                     headers: {
@@ -287,6 +288,8 @@ const POAReview = () => {
                         isFinal
                     })
                 });
+                
+                console.log(`POA Review - Batch ${batchNumber}/${totalBatches} response received, status:`, batchResponse.status);
 
                 if (!batchResponse.ok) {
                     // Get detailed error information
