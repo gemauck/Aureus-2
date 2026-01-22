@@ -1158,7 +1158,7 @@ function initializeProjectDetail() {
             return;
         }
         
-        const { task: taskId = null, comment: commentId = null, clearTask = false, clearComment = false } = options;
+        const { task: taskId = null, comment: commentId = null, clearTask = false, clearComment = false, replace = false } = options;
         
         // Build search params
         const searchParams = new URLSearchParams();
@@ -1208,12 +1208,14 @@ function initializeProjectDetail() {
         if (!urlUpdated && window.RouteState?.navigate) {
             try {
                 // Use RouteState.navigate - explicitly set segments to include project ID
+                // Use replace: true to prevent navigation events that cause page flashes
                 window.RouteState.navigate({
                     page: 'projects',
                     segments: [projectId], // CRITICAL: Always include project ID in segments
                     search: newSearch,
                     preserveSearch: false,
-                    preserveHash: false
+                    preserveHash: false,
+                    replace: replace // Use replace parameter to prevent navigation events
                 });
                 urlUpdated = true;
             } catch (e) {
@@ -1224,8 +1226,9 @@ function initializeProjectDetail() {
         if (!urlUpdated && window.RouteState?.setPageSubpath) {
             try {
                 // Use setPageSubpath - explicitly set segments to include project ID
+                // Use replace parameter to prevent navigation events
                 window.RouteState.setPageSubpath('projects', [projectId], { // CRITICAL: Always include project ID
-                    replace: false,
+                    replace: replace, // Use replace parameter to prevent navigation events
                     preserveSearch: false,
                     preserveHash: false
                 });
@@ -1255,10 +1258,16 @@ function initializeProjectDetail() {
             url.pathname = expectedPath; // CRITICAL: Always set pathname with project ID
             url.search = newSearch;
             
-            // Use pushState to update URL
+            // Use replaceState when replace=true to prevent navigation events that cause page flashes
+            // Use pushState only when replace=false (for normal navigation)
             try {
-                window.history.pushState({}, '', url);
-                console.log('✅ URL updated directly:', url.href, '(was:', window.location.href + ')');
+                if (replace) {
+                    window.history.replaceState({}, '', url);
+                    console.log('✅ URL updated via replaceState (no navigation):', url.href);
+                } else {
+                    window.history.pushState({}, '', url);
+                    console.log('✅ URL updated via pushState:', url.href, '(was:', window.location.href + ')');
+                }
                 
                 // Verify it actually updated
                 setTimeout(() => {
@@ -4023,27 +4032,23 @@ function initializeProjectDetail() {
         const expectedSearch = `?task=${task.id}`;
         const expectedUrl = `${window.location.origin}${expectedPath}${expectedSearch}`;
         
-        // Method 1: Direct URL manipulation (ALWAYS works)
+        // Method 1: Direct URL manipulation using replaceState to avoid triggering route changes
+        // Use replaceState instead of pushState to prevent navigation events that cause page flashes
         const url = new URL(window.location.href);
         url.pathname = expectedPath; // Always set pathname with project ID
         url.search = expectedSearch; // Always set search with task ID
         
-        // Update immediately - this is the most reliable method
+        // Update immediately using replaceState to avoid triggering route navigation
         try {
-            window.history.pushState({}, '', url);
-            console.log('✅ URL updated via pushState:', url.href);
+            window.history.replaceState({}, '', url);
+            console.log('✅ URL updated via replaceState (no navigation trigger):', url.href);
         } catch (e) {
-            console.error('❌ pushState failed, trying replaceState:', e);
-            try {
-                window.history.replaceState({}, '', url);
-                console.log('✅ URL updated via replaceState:', url.href);
-            } catch (e2) {
-                console.error('❌ Both pushState and replaceState failed:', e2);
-            }
+            console.error('❌ replaceState failed:', e);
         }
         
         // Method 2: Also try RouteState methods (if available) for consistency
-        updateUrl({ task: task.id, clearComment: true });
+        // Use replace: true to prevent navigation events
+        updateUrl({ task: task.id, clearComment: true, replace: true });
         
         // Method 3: Verify and force-fix after delay to ensure it sticks
         setTimeout(() => {
