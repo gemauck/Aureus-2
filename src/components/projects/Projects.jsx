@@ -96,6 +96,7 @@ const Projects = () => {
     const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     // Load view mode from localStorage, defaulting to 'list' if not set
     const [viewMode, setViewMode] = useState(() => {
@@ -868,16 +869,18 @@ const Projects = () => {
                 }
 
                 
-                // Wait for DatabaseAPI to be available (with timeout - max 5 seconds)
-                let waitAttempts = 0;
-                const maxWaitAttempts = 50; // 5 seconds total (50 * 100ms)
-                
-                while (!window.DatabaseAPI && waitAttempts < maxWaitAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    waitAttempts++;
+                // Wait for DatabaseAPI to be available (with timeout - max 2 seconds)
+                // Use exponential backoff instead of fixed 100ms polling for better performance
+                if (!window.DatabaseAPI) {
+                    let waitAttempts = 0;
+                    const maxWaitAttempts = 20; // Reduced from 50 to 20
+                    let delay = 50; // Start with 50ms
                     
-                    // Log progress every 10 attempts (1 second)
-                    if (waitAttempts % 10 === 0) {
+                    while (!window.DatabaseAPI && waitAttempts < maxWaitAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        waitAttempts++;
+                        // Exponential backoff: 50ms, 100ms, 150ms, 200ms, etc. (max 500ms)
+                        delay = Math.min(50 + (waitAttempts * 50), 500);
                     }
                 }
                 
@@ -2097,7 +2100,8 @@ const Projects = () => {
         checkProjectDetail();
         
         // Check periodically even when not viewing a project
-        const interval = setInterval(checkProjectDetail, 200);
+        // Use longer interval (1 second) to reduce performance impact
+        const interval = setInterval(checkProjectDetail, 1000);
         
         // Also check on window load events
         window.addEventListener('load', checkProjectDetail);
@@ -2912,12 +2916,31 @@ const Projects = () => {
         return [...new Set(projects.map(p => p.client))].sort();
     }, [projects]);
 
+    // Memoize client counts to avoid recalculating on every render
+    const clientCounts = useMemo(() => {
+        const counts = {};
+        projects.forEach(p => {
+            const client = p.client || '';
+            counts[client] = (counts[client] || 0) + 1;
+        });
+        return counts;
+    }, [projects]);
+
+    // Debounce search term to reduce filter operations while typing
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 300); // 300ms debounce delay
+
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
+
     // Filter projects by selected client, search term, status and sort alphabetically by client name - memoized
     const filteredProjects = useMemo(() => {
-        const lowerSearchTerm = searchTerm.toLowerCase();
+        const lowerSearchTerm = debouncedSearchTerm.toLowerCase();
         return projects.filter(p => {
             const matchesClient = selectedClient === 'all' || p.client === selectedClient;
-            const matchesSearch = searchTerm === '' || 
+            const matchesSearch = debouncedSearchTerm === '' || 
                 p.name.toLowerCase().includes(lowerSearchTerm) ||
                 (p.client || '').toLowerCase().includes(lowerSearchTerm) ||
                 p.type.toLowerCase().includes(lowerSearchTerm) ||
@@ -2929,7 +2952,7 @@ const Projects = () => {
             const bClient = b.client || '';
             return aClient.localeCompare(bClient);
         });
-    }, [projects, selectedClient, searchTerm, filterStatus]);
+    }, [projects, selectedClient, debouncedSearchTerm, filterStatus]);
 
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
@@ -3561,7 +3584,7 @@ const Projects = () => {
                     >
                         <option value="all">All Clients ({projects.length})</option>
                         {uniqueClients.map(client => {
-                            const clientCount = projects.filter(p => p.client === client).length;
+                            const clientCount = clientCounts[client] || 0;
                             return (
                                 <option key={client} value={client}>
                                     {client} ({clientCount})
