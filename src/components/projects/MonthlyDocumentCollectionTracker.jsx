@@ -27,6 +27,69 @@ const getFacilitiesLabel = (project) => {
     return String(candidate || '').trim();
 };
 
+// Helper function to format dates as date and time (without timezone info)
+const formatDateTime = (dateValue) => {
+    if (!dateValue) return '';
+    try {
+        // Handle string dates - remove Z if present for consistent parsing
+        const cleanDate = String(dateValue).replace(/Z$/, '');
+        const date = new Date(cleanDate);
+        if (isNaN(date.getTime())) {
+            // Try parsing as ISO string directly
+            const date2 = new Date(dateValue);
+            if (isNaN(date2.getTime())) return '';
+            // Format as: "Jan 23, 2026 6:03 PM" (no timezone, no milliseconds)
+            return date2.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+        // Format as: "Jan 23, 2026 6:03 PM" (no timezone, no milliseconds)
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+    } catch (e) {
+        console.warn('Failed to format date:', dateValue, e);
+        return '';
+    }
+};
+
+// Helper function to format dates as date only (no time)
+const formatDateOnly = (dateValue) => {
+    if (!dateValue) return '';
+    try {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) return '';
+        // Format as: "Jan 23, 2026"
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (e) {
+        return '';
+    }
+};
+
+// Helper function to truncate text to one line (approximately 60 characters)
+const truncateDescription = (text, maxLength = 60) => {
+    if (!text || text.length <= maxLength) return { truncated: text, isLong: false };
+    // Find the last space before maxLength to avoid cutting words
+    const truncated = text.substring(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    const cutPoint = lastSpace > 0 ? lastSpace : maxLength;
+    return { truncated: text.substring(0, cutPoint), isLong: true };
+};
+
 const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
@@ -49,6 +112,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const deletionTimestampRef = useRef(null); // Track when deletion started
     const deletionQueueRef = useRef([]); // Queue for pending deletions when one is already in progress
     const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
+    const scrollableContainersRef = useRef([]); // Store refs to all scrollable table containers
+    const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     
     const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
@@ -320,6 +385,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
     const [showTemplateList, setShowTemplateList] = useState(true);
+    const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -460,6 +526,56 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         };
     }, [sectionsByYear, isLoading, project?.id]);
+    
+    // Synchronize horizontal scrolling across all table containers
+    useEffect(() => {
+        // Clean up old refs when sections change
+        scrollableContainersRef.current = [];
+        
+        let scrollHandlers = new Map();
+        let timeoutId;
+        
+        // Small delay to allow DOM to update
+        timeoutId = setTimeout(() => {
+            const containers = scrollableContainersRef.current.filter(Boolean);
+            if (containers.length === 0) return;
+            
+            const handleScroll = (sourceElement) => {
+                if (isScrollingRef.current) return;
+                isScrollingRef.current = true;
+                
+                const scrollLeft = sourceElement.scrollLeft;
+                containers.forEach(container => {
+                    if (container !== sourceElement && container) {
+                        container.scrollLeft = scrollLeft;
+                    }
+                });
+                
+                // Reset flag after a short delay to allow smooth scrolling
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        isScrollingRef.current = false;
+                    }, 50);
+                });
+            };
+            
+            // Add scroll listeners to all containers
+            containers.forEach(container => {
+                const handler = () => handleScroll(container);
+                scrollHandlers.set(container, handler);
+                container.addEventListener('scroll', handler, { passive: true });
+            });
+        }, 100);
+        
+        return () => {
+            clearTimeout(timeoutId);
+            // Cleanup: remove all scroll listeners
+            scrollHandlers.forEach((handler, container) => {
+                container.removeEventListener('scroll', handler);
+            });
+            scrollHandlers.clear();
+        };
+    }, [sections.length]); // Re-run when sections change
     
     // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
@@ -1655,10 +1771,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 if (!dateValue) return `${c.author}: ${c.text}`;
                                 const date = new Date(dateValue);
                                 if (isNaN(date.getTime())) return `${c.author}: ${c.text}`;
-                                const formattedDate = date.toLocaleString('en-ZA', {
-                                    year: 'numeric', month: 'short', day: '2-digit',
-                                    hour: '2-digit', minute: '2-digit'
-                                });
+                                const formattedDate = formatDateTime(dateValue);
                                 return `[${formattedDate}] ${c.author}: ${c.text}`;
                             } catch (e) {
                                 return `${c.author}: ${c.text}`;
@@ -1771,6 +1884,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
                 setHoverCommentCell(null);
                 setQuickComment('');
+                // Clear URL params when closing popup by clicking outside (but preserve project path)
+                if (window.RouteState && window.RouteState.navigate && project?.id) {
+                    window.RouteState.navigate({
+                        page: 'projects',
+                        segments: [String(project.id)],
+                        hash: '',
+                        search: '',
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                }
             }
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
@@ -2164,7 +2289,57 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     }
                 }, 200);
                 
-                // Comment deep linking removed - no scrolling functionality
+                // Scroll to specific comment if commentId is provided
+                if (deepCommentId) {
+                    const scrollToComment = () => {
+                        const commentElement = window.document.getElementById(`comment-${deepCommentId}`);
+                        const container = commentPopupContainerRef.current;
+                        if (commentElement && container) {
+                            // Calculate scroll position to center the comment in the container
+                            // Use offsetTop relative to the container's scrollable content
+                            const containerScrollTop = container.scrollTop;
+                            const commentOffsetTop = commentElement.offsetTop - container.offsetTop;
+                            const containerHeight = container.clientHeight;
+                            const commentHeight = commentElement.offsetHeight;
+                            
+                            // Center the comment vertically in the visible area
+                            const targetScrollTop = commentOffsetTop - (containerHeight / 2) + (commentHeight / 2);
+                            
+                            container.scrollTo({
+                                top: Math.max(0, targetScrollTop),
+                                behavior: 'smooth'
+                            });
+                            
+                            // Highlight the comment briefly with a subtle animation
+                            commentElement.style.transition = 'background-color 0.3s ease';
+                            commentElement.style.backgroundColor = '#fef3c7'; // yellow highlight
+                            setTimeout(() => {
+                                commentElement.style.backgroundColor = '';
+                                setTimeout(() => {
+                                    commentElement.style.transition = '';
+                                }, 300);
+                            }, 2000);
+                            
+                            console.log('✅ Scrolled to comment:', deepCommentId);
+                            return true;
+                        }
+                        return false;
+                    };
+                    
+                    // Try scrolling immediately, then retry a few times (wait for popup to render)
+                    setTimeout(() => {
+                        if (!scrollToComment()) {
+                            let scrollAttempts = 0;
+                            const maxScrollAttempts = 10;
+                            const scrollRetry = setInterval(() => {
+                                scrollAttempts++;
+                                if (scrollToComment() || scrollAttempts >= maxScrollAttempts) {
+                                    clearInterval(scrollRetry);
+                                }
+                            }, 200);
+                        }
+                    }, 100); // Small delay to ensure popup is rendered
+                }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);
@@ -2327,7 +2502,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                className={`px-3 py-2 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
@@ -2385,7 +2560,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
+                        className={`w-full px-2 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2395,7 +2570,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         ))}
                     </select>
                     
-                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
+                    <div className="absolute top-1/2 right-1 -translate-y-1/2 z-10">
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -2404,9 +2579,41 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 
                                 if (isPopupOpen) {
                                     setHoverCommentCell(null);
+                                    // Clear URL params when closing popup (but preserve project path)
+                                    if (window.RouteState && window.RouteState.navigate && project?.id) {
+                                        window.RouteState.navigate({
+                                            page: 'projects',
+                                            segments: [String(project.id)],
+                                            hash: '',
+                                            search: '',
+                                            replace: false,
+                                            preserveSearch: false,
+                                            preserveHash: false
+                                        });
+                                    }
                                 } else {
                                     // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);
+                                    
+                                    // Update URL with deep link when opening popup
+                                    const [sectionId, documentId, month] = cellKey.split('-');
+                                    if (sectionId && documentId && month && project?.id) {
+                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}`;
+                                        
+                                        if (window.RouteState && window.RouteState.navigate) {
+                                            window.RouteState.navigate({
+                                                page: 'projects',
+                                                segments: [String(project.id)],
+                                                hash: deepLinkUrl.replace('#', ''),
+                                                replace: false,
+                                                preserveSearch: false,
+                                                preserveHash: false
+                                            });
+                                        } else {
+                                            window.location.hash = deepLinkUrl;
+                                        }
+                                    }
+                                    
                                     // Trigger position update after state is set
                                     setTimeout(() => {
                                         const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
@@ -3110,10 +3317,53 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
                                             id={comment.id ? `comment-${comment.id}` : undefined}
-                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group"
+                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group cursor-pointer"
+                                            onClick={() => {
+                                                // Update URL when clicking on a comment to enable sharing
+                                                if (section && doc && comment.id) {
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    
+                                                    // Update URL using RouteState if available, otherwise use hash
+                                                    if (window.RouteState && window.RouteState.navigate) {
+                                                        const url = new URL(window.location.href);
+                                                        url.hash = deepLinkUrl.replace('#', '');
+                                                        window.RouteState.navigate({
+                                                            page: 'projects',
+                                                            segments: [String(project?.id || '')],
+                                                            hash: deepLinkUrl.replace('#', ''),
+                                                            replace: false,
+                                                            preserveSearch: false,
+                                                            preserveHash: false
+                                                        });
+                                                    } else {
+                                                        window.location.hash = deepLinkUrl;
+                                                    }
+                                                    
+                                                    // Copy to clipboard
+                                                    const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
+                                                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                        navigator.clipboard.writeText(fullUrl).then(() => {
+                                                            // Show brief feedback
+                                                            const button = window.document.querySelector(`[data-copy-link="${comment.id}"]`);
+                                                            if (button) {
+                                                                const originalHTML = button.innerHTML;
+                                                                button.innerHTML = '<i class="fas fa-check text-[9px]"></i>';
+                                                                button.className = button.className.replace('text-gray-400', 'text-green-600');
+                                                                setTimeout(() => {
+                                                                    button.innerHTML = originalHTML;
+                                                                    button.className = button.className.replace('text-green-600', 'text-gray-400');
+                                                                }, 1500);
+                                                            }
+                                                        }).catch(err => {
+                                                            console.warn('Failed to copy link:', err);
+                                                        });
+                                                    }
+                                                }
+                                            }}
+                                            title="Click to copy link to this comment"
                                         >
                                             <p
-                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-6"
+                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-12"
                                                 dangerouslySetInnerHTML={{
                                                     __html:
                                                         window.MentionHelper && comment.text
@@ -3127,23 +3377,79 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     try {
                                                         const date = new Date(comment.date || comment.createdAt);
                                                         if (isNaN(date.getTime())) return 'Invalid Date';
-                                                        return date.toLocaleString('en-ZA', { 
-                                                            month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                        });
+                                                        return formatDateTime(comment.date || comment.createdAt);
                                                     } catch (e) {
                                                         return 'Invalid Date';
                                                     }
                                                 })() : 'No date'}</span>
                                             </div>
                                             <button
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent triggering comment click
                                                     if (!section || !doc) return;
                                                     handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
-                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
+                                                title="Delete comment"
                                             >
                                                 <i className="fas fa-trash text-[10px]"></i>
+                                            </button>
+                                            <button
+                                                data-copy-link={comment.id}
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent triggering comment click
+                                                    if (!section || !doc || !comment.id) return;
+                                                    
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
+                                                    
+                                                    // Copy to clipboard
+                                                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                        navigator.clipboard.writeText(fullUrl).then(() => {
+                                                            // Show feedback
+                                                            const button = e.currentTarget;
+                                                            const originalHTML = button.innerHTML;
+                                                            button.innerHTML = '<i class="fas fa-check text-[9px]"></i>';
+                                                            button.className = button.className.replace('text-gray-400', 'text-green-600');
+                                                            setTimeout(() => {
+                                                                button.innerHTML = originalHTML;
+                                                                button.className = button.className.replace('text-green-600', 'text-gray-400');
+                                                            }, 1500);
+                                                        }).catch(err => {
+                                                            console.warn('Failed to copy link:', err);
+                                                            alert('Failed to copy link. Please copy manually from the address bar.');
+                                                        });
+                                                    } else {
+                                                        // Fallback: select the URL in a temporary input
+                                                        const input = document.createElement('input');
+                                                        input.value = fullUrl;
+                                                        document.body.appendChild(input);
+                                                        input.select();
+                                                        document.execCommand('copy');
+                                                        document.body.removeChild(input);
+                                                        alert('Link copied to clipboard!');
+                                                    }
+                                                    
+                                                    // Also update URL
+                                                    if (window.RouteState && window.RouteState.navigate) {
+                                                        window.RouteState.navigate({
+                                                            page: 'projects',
+                                                            segments: [String(project?.id || '')],
+                                                            hash: deepLinkUrl.replace('#', ''),
+                                                            replace: false,
+                                                            preserveSearch: false,
+                                                            preserveHash: false
+                                                        });
+                                                    } else {
+                                                        window.location.hash = deepLinkUrl;
+                                                    }
+                                                }}
+                                                className="absolute top-1 right-6 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                type="button"
+                                                title="Copy link to this comment"
+                                            >
+                                                <i className="fas fa-link text-[9px]"></i>
                                             </button>
                                         </div>
                                         ))}
@@ -3199,140 +3505,140 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             })()}
             
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
-                        <i className="fas fa-arrow-left"></i>
-                    </button>
-                    <div>
-                        <h1 className="text-lg font-semibold text-gray-900">Monthly Document Collection Tracker</h1>
-                        <p className="text-xs text-gray-500">
-                            {project?.name}
-                            {' • '}
-                            {project?.client}
-                            {' • '}
-                            Facilities:
-                            {' '}
-                            {getFacilitiesLabel(project) || 'Not specified'}
-                        </p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={onBack} 
+                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">Monthly Document Collection Tracker</h1>
+                            <p className="text-sm text-gray-600 mt-0.5">
+                                {project?.name}
+                                {project?.client && ` • ${project.client}`}
+                                {' • Facilities: '}
+                                <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                            </p>
+                        </div>
                     </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-medium text-gray-600">Year:</label>
-                    <select
-                        value={selectedYear}
-                        onChange={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const newYear = parseInt(e.target.value, 10);
-                            if (!isNaN(newYear)) {
-                                handleYearChange(newYear);
-                            }
-                        }}
-                        onBlur={(e) => {
-                            const newYear = parseInt(e.target.value, 10);
-                            if (!isNaN(newYear) && newYear !== selectedYear) {
-                                handleYearChange(newYear);
-                            }
-                        }}
-                        aria-label="Select year for document collection tracker"
-                        role="combobox"
-                        aria-haspopup="listbox"
-                        data-testid="year-selector"
-                        className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500"
-                    >
-                        {yearOptions.map(year => (
-                            <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
-                        ))}
-                    </select>
                     
-                    <button
-                        onClick={handleExportToExcel}
-                        disabled={isExporting || sections.length === 0}
-                        className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-[10px] font-medium disabled:opacity-50"
-                    >
-                        {isExporting ? (
-                            <><i className="fas fa-spinner fa-spin mr-1"></i>Exporting...</>
-                        ) : (
-                            <><i className="fas fa-file-excel mr-1"></i>Export</>
-                        )}
-                    </button>
-                    
-                    <button
-                        onClick={handleAddSection}
-                        className="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-[10px] font-medium"
-                    >
-                        <i className="fas fa-plus mr-1"></i>Add Section
-                    </button>
-                    
-                    <div className="flex items-center gap-1 border-l border-gray-300 pl-2 ml-2">
-                        <button
-                            onClick={() => setShowApplyTemplateModal(true)}
-                            className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-[10px] font-medium"
-                        >
-                            <i className="fas fa-magic mr-1"></i>Apply Template
-                        </button>
-                        <button
-                            onClick={() => setShowTemplateModal(true)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-[10px] font-medium"
-                        >
-                            <i className="fas fa-layer-group mr-1"></i>Templates
-                        </button>
-                        <button
-                            onClick={() => {
-                                try {
-                                    if (!sections || sections.length === 0) {
-                                        alert('There are no sections in this year to save as a template.');
-                                        return;
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+                            <label className="text-xs font-semibold text-gray-700">Year:</label>
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const newYear = parseInt(e.target.value, 10);
+                                    if (!isNaN(newYear)) {
+                                        handleYearChange(newYear);
                                     }
-                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
-                                    const name = window.prompt('Template name', defaultName);
-                                    if (!name || !name.trim()) {
-                                        return;
+                                }}
+                                onBlur={(e) => {
+                                    const newYear = parseInt(e.target.value, 10);
+                                    if (!isNaN(newYear) && newYear !== selectedYear) {
+                                        handleYearChange(newYear);
                                     }
-                                    // Build a clean template payload from the current year's sections
-                                    // (names/descriptions only, no status/comments) and route it
-                                    // through the "create" flow so we POST a brand‑new template.
-                                    setEditingTemplate(null);
-                                    setPrefilledTemplate({
-                                        name: name.trim(),
-                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
-                                        sections: buildTemplateSectionsFromCurrent()
-                                    });
-                                    setShowTemplateList(false);
-                                    setShowTemplateModal(true);
-                                } catch (e) {
-                                    console.error('❌ Failed to prepare template from current year:', e);
-                                    alert('Could not prepare template from current year. See console for details.');
-                                }
-                            }}
-                            className="px-3 py-1 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-[10px] font-medium"
-                            title="Save current year as template"
+                                }}
+                                aria-label="Select year for document collection tracker"
+                                role="combobox"
+                                aria-haspopup="listbox"
+                                data-testid="year-selector"
+                                className="text-sm font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer"
+                            >
+                                {yearOptions.map(year => (
+                                    <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <button
+                            onClick={handleExportToExcel}
+                            disabled={isExporting || sections.length === 0}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                         >
-                            <i className="fas fa-save mr-1"></i>Save Year as Template
+                            {isExporting ? (
+                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
+                            ) : (
+                                <><i className="fas fa-file-excel"></i><span>Export</span></>
+                            )}
                         </button>
+                        
+                        <button
+                            onClick={handleAddSection}
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                        >
+                            <i className="fas fa-plus"></i><span>Add Section</span>
+                        </button>
+                        
+                        <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
+                            <button
+                                onClick={() => setShowApplyTemplateModal(true)}
+                                className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                            >
+                                <i className="fas fa-magic"></i><span>Apply Template</span>
+                            </button>
+                            <button
+                                onClick={() => setShowTemplateModal(true)}
+                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                            >
+                                <i className="fas fa-layer-group"></i><span>Templates</span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    try {
+                                        if (!sections || sections.length === 0) {
+                                            alert('There are no sections in this year to save as a template.');
+                                            return;
+                                        }
+                                        const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
+                                        const name = window.prompt('Template name', defaultName);
+                                        if (!name || !name.trim()) {
+                                            return;
+                                        }
+                                        setEditingTemplate(null);
+                                        setPrefilledTemplate({
+                                            name: name.trim(),
+                                            description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
+                                            sections: buildTemplateSectionsFromCurrent()
+                                        });
+                                        setShowTemplateList(false);
+                                        setShowTemplateModal(true);
+                                    } catch (e) {
+                                        console.error('❌ Failed to prepare template from current year:', e);
+                                        alert('Could not prepare template from current year. See console for details.');
+                                    }
+                                }}
+                                className="px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                                title="Save current year as template"
+                            >
+                                <i className="fas fa-save"></i><span>Save Template</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
             
             {/* Legend */}
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-                <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-medium text-gray-600">Status:</span>
+            <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-4">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status Legend:</span>
                     {statusOptions.slice(0, 3).map((option, idx) => (
                         <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-1">
-                                <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
-                                <span className="text-[10px] text-gray-600">{option.label}</span>
+                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                                <div className={`w-4 h-4 rounded-full ${option.cellColor} ring-2 ring-white shadow-sm`}></div>
+                                <span className="text-xs font-medium text-gray-700">{option.label}</span>
                             </div>
-                            {idx < 2 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                            {idx < 2 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
                         </React.Fragment>
                     ))}
-                    <span className="text-gray-300 mx-1">|</span>
-                    <div className="flex items-center gap-1">
-                        <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor}`}></div>
-                        <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
+                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                        <div className={`w-4 h-4 rounded-full ${statusOptions[3].cellColor} ring-2 ring-white shadow-sm`}></div>
+                        <span className="text-xs font-medium text-gray-700">{statusOptions[3].label}</span>
                     </div>
                 </div>
             </div>
@@ -3340,21 +3646,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             {/* Per-section tables with independent horizontal scroll */}
             <div className="space-y-3">
                 {sections.length === 0 ? (
-                    <div className="bg-white rounded-lg border border-gray-200 p-6 text-center text-gray-400">
-                        <i className="fas fa-folder-open text-3xl mb-2 opacity-50"></i>
-                        <p className="text-sm">No sections yet</p>
-                        <button
-                            onClick={handleAddSection}
-                            className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                        >
-                            <i className="fas fa-plus mr-1"></i>Add First Section
-                        </button>
+                    <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
+                                <i className="fas fa-folder-open text-3xl text-primary-600"></i>
+                            </div>
+                            <div>
+                                <p className="text-lg font-bold text-gray-900">No sections yet</p>
+                                <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                            </div>
+                            <button
+                                onClick={handleAddSection}
+                                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                            >
+                                <i className="fas fa-plus"></i><span>Add First Section</span>
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+                            className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
@@ -3362,92 +3675,182 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}
-                            <div className="px-3 py-2 bg-gray-100 flex items-center justify-between cursor-grab active:cursor-grabbing">
-                                <div className="flex items-center gap-2">
-                                    <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                    <div>
-                                        <div className="font-semibold text-sm text-gray-900">{section.name}</div>
+                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex items-center justify-between cursor-grab active:cursor-grabbing">
+                                <div className="flex items-center gap-3 flex-1">
+                                    <i className="fas fa-grip-vertical text-gray-400 text-sm"></i>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-base text-gray-900 flex items-center gap-2">
+                                            <span>#{sectionIndex + 1}</span>
+                                            <span>{section.name}</span>
+                                        </div>
                                         {section.description && (
-                                            <div className="text-[10px] text-gray-500">{section.description}</div>
+                                            <div className="text-xs text-gray-600 mt-1">{section.description}</div>
                                         )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => handleAddDocument(section.id)}
-                                        className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
+                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-semibold hover:bg-primary-700 transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                                     >
-                                        <i className="fas fa-plus mr-1"></i>Add Document
+                                        <i className="fas fa-plus"></i><span>Add Document</span>
                                     </button>
                                     <button
                                         onClick={() => handleEditSection(section)}
-                                        className="text-gray-600 hover:text-primary-600 p-1"
+                                        className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                        title="Edit section"
                                     >
-                                        <i className="fas fa-edit text-xs"></i>
+                                        <i className="fas fa-edit text-sm"></i>
                                     </button>
                                     <button
                                         onClick={(e) => handleDeleteSection(section.id, e)}
-                                        className="text-gray-600 hover:text-red-600 p-1"
+                                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                         type="button"
+                                        title="Delete section"
                                     >
-                                        <i className="fas fa-trash text-xs"></i>
+                                        <i className="fas fa-trash text-sm"></i>
                                     </button>
                                 </div>
                             </div>
 
                             {/* Scrollable month/document grid for this section only */}
-                            <div className="border-t border-gray-200 overflow-x-auto">
+                            <div 
+                                ref={(el) => {
+                                    if (el) {
+                                        const current = scrollableContainersRef.current;
+                                        if (!current.includes(el)) {
+                                            current.push(el);
+                                        }
+                                    }
+                                }}
+                                className="overflow-x-auto"
+                            >
                                 <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
+                                    <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
                                         <tr>
                                             <th
-                                                className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                             >
                                                 Document / Data
                                             </th>
                                             {months.map((month, idx) => (
                                                 <th
                                                     key={month}
-                                                    className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
+                                                    className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
                                                         workingMonths.includes(idx) && selectedYear === currentYear
-                                                            ? 'bg-primary-50 text-primary-700'
-                                                            : 'text-gray-600'
+                                                            ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                            : 'text-gray-700'
                                                     }`}
                                                 >
-                                                    {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span>{month.slice(0, 3)}</span>
+                                                        <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                    </div>
                                                 </th>
                                             ))}
-                                            <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
                                                 Actions
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-100">
+                                    <tbody className="bg-white divide-y divide-gray-200">
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
-                                                    <p className="text-xs">No documents in this section</p>
-                                                    <button
-                                                        onClick={() => handleAddDocument(section.id)}
-                                                        className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                                    >
-                                                        <i className="fas fa-plus mr-1"></i>Add Document
-                                                    </button>
+                                                <td colSpan={14} className="px-8 py-12 text-center">
+                                                    <div className="flex flex-col items-center gap-3">
+                                                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                                                            <i className="fas fa-file-alt text-2xl text-gray-400"></i>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-gray-700">No documents in this section</p>
+                                                            <p className="text-xs text-gray-500 mt-1">Get started by adding your first document</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleAddDocument(section.id)}
+                                                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
+                                                        >
+                                                            <i className="fas fa-plus"></i><span>Add Document</span>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ) : (
                                             section.documents.map((doc) => (
-                                                <tr key={doc.id} className="hover:bg-gray-50">
+                                                <tr key={doc.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
                                                     <td
-                                                        className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                        className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                                     >
-                                                        <div className="min-w-[200px]">
-                                                            <div className="text-xs font-medium text-gray-900">{doc.name}</div>
-                                                            {doc.description && (
-                                                                <div className="text-[10px] text-gray-500">{doc.description}</div>
-                                                            )}
+                                                        <div className="w-full">
+                                                            <div className="text-sm font-semibold text-gray-900 mb-1">{doc.name}</div>
+                                                            {doc.description && (() => {
+                                                                // Check if description contains ISO date strings and format them
+                                                                let desc = String(doc.description);
+                                                                
+                                                                // Multiple regex patterns to catch all ISO date variations
+                                                                // Pattern 1: Standard ISO with T and Z: 2026-01-23T18:03:45.992Z
+                                                                const isoPattern1 = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z)/gi;
+                                                                // Pattern 2: ISO without Z: 2026-01-23T18:03:45.992
+                                                                const isoPattern2 = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(?![0-9Z])/gi;
+                                                                // Pattern 3: ISO with space instead of T: 2026-01-23 18:03:45.992Z
+                                                                const isoPattern3 = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z?)/gi;
+                                                                
+                                                                // Apply all patterns
+                                                                [isoPattern1, isoPattern2, isoPattern3].forEach(pattern => {
+                                                                    desc = desc.replace(pattern, (match) => {
+                                                                        // Clean the match - replace space with T if needed, ensure proper format
+                                                                        let cleanedMatch = match.trim().replace(/\s+/, 'T');
+                                                                        // Ensure it ends with Z or add it if it's a complete ISO string
+                                                                        if (cleanedMatch.includes('T') && !cleanedMatch.endsWith('Z') && cleanedMatch.match(/\.\d+$/)) {
+                                                                            // Has milliseconds but no Z - add Z for proper parsing
+                                                                            cleanedMatch = cleanedMatch + 'Z';
+                                                                        }
+                                                                        
+                                                                        const formatted = formatDateTime(cleanedMatch);
+                                                                        // If formatting failed, try direct Date parsing
+                                                                        if (!formatted || formatted === '') {
+                                                                            try {
+                                                                                const date = new Date(cleanedMatch);
+                                                                                if (!isNaN(date.getTime())) {
+                                                                                    return date.toLocaleString('en-US', {
+                                                                                        year: 'numeric',
+                                                                                        month: 'short',
+                                                                                        day: 'numeric',
+                                                                                        hour: 'numeric',
+                                                                                        minute: '2-digit',
+                                                                                        hour12: true
+                                                                                    });
+                                                                                }
+                                                                            } catch (e) {
+                                                                                // If all else fails, return original
+                                                                            }
+                                                                            return match; // Return original if formatting fails
+                                                                        }
+                                                                        return formatted;
+                                                                    });
+                                                                });
+                                                                
+                                                                const { truncated, isLong } = truncateDescription(desc);
+                                                                const isExpanded = expandedDescriptionId === doc.id;
+                                                                
+                                                                return (
+                                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1 overflow-hidden">
+                                                                        <span className="truncate flex-1 min-w-0">{truncated}</span>
+                                                                        {isLong && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setExpandedDescriptionId(doc.id);
+                                                                                }}
+                                                                                className="text-primary-600 hover:text-primary-700 underline cursor-pointer flex-shrink-0"
+                                                                            >
+                                                                                ...more
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </td>
                                                     {months.map((month) => (
@@ -3455,20 +3858,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             {renderStatusCell(section, doc, month)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-2.5 py-1.5 border-l border-gray-200">
-                                                        <div className="flex items-center gap-1">
+                                                    <td className="px-4 py-3 border-l-2 border-gray-200">
+                                                        <div className="flex items-center gap-2 justify-center">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}
-                                                                className="text-gray-600 hover:text-primary-600 p-1"
+                                                                className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                title="Edit document"
                                                             >
-                                                                <i className="fas fa-edit text-xs"></i>
+                                                                <i className="fas fa-edit text-sm"></i>
                                                             </button>
                                                             <button
                                                                 onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
-                                                                className="text-gray-600 hover:text-red-600 p-1"
+                                                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                                 type="button"
+                                                                title="Delete document"
                                                             >
-                                                                <i className="fas fa-trash text-xs"></i>
+                                                                <i className="fas fa-trash text-sm"></i>
                                                             </button>
                                                         </div>
                                                     </td>
@@ -3488,6 +3893,56 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             {showDocumentModal && <DocumentModal />}
             {showTemplateModal && <TemplateModal />}
             {showApplyTemplateModal && <ApplyTemplateModal />}
+            {expandedDescriptionId && (() => {
+                // Find the document with the expanded description ID
+                let foundDoc = null;
+                let foundDocName = '';
+                for (const section of sections) {
+                    const doc = section.documents?.find(d => d.id === expandedDescriptionId);
+                    if (doc) {
+                        foundDoc = doc;
+                        foundDocName = doc.name;
+                        break;
+                    }
+                }
+                
+                if (!foundDoc || !foundDoc.description) return null;
+                
+                // Format the description (handle ISO dates)
+                let desc = foundDoc.description;
+                const isoDatePattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/g;
+                desc = desc.replace(isoDatePattern, (match) => {
+                    const formatted = formatDateTime(match);
+                    return formatted || match;
+                });
+                
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setExpandedDescriptionId(null)}>
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                                <h2 className="text-base font-semibold text-gray-900">{foundDocName} - Description</h2>
+                                <button 
+                                    onClick={() => setExpandedDescriptionId(null)} 
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                >
+                                    <i className="fas fa-times text-sm"></i>
+                                </button>
+                            </div>
+                            <div className="p-4 overflow-y-auto">
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{desc}</p>
+                            </div>
+                            <div className="flex justify-end px-4 py-3 border-t border-gray-200">
+                                <button
+                                    onClick={() => setExpandedDescriptionId(null)}
+                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

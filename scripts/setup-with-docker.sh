@@ -90,3 +90,7 @@ echo "To start PostgreSQL again:"
 echo "  docker-compose up -d"
 echo ""
 
+
+
+
+

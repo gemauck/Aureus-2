@@ -481,6 +481,20 @@
     color: #ffffff !important;
 }
 
+/* Preserve primary button background colors on hover */
+[data-theme="light"] button.bg-primary-600,
+[data-theme="light"] button[class*="bg-primary-600"] {
+    background-color: #0369a1 !important;
+}
+
+[data-theme="light"] button.bg-primary-600:hover,
+[data-theme="light"] button[class*="bg-primary-600"]:hover,
+[data-theme="light"] button.bg-primary-600.text-white:hover,
+[data-theme="light"] button[class*="bg-primary-600"][class*="text-white"]:hover {
+    background-color: #075985 !important;
+    color: #ffffff !important;
+}
+
 [data-theme="light"] button.text-white .fas,
 [data-theme="light"] button.text-white .far,
 [data-theme="light"] button.text-white .fab,

@@ -1155,7 +1155,6 @@ const Teams = () => {
                                     </button>
                                 );
                             })}
-                            )}
                         </div>
                     </div>
 

@@ -1513,11 +1513,18 @@ function initializeProjectDetail() {
     }, [project?.id, project?.taskLists]); // Run when project ID or taskLists changes
     
     // CRITICAL: Ensure project ID is always in URL when ProjectDetail is rendered
+    // BUT: Don't fix URL if we're navigating back to projects list
     useEffect(() => {
         if (!project?.id) return;
         
         const currentPathname = window.location.pathname;
         const expectedPath = `/projects/${project.id}`;
+        
+        // CRITICAL: If we're on /projects (no project ID), don't try to fix URL
+        // This means user navigated back - don't interfere
+        if (currentPathname === '/projects' || currentPathname === '/projects/') {
+            return; // User is navigating away, don't restore project ID
+        }
         
         // Check if pathname exactly matches expected path (not just contains project ID)
         // This prevents false positives when one project ID is a substring of another
@@ -6338,10 +6345,41 @@ function initializeProjectDetail() {
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <button 
-                        onClick={onBack} 
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        type="button"
+                        onClick={(e) => {
+                            // CRITICAL: Stop all event propagation immediately
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.nativeEvent?.stopImmediatePropagation?.();
+                            
+                            // Prevent multiple rapid clicks
+                            const button = e.currentTarget;
+                            if (button.disabled) {
+                                return;
+                            }
+                            button.disabled = true;
+                            
+                            // Call onBack immediately and synchronously
+                            if (typeof onBack === 'function') {
+                                try {
+                                    onBack();
+                                } catch (error) {
+                                    console.error('Error calling onBack:', error);
+                                    button.disabled = false; // Re-enable on error
+                                }
+                            } else {
+                                console.warn('onBack is not a function');
+                                button.disabled = false; // Re-enable if no handler
+                            }
+                            
+                            // Re-enable after navigation completes (longer delay to prevent re-clicks)
+                            setTimeout(() => {
+                                button.disabled = false;
+                            }, 1000);
+                        }} 
+                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <i className="fas fa-arrow-left text-lg"></i>
+                        <i className="fas fa-arrow-left text-lg pointer-events-none"></i>
                     </button>
                     <div>
                         <h1 className="text-xl font-semibold text-gray-900">{project.name}</h1>
@@ -6373,7 +6411,7 @@ function initializeProjectDetail() {
                         onClick={() => switchSection('overview')}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'overview'
-                                ? 'bg-primary-600 text-white'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
                                 : 'text-gray-700 hover:bg-gray-100'
                         }`}
                     >
@@ -6398,7 +6436,7 @@ function initializeProjectDetail() {
                         }}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'tasks'
-                                ? 'bg-primary-600 text-white'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
                                 : 'text-gray-700 hover:bg-gray-100'
                         }`}
                     >
@@ -6410,7 +6448,7 @@ function initializeProjectDetail() {
                             onClick={() => switchSection('documentCollection')}
                             className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'documentCollection'
-                                    ? 'bg-primary-600 text-white'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
                             }`}
                         >
@@ -6423,7 +6461,7 @@ function initializeProjectDetail() {
                             onClick={() => switchSection('weeklyFMSReview')}
                             className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'weeklyFMSReview'
-                                    ? 'bg-primary-600 text-white'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
                             }`}
                         >
@@ -6436,7 +6474,7 @@ function initializeProjectDetail() {
                         onClick={() => switchSection('monthlyFMSReview')}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'monthlyFMSReview'
-                                ? 'bg-primary-600 text-white'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
                                 : 'text-gray-700 hover:bg-gray-100'
                         }`}
                     >

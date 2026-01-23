@@ -81,3 +81,7 @@ echo "Your .env.local file contains your password."
 echo "Start the dev server with: npm run dev"
 echo ""
 
+
+
+
+

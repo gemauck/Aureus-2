@@ -62,3 +62,7 @@ Docker is the easiest option because:
 
 Run: `bash scripts/setup-with-docker.sh`
 
+
+
+
+

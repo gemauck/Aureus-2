@@ -107,3 +107,7 @@ echo "  1. Copy production data (optional): npm run copy:prod-data"
 echo "  2. Start development server: npm run dev"
 echo ""
 
+
+
+
+

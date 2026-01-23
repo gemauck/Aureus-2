@@ -64,3 +64,7 @@ echo ""
 echo "Your local database now has all production data!"
 echo "Start server: npm run dev:backend"
 
+
+
+
+

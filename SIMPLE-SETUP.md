@@ -121,3 +121,7 @@ psql "postgresql://gemau:YOUR_PASSWORD@localhost:5432/abcotronics_erp_local" -c 
 
 If this works, your setup is correct!
 
+
+
+
+

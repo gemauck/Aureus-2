@@ -36,4 +36,3 @@ CREATE INDEX IF NOT EXISTS "Opportunity_status_idx" ON "Opportunity"("status");
 
 -- Project table additional index for updatedAt (used in tasks query)
 CREATE INDEX IF NOT EXISTS "Project_updatedAt_idx" ON "Project"("updatedAt");
-

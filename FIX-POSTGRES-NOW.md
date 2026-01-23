@@ -88,3 +88,7 @@ sudo open -a TextEdit /Library/PostgreSQL/18/data/pg_hba.conf
 - This is safe for local development on your own machine
 - Production servers should still use password authentication
 
+
+
+
+

@@ -37,3 +37,7 @@ npx prisma db push --accept-data-loss
 echo ""
 echo "✅ Setup complete! Run: npm run dev"
 
+
+
+
+

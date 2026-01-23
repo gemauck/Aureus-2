@@ -93,6 +93,7 @@ const Projects = () => {
     const lastProcessedRouteRef = useRef(null);
     const lastProcessedProjectIdRef = useRef(null);
     const routeCheckInProgressRef = useRef(false);
+    const navigatingBackRef = useRef(false); // Track when user explicitly navigates back
     const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
     // Track when projects were last loaded to avoid unnecessary refreshes
     const projectLoadTimestampsRef = useRef(new Map()); // Map<projectId, timestamp>
@@ -466,6 +467,18 @@ const Projects = () => {
         routeCheckInProgressRef.current = true;
         
         const handleRouteChange = async (route) => {
+            // CRITICAL: If user is navigating back, don't re-open projects
+            if (navigatingBackRef.current) {
+                // If route has no segments (projects list), clear the flag
+                if (route?.page === 'projects' && (!route.segments || route.segments.length === 0)) {
+                    // Allow a brief delay before clearing flag to ensure state is updated
+                    setTimeout(() => {
+                        navigatingBackRef.current = false;
+                    }, 300);
+                }
+                return; // Don't process route changes while navigating back
+            }
+            
             // Prevent processing the same route multiple times
             const routeKey = route ? `${route.page}-${route.segments?.join('-')}-${route.search?.toString()}` : 'none';
             if (lastProcessedRouteRef.current === routeKey) {
@@ -488,6 +501,21 @@ const Projects = () => {
                     // URL contains a project ID - open that project
                     const projectId = route.segments[0];
                     const taskId = route.search?.get('task');
+                    
+                    // CRITICAL: Verify actual URL matches route before opening project
+                    // This prevents opening project when URL was just changed to /projects
+                    const currentPath = window.location.pathname;
+                    const expectedPathWithProject = `/projects/${projectId}`;
+                    if (currentPath !== expectedPathWithProject && currentPath === '/projects') {
+                        // URL is actually /projects but route says there's a project ID
+                        // This means we just navigated back - don't open project
+                        return;
+                    }
+                    
+                    // CRITICAL: Don't open project if we just navigated back
+                    if (navigatingBackRef.current) {
+                        return;
+                    }
                     
                     if (projectId) {
                         // Prevent processing the same project multiple times
@@ -1426,11 +1454,21 @@ const Projects = () => {
     // Check route when projects load - this handles cases where projects weren't loaded yet
     // NOTE: Removed viewingProject from dependencies to prevent infinite loops
     useEffect(() => {
+        // CRITICAL: Don't run if user is navigating back
+        if (navigatingBackRef.current) {
+            return;
+        }
+        
         if (routeCheckInProgressRef.current) {
             return;
         }
         
         const tryOpenProjectFromRoute = async () => {
+            // CRITICAL: Don't run if user is navigating back
+            if (navigatingBackRef.current) {
+                return;
+            }
+            
             if (!window.RouteState) {
                 setTimeout(tryOpenProjectFromRoute, 200);
                 return;
@@ -1441,6 +1479,13 @@ const Projects = () => {
             }
             
             const currentRoute = window.RouteState.getRoute();
+            
+            // CRITICAL: Verify actual URL matches route before opening project
+            const currentPath = window.location.pathname;
+            if (currentPath === '/projects' || currentPath === '/projects/') {
+                // URL is /projects, don't open any project even if route says there is one
+                return;
+            }
             
             if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
                 const projectId = currentRoute.segments[0];
@@ -1666,6 +1711,14 @@ const Projects = () => {
         
         const currentRoute = window.RouteState.getRoute();
         console.log('🔍 Projects: Checking route, projects loaded:', projects.length, 'route:', currentRoute);
+        
+        // CRITICAL: Verify actual URL - if it's /projects, don't open any project
+        const currentPath = window.location.pathname;
+        if (currentPath === '/projects' || currentPath === '/projects/') {
+            // URL is /projects, don't open any project even if route/sessionStorage says there is one
+            console.log('⏸️ Projects: URL is /projects, skipping project opening');
+            return;
+        }
         
         // Get project ID from route or sessionStorage
         let projectId = null;
@@ -2879,6 +2932,54 @@ const Projects = () => {
         setDeleteConfirmation({ show: true, projectId });
     }, [projects, viewingProject, logout, updateClientProjectIds]);
     
+    // Memoize the onBack handler to prevent unnecessary re-renders
+    // Must be at top level (not inside conditional blocks) to follow Rules of Hooks
+    const handleBackToProjects = useCallback(() => {
+        // CRITICAL: Set navigating back flag FIRST to prevent route handler from re-opening project
+        navigatingBackRef.current = true;
+        routeCheckInProgressRef.current = true;
+        lastProcessedProjectIdRef.current = null;
+        lastProcessedRouteRef.current = 'projects--'; // Set to expected route key to prevent re-processing
+        
+        // Update URL DIRECTLY first (synchronous) before RouteState triggers async events
+        // This ensures the URL is updated before any route handlers run
+        try {
+            window.history.replaceState({ page: 'projects' }, '', '/projects');
+        } catch (e) {
+            console.warn('Failed to update URL directly:', e);
+        }
+        
+        // Clear state immediately using functional updates to avoid stale closures
+        setViewingProject(() => null);
+        setSelectedProject(() => null);
+        
+        // Force a re-render to ensure state is cleared immediately
+        setForceRender(prev => prev + 1);
+        
+        // Clear sessionStorage to prevent auto-opening
+        sessionStorage.removeItem('openProjectId');
+        sessionStorage.removeItem('openTaskId');
+        
+        // Update RouteState (this will trigger route change event, but we've already set flags)
+        if (window.RouteState) {
+            window.RouteState.setPageSubpath('projects', [], {
+                replace: true, // Use replace to avoid history issues
+                preserveSearch: false,
+                preserveHash: false
+            });
+        }
+        
+        // Reset flags after navigation completes
+        // Use a longer delay to ensure route effect has processed and state is stable
+        setTimeout(() => {
+            routeCheckInProgressRef.current = false;
+            // Keep navigatingBackRef true a bit longer to prevent any late route handlers
+            setTimeout(() => {
+                navigatingBackRef.current = false;
+            }, 300);
+        }, 500);
+    }, []);
+    
     const confirmDeleteProject = useCallback(async () => {
         const projectId = deleteConfirmation.projectId;
         if (!projectId) return;
@@ -3354,7 +3455,22 @@ const Projects = () => {
     }, [viewingProject?.id, forceRender]);
 
     if (viewingProject) {
-        try {
+        // CRITICAL: Don't render ProjectDetail if we're navigating back
+        // Check both the flag and the actual URL
+        const currentPath = window.location.pathname;
+        const isNavigatingBack = navigatingBackRef.current || (currentPath === '/projects' || currentPath === '/projects/');
+        
+        if (isNavigatingBack) {
+            // We're navigating back - clear viewingProject and render projects list instead
+            // Use setTimeout to avoid state update during render
+            setTimeout(() => {
+                setViewingProject(null);
+                setSelectedProject(null);
+            }, 0);
+            // Fall through to render projects list below (don't return, let it continue)
+        } else {
+            // Not navigating back - render ProjectDetail normally
+            try {
             // Check window.ProjectDetail directly (it may be loaded lazily)
             const ProjectDetailComponent = window.ProjectDetail;
             
@@ -3495,35 +3611,26 @@ const Projects = () => {
                 );
             }
             
-            return <ProjectDetailComponent 
-                project={viewingProject} 
-                onBack={() => {
-                    setViewingProject(null);
-                    // Update URL to clear project ID
-                    if (window.RouteState) {
-                        window.RouteState.setPageSubpath('projects', [], {
-                            replace: false,
-                            preserveSearch: false,
-                            preserveHash: false
-                        });
-                    }
-                }}
-                onDelete={handleDeleteProject}
-            />;
-        } catch (error) {
-            console.error('Error rendering ProjectDetail:', error);
-            return (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h2 className="text-lg font-semibold text-red-800 mb-2">Error loading project</h2>
-                    <p className="text-sm text-red-600 mb-3">{error.message}</p>
-                    <button 
-                        onClick={() => setViewingProject(null)}
-                        className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
-                    >
-                        Back to Projects
-                    </button>
-                </div>
-            );
+                return <ProjectDetailComponent 
+                    project={viewingProject} 
+                    onBack={handleBackToProjects}
+                    onDelete={handleDeleteProject}
+                />;
+            } catch (error) {
+                console.error('Error rendering ProjectDetail:', error);
+                return (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <h2 className="text-lg font-semibold text-red-800 mb-2">Error loading project</h2>
+                        <p className="text-sm text-red-600 mb-3">{error.message}</p>
+                        <button 
+                            onClick={() => setViewingProject(null)}
+                            className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
+                        >
+                            Back to Projects
+                        </button>
+                    </div>
+                );
+            }
         }
     }
 

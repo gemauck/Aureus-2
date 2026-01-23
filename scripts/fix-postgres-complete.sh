@@ -139,3 +139,7 @@ echo "  2. Open browser: http://localhost:3000"
 echo "  3. (Optional) Copy production data: npm run copy:prod-data"
 echo ""
 
+
+
+
+

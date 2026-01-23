@@ -27,6 +27,16 @@ const getFacilitiesLabel = (project) => {
     return String(candidate || '').trim();
 };
 
+// Helper function to truncate text to one line (approximately 60 characters)
+const truncateDescription = (text, maxLength = 60) => {
+    if (!text || text.length <= maxLength) return { truncated: text, isLong: false };
+    // Find the last space before maxLength to avoid cutting words
+    const truncated = text.substring(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    const cutPoint = lastSpace > 0 ? lastSpace : maxLength;
+    return { truncated: text.substring(0, cutPoint), isLong: true };
+};
+
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentDate = new Date();
@@ -40,6 +50,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionTimestampRef = useRef(null); // Track when deletion started
+    const scrollableContainersRef = useRef([]); // Store refs to all scrollable table containers
+    const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
+    const lastLoadedProjectIdRef = useRef(null); // Track last loaded project ID to prevent unnecessary reloads
+    const lastSelectedYearRef = useRef(currentYear); // Track last selected year to detect year changes
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -384,6 +398,56 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, []);
     
+    // Synchronize horizontal scrolling across all table containers
+    useEffect(() => {
+        // Clean up old refs when sections change
+        scrollableContainersRef.current = [];
+        
+        let scrollHandlers = new Map();
+        let timeoutId;
+        
+        // Small delay to allow DOM to update
+        timeoutId = setTimeout(() => {
+            const containers = scrollableContainersRef.current.filter(Boolean);
+            if (containers.length === 0) return;
+            
+            const handleScroll = (sourceElement) => {
+                if (isScrollingRef.current) return;
+                isScrollingRef.current = true;
+                
+                const scrollLeft = sourceElement.scrollLeft;
+                containers.forEach(container => {
+                    if (container !== sourceElement && container) {
+                        container.scrollLeft = scrollLeft;
+                    }
+                });
+                
+                // Reset flag after a short delay to allow smooth scrolling
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        isScrollingRef.current = false;
+                    }, 50);
+                });
+            };
+            
+            // Add scroll listeners to all containers
+            containers.forEach(container => {
+                const handler = () => handleScroll(container);
+                scrollHandlers.set(container, handler);
+                container.addEventListener('scroll', handler, { passive: true });
+            });
+        }, 100);
+        
+        return () => {
+            clearTimeout(timeoutId);
+            // Cleanup: remove all scroll listeners
+            scrollHandlers.forEach((handler, container) => {
+                container.removeEventListener('scroll', handler);
+            });
+            scrollHandlers.clear();
+        };
+    }, [sections.length]); // Re-run when sections change
+    
     // Templates state
     const [templates, setTemplates] = useState([]);
 
@@ -402,6 +466,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+    const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
     const [showTemplateList, setShowTemplateList] = useState(true);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
@@ -439,7 +504,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
     // Simplified loading - load from database, use prop as fallback
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (forceReload = false) => {
         if (!project?.id) return;
         
         // Don't reload if we're currently saving - wait for save to complete
@@ -448,12 +513,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             return;
         }
         
+        // CRITICAL FIX: Don't reload if there are unsaved changes (unless forced)
+        // This prevents overwriting user changes when parent component updates the prop
+        if (!forceReload) {
+            const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
+            if (currentData !== lastSavedDataRef.current && lastSavedDataRef.current !== null) {
+                console.log('⏸️ Load skipped: unsaved changes detected', {
+                    hasCurrentData: Object.keys(sectionsRef.current || sectionsByYear).length > 0,
+                    hasLastSaved: lastSavedDataRef.current !== null
+                });
+                return;
+            }
+        }
+        
         setIsLoading(true);
         
         try {
             // ALWAYS load from database first (most reliable, has latest data)
             if (apiRef.current) {
-                console.log('📥 Loading from database...', { projectId: project.id });
+                console.log('📥 Loading from database...', { projectId: project.id, forceReload });
                 const freshProject = await apiRef.current.fetchProject(project.id);
                 console.log('📥 Loaded project from database:', { 
                     hasWeeklyFMSReviewSections: !!freshProject?.weeklyFMSReviewSections,
@@ -477,14 +555,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             }
             
-            // Fallback to prop data (only if database load failed)
-            console.log('⚠️ Falling back to prop data');
-            if (project?.weeklyFMSReviewSections) {
+            // Fallback to prop data (only if database load failed AND we don't have existing data)
+            // Only use prop data on initial load, not when prop updates after save
+            const hasExistingData = sectionsRef.current && Object.keys(sectionsRef.current).length > 0;
+            if (!hasExistingData && project?.weeklyFMSReviewSections) {
+                console.log('⚠️ Falling back to prop data (initial load only)');
                 const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
-            } else {
+            } else if (!hasExistingData) {
                 // Check localStorage as backup before initializing empty
                 const snapshotKey = getSnapshotKey(project.id);
                 if (snapshotKey && window.localStorage) {
@@ -514,6 +594,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 setSectionsByYear({});
                 sectionsRef.current = {};
                 lastSavedDataRef.current = JSON.stringify({});
+            } else {
+                console.log('⏸️ Skipping load: existing data present and no force reload');
             }
         } catch (error) {
             console.error('❌ Error loading data:', error);
@@ -522,17 +604,38 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 stack: error.stack,
                 projectId: project.id
             });
-            setSectionsByYear({});
-            sectionsRef.current = {};
+            // Only clear data if we don't have existing data
+            if (!sectionsRef.current || Object.keys(sectionsRef.current).length === 0) {
+                setSectionsByYear({});
+                sectionsRef.current = {};
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.weeklyFMSReviewSections, selectedYear]);
+    }, [project?.id, selectedYear, sectionsByYear]);
     
-    // Load data on mount and when project/year changes
+    // Load data on mount and when project ID changes (NOT when project prop updates)
     useEffect(() => {
         if (project?.id) {
-            loadData();
+            // Only load if project ID actually changed (not just prop update)
+            const projectIdChanged = lastLoadedProjectIdRef.current !== project.id;
+            
+            if (projectIdChanged) {
+                console.log('🔄 Project ID changed, loading data...', { 
+                    oldId: lastLoadedProjectIdRef.current, 
+                    newId: project.id 
+                });
+                lastLoadedProjectIdRef.current = project.id;
+                lastSelectedYearRef.current = selectedYear;
+                loadData(true); // Force reload on project change
+            } else if (lastSelectedYearRef.current !== selectedYear) {
+                // Year changed for same project - don't reload data, just track the change
+                console.log('🔄 Year changed, no reload needed', { 
+                    oldYear: lastSelectedYearRef.current, 
+                    newYear: selectedYear 
+                });
+                lastSelectedYearRef.current = selectedYear;
+            }
         }
     }, [project?.id, selectedYear, loadData]);
     
@@ -3545,13 +3648,23 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             </div>
 
                             {/* Scrollable week/document grid for this section only */}
-                            <div className="border-t border-gray-200 overflow-x-auto">
+                            <div 
+                                ref={(el) => {
+                                    if (el) {
+                                        const current = scrollableContainersRef.current;
+                                        if (!current.includes(el)) {
+                                            current.push(el);
+                                        }
+                                    }
+                                }}
+                                className="border-t border-gray-200 overflow-x-auto"
+                            >
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
                                             <th
                                                 className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                             >
                                                 Document / Data
                                             </th>
@@ -3593,13 +3706,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 <tr key={doc.id} className="hover:bg-gray-50">
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                                     >
-                                                        <div className="min-w-[200px]">
+                                                        <div className="w-full">
                                                             <div className="text-xs font-medium text-gray-900">{doc.name}</div>
-                                                            {doc.description && (
-                                                                <div className="text-[10px] text-gray-500">{doc.description}</div>
-                                                            )}
+                                                            {doc.description && (() => {
+                                                                const { truncated, isLong } = truncateDescription(String(doc.description));
+                                                                return (
+                                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1 overflow-hidden">
+                                                                        <span className="truncate flex-1 min-w-0">{truncated}</span>
+                                                                        {isLong && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setExpandedDescriptionId(doc.id);
+                                                                                }}
+                                                                                className="text-primary-600 hover:text-primary-700 underline cursor-pointer flex-shrink-0"
+                                                                            >
+                                                                                ...more
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </td>
                                                     {weeks.map((week) => (
@@ -3640,6 +3769,48 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {showDocumentModal && <DocumentModal />}
             {showTemplateModal && <TemplateModal />}
             {showApplyTemplateModal && <ApplyTemplateModal />}
+            {expandedDescriptionId && (() => {
+                // Find the document with the expanded description ID
+                let foundDoc = null;
+                let foundDocName = '';
+                for (const section of sections) {
+                    const doc = section.documents?.find(d => d.id === expandedDescriptionId);
+                    if (doc) {
+                        foundDoc = doc;
+                        foundDocName = doc.name;
+                        break;
+                    }
+                }
+                
+                if (!foundDoc || !foundDoc.description) return null;
+                
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setExpandedDescriptionId(null)}>
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                                <h2 className="text-base font-semibold text-gray-900">{foundDocName} - Description</h2>
+                                <button 
+                                    onClick={() => setExpandedDescriptionId(null)} 
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                >
+                                    <i className="fas fa-times text-sm"></i>
+                                </button>
+                            </div>
+                            <div className="p-4 overflow-y-auto">
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{foundDoc.description}</p>
+                            </div>
+                            <div className="flex justify-end px-4 py-3 border-t border-gray-200">
+                                <button
+                                    onClick={() => setExpandedDescriptionId(null)}
+                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

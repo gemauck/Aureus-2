@@ -192,3 +192,7 @@ abcotronics-erp-modular/
 
 **Remember:** The real application code is in `src/` and `api/`. The `frontend/` directory is a separate modernization project and is NOT used by the live application.
 
+
+
+
+
