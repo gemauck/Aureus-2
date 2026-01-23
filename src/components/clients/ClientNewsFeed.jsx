@@ -19,6 +19,9 @@ const ClientNewsFeed = () => {
     const [clients, setClients] = useState([]);
     const [filterDate, setFilterDate] = useState('all'); // all, today, week, month
     const [activeTab, setActiveTab] = useState('activities'); // activities, news
+    
+    // Get theme
+    const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
 
     // Load clients and data
     useEffect(() => {
@@ -299,8 +302,8 @@ const ClientNewsFeed = () => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Client News Feed</h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <h1 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Client News Feed</h1>
+                    <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Stay updated with client and lead activities and news
                     </p>
                 </div>
@@ -309,7 +312,7 @@ const ClientNewsFeed = () => {
                         loadActivities();
                         loadNewsArticles();
                     }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center gap-2 text-sm font-medium"
                 >
                     <i className="fas fa-sync-alt"></i>
                     Refresh
@@ -317,13 +320,13 @@ const ClientNewsFeed = () => {
             </div>
 
             {/* Tabs */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-1 inline-flex">
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 inline-flex gap-1`}>
                 <button
                     onClick={() => setActiveTab('activities')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         activeTab === 'activities'
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-bell mr-2"></i>
@@ -331,10 +334,10 @@ const ClientNewsFeed = () => {
                 </button>
                 <button
                     onClick={() => setActiveTab('news')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         activeTab === 'news'
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-newspaper mr-2"></i>
@@ -348,15 +351,19 @@ const ClientNewsFeed = () => {
             </div>
 
             {/* Filters */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-4">
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 flex flex-wrap gap-4 shadow-sm`}>
                 <div className="flex-1 min-w-[200px]">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                         Client
                     </label>
                     <select
                         value={selectedClient}
                         onChange={(e) => setSelectedClient(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                        className={`w-full px-4 py-3 border rounded-lg text-sm transition-colors ${
+                            isDark 
+                                ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+                        }`}
                     >
                         <option value="all">All Clients & Leads</option>
                         {clients
@@ -377,13 +384,17 @@ const ClientNewsFeed = () => {
                     </select>
                 </div>
                 <div className="flex-1 min-w-[200px]">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                         Date Range
                     </label>
                     <select
                         value={filterDate}
                         onChange={(e) => setFilterDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                        className={`w-full px-4 py-3 border rounded-lg text-sm transition-colors ${
+                            isDark 
+                                ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+                        }`}
                     >
                         <option value="all">All Time</option>
                         <option value="today">Today</option>
@@ -395,23 +406,23 @@ const ClientNewsFeed = () => {
 
             {/* Content */}
             {isLoading ? (
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-gray-400 mb-4"></i>
-                    <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8 text-center shadow-sm`}>
+                    <i className={`fas fa-spinner fa-spin text-3xl mb-4 ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                    <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading...</p>
                 </div>
             ) : activeTab === 'activities' ? (
                 /* Activities Feed */
                 <div className="space-y-3">
                     {activities.length === 0 ? (
-                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
-                            <i className="fas fa-inbox text-3xl text-gray-300 mb-4"></i>
-                            <p className="text-gray-600 dark:text-gray-400">No activities found</p>
+                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8 text-center shadow-sm`}>
+                            <i className={`fas fa-inbox text-3xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
+                            <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No activities found</p>
                         </div>
                     ) : (
                         activities.map((activity, index) => (
                             <div
                                 key={`activity-${activity.clientId}-${index}`}
-                                className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow"
+                                className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 hover:shadow-md transition-all duration-200`}
                             >
                                 <div className="flex items-start gap-3">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getActivityColor(activity.type)}`}>
@@ -419,24 +430,26 @@ const ClientNewsFeed = () => {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                            <span className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                                 {activity.clientName}
                                             </span>
                                             {activity.clientType === 'lead' && (
-                                                <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 text-xs rounded-full font-medium">
+                                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                                    isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'
+                                                }`}>
                                                     Lead
                                                 </span>
                                             )}
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {formatDate(activity.timestamp)}
                                             </span>
                                         </div>
-                                        <div className="text-sm text-gray-700 dark:text-gray-300 mb-1">
+                                        <div className={`text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                             <span className="font-medium capitalize">{activity.type}</span>
                                             {activity.description && `: ${activity.description}`}
                                         </div>
                                         {activity.user && (
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                            <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 by {activity.user}
                                             </div>
                                         )}
@@ -450,22 +463,22 @@ const ClientNewsFeed = () => {
                 /* News Feed */
                 <div className="space-y-3">
                     {newsArticles.length === 0 ? (
-                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
-                            <i className="fas fa-newspaper text-3xl text-gray-300 mb-4"></i>
-                            <p className="text-gray-600 dark:text-gray-400 mb-2">No news articles found</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">
+                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8 text-center shadow-sm`}>
+                            <i className={`fas fa-newspaper text-3xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
+                            <p className={`mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No news articles found</p>
+                            <p className={`text-xs mb-4 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                 {isLoading ? 'Loading articles...' : 'News articles are automatically fetched daily. Check back tomorrow for updates.'}
                             </p>
                             <button
                                 onClick={() => {
                                     loadNewsArticles();
                                 }}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 text-sm font-medium"
                             >
                                 <i className="fas fa-sync-alt mr-2"></i>
                                 Refresh Articles
                             </button>
-                            <p className="text-xs text-gray-400 mt-2">
+                            <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                 Check browser console (F12) for debug info
                             </p>
                         </div>
@@ -473,11 +486,11 @@ const ClientNewsFeed = () => {
                         newsArticles.map((article) => (
                             <div
                                 key={article.id}
-                                className={`bg-white dark:bg-gray-800 rounded-lg border ${
+                                className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border ${
                                     isNewArticle(article) 
-                                        ? 'border-blue-500 dark:border-blue-600 shadow-md' 
-                                        : 'border-gray-200 dark:border-gray-700'
-                                } p-4 hover:shadow-md transition-shadow`}
+                                        ? isDark ? 'border-blue-600 shadow-md' : 'border-blue-500 shadow-md'
+                                        : ''
+                                } p-4 hover:shadow-md transition-all duration-200`}
                             >
                                 <div className="flex items-start gap-3">
                                     {isNewArticle(article) && (
@@ -486,32 +499,34 @@ const ClientNewsFeed = () => {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <div className="flex items-center gap-2">
-                                                <i className={`fas ${article.clientType === 'lead' ? 'fa-star' : 'fa-building'} text-xs text-gray-400`}></i>
-                                                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                <i className={`fas ${article.clientType === 'lead' ? 'fa-star' : 'fa-building'} text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                                                <span className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                                     {article.clientName || 'Unknown Client'}
                                                 </span>
                                                 <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
                                                     article.clientType === 'lead' 
-                                                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' 
-                                                        : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                                                        ? isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'
+                                                        : isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
                                                 }`}>
                                                     {article.clientType === 'lead' ? 'Lead' : 'Client'}
                                                 </span>
                                             </div>
                                             {isNewArticle(article) && (
-                                                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full font-medium">
+                                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                                    isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                                                }`}>
                                                     NEW
                                                 </span>
                                             )}
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {formatDate(article.publishedAt || article.createdAt)}
                                             </span>
                                         </div>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 break-words overflow-hidden line-clamp-2">
+                                        <h3 className={`text-lg font-semibold mb-2 break-words overflow-hidden line-clamp-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                             {article.title}
                                         </h3>
                                         {article.description && (
-                                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-3 break-words overflow-hidden">
+                                            <p className={`text-sm mb-2 line-clamp-3 break-words overflow-hidden ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                 {article.description}
                                             </p>
                                         )}
@@ -530,7 +545,7 @@ const ClientNewsFeed = () => {
                                         )}
                                         <div className="flex items-center gap-4 mt-3 flex-wrap">
                                             {article.source && (
-                                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                     <i className="fas fa-globe mr-1"></i>
                                                     {article.source}
                                                 </span>
@@ -540,7 +555,9 @@ const ClientNewsFeed = () => {
                                                     href={article.url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                                                    className={`text-xs hover:underline flex items-center gap-1 ${
+                                                        isDark ? 'text-blue-400' : 'text-blue-600'
+                                                    }`}
                                                 >
                                                     Read more
                                                     <i className="fas fa-external-link-alt text-xs"></i>
@@ -594,7 +611,9 @@ const ClientNewsFeed = () => {
                                                         }
                                                     }
                                                 }}
-                                                className="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
+                                                className={`text-xs hover:underline flex items-center gap-1 ${
+                                                    isDark ? 'text-red-400' : 'text-red-600'
+                                                }`}
                                                 title={`Unsubscribe from ${article.clientName} news feed`}
                                             >
                                                 <i className="fas fa-bell-slash text-xs"></i>

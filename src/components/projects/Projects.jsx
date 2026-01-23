@@ -17,15 +17,30 @@ const getStatusColorClasses = (status) => {
     return statusMap[status] || 'bg-gray-100 text-gray-700';
 };
 
+// Create a fallback context that always exists to ensure consistent hook calls
+// This prevents React error #300 by ensuring useContext is always called with a valid context
+const createFallbackAuthContext = () => {
+    if (!window._fallbackAuthContext) {
+        window._fallbackAuthContext = React.createContext({
+            user: null,
+            logout: () => {},
+            loading: false,
+            refreshUser: async () => null
+        });
+    }
+    return window._fallbackAuthContext;
+};
+
 // Safe useAuth wrapper - always returns a consistent hook result
-// CRITICAL FIX for React error #321: Must always call hooks unconditionally
-// The issue: conditionally calling window.useAuth() causes different hook counts between renders
-// Solution: Always call window.useAuth() unconditionally (following App.jsx pattern)
-// React tracks hook calls consistently - if useAuth throws, we catch and return default
+// CRITICAL FIX for React error #300: Must always call hooks unconditionally
+// The issue: If window.useAuth doesn't exist, calling it throws ReferenceError before React tracks the hook
+// This causes inconsistent hook counts between renders (React error #300)
+// Solution: Always call useContext unconditionally with a valid context (AuthContext or fallback)
 const useAuthSafe = () => {
-    // CRITICAL: Always call window.useAuth() unconditionally - no conditional checks
+    // CRITICAL: Always call useContext unconditionally - no conditional checks
     // This ensures React sees the same hook call pattern on every render
-    // Following the pattern from App.jsx which always calls useAuth in try-catch
+    // Use AuthContext if available, otherwise use fallback context
+    const authContext = window.AuthContext || createFallbackAuthContext();
     
     let user = null;
     let logout = () => {
@@ -35,11 +50,9 @@ const useAuthSafe = () => {
     let loading = false;
     let refreshUser = async () => null;
     
+    // Always call useContext - this hook is ALWAYS called, maintaining React's hook tracking
     try {
-        // Always call window.useAuth() - React tracks this consistently
-        // If it doesn't exist, this will throw ReferenceError, which we catch
-        // If context isn't available, it will throw React error #321, which we also catch
-        const authState = window.useAuth();
+        const authState = useContext(authContext);
         if (authState && typeof authState === 'object') {
             user = authState.user || null;
             logout = authState.logout || logout;
@@ -48,21 +61,32 @@ const useAuthSafe = () => {
         }
     } catch (error) {
         // React error #321/#300 means context not found - expected if AuthProvider isn't ready
-        // ReferenceError means window.useAuth doesn't exist yet
-        // Both are recoverable - component will re-render when provider/useAuth is ready
         const isContextError = error.message && (
             error.message.includes('321') || 
             error.message.includes('300') ||
             error.message.includes('Context')
         );
-        const isReferenceError = error.name === 'ReferenceError' || 
-            (error.message && error.message.includes('useAuth'));
-        
-        // Only log if it's an unexpected error
-        if (!isContextError && !isReferenceError) {
-            console.warn('⚠️ Projects: useAuth hook threw an error:', error);
+        if (!isContextError) {
+            console.warn('⚠️ Projects: AuthContext threw an error:', error);
         }
-        // Fall through to use default values
+        // Fall through to use defaults
+    }
+    
+    // Fallback: Try window.useAuth if we didn't get valid data from context
+    // This is safe because we've already called our hook (useContext) above
+    if ((!user && !loading) && window.useAuth && typeof window.useAuth === 'function') {
+        try {
+            const authState = window.useAuth();
+            if (authState && typeof authState === 'object') {
+                user = authState.user || null;
+                logout = authState.logout || logout;
+                loading = authState.loading !== undefined ? authState.loading : false;
+                refreshUser = authState.refreshUser || refreshUser;
+            }
+        } catch (error) {
+            // Ignore errors here since we already tried useContext
+            // This is just a fallback
+        }
     }
     
     // Always return the same structure - ensures consistent return value
@@ -80,6 +104,9 @@ const Projects = () => {
     // CRITICAL: Always call useAuthSafe() unconditionally at the top level
     // This ensures hooks are always called in the same order on every render
     const { logout } = useAuthSafe();
+    
+    // Get theme
+    const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
     const [projects, setProjects] = useState([]); // Projects are database-only
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
@@ -3635,23 +3662,32 @@ const Projects = () => {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <div className="flex-1 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
-                        <p className="text-xs text-gray-600">Manage and track all your projects</p>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                        <i className={`fas fa-project-diagram ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
                     </div>
-                    {SectionCommentWidget && (
-                        <SectionCommentWidget 
-                            sectionId="projects-main"
-                            sectionName="Projects"
-                        />
-                    )}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Projects</h1>
+                                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Manage and track all your projects</p>
+                            </div>
+                            {SectionCommentWidget && (
+                                <div className="hidden sm:block flex-shrink-0">
+                                    <SectionCommentWidget 
+                                        sectionId="projects-main"
+                                        sectionName="Projects"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3">
                     {/* View Toggle */}
-                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0" role="group" aria-label="View mode selector">
+                    <div className={`flex items-center ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 shrink-0`} role="group" aria-label="View mode selector">
                         <button
                             onClick={() => {
                                 setViewMode('grid');
@@ -3661,10 +3697,10 @@ const Projects = () => {
                                     console.warn('Failed to save view mode preference:', e);
                                 }
                             }}
-                            className={`px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
+                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                 viewMode === 'grid'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                             title="Grid View"
                             aria-label="Switch to grid view"
@@ -3681,10 +3717,10 @@ const Projects = () => {
                                     console.warn('Failed to save view mode preference:', e);
                                 }
                             }}
-                            className={`px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 ${
+                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                 viewMode === 'list'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                             title="List View"
                             aria-label="Switch to list view"
@@ -3700,40 +3736,66 @@ const Projects = () => {
                             setTimeout(() => {
                             }, 100);
                         }}
-                        className="px-3 py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium"
+                        className={`px-4 py-2.5 rounded-lg transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 ${
+                            isDark 
+                                ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' 
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
                         aria-label="Open progress tracker"
                     >
-                        <i className="fas fa-chart-line mr-1.5 text-xs" aria-hidden="true"></i>
+                        <i className="fas fa-chart-line mr-2 text-xs" aria-hidden="true"></i>
                         Progress Tracker
                     </button>
                     <button 
                         onClick={handleAddProject}
-                        className="bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm font-medium"
+                        className="bg-blue-500 text-white px-4 py-2.5 rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0"
                         aria-label="Create new project"
                     >
-                        <i className="fas fa-plus mr-1.5 text-xs" aria-hidden="true"></i>
+                        <i className="fas fa-plus mr-2 text-xs" aria-hidden="true"></i>
                         New Project
                     </button>
                 </div>
             </div>
 
             {/* Search and Filters */}
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <div className="flex gap-2.5">
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+                <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1">
-                        <input
-                            type="text"
-                            placeholder="Search projects by name, client, type, or team member..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            aria-label="Search projects"
-                        />
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search projects by name, client, type, or team member..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                    isDark 
+                                        ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400 focus:bg-gray-800' 
+                                        : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'
+                                }`}
+                                aria-label="Search projects"
+                            />
+                            <i className={`fas fa-search absolute left-3 top-3.5 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className={`absolute right-3 top-3.5 transition-colors ${
+                                        isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
+                                    }`}
+                                    title="Clear search"
+                                >
+                                    <i className="fas fa-times text-sm"></i>
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <select
                         value={selectedClient}
                         onChange={(e) => setSelectedClient(e.target.value)}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                            isDark 
+                                ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+                        }`}
                         aria-label="Filter by client"
                     >
                         <option value="all">All Clients ({projects.length})</option>
@@ -3749,7 +3811,11 @@ const Projects = () => {
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                            isDark 
+                                ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+                        }`}
                         aria-label="Filter by status"
                     >
                         <option value="all">All Statuses</option>
@@ -3765,28 +3831,28 @@ const Projects = () => {
             {/* Loading State */}
             {isLoading && (
                 <div className="col-span-full text-center py-12">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-3"></div>
-                    <p className="text-gray-500 text-sm">Loading projects...</p>
+                    <div className={`inline-block animate-spin rounded-full h-8 w-8 border-b-2 mb-3 ${isDark ? 'border-blue-400' : 'border-blue-600'}`}></div>
+                    <p className={isDark ? 'text-gray-400 text-sm' : 'text-gray-500 text-sm'}>Loading projects...</p>
                 </div>
             )}
 
             {/* Error State */}
             {loadError && !isLoading && (
-                <div className="col-span-full bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className={`col-span-full ${isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'} border rounded-xl p-5`}>
                     <div className="flex items-start">
-                        <i className="fas fa-exclamation-circle text-red-600 mt-0.5 mr-3"></i>
+                        <i className={`fas fa-exclamation-circle mt-0.5 mr-3 ${isDark ? 'text-red-400' : 'text-red-600'}`}></i>
                         <div className="flex-1">
-                            <h3 className="text-sm font-semibold text-red-800 mb-1">Error Loading Projects</h3>
-                            <p className="text-sm text-red-700 mb-3">{loadError}</p>
+                            <h3 className={`text-sm font-semibold mb-1 ${isDark ? 'text-red-200' : 'text-red-800'}`}>Error Loading Projects</h3>
+                            <p className={`text-sm mb-3 ${isDark ? 'text-red-300' : 'text-red-700'}`}>{loadError}</p>
                             <button
                                 onClick={() => {
                                     setLoadError(null);
                                     setIsLoading(true);
                                     window.location.reload();
                                 }}
-                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-medium"
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-all duration-200"
                             >
-                                <i className="fas fa-redo mr-1.5"></i>
+                                <i className="fas fa-redo mr-2"></i>
                                 Retry
                             </button>
                         </div>
@@ -3798,9 +3864,9 @@ const Projects = () => {
             {!isLoading && !loadError && (
                 <>
                     {filteredProjects.length === 0 ? (
-                        <div className="col-span-full text-center py-12">
-                            <i className="fas fa-filter text-4xl text-gray-300 mb-3"></i>
-                            <p className="text-gray-500 text-sm mb-2">
+                        <div className={`col-span-full text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8`}>
+                            <i className={`fas fa-filter text-4xl mb-3 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
+                            <p className={`text-sm mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {projects.length === 0 
                                     ? 'No projects yet. Create your first project!' 
                                     : 'No projects match your filters'}
@@ -3812,15 +3878,15 @@ const Projects = () => {
                                         setSelectedClient('all');
                                         setFilterStatus('all');
                                     }}
-                                    className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                    className="mt-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium transition-all duration-200"
                                 >
-                                    <i className="fas fa-redo mr-1.5"></i>
+                                    <i className="fas fa-redo mr-2"></i>
                                     Clear all filters
                                 </button>
                             )}
                         </div>
                     ) : viewMode === 'grid' ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
                             {filteredProjects.map((project, index) => (
                                 <div 
                                     key={project.id}
@@ -3906,35 +3972,35 @@ const Projects = () => {
                                         }
                                         mouseDownRef.current = null;
                                     }}
-                                    className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
+                                    className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border hover:shadow-md transition-all duration-200 p-5 cursor-pointer`}
                                 >
-                                    <div className="flex justify-between items-start mb-3">
+                                    <div className="flex justify-between items-start mb-4">
                                         <div className="flex-1">
-                                            <h3 className="font-semibold text-gray-900 text-sm mb-0.5">{project.name}</h3>
-                                            <p className="text-xs text-gray-500">{project.client}</p>
+                                            <h3 className={`font-semibold text-sm mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{project.name}</h3>
+                                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{project.client}</p>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${getStatusColorClasses(project.status)}`}>
+                                            <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
                                                 {project.status}
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 mb-3">
-                                        <div className="flex items-center text-xs text-gray-600">
-                                            <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
+                                    <div className="space-y-2.5">
+                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <i className={`fas fa-tag mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                             {project.type}
                                         </div>
-                                        <div className="flex items-center text-xs text-gray-600">
-                                            <i className="fas fa-calendar mr-2 w-3 text-[10px]"></i>
+                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <i className={`fas fa-calendar mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                             {project.startDate} - {project.dueDate}
                                         </div>
-                                        <div className="flex items-center text-xs text-gray-600">
-                                            <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
+                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <i className={`fas fa-user mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                             {project.assignedTo}
                                         </div>
-                                        <div className="flex items-center text-xs text-gray-600">
-                                            <i className="fas fa-tasks mr-2 w-3 text-[10px]"></i>
+                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <i className={`fas fa-tasks mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                             {project.tasksCount || 0} tasks
                                         </div>
                                     </div>
@@ -3942,54 +4008,54 @@ const Projects = () => {
                             ))}
                         </div>
                     ) : (
-                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
                             <div className="overflow-x-auto">
                                 <table className="w-full">
-                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                    <thead className={isDark ? 'bg-gray-800 border-b border-gray-800' : 'bg-gray-50 border-b border-gray-100'}>
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Project</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Client</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Type</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Dates</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned To</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Tasks</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
+                                    <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
                                         {filteredProjects.map((project) => (
                                             <tr
                                                 key={project.id}
                                                 onClick={() => handleViewProject(project)}
-                                                className="hover:bg-gray-50 cursor-pointer transition-colors"
+                                                className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
                                             >
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900">{project.name}</div>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{project.name}</div>
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-600">{project.client}</div>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.client}</div>
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-600">{project.type}</div>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.type}</div>
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <span className={`px-2 py-1 text-xs rounded font-medium ${getStatusColorClasses(project.status)}`}>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
                                                         {project.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-600">
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                         {project.startDate && project.dueDate 
                                                             ? `${project.startDate} - ${project.dueDate}`
                                                             : project.dueDate || project.startDate || 'No dates'
                                                         }
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-600">{project.assignedTo || 'Unassigned'}</div>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.assignedTo || 'Unassigned'}</div>
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-600">{project.tasksCount || 0}</div>
+                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -4015,13 +4081,17 @@ const Projects = () => {
                     />
                 ) : (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-lg p-4 w-full max-w-md">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h2>
-                            <p className="text-sm text-gray-600 mb-3">Project editor failed to load. Please wait a moment and try again.</p>
+                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6 w-full max-w-md shadow-xl`}>
+                            <h2 className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Something went wrong</h2>
+                            <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Project editor failed to load. Please wait a moment and try again.</p>
                             <div className="flex justify-end">
                                 <button
                                     onClick={() => setShowModal(false)}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    className={`px-4 py-2 text-sm border rounded-lg transition-all duration-200 font-medium ${
+                                        isDark 
+                                            ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' 
+                                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                                    }`}
                                 >
                                     Close
                                 </button>
@@ -4034,31 +4104,35 @@ const Projects = () => {
             {/* Delete Confirmation Modal */}
             {deleteConfirmation.show && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-confirmation-title">
-                    <div className="bg-white rounded-lg p-4 w-full max-w-md">
+                    <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6 w-full max-w-md shadow-xl`}>
                         <div className="flex items-start mb-4">
                             <div className="flex-shrink-0">
-                                <i className="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+                                <i className={`fas fa-exclamation-triangle text-2xl ${isDark ? 'text-red-400' : 'text-red-600'}`}></i>
                             </div>
                             <div className="ml-3 flex-1">
-                                <h2 id="delete-confirmation-title" className="text-lg font-semibold text-gray-900 mb-2">
+                                <h2 id="delete-confirmation-title" className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                     Delete Project
                                 </h2>
-                                <p className="text-sm text-gray-600">
+                                <p className={isDark ? 'text-sm text-gray-400' : 'text-sm text-gray-600'}>
                                     Are you sure you want to delete this project? This action cannot be undone.
                                 </p>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-2 mt-4">
+                        <div className="flex justify-end gap-3 mt-6">
                             <button
                                 onClick={cancelDeleteProject}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                className={`px-4 py-2 text-sm border rounded-lg transition-all duration-200 font-medium ${
+                                    isDark 
+                                        ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' 
+                                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                                }`}
                                 aria-label="Cancel deletion"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={confirmDeleteProject}
-                                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 font-medium"
                                 aria-label="Confirm deletion"
                             >
                                 Delete Project

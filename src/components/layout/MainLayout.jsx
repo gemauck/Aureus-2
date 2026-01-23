@@ -1392,24 +1392,24 @@ const MainLayout = () => {
                     setSidebarOpen(false);
                 }
             }}
-            className={`w-full flex items-center ${sidebarOpen ? 'px-4 py-3 space-x-3' : 'px-2 py-3 justify-center'} transition-colors ${
+            className={`w-full flex items-center ${sidebarOpen ? 'px-5 py-2.5 mx-2 my-1 space-x-3 rounded-lg' : 'px-3 py-2.5 mx-2 my-1 justify-center rounded-lg'} transition-all duration-200 ${
                 currentPage === item.id 
                     ? isDark
-                        ? 'bg-primary-900 text-primary-200 border-r-2 border-primary-400'
-                        : 'bg-primary-50 text-primary-600 border-r-2 border-primary-600'
+                        ? 'bg-gray-800 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-900 shadow-sm'
                     : isDark 
-                        ? 'text-gray-200 hover:bg-gray-700' 
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             } ${extraClasses}`}
             title={!sidebarOpen ? item.label : ''}
         >
-            <i className={`fas ${item.icon} text-lg`}></i>
-            {sidebarOpen && <span className="font-medium">{item.label}</span>}
+            <i className={`fas ${item.icon} ${sidebarOpen ? 'text-base' : 'text-lg'} ${currentPage === item.id ? '' : 'opacity-70'}`}></i>
+            {sidebarOpen && <span className={`text-sm font-medium ${currentPage === item.id ? '' : 'font-normal'}`}>{item.label}</span>}
         </button>
     );
 
     return (
-        <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`} style={{ width: '100vw', maxWidth: '100vw' }}>
+        <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`} style={{ width: '100vw', maxWidth: '100vw' }}>
             {/* Mobile Sidebar Overlay - FIXED positioning */}
             {isMobile && sidebarOpen && (
                 <div 
@@ -1423,8 +1423,8 @@ const MainLayout = () => {
             <div 
                 data-theme={isDark ? 'dark' : 'light'}
                 className={`
-                    ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
-                    border-r transition-all duration-300 flex flex-col
+                    ${isDark ? 'bg-gray-900' : 'bg-white'} 
+                    transition-all duration-300 flex flex-col shadow-sm
                     ${isMobile ? 'fixed z-50' : 'relative z-10'}
                     ${isMobile ? 'main-layout-sidebar' : ''}
                     ${isMobile ? (sidebarOpen ? 'sidebar-open' : 'sidebar-closed') : ''}
@@ -1441,63 +1441,59 @@ const MainLayout = () => {
                     } : {
                         // Desktop: Normal flow, variable width
                         position: 'relative',
-                        width: sidebarOpen ? '240px' : '64px',
-                        minWidth: sidebarOpen ? '240px' : '64px',
+                        width: sidebarOpen ? '260px' : '72px',
+                        minWidth: sidebarOpen ? '260px' : '72px',
                         flexShrink: 0,
                     })
                 }}
             >
                 {/* Logo */}
-                <div className={`h-14 flex items-center ${sidebarOpen ? 'justify-between px-4' : 'justify-center px-2'} border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'}`}>
                     {sidebarOpen && (
-                        <h1 className="abcotronics-logo font-bold text-lg">
+                        <h1 className={`abcotronics-logo font-semibold text-base tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {companyName}
                         </h1>
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
                         aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                     >
-                        <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-lg`}></i>
+                        <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-base`}></i>
                     </button>
                 </div>
 
                 {/* Menu Items */}
-                <nav className="flex-1 overflow-y-auto py-2 flex flex-col">
+                <nav className="flex-1 overflow-y-auto py-3 flex flex-col">
                     <div className="flex-1">
                         {primaryMenuItems.map((item) => renderMenuButton(item))}
                     </div>
-                    {myTasksMenuItem && (
-                        <div className={sidebarOpen ? 'mt-4' : 'mt-2'}>
-                            {renderMenuButton(myTasksMenuItem)}
-                        </div>
-                    )}
-                    {myNotesMenuItem && (
-                        <div className={sidebarOpen ? 'mt-2' : 'mt-2'}>
-                            {renderMenuButton(myNotesMenuItem)}
+                    {(myTasksMenuItem || myNotesMenuItem) && (
+                        <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-100'} pt-2 mt-2`}>
+                            {myTasksMenuItem && renderMenuButton(myTasksMenuItem)}
+                            {myNotesMenuItem && renderMenuButton(myNotesMenuItem)}
                         </div>
                     )}
                 </nav>
 
                 {/* User Profile */}
-                <div className={`border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} p-3`}>
+                <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-100'} p-4`}>
                     <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
-                        <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold">
+                        <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center ${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium text-sm`}>
                             {user?.name?.charAt(0) || 'U'}
                         </div>
                         {sidebarOpen && (
                             <>
                                 <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
-                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} truncate`}>{user?.role}</p>
+                                    <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} truncate`}>{user?.name}</p>
+                                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate capitalize`}>{user?.role}</p>
                                 </div>
                                 <button 
                                     onClick={logout}
-                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
                                     title="Logout"
                                 >
-                                    <i className="fas fa-sign-out-alt"></i>
+                                    <i className="fas fa-sign-out-alt text-sm"></i>
                                 </button>
                             </>
                         )}
@@ -1510,26 +1506,27 @@ const MainLayout = () => {
                 {/* Header - STICKY on mobile */}
                 <header 
                     className={`
-                        ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
-                        border-b h-14 flex items-center justify-between pl-8 pr-4 flex-shrink-0
+                        ${isDark ? 'bg-gray-900' : 'bg-white'} 
+                        ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'} 
+                        h-16 flex items-center justify-between px-6 flex-shrink-0
                         ${isMobile ? 'sticky top-0 z-30' : ''}
                     `}
                 >
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className="flex items-center space-x-4 flex-1 min-w-0">
                         {/* Hamburger - MOBILE ONLY */}
                         {isMobile && (
                             <button 
                                 onClick={() => setSidebarOpen(true)}
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
                                 aria-label="Open menu"
                             >
-                                <i className="fas fa-bars text-xl"></i>
+                                <i className="fas fa-bars text-lg"></i>
                             </button>
                         )}
                         
                         {/* Logo - MOBILE ONLY */}
                         {isMobile && (
-                            <h1 className="abcotronics-logo font-bold text-base truncate">
+                            <h1 className={`abcotronics-logo font-semibold text-base truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {companyName}
                             </h1>
                         )}
@@ -1549,25 +1546,25 @@ const MainLayout = () => {
                         {/* Settings Button */}
                         <button
                             onClick={() => navigateToPage('settings')}
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-colors border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2.5 rounded-lg transition-all duration-200`}
                             title="Settings"
                         >
-                            <i className="fas fa-cog"></i>
+                            <i className="fas fa-cog text-sm"></i>
                         </button>
                         
                         {/* Theme Selector */}
                         <div className="relative theme-selector">
                             <button 
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-colors border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2.5 rounded-lg transition-all duration-200`}
                                 onClick={() => setShowThemeMenu(!showThemeMenu)}
                             >
-                                <i className={`fas fa-${isDark ? 'sun' : 'moon'}`}></i>
+                                <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
                             </button>
                             
                             {showThemeMenu && (
                                 <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50`}>
-                                    <div className="p-3">
-                                        <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-2`}>
+                                    <div className="p-2">
+                                        <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
                                             Theme
                                         </div>
                                         <button
@@ -1575,7 +1572,7 @@ const MainLayout = () => {
                                                 toggleTheme();
                                                 setShowThemeMenu(false);
                                             }}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
                                         >
                                             <i className={`fas fa-${isDark ? 'sun' : 'moon'}`}></i>
                                             <span>Switch to {isDark ? 'Light' : 'Dark'}</span>
@@ -1585,7 +1582,7 @@ const MainLayout = () => {
                                                 toggleSystemPreference();
                                                 setShowThemeMenu(false);
                                             }}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
                                         >
                                             <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'}`}></i>
                                             <span>{isFollowingSystem ? 'Following' : 'Follow'} System</span>
@@ -1598,7 +1595,7 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content - SCROLLABLE */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-4'}`} style={{ width: 'auto', maxWidth: 'none', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-6'}`} style={{ width: 'auto', maxWidth: 'none', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
                     <div className={`w-full max-w-full min-w-full ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: '100%' }}>
                         {renderPage}
                     </div>

@@ -413,10 +413,10 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     };
 
     return (
-        <div className={`${cardBase} border rounded-lg p-4 flex flex-col h-full`}>
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <div className={`${cardBase} border rounded-xl p-5 flex flex-col h-full shadow-sm`}>
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
-                <i className="fas fa-tasks text-teal-500"></i>
+                <i className="fas fa-tasks text-teal-500 opacity-70"></i>
             </div>
             
             {isLoading ? (
@@ -446,7 +446,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 <div
                                     key={task.id || `task-${Math.random()}`}
                                     onClick={() => handleTaskClick(task)}
-                                    className={`p-2 rounded border ${isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'} cursor-pointer transition-colors`}
+                                    className={`p-3 rounded-lg ${isDark ? 'bg-gray-800 border border-gray-800 hover:bg-gray-750 hover:border-gray-700' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:border-gray-200'} cursor-pointer transition-all duration-200`}
                                     title={isProjectTask ? `Click to view project: ${task.project?.name || 'Unknown'}` : 'Click to view in My Tasks'}
                                 >
                                     <div className="flex items-start justify-between gap-2">
@@ -489,7 +489,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                         })}
                     </div>
                     {allTasks.length > 0 && (
-                        <div className={`text-xs ${subText} text-center pt-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0 mt-2`}>
+                        <div className={`text-xs ${subText} text-center pt-3 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'} flex-shrink-0 mt-3`}>
                             {projectTasks.length > 0 && userTasks.length > 0 && (
                                 <span>{projectTasks.length} project task{projectTasks.length !== 1 ? 's' : ''} • {userTasks.length} personal task{userTasks.length !== 1 ? 's' : ''}</span>
                             )}
@@ -711,9 +711,9 @@ const DashboardLive = () => {
 
     // Widget definitions (excluding finance)
     const widgetRegistry = React.useMemo(() => {
-        const cardBase = isDark ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900';
+        const cardBase = isDark ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-100 text-gray-900';
         const subText = isDark ? 'text-gray-400' : 'text-gray-500';
-        const headerText = isDark ? 'text-gray-200' : 'text-gray-800';
+        const headerText = isDark ? 'text-gray-100' : 'text-gray-900';
         
         const formatCurrency = (val) => {
             try {
@@ -736,10 +736,10 @@ const DashboardLive = () => {
                     }, {});
                     const entries = Object.entries(stageCounts);
                     return (
-                        <div className={`${cardBase} border rounded-lg p-4`}>
-                            <div className="flex items-center justify-between mb-2">
+                        <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
+                            <div className="flex items-center justify-between mb-4">
                                 <h3 className={`text-sm font-semibold ${headerText}`}>Leads by Stage</h3>
-                                <i className="fas fa-filter text-purple-500"></i>
+                                <i className="fas fa-filter text-purple-500 opacity-70"></i>
                             </div>
                             {entries.length === 0 ? (
                                 <div className={`text-sm ${subText}`}>No leads data.</div>
@@ -786,10 +786,10 @@ const DashboardLive = () => {
                         .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
                         .slice(0, 8);
                     return (
-                        <div className={`${cardBase} border rounded-lg p-4`}>
-                            <div className="flex items-center justify-between mb-2">
+                        <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
+                            <div className="flex items-center justify-between mb-4">
                                 <h3 className={`text-sm font-semibold ${headerText}`}>Recent Activity</h3>
-                                <i className="fas fa-stream text-indigo-500"></i>
+                                <i className="fas fa-stream text-indigo-500 opacity-70"></i>
                             </div>
                             {sorted.length === 0 ? (
                                 <div className={`text-sm ${subText}`}>No recent activity.</div>
@@ -1288,15 +1288,16 @@ const DashboardLive = () => {
 
     // Customizable widgets UI
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>Welcome, {userName}</h2>
+                    <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Welcome, {userName}</h2>
+                    <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Here's what's happening today</p>
                 </div>
             </div>
 
             <div 
-                className="grid gap-4"
+                className="grid gap-5"
                 style={{
                     gridTemplateColumns: 'repeat(3, 1fr)',
                     gridAutoRows: 'minmax(200px, auto)'
@@ -1385,10 +1386,10 @@ const DashboardLive = () => {
             </div>
 
             {/* Edit Layout and Manage Widgets Buttons at Bottom */}
-            <div className="flex justify-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className={`flex justify-center gap-3 pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
                 <button
                     onClick={() => setManageOpen(true)}
-                    className="px-6 py-3 text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-200 shadow-lg transition-all"
+                    className={`px-5 py-2.5 text-sm font-medium rounded-lg ${isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'} transition-all duration-200`}
                 >
                     <i className="fas fa-cog mr-2"></i>
                     Manage Widgets
@@ -1398,7 +1399,7 @@ const DashboardLive = () => {
                         setEditMode(!editMode);
                         console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
                     }}
-                    className={`px-6 py-3 text-sm font-semibold rounded-md ${editMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'} shadow-lg transition-all`}
+                    className={`px-5 py-2.5 text-sm font-medium rounded-lg ${editMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'} transition-all duration-200`}
                     title={editMode ? 'Exit edit mode to hide controls' : 'Click to enable drag, drop, and resize'}
                 >
                     <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>
@@ -1409,21 +1410,21 @@ const DashboardLive = () => {
             {manageOpen ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center">
                     <div className="absolute inset-0 bg-black bg-opacity-40" onClick={() => setManageOpen(false)}></div>
-                    <div className={`${isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'} relative rounded-lg shadow-lg w-full max-w-2xl border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <div className={`${isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'} relative rounded-xl shadow-xl w-full max-w-2xl border ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+                        <div className={`p-5 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
                             <div className="flex items-center justify-between">
-                                <h3 className="text-base font-semibold">Manage Widgets</h3>
-                                <button className="p-2" onClick={() => setManageOpen(false)}>
+                                <h3 className="text-lg font-semibold">Manage Widgets</h3>
+                                <button className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} transition-colors`} onClick={() => setManageOpen(false)}>
                                     <i className="fas fa-times"></i>
                                 </button>
                             </div>
                         </div>
-                        <div className="p-4">
+                        <div className="p-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {availableWidgets.map(w => {
                                     const checked = selectedWidgets.includes(w.id);
                                     return (
-                                        <label key={w.id} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} border rounded-md p-3 flex items-start gap-3`}>
+                                        <label key={w.id} className={`${isDark ? 'bg-gray-800 border-gray-800 hover:bg-gray-750' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'} border rounded-lg p-4 flex items-start gap-3 cursor-pointer transition-all duration-200`}>
                                             <input
                                                 type="checkbox"
                                                 className="mt-1"
@@ -1439,10 +1440,10 @@ const DashboardLive = () => {
                                 })}
                             </div>
                         </div>
-                        <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
-                            <div className="flex items-center gap-2">
+                        <div className={`p-5 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'} flex items-center justify-between`}>
+                            <div className="flex items-center gap-3">
                                 <button
-                                    className="text-sm px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50"
+                                    className={`text-sm px-4 py-2 rounded-lg ${isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'} transition-all duration-200`}
                                     onClick={handleResetWidgets}
                                 >
                                     Reset to defaults
@@ -1454,7 +1455,7 @@ const DashboardLive = () => {
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
-                                    className="text-sm px-3 py-2 rounded-md"
+                                    className={`text-sm px-4 py-2 rounded-lg font-medium ${isDark ? 'bg-gray-800 text-gray-200 hover:bg-gray-750' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} transition-all duration-200`}
                                     onClick={() => setManageOpen(false)}
                                 >
                                     Close

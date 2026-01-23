@@ -8,7 +8,8 @@ const Tools = () => {
         HandwritingToWord: null,
         UnitConverter: null,
         TankSizeCalculator: null,
-        DieselRefundEvidenceEvaluator: null
+        DieselRefundEvidenceEvaluator: null,
+        DocumentParser: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
 
@@ -25,7 +26,8 @@ const Tools = () => {
                 HandwritingToWord: window.HandwritingToWord,
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator,
-                DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
+                DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
+                DocumentParser: window.DocumentParser
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -54,7 +56,8 @@ const Tools = () => {
                     UnitConverter: !!components.UnitConverter,
                     PDFToWordConverter: !!components.PDFToWordConverter,
                     HandwritingToWord: !!components.HandwritingToWord,
-                    DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator
+                    DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator,
+                    DocumentParser: !!components.DocumentParser
                 });
                 isChecking = false;
             }
@@ -80,7 +83,8 @@ const Tools = () => {
                 HandwritingToWord: window.HandwritingToWord,
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator,
-                DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
+                DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
+                DocumentParser: window.DocumentParser
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -105,6 +109,14 @@ const Tools = () => {
     // Build tools array with components - use useMemo to recalculate when toolComponents changes
     const tools = useMemo(() => {
         const toolsArray = [
+            {
+                id: 'document-parser',
+                name: 'Document Parser',
+                description: 'Extract all information from documents including handwriting, tables, and structured data',
+                icon: 'fa-file-search',
+                color: 'indigo',
+                component: toolComponents.DocumentParser
+            },
             {
                 id: 'tank-calculator',
                 name: 'Tank Size Calculator',

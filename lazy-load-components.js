@@ -147,6 +147,7 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
         './src/components/tools/PDFToWordConverter.jsx',
         './src/components/tools/HandwritingToWord.jsx',
         './src/components/tools/DieselRefundEvidenceEvaluator.jsx',
+        './src/components/tools/DocumentParser.jsx',
         './src/components/tools/Tools.jsx',
         
         // Tasks and Notes

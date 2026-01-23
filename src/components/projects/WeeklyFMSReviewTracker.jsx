@@ -1,6 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
+const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
 // Derive a human‑readable facilities label from the project, handling both
@@ -2191,7 +2192,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return;
             }
             
-            const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+            const commentButton = documentRef.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
             if (!commentButton) {
                 return;
             }
@@ -2273,8 +2274,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             }
         };
         
-        window.document.addEventListener('mousedown', handleClickOutside);
-        return () => window.document.removeEventListener('mousedown', handleClickOutside);
+        documentRef.addEventListener('mousedown', handleClickOutside);
+        return () => documentRef.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
@@ -2349,7 +2350,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
-                    const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                    const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -2386,13 +2387,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     } else {
                         // Fallback: try to find the cell and position relative to it
                         // deepWeek might be a week label or week number, try both
-                        let cell = window.document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-week-label="${deepWeek}"]`);
+                        let cell = documentRef.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-week-label="${deepWeek}"]`);
                         if (!cell) {
                             // Try by week number if deepWeek is a number or week label
                             const weekMatch = String(deepWeek).match(/Week\s+(\d+)/i) || String(deepWeek).match(/W(\d+)/i) || String(deepWeek).match(/(\d+)/);
                             const weekNum = weekMatch ? weekMatch[1] : null;
                             if (weekNum) {
-                                cell = window.document.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-week="${weekNum}"]`);
+                                cell = documentRef.querySelector(`[data-section-id="${deepSectionId}"][data-document-id="${deepDocumentId}"][data-week="${weekNum}"]`);
                             }
                         }
                         if (cell) {
@@ -2619,7 +2620,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                     // Trigger position update after state is set
                                     setTimeout(() => {
-                                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
+                                        const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                                         if (commentButton) {
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;
@@ -3439,134 +3440,135 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             })()}
             
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
-                        <i className="fas fa-arrow-left"></i>
-                    </button>
-                    <div>
-                        <h1 className="text-lg font-semibold text-gray-900">Weekly FMS Review Tracker</h1>
-                        <p className="text-xs text-gray-500">
-                            {project?.name}
-                            {' • '}
-                            {project?.client}
-                            {' • '}
-                            Facilities:
-                            {' '}
-                            {getFacilitiesLabel(project) || 'Not specified'}
-                        </p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={onBack} 
+                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">Weekly FMS Review Tracker</h1>
+                            <p className="text-sm text-gray-600 mt-0.5">
+                                {project?.name}
+                                {project?.client && ` • ${project.client}`}
+                                {' • Facilities: '}
+                                <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                            </p>
+                        </div>
                     </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-medium text-gray-600">Year:</label>
-                    <select
-                        value={selectedYear}
-                        onChange={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const newYear = parseInt(e.target.value, 10);
-                            if (!isNaN(newYear)) {
-                                handleYearChange(newYear);
-                            }
-                        }}
-                        onBlur={(e) => {
-                            const newYear = parseInt(e.target.value, 10);
-                            if (!isNaN(newYear) && newYear !== selectedYear) {
-                                handleYearChange(newYear);
-                            }
-                        }}
-                        aria-label="Select year for weekly FMS review tracker"
-                        role="combobox"
-                        aria-haspopup="listbox"
-                        data-testid="year-selector"
-                        className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500"
-                    >
-                        {yearOptions.map(year => (
-                            <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
-                        ))}
-                    </select>
                     
-                    <button
-                        onClick={handleExportToExcel}
-                        disabled={isExporting || sections.length === 0}
-                        className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-[10px] font-medium disabled:opacity-50"
-                    >
-                        {isExporting ? (
-                            <><i className="fas fa-spinner fa-spin mr-1"></i>Exporting...</>
-                        ) : (
-                            <><i className="fas fa-file-excel mr-1"></i>Export</>
-                        )}
-                    </button>
-                    
-                    <button
-                        onClick={handleAddSection}
-                        className="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-[10px] font-medium"
-                    >
-                        <i className="fas fa-plus mr-1"></i>Add Section
-                    </button>
-                    
-                    <div className="flex items-center gap-1 border-l border-gray-300 pl-2 ml-2">
-                        <button
-                            onClick={() => setShowApplyTemplateModal(true)}
-                            className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-[10px] font-medium"
-                        >
-                            <i className="fas fa-magic mr-1"></i>Apply Template
-                        </button>
-                        <button
-                            onClick={() => setShowTemplateModal(true)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-[10px] font-medium"
-                        >
-                            <i className="fas fa-layer-group mr-1"></i>Templates
-                        </button>
-                        <button
-                            onClick={() => {
-                                try {
-                                    if (!sections || sections.length === 0) {
-                                        alert('There are no sections in this year to save as a template.');
-                                        return;
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+                            <label className="text-xs font-semibold text-gray-700">Year:</label>
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const newYear = parseInt(e.target.value, 10);
+                                    if (!isNaN(newYear)) {
+                                        handleYearChange(newYear);
                                     }
-                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
-                                    const name = window.prompt('Template name', defaultName);
-                                    if (!name || !name.trim()) {
-                                        return;
+                                }}
+                                onBlur={(e) => {
+                                    const newYear = parseInt(e.target.value, 10);
+                                    if (!isNaN(newYear) && newYear !== selectedYear) {
+                                        handleYearChange(newYear);
                                     }
-                                    // Build a clean template payload from the current year's sections
-                                    // (names/descriptions only, no status/comments) and route it
-                                    // through the "create" flow so we POST a brand‑new template.
-                                    setEditingTemplate(null);
-                                    setPrefilledTemplate({
-                                        name: name.trim(),
-                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
-                                        sections: buildTemplateSectionsFromCurrent()
-                                    });
-                                    setShowTemplateList(false);
-                                    setShowTemplateModal(true);
-                                } catch (e) {
-                                    console.error('❌ Failed to prepare template from current year:', e);
-                                    alert('Could not prepare template from current year. See console for details.');
-                                }
-                            }}
-                            className="px-3 py-1 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-[10px] font-medium"
-                            title="Save current year as template"
+                                }}
+                                aria-label="Select year for weekly FMS review tracker"
+                                role="combobox"
+                                aria-haspopup="listbox"
+                                data-testid="year-selector"
+                                className="text-sm font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer"
+                            >
+                                {yearOptions.map(year => (
+                                    <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <button
+                            onClick={handleExportToExcel}
+                            disabled={isExporting || sections.length === 0}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                         >
-                            <i className="fas fa-save mr-1"></i>Save Year as Template
+                            {isExporting ? (
+                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
+                            ) : (
+                                <><i className="fas fa-file-excel"></i><span>Export</span></>
+                            )}
                         </button>
+                        
+                        <button
+                            onClick={handleAddSection}
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                        >
+                            <i className="fas fa-plus"></i><span>Add Section</span>
+                        </button>
+                        
+                        <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
+                            <button
+                                onClick={() => setShowApplyTemplateModal(true)}
+                                className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                            >
+                                <i className="fas fa-magic"></i><span>Apply Template</span>
+                            </button>
+                            <button
+                                onClick={() => setShowTemplateModal(true)}
+                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                            >
+                                <i className="fas fa-layer-group"></i><span>Templates</span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    try {
+                                        if (!sections || sections.length === 0) {
+                                            alert('There are no sections in this year to save as a template.');
+                                            return;
+                                        }
+                                        const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
+                                        const name = window.prompt('Template name', defaultName);
+                                        if (!name || !name.trim()) {
+                                            return;
+                                        }
+                                        setEditingTemplate(null);
+                                        setPrefilledTemplate({
+                                            name: name.trim(),
+                                            description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
+                                            sections: buildTemplateSectionsFromCurrent()
+                                        });
+                                        setShowTemplateList(false);
+                                        setShowTemplateModal(true);
+                                    } catch (e) {
+                                        console.error('❌ Failed to prepare template from current year:', e);
+                                        alert('Could not prepare template from current year. See console for details.');
+                                    }
+                                }}
+                                className="px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                                title="Save current year as template"
+                            >
+                                <i className="fas fa-save"></i><span>Save Template</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
             
             {/* Legend */}
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-                <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-medium text-gray-600">Status:</span>
+            <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-4">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status Legend:</span>
                     {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-1">
-                                <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
-                                <span className="text-[10px] text-gray-600">{option.label}</span>
+                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                                <div className={`w-4 h-4 rounded-full ${option.cellColor || 'bg-gray-200'} ring-2 ring-white shadow-sm`}></div>
+                                <span className="text-xs font-medium text-gray-700">{option.label}</span>
                             </div>
-                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
                         </React.Fragment>
                     ))}
                 </div>
@@ -3575,21 +3577,28 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {/* Per-section tables with independent horizontal scroll */}
             <div className="space-y-3">
                 {sections.length === 0 ? (
-                    <div className="bg-white rounded-lg border border-gray-200 p-6 text-center text-gray-400">
-                        <i className="fas fa-folder-open text-3xl mb-2 opacity-50"></i>
-                        <p className="text-sm">No sections yet</p>
-                        <button
-                            onClick={handleAddSection}
-                            className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                        >
-                            <i className="fas fa-plus mr-1"></i>Add First Section
-                        </button>
+                    <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
+                                <i className="fas fa-folder-open text-3xl text-primary-600"></i>
+                            </div>
+                            <div>
+                                <p className="text-lg font-bold text-gray-900">No sections yet</p>
+                                <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                            </div>
+                            <button
+                                onClick={handleAddSection}
+                                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                            >
+                                <i className="fas fa-plus"></i><span>Add First Section</span>
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+                            className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
@@ -3597,23 +3606,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}
-                            <div className="px-3 py-2 bg-gray-100 flex items-center justify-between cursor-grab active:cursor-grabbing">
-                                <div className="flex items-center gap-2 flex-1">
-                                    <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
+                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex items-center justify-between cursor-grab active:cursor-grabbing">
+                                <div className="flex items-center gap-3 flex-1">
+                                    <i className="fas fa-grip-vertical text-gray-400 text-sm"></i>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-sm text-gray-900">{section.name}</div>
+                                        <div className="font-bold text-base text-gray-900 flex items-center gap-2">
+                                            <span>#{sectionIndex + 1}</span>
+                                            <span>{section.name}</span>
+                                        </div>
                                         {section.description && (
-                                            <div className="text-[10px] text-gray-500">{section.description}</div>
+                                            <div className="text-xs text-gray-600 mt-1">{section.description}</div>
                                         )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1.5">
-                                        <label className="text-[10px] font-medium text-gray-600">Reviewer:</label>
+                                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-gray-200">
+                                        <label className="text-xs font-semibold text-gray-700">Reviewer:</label>
                                         <select
                                             value={section.reviewer || ''}
                                             onChange={(e) => handleUpdateReviewer(section.id, e.target.value)}
-                                            className="px-2 py-0.5 text-[10px] border border-gray-300 rounded bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                                            className="text-xs font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer"
                                             onClick={(e) => e.stopPropagation()}
                                             onMouseDown={(e) => e.stopPropagation()}
                                         >
@@ -3627,22 +3639,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     </div>
                                     <button
                                         onClick={() => handleAddDocument(section.id)}
-                                        className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
+                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-semibold hover:bg-primary-700 transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                                     >
-                                        <i className="fas fa-plus mr-1"></i>Add Document
+                                        <i className="fas fa-plus"></i><span>Add Document</span>
                                     </button>
                                     <button
                                         onClick={() => handleEditSection(section)}
-                                        className="text-gray-600 hover:text-primary-600 p-1"
+                                        className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                        title="Edit section"
                                     >
-                                        <i className="fas fa-edit text-xs"></i>
+                                        <i className="fas fa-edit text-sm"></i>
                                     </button>
                                     <button
                                         onClick={(e) => handleDeleteSection(section.id, e)}
-                                        className="text-gray-600 hover:text-red-600 p-1"
+                                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                         type="button"
+                                        title="Delete section"
                                     >
-                                        <i className="fas fa-trash text-xs"></i>
+                                        <i className="fas fa-trash text-sm"></i>
                                     </button>
                                 </div>
                             </div>
@@ -3657,13 +3671,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         }
                                     }
                                 }}
-                                className="border-t border-gray-200 overflow-x-auto"
+                                className="overflow-x-auto"
                             >
                                 <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
+                                    <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
                                         <tr>
                                             <th
-                                                className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
+                                                className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
                                                 style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                             >
                                                 Document / Data
@@ -3671,45 +3685,53 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             {weeks.map((week) => (
                                                 <th
                                                     key={week.label}
-                                                    className={`px-1.5 py-1.5 text-center text-[10px] font-semibold border-l border-gray-200 ${
+                                                    className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
                                                         workingWeeks.includes(week.number) && selectedYear === currentYear
-                                                            ? 'bg-primary-50 text-primary-700'
-                                                            : 'text-gray-600'
+                                                            ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                            : 'text-gray-700'
                                                     }`}
                                                     title={week.dateRange}
                                                 >
-                                                    <div className="flex flex-col items-center">
-                                                        <span>{week.label}</span>
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span className="text-[10px]">{week.label}</span>
                                                     </div>
                                                 </th>
                                             ))}
-                                            <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
                                                 Actions
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-100">
+                                    <tbody className="bg-white divide-y divide-gray-200">
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={weeks.length + 2} className="px-8 py-4 text-center text-gray-400">
-                                                    <p className="text-xs">No documents in this section</p>
-                                                    <button
-                                                        onClick={() => handleAddDocument(section.id)}
-                                                        className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                                    >
-                                                        <i className="fas fa-plus mr-1"></i>Add Document
-                                                    </button>
+                                                <td colSpan={weeks.length + 2} className="px-8 py-12 text-center">
+                                                    <div className="flex flex-col items-center gap-3">
+                                                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                                                            <i className="fas fa-file-alt text-2xl text-gray-400"></i>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-gray-700">No documents in this section</p>
+                                                            <p className="text-xs text-gray-500 mt-1">Get started by adding your first document</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleAddDocument(section.id)}
+                                                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
+                                                        >
+                                                            <i className="fas fa-plus"></i><span>Add Document</span>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ) : (
                                             section.documents.map((doc) => (
-                                                <tr key={doc.id} className="hover:bg-gray-50">
+                                                <tr key={doc.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
                                                     <td
-                                                        className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
+                                                        className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                                     >
                                                         <div className="w-full">
-                                                            <div className="text-xs font-medium text-gray-900">{doc.name}</div>
+                                                            <div className="text-sm font-semibold text-gray-900 mb-1">{doc.name}</div>
                                                             {doc.description && (() => {
                                                                 const { truncated, isLong } = truncateDescription(String(doc.description));
                                                                 return (
@@ -3736,20 +3758,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             {renderStatusCell(section, doc, week)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-2.5 py-1.5 border-l border-gray-200">
-                                                        <div className="flex items-center gap-1">
+                                                    <td className="px-4 py-3 border-l-2 border-gray-200">
+                                                        <div className="flex items-center gap-2 justify-center">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}
-                                                                className="text-gray-600 hover:text-primary-600 p-1"
+                                                                className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                title="Edit document"
                                                             >
-                                                                <i className="fas fa-edit text-xs"></i>
+                                                                <i className="fas fa-edit text-sm"></i>
                                                             </button>
                                                             <button
                                                                 onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
-                                                                className="text-gray-600 hover:text-red-600 p-1"
+                                                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                                 type="button"
+                                                                title="Delete document"
                                                             >
-                                                                <i className="fas fa-trash text-xs"></i>
+                                                                <i className="fas fa-trash text-sm"></i>
                                                             </button>
                                                         </div>
                                                     </td>
