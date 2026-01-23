@@ -3188,19 +3188,15 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm">
                 <div className="flex flex-wrap items-center gap-4">
                     <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status Legend:</span>
-                    {statusOptions.slice(0, 3).map((option, idx) => (
+                    {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
                             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                <div className={`w-4 h-4 rounded-full ${option.cellColor} ring-2 ring-white shadow-sm`}></div>
+                                <div className={`w-4 h-4 rounded-full ${option.cellColor || 'bg-gray-200'} ring-2 ring-white shadow-sm`}></div>
                                 <span className="text-xs font-medium text-gray-700">{option.label}</span>
                             </div>
-                            {idx < 2 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
                         </React.Fragment>
                     ))}
-                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                        <div className={`w-4 h-4 rounded-full ${statusOptions[3].cellColor} ring-2 ring-white shadow-sm`}></div>
-                        <span className="text-xs font-medium text-gray-700">{statusOptions[3].label}</span>
-                    </div>
                 </div>
             </div>
             
