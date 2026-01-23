@@ -1,103 +1,221 @@
-# Local Development Setup Guide
+# Local Development Environment Setup
 
-## Problem
-The remote DigitalOcean database is not accessible from localhost (firewall restrictions). You need a local PostgreSQL database for development.
+This guide will help you set up a local development environment that mirrors your production setup, allowing you to test changes locally before deploying.
 
-## Quick Setup (Choose One)
+## Prerequisites
 
-### Option 1: Use the Setup Script (Recommended)
+1. **PostgreSQL** installed locally
+   - macOS: `brew install postgresql@14` or `brew install postgresql`
+   - Ubuntu: `sudo apt-get install postgresql postgresql-contrib`
+   - Windows: Download from [PostgreSQL website](https://www.postgresql.org/download/)
+
+2. **Node.js** (v18 or higher)
+3. **SSH access** to production server (for copying production data)
+
+## Quick Start
+
+Run the complete setup script:
 
 ```bash
-./setup-local-dev.sh
+npm run setup:local-dev
+```
+
+This will:
+1. Set up a local PostgreSQL database
+2. Copy production data to your local database
+3. Install dependencies and build the application
+4. Configure environment variables
+
+## Manual Setup
+
+If you prefer to set up step by step:
+
+### Step 1: Set up Local Database
+
+```bash
+bash scripts/setup-local-dev.sh
 ```
 
 This script will:
-- Check if PostgreSQL is running
-- Ask for your PostgreSQL credentials
-- Create the database
-- Set up .env.local
-- Run migrations
+- Check if PostgreSQL is installed and running
+- Create a local database named `abcotronics_erp_local`
+- Create `.env.local` with local development settings
+- Run Prisma migrations to set up the schema
 
-### Option 2: Manual Setup
+### Step 2: Copy Production Data (Optional)
 
-1. **Make sure PostgreSQL is running:**
-   ```bash
-   # Check if running
-   pg_isready -h localhost
-   
-   # If not running, start it:
-   # macOS (Homebrew)
-   brew services start postgresql@18
-   
-   # macOS (Postgres.app)
-   # Just open Postgres.app
-   ```
+To get a copy of your production data:
 
-2. **Create the database:**
-   ```bash
-   # Replace 'yourpassword' with your PostgreSQL password
-   PGPASSWORD=yourpassword psql -U postgres -h localhost -c "CREATE DATABASE abcotronics_erp;"
-   ```
+```bash
+npm run copy:prod-data
+# or
+bash scripts/copy-production-data.sh
+```
 
-3. **Update .env file:**
-   ```bash
-   # Backup current .env
-   cp .env .env.production.backup
-   
-   # Edit .env and change DATABASE_URL to:
-   DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/abcotronics_erp"
-   ```
+This will:
+- Connect to your production server
+- Dump the production database
+- Restore it to your local database
 
-4. **Run migrations:**
-   ```bash
-   npx prisma generate
-   npx prisma migrate dev --name init
-   # OR if migrations already exist:
-   npx prisma db push
-   ```
+**Note:** You'll need SSH access to the production server. If direct connection fails, the script will provide manual instructions.
 
-5. **Start the server:**
-   ```bash
-   npm run dev
-   ```
+### Step 3: Start Development Server
 
-### Option 3: Use Remote Database (If you have VPN/access)
+```bash
+npm run dev
+```
 
-If you have access to the remote database (VPN, IP whitelist, etc.), you can keep using the remote database:
+This starts:
+- Frontend development server (Vite)
+- Backend server
+- JSX watcher
 
-1. Make sure your IP is whitelisted in DigitalOcean
-2. Keep the current .env file
-3. Test connection:
-   ```bash
-   npx prisma db pull
-   ```
+Open your browser to: **http://localhost:3000**
+
+## Environment Files
+
+- **`.env.local`** - Local development settings (created automatically)
+- **`.env`** - Production settings (not used in local dev)
+
+The `.env.local` file contains:
+- Local PostgreSQL connection string
+- Development mode settings
+- JWT secret (same as production for testing)
+
+## Useful Commands
+
+```bash
+# View database in browser
+npm run db:studio
+# Opens Prisma Studio at http://localhost:5555
+
+# Copy production data again (to refresh local data)
+npm run copy:prod-data
+
+# Reset local database
+bash scripts/setup-local-dev.sh
+
+# Run migrations manually
+npx prisma migrate deploy
+
+# Generate Prisma client
+npx prisma generate
+```
+
+## Database Management
+
+### Viewing Your Database
+
+Use Prisma Studio to view and edit your local database:
+
+```bash
+npm run db:studio
+```
+
+### Resetting Your Database
+
+If you need to start fresh:
+
+```bash
+# Drop and recreate database
+bash scripts/setup-local-dev.sh
+# (Answer 'y' when asked to drop existing database)
+
+# Then copy production data again
+npm run copy:prod-data
+```
 
 ## Troubleshooting
 
-### "password authentication failed"
-- Make sure you're using the correct PostgreSQL password
-- Try connecting with: `psql -U postgres -d postgres` to test
+### PostgreSQL Not Running
 
-### "database does not exist"
-- Create it manually: `createdb abcotronics_erp`
-- Or use: `psql -U postgres -c "CREATE DATABASE abcotronics_erp;"`
+**macOS:**
+```bash
+brew services start postgresql@14
+# or
+brew services start postgresql
+```
 
-### "Can't reach database server"
-- Check if PostgreSQL is running: `pg_isready -h localhost`
-- Check PostgreSQL logs for errors
-- Verify the connection string in .env
+**Linux:**
+```bash
+sudo systemctl start postgresql
+```
 
-## Next Steps After Setup
+### Cannot Connect to Production Database
 
-1. **Start the server:**
+If the script can't dump the production database:
+
+1. **Check SSH access:**
    ```bash
-   npm run dev
+   ssh root@165.22.127.196
    ```
 
-2. **Open the app:**
-   - http://localhost:3000
+2. **Check database firewall:**
+   - Your IP must be whitelisted in Digital Ocean database firewall
+   - Go to: Digital Ocean → Databases → Your DB → Settings → Trusted Sources
 
-3. **Create an admin user** (if needed):
-   - Check if there's a seed script: `npm run seed`
-   - Or create via the app interface
+3. **Manual dump:**
+   ```bash
+   # On production server
+   ssh root@165.22.127.196
+   cd /var/www/abcotronics-erp
+   pg_dump $DATABASE_URL > /tmp/dump.sql
+   
+   # On local machine
+   scp root@165.22.127.196:/tmp/dump.sql /tmp/dump.sql
+   psql postgresql://youruser@localhost:5432/abcotronics_erp_local < /tmp/dump.sql
+   ```
 
+### Port Already in Use
+
+If port 3000 is already in use:
+
+1. Change port in `.env.local`:
+   ```
+   PORT=3001
+   ```
+
+2. Or kill the process using port 3000:
+   ```bash
+   lsof -ti:3000 | xargs kill -9
+   ```
+
+### Database Connection Errors
+
+If you see database connection errors:
+
+1. Check PostgreSQL is running:
+   ```bash
+   pg_isready
+   ```
+
+2. Check database exists:
+   ```bash
+   psql -l | grep abcotronics_erp_local
+   ```
+
+3. Test connection:
+   ```bash
+   psql postgresql://youruser@localhost:5432/abcotronics_erp_local
+   ```
+
+## Workflow
+
+1. **Make changes locally** - Edit code, test features
+2. **Test thoroughly** - Ensure everything works
+3. **Deploy to production** - When ready, deploy using your normal process
+
+## Important Notes
+
+- **Local database is separate from production** - Changes won't affect production
+- **Production data is copied, not synced** - To get latest data, run `npm run copy:prod-data` again
+- **`.env.local` is for local development only** - Never commit this file
+- **Always test locally before deploying** - This prevents breaking production
+
+## Next Steps
+
+After setup:
+1. Start the dev server: `npm run dev`
+2. Open http://localhost:3000
+3. Log in with your production credentials (if you copied production data)
+4. Start developing!

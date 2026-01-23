@@ -275,15 +275,9 @@ const DashboardEnhanced = () => {
         );
     }
 
-    // Get Calendar component
-    const Calendar = window.Calendar || (() => <div>Loading calendar...</div>);
-
     return (
         <div className="space-y-4">
-            {/* Calendar Component */}
-            <div>
-                <Calendar />
-            </div>
+            {/* Dashboard content */}
         </div>
     );
 };

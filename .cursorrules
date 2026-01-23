@@ -1,0 +1,37 @@
+# Cursor Rules for Abcotronics ERP
+
+## Primary Application Code Locations
+
+The REAL application code that runs in production is located in:
+- `src/` - React components, styles, utilities
+- `api/` - Backend API endpoints
+- Root level: `index.html`, `server.js`, `package.json`
+
+## DO NOT Edit
+
+- `frontend/` directory - This is a separate modernization project with placeholder code
+- Files in `frontend/` are NOT used by the live application
+
+## When Editing Components
+
+Always edit files in `src/components/` not `frontend/src/components/`
+
+Example:
+- ✅ Correct: `src/components/projects/MonthlyDocumentCollectionTracker.jsx`
+- ❌ Wrong: `frontend/src/components/projects/MonthlyDocumentCollectionTracker.jsx`
+
+## Development Server
+
+For local development of the real app, use:
+- `npm run dev:backend` - Starts Express server serving the real app
+- `npm run watch:jsx` - Watches and builds JSX files from `src/`
+
+The `npm run dev` command starts both the real app AND the frontend modernization project. If you only need the real app, use `npm run dev:backend`.
+
+## File Verification
+
+Before editing, verify:
+1. File path starts with `src/` or `api/` (not `frontend/`)
+2. File is referenced in the build process or loaded by the server
+3. Changes appear when testing with `npm run dev:backend`
+

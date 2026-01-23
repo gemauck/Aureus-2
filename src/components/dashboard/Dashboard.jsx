@@ -216,8 +216,6 @@ const Dashboard = () => {
     const totalPipeline = leadsPipelineValue;
     const weightedPipeline = leadsWeightedValue;
 
-    // Get Calendar component (may be lazy loaded)
-    const Calendar = window.Calendar || (() => <div>Loading calendar...</div>);
     // Get MyProjectTasks component (may be lazy loaded)
     const MyProjectTasks = window.MyProjectTasks || (() => <div>Loading tasks...</div>);
     
@@ -226,11 +224,6 @@ const Dashboard = () => {
             {/* My Project Tasks Component */}
             <div>
                 <MyProjectTasks />
-            </div>
-            
-            {/* Calendar Component */}
-            <div>
-                <Calendar />
             </div>
         </div>
     );

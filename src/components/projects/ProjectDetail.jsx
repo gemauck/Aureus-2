@@ -1421,35 +1421,52 @@ function initializeProjectDetail() {
         }
     }, []);
 
-    // CRITICAL: Always load tasks from API when project changes or component mounts
-    // This ensures tasks are always displayed, even if project prop doesn't include them
+    // OPTIMIZED: Use tasks from project prop if available, otherwise load from API
+    // This avoids unnecessary API calls when project data already includes tasks
     useEffect(() => {
         if (!project?.id) return;
         
-        const loadTasks = async () => {
-            const apiTasks = await loadTasksFromAPI(project.id);
-            if (apiTasks && Array.isArray(apiTasks)) {
-                // Always use API tasks directly (they are the source of truth)
-                setTasks(apiTasks);
-                tasksRef.current = apiTasks;
-                console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
-            } else {
-                // If API returns null/undefined, keep existing tasks from project prop
-                // Don't clear tasks if API fails - fallback to project prop tasks
-                console.log('⚠️ ProjectDetail: API returned no tasks, keeping existing tasks from project prop');
-            }
-        };
-        
-        // Load immediately
-        loadTasks();
-        
-        // Also set up periodic refresh every 30 seconds to ensure tasks stay up-to-date
-        const refreshInterval = setInterval(() => {
+        // Check if project prop already has tasks (from getProject API call)
+        if (project.tasks && Array.isArray(project.tasks) && project.tasks.length > 0) {
+            console.log('⚡ ProjectDetail: Using tasks from project prop (no API call needed):', project.tasks.length);
+            setTasks(project.tasks);
+            tasksRef.current = project.tasks;
+            // Still set up periodic refresh, but less frequently since we have initial data
+            const refreshInterval = setInterval(() => {
+                loadTasksFromAPI(project.id).then(apiTasks => {
+                    if (apiTasks && Array.isArray(apiTasks)) {
+                        setTasks(apiTasks);
+                        tasksRef.current = apiTasks;
+                    }
+                }).catch(() => {
+                    // Silently fail - keep existing tasks
+                });
+            }, 60000); // Refresh every 60 seconds instead of 30
+            return () => clearInterval(refreshInterval);
+        } else {
+            // No tasks in project prop, load from API
+            const loadTasks = async () => {
+                const apiTasks = await loadTasksFromAPI(project.id);
+                if (apiTasks && Array.isArray(apiTasks)) {
+                    setTasks(apiTasks);
+                    tasksRef.current = apiTasks;
+                    console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
+                } else {
+                    console.log('⚠️ ProjectDetail: API returned no tasks, keeping existing tasks from project prop');
+                }
+            };
+            
+            // Load immediately
             loadTasks();
-        }, 30000);
-        
-        return () => clearInterval(refreshInterval);
-    }, [project?.id, loadTasksFromAPI]);
+            
+            // Set up periodic refresh every 30 seconds
+            const refreshInterval = setInterval(() => {
+                loadTasks();
+            }, 30000);
+            
+            return () => clearInterval(refreshInterval);
+        }
+    }, [project?.id, project?.tasks, loadTasksFromAPI]);
     
     // CRITICAL: Initialize default taskLists when project loads with empty taskLists
     // This ensures default lists are shown even if project.taskLists is an empty array from the database

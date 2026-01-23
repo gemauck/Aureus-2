@@ -1,32 +1,98 @@
-# Quick Fix - Copy & Paste This
+# Quick Fix for PostgreSQL Password Issue
 
-## Step 1: Open Browser Console
-Press `F12` or `Cmd+Option+I` (Mac) or `Ctrl+Shift+I` (Windows)
+## The Problem
+PostgreSQL is asking for a password when you try to create the database, but authentication is failing.
 
-## Step 2: Paste This Code
+## Solution Options
 
-```javascript
-(async()=>{const t=window.storage?.getToken?.();if(!t){alert('❌ Please log in');return}const c=[{id:'cmhdajkei000bm8zlnz01j7hb',n:'Chromex Mining'},{id:'cmhdajkcd0001m8zlk72lb2bt',n:'AccuFarm'}];console.log('🚀 Fixing',c.length,'clients...');for(const client of c){try{const r=await fetch(`/api/clients/${client.id}/fix`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${t}`},credentials:'include',body:JSON.stringify({action:'full-fix'})});const d=await r.json();console.log(`✅ ${client.n}:`,d.operations?.map(o=>o.message).join(', ')||'Fixed');await new Promise(r=>setTimeout(r,500))}catch(e){console.error(`❌ ${client.n}:`,e.message)}}alert('✅ Fix complete! Refreshing...');location.reload()})()
+### Option 1: Use postgres superuser (Easiest)
+
+```bash
+# Connect as postgres user (might not need password)
+psql -U postgres
+
+# Or if that doesn't work:
+sudo -u postgres psql
 ```
 
-## Step 3: Press Enter
-
-That's it! The script will:
-- Fix both corrupted clients
-- Show progress in console
-- Refresh the page automatically
-
----
-
-## Alternative: Fix One Client at a Time
-
-```javascript
-// Fix Chromex Mining Company
-fetch('/api/clients/cmhdajkei000bm8zlnz01j7hb/fix',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${window.storage?.getToken?.()}`},credentials:'include',body:JSON.stringify({action:'full-fix'})}).then(r=>r.json()).then(d=>{console.log('✅ Fix Results:',d);alert('✅ Fixed! Refreshing...');location.reload()})
+Then inside psql:
+```sql
+CREATE DATABASE abcotronics_erp_local;
+CREATE USER gemau WITH SUPERUSER;
+\q
 ```
 
-```javascript
-// Fix AccuFarm
-fetch('/api/clients/cmhdajkcd0001m8zlk72lb2bt/fix',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${window.storage?.getToken?.()}`},credentials:'include',body:JSON.stringify({action:'full-fix'})}).then(r=>r.json()).then(d=>{console.log('✅ Fix Results:',d);alert('✅ Fixed! Refreshing...');location.reload()})
+### Option 2: Fix authentication (Recommended for development)
+
+Run the fix script:
+```bash
+bash scripts/fix-postgres-auth.sh
 ```
 
+This will:
+- Configure PostgreSQL to allow local connections without password
+- Restart PostgreSQL
+- Then you can run: `createdb abcotronics_erp_local`
+
+### Option 3: Manual fix
+
+1. Find your PostgreSQL config file:
+   ```bash
+   # On macOS with Homebrew:
+   find ~/Library/Application\ Support/Postgres -name "pg_hba.conf" 2>/dev/null
+   # Or:
+   find /opt/homebrew/var -name "pg_hba.conf" 2>/dev/null
+   ```
+
+2. Edit the file and add this line at the TOP:
+   ```
+   local   all   all   trust
+   ```
+
+3. Restart PostgreSQL:
+   ```bash
+   brew services restart postgresql
+   ```
+
+4. Try again:
+   ```bash
+   createdb abcotronics_erp_local
+   ```
+
+### Option 4: Use a password
+
+If you know your PostgreSQL password:
+```bash
+PGPASSWORD=yourpassword createdb -U gemau abcotronics_erp_local
+```
+
+Or set it in the connection string in `.env.local`:
+```
+DATABASE_URL="postgresql://gemau:yourpassword@localhost:5432/abcotronics_erp_local"
+```
+
+## After Database is Created
+
+1. Set up schema:
+   ```bash
+   export DATABASE_URL="postgresql://gemau@localhost:5432/abcotronics_erp_local"
+   npx prisma db push --accept-data-loss
+   ```
+
+2. Start dev server:
+   ```bash
+   npm run dev
+   ```
+
+## Check PostgreSQL Status
+
+```bash
+# Check if running
+pg_isready
+
+# Check version
+psql --version
+
+# List databases
+psql -l
+```

@@ -38,7 +38,7 @@ function initializePrisma() {
     // Log the DATABASE_URL immediately for debugging
     const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@')
     
-    // Prohibit local database connections
+    // Prohibit local database connections in production only
     const dbUrl = process.env.DATABASE_URL.toLowerCase()
     const isLocalDatabase = 
       dbUrl.includes('localhost') ||
@@ -47,13 +47,17 @@ function initializePrisma() {
       dbUrl.includes('0.0.0.0') ||
       (dbUrl.startsWith('postgresql://') && !dbUrl.includes('ondigitalocean.com'))
     
-    if (isLocalDatabase) {
-      const error = new Error('Local database connections are prohibited. Use the Digital Ocean production database.')
-      console.error('❌ SECURITY ERROR: Local database connections are prohibited!')
+    // Only block local databases in production - allow in development
+    if (isLocalDatabase && process.env.NODE_ENV === 'production') {
+      const error = new Error('Local database connections are prohibited in production. Use the Digital Ocean production database.')
+      console.error('❌ SECURITY ERROR: Local database connections are prohibited in production!')
       console.error('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
       console.error('   This application must connect to the Digital Ocean production database.')
       initializationError = error
       throw error
+    } else if (isLocalDatabase) {
+      console.warn('⚠️ WARNING: Using local database connection in development mode')
+      console.warn('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
     }
     
     // Force use of process.env.DATABASE_URL - ensure it's the correct one

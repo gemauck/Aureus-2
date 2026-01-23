@@ -3179,7 +3179,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                                         rows="2"
                                         placeholder="Type comment... (Ctrl+Enter to submit)"
-                                        autoFocus
                                     />
                                     <button
                                         onClick={() => {

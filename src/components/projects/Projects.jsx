@@ -94,6 +94,8 @@ const Projects = () => {
     const lastProcessedProjectIdRef = useRef(null);
     const routeCheckInProgressRef = useRef(false);
     const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
+    // Track when projects were last loaded to avoid unnecessary refreshes
+    const projectLoadTimestampsRef = useRef(new Map()); // Map<projectId, timestamp>
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -1015,6 +1017,13 @@ const Projects = () => {
                 // Ensure we always set an array (only if component is still mounted)
                 if (isMounted) {
                     setProjects(normalizedProjects);
+                    // Track load timestamps for performance optimization
+                    const now = Date.now();
+                    normalizedProjects.forEach(project => {
+                        if (project?.id) {
+                            projectLoadTimestampsRef.current.set(String(project.id), now);
+                        }
+                    });
                     setIsLoading(false);
                     
                     // Sync existing projects with clients (non-blocking, won't crash on failure)
@@ -1226,6 +1235,9 @@ const Projects = () => {
                                 client: projectData.clientName || projectData.client || ''
                             };
                             console.log('✅ Projects: IMMEDIATE - Opening project:', fetchedProject.name);
+                            
+                            // Track load timestamp for performance optimization
+                            projectLoadTimestampsRef.current.set(String(projectId), Date.now());
                             
                             // Add to projects array
                             setProjects(prev => {
@@ -1590,41 +1602,59 @@ const Projects = () => {
                                 routeCheckInProgressRef.current = true;
                                 lastProcessedProjectIdRef.current = projectId;
                                 
-                                // CRITICAL: Always refresh from database to ensure we have latest data
-                                if (window.DatabaseAPI?.getProject) {
+                                // OPTIMIZATION: Check if project data is fresh (loaded within last 5 seconds)
+                                const lastLoadTime = projectLoadTimestampsRef.current.get(projectId);
+                                const now = Date.now();
+                                const isDataFresh = lastLoadTime && (now - lastLoadTime) < 5000;
+                                
+                                // Open project immediately with cached data for fast UI response
+                                const normalizedProject = {
+                                    ...projectToOpen,
+                                    client: projectToOpen.clientName || projectToOpen.client || ''
+                                };
+                                setViewingProject(normalizedProject);
+                                setShowModal(false);
+                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
+                                
+                                // Handle task opening immediately
+                                if (taskId) {
+                                    setTimeout(() => {
+                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                            detail: { taskId: taskId, tab: 'details' }
+                                        }));
+                                    }, 500); // Reduced delay
+                                }
+                                
+                                // Only refresh if data is stale - refresh in background
+                                if (window.DatabaseAPI?.getProject && !isDataFresh) {
                                     window.DatabaseAPI.getProject(projectId)
                                         .then(response => {
                                             const freshProjectData = response?.data?.project || response?.project || response?.data;
                                             if (freshProjectData) {
-                                                const normalizedProject = {
+                                                const updatedProject = {
                                                     ...freshProjectData,
                                                     client: freshProjectData.clientName || freshProjectData.client || ''
                                                 };
-                                                setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? normalizedProject : p));
-                                                setViewingProject(normalizedProject);
-                                                setShowModal(false);
-                                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
-                                                if (taskId) {
-                                                    setTimeout(() => {
-                                                        window.dispatchEvent(new CustomEvent('openTask', {
-                                                            detail: { taskId: taskId, tab: 'details' }
-                                                        }));
-                                                    }, 1500);
-                                                }
-                                            } else {
-                                                setViewingProject(projectToOpen);
-                                                setShowModal(false);
-                                                setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
+                                                
+                                                // Update timestamp
+                                                projectLoadTimestampsRef.current.set(projectId, Date.now());
+                                                
+                                                setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? updatedProject : p));
+                                                
+                                                // Only update viewingProject if user is still viewing this project
+                                                setViewingProject(prev => {
+                                                    if (prev && String(prev.id) === String(projectId)) {
+                                                        return updatedProject;
+                                                    }
+                                                    return prev;
+                                                });
                                             }
                                         })
                                         .catch(() => {
-                                            setViewingProject(projectToOpen);
-                                            setShowModal(false);
-                                            setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
+                                            // Silently fail - keep using cached data
                                         });
-                                } else {
-                                    setViewingProject(projectToOpen);
-                                    setShowModal(false);
+                                } else if (isDataFresh) {
+                                    console.log('⚡ Projects: Using cached project data (fresh)');
                                 }
                             }
                         }
@@ -1731,68 +1761,83 @@ const Projects = () => {
         if (projectToOpen) {
             console.log('✅ Projects: Found project, opening from URL:', projectToOpen.name);
             
-            // CRITICAL: Always refresh from database to ensure we have latest data (especially hasWeeklyFMSReviewProcess)
-            // This ensures that when navigating back, we get the updated project data
-            if (window.DatabaseAPI?.getProject) {
-                console.log('🔄 Projects: Refreshing project from database to ensure latest data...');
+            // OPTIMIZATION: Check if project data is fresh (loaded within last 5 seconds)
+            // This avoids unnecessary API calls when opening projects quickly
+            const lastLoadTime = projectLoadTimestampsRef.current.get(projectId);
+            const now = Date.now();
+            const isDataFresh = lastLoadTime && (now - lastLoadTime) < 5000; // 5 seconds
+            
+            // Check if project has critical fields (some projects might be missing data)
+            const hasCriticalFields = projectToOpen.hasWeeklyFMSReviewProcess !== undefined || 
+                                     projectToOpen.hasDocumentCollectionProcess !== undefined ||
+                                     projectToOpen.tasks !== undefined;
+            
+            // Open project immediately with cached data for fast UI response
+            const normalizedProject = {
+                ...projectToOpen,
+                client: projectToOpen.clientName || projectToOpen.client || ''
+            };
+            setViewingProject(normalizedProject);
+            setShowModal(false);
+            
+            // Handle task opening if specified (don't wait for refresh)
+            if (taskId) {
+                console.log('📋 Projects: Task ID found in route, will open task:', taskId);
+                setTimeout(() => {
+                    console.log('📋 Projects: Dispatching openTask event for task:', taskId);
+                    window.dispatchEvent(new CustomEvent('openTask', {
+                        detail: { 
+                            taskId: taskId,
+                            tab: 'details'
+                        }
+                    }));
+                }, 500); // Reduced delay since we're not waiting for refresh
+            }
+            
+            // Only refresh if data is stale or missing critical fields
+            // Refresh in background without blocking UI
+            if (window.DatabaseAPI?.getProject && (!isDataFresh || !hasCriticalFields)) {
+                console.log(`🔄 Projects: ${isDataFresh ? 'Data missing fields' : 'Data is stale'}, refreshing from database in background...`);
+                
+                // Refresh in background - don't block UI
                 window.DatabaseAPI.getProject(projectId)
                     .then(response => {
                         const freshProjectData = response?.data?.project || response?.project || response?.data;
                         if (freshProjectData) {
-                            const normalizedProject = {
+                            const updatedProject = {
                                 ...freshProjectData,
                                 client: freshProjectData.clientName || freshProjectData.client || ''
                             };
-                            console.log('✅ Projects: Refreshed project from database:', normalizedProject.name, {
-                                hasWeeklyFMSReviewProcess: normalizedProject.hasWeeklyFMSReviewProcess,
-                                hasWeeklyFMSReviewProcessType: typeof normalizedProject.hasWeeklyFMSReviewProcess,
-                                rawValue: freshProjectData.hasWeeklyFMSReviewProcess
-                            });
+                            
+                            // Update timestamp
+                            projectLoadTimestampsRef.current.set(projectId, Date.now());
+                            
+                            console.log('✅ Projects: Background refresh completed:', updatedProject.name);
                             
                             // Update projects array with fresh data
                             setProjects(prev => {
                                 const exists = prev.find(p => String(p.id) === String(projectId));
                                 if (exists) {
-                                    return prev.map(p => String(p.id) === String(projectId) ? normalizedProject : p);
+                                    return prev.map(p => String(p.id) === String(projectId) ? updatedProject : p);
                                 }
-                                return [...prev, normalizedProject];
+                                return [...prev, updatedProject];
                             });
                             
-                            // Set viewingProject with fresh data
-                            setViewingProject(normalizedProject);
-                            setShowModal(false);
-                            
-                            // Handle task opening if specified
-                            if (taskId) {
-                                console.log('📋 Projects: Task ID found in route, will open task:', taskId);
-                                setTimeout(() => {
-                                    console.log('📋 Projects: Dispatching openTask event for task:', taskId);
-                                    window.dispatchEvent(new CustomEvent('openTask', {
-                                        detail: { 
-                                            taskId: taskId,
-                                            tab: 'details'
-                                        }
-                                    }));
-                                }, 2000); // Give ProjectDetail time to load
-                            }
-                        } else {
-                            // Fallback to cached project if refresh fails
-                            console.warn('⚠️ Projects: Failed to get fresh project data, using cached:', projectToOpen.name);
-                            setViewingProject(projectToOpen);
-                            setShowModal(false);
+                            // Only update viewingProject if user is still viewing this project
+                            setViewingProject(prev => {
+                                if (prev && String(prev.id) === String(projectId)) {
+                                    return updatedProject;
+                                }
+                                return prev;
+                            });
                         }
                     })
                     .catch(error => {
-                        console.error('❌ Projects: Failed to refresh project from database, using cached:', error);
-                        // Fallback to cached project if refresh fails
-                        setViewingProject(projectToOpen);
-                        setShowModal(false);
+                        console.warn('⚠️ Projects: Background refresh failed (non-critical):', error);
+                        // Don't update UI on error - keep using cached data
                     });
-            } else {
-                // Fallback if DatabaseAPI not available
-                console.log('⚠️ Projects: DatabaseAPI not available, using cached project');
-                setViewingProject(projectToOpen);
-                setShowModal(false);
+            } else if (isDataFresh) {
+                console.log('⚡ Projects: Using cached project data (fresh, loaded', Math.round((now - lastLoadTime) / 1000), 'seconds ago)');
             }
         } else {
             console.log('⚠️ Projects: Project not found in loaded projects and API fetch failed, route:', projectId, 'Available project IDs:', projects.map(p => p.id));

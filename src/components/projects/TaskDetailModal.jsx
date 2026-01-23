@@ -121,6 +121,77 @@ const TaskDetailModal = ({
     };
     const commentsContainerRef = useRef(null);
     const leftContentRef = useRef(null);
+    const modalRef = useRef(null);
+    const footerRef = useRef(null);
+    const contentAreaRef = useRef(null);
+
+    // Fix footer positioning
+    useEffect(() => {
+        if (!modalRef.current || !footerRef.current || !contentAreaRef.current) return;
+        
+        const modal = modalRef.current;
+        const footer = footerRef.current;
+        const contentArea = contentAreaRef.current;
+        const header = modal.querySelector('.border-b.border-gray-200');
+        
+        const applyStyles = () => {
+            // CRITICAL: Move footer inside modal if it's not already there
+            if (footer.parentElement !== modal) {
+                modal.appendChild(footer);
+            }
+            
+            // Set modal to flex column first
+            modal.style.display = 'flex';
+            modal.style.flexDirection = 'column';
+            modal.style.maxHeight = '90vh';
+            modal.style.overflow = 'hidden';
+            
+            // Force footer to bottom
+            footer.style.marginTop = 'auto';
+            footer.style.flexShrink = '0';
+            
+            // Force reflow to get accurate measurements
+            void modal.offsetHeight;
+            void footer.offsetHeight;
+            
+            // Calculate proper maxHeight for content area AFTER footer is positioned
+            const modalHeight = modal.getBoundingClientRect().height;
+            const headerHeight = header ? header.getBoundingClientRect().height : 0;
+            const footerHeight = footer.getBoundingClientRect().height;
+            const availableHeight = Math.max(0, modalHeight - headerHeight - footerHeight);
+            
+            // Constrain content area - use direct assignment for better compatibility
+            contentArea.style.flex = '1 1 0%';
+            contentArea.style.minHeight = '0';
+            contentArea.style.maxHeight = `${availableHeight}px`;
+            contentArea.style.height = `${availableHeight}px`;
+            contentArea.style.overflowY = 'auto';
+            contentArea.style.overflowX = 'hidden';
+        };
+        
+        // Apply immediately
+        applyStyles();
+        
+        // Also apply after delays to ensure DOM is ready and layout is stable
+        const timeout1 = setTimeout(applyStyles, 50);
+        const timeout2 = setTimeout(applyStyles, 200);
+        const timeout3 = setTimeout(applyStyles, 500);
+        
+        // Use ResizeObserver to recalculate when footer size changes
+        const resizeObserver = new ResizeObserver(() => {
+            applyStyles();
+        });
+        resizeObserver.observe(footer);
+        resizeObserver.observe(modal);
+        if (header) resizeObserver.observe(header);
+        
+        return () => {
+            clearTimeout(timeout1);
+            clearTimeout(timeout2);
+            clearTimeout(timeout3);
+            resizeObserver.disconnect();
+        };
+    }, [task?.id]);
     const refreshIntervalRef = useRef(null);
     const lastCommentAddTimeRef = useRef(null); // Track when comment was added to prevent refresh race condition
     
@@ -1528,9 +1599,8 @@ const TaskDetailModal = ({
     }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto" style={{ padding: '0.5rem' }}>
-            <div className="min-h-full flex items-start sm:items-center justify-center py-2 sm:py-4">
-                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[calc(100vh-1rem)] sm:max-h-[90vh] flex flex-col shadow-xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto flex items-center justify-center" style={{ padding: '1rem' }}>
+            <div ref={modalRef} className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col shadow-xl overflow-hidden" style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
                 {/* Header */}
                 <div className="border-b border-gray-200 px-3 sm:px-4 py-3 bg-white flex-shrink-0">
                     <div className="flex items-start justify-between">
@@ -1586,7 +1656,7 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 bg-gray-50 min-h-0 overflow-y-auto">
+                <div ref={contentAreaRef} className="flex-1 bg-gray-50 min-h-0">
                     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 lg:px-6">
                             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-4 sm:gap-6">
                                 {/* Left Side - Main Content */}
@@ -2477,11 +2547,10 @@ const TaskDetailModal = ({
                             </div>
                         </div>
                     </div>
-                </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0">
-                    <div className="flex gap-2">
+                <div ref={footerRef} className="border-t border-gray-200 px-3 sm:px-4 py-2.5 flex justify-end items-center bg-white flex-shrink-0 w-full" style={{ marginTop: 'auto' }}>
+                    <div className="flex gap-2 justify-end">
                         {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button
                                 onClick={() => {

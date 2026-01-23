@@ -74,7 +74,12 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Prohibit local database connections (unless explicitly allowed for dev)
-if (process.env.DATABASE_URL && !isDevNoDb) {
+// Allow local databases in development mode or when DEV_LOCAL_NO_DB=true
+const isDevelopment = process.env.NODE_ENV === 'development' || 
+                     process.env.NODE_ENV === 'dev' ||
+                     (!process.env.NODE_ENV && !isProduction)
+
+if (process.env.DATABASE_URL && !isDevNoDb && !isDevelopment) {
   const dbUrl = process.env.DATABASE_URL.toLowerCase()
   const isLocalDatabase = 
     dbUrl.includes('localhost') ||
@@ -87,7 +92,8 @@ if (process.env.DATABASE_URL && !isDevNoDb) {
     console.error('❌ SECURITY ERROR: Local database connections are prohibited!')
     console.error('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
     console.error('   This application must connect to the Digital Ocean production database.')
-    console.error('   If you need to use a local database for development, set DEV_LOCAL_NO_DB=true')
+    console.error('   If you need to use a local database for development, set NODE_ENV=development')
+    console.error('   or set DEV_LOCAL_NO_DB=true')
     process.exit(1)
   }
 }

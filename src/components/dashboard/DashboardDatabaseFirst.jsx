@@ -219,10 +219,7 @@ const DashboardDatabaseFirst = () => {
     
     return (
         <div className="space-y-4">
-            {/* Calendar Component */}
-            <div>
-                <Calendar />
-            </div>
+            {/* Dashboard content */}
         </div>
     );
 };

@@ -35,7 +35,7 @@
     "validate:deps": "node scripts/validate-component-deps.js",
     "precommit": "npm run validate:deps",
     "dev:frontend": "cd frontend && vite",
-    "dev:backend": "node server.js",
+    "dev:backend": "NODE_ENV=development node server.js",
     "build:new": "cd frontend && vite build",
     "preview": "cd frontend && vite preview",
     "old:build": "npm run build:jsx && npm run build:css && npx prisma generate",
@@ -50,7 +50,13 @@
     "android:run": "npm run android:build && npx cap run android",
     "setup:local-prod": "bash scripts/setup-local-production.sh",
     "start:local-prod": "bash scripts/start-local-production.sh",
-    "start:local-prod:pm2": "bash scripts/start-local-production-pm2.sh"
+    "start:local-prod:pm2": "bash scripts/start-local-production-pm2.sh",
+    "setup:local-dev": "bash scripts/setup-complete-local-dev.sh",
+    "setup:local-live": "bash setup-local-live-environment.sh",
+    "launch:local": "bash launch-local.sh",
+    "copy:prod-data": "bash scripts/copy-production-data.sh",
+    "seed:dummy": "node scripts/create-dummy-data.js",
+    "db:studio": "npx prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
