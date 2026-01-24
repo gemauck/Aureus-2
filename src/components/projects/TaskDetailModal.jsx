@@ -8,6 +8,10 @@ const TaskDetailModal = ({
     taskLists,
     project,
     users: usersProp,
+    focusInput = null,
+    focusTaskId = null,
+    initialTab = null,
+    onFocusHandled,
     onUpdate, 
     onClose,
     onAddSubtask,
@@ -64,6 +68,95 @@ const TaskDetailModal = ({
             }));
         }
     }, [task?.subscribers]);
+
+    useEffect(() => {
+        if (!initialTab) return;
+        const normalizedTab = ['details', 'comments', 'checklist'].includes(initialTab) ? initialTab : null;
+        if (!normalizedTab) return;
+        
+        const taskId = task?.id || 'new';
+        const tabKey = `${taskId}-${normalizedTab}`;
+        if (lastInitialTabRef.current === tabKey) return;
+        lastInitialTabRef.current = tabKey;
+        
+        if (activeTab !== normalizedTab) {
+            setActiveTab(normalizedTab);
+        }
+
+        if (!focusInput && typeof onFocusHandled === 'function') {
+            setTimeout(() => onFocusHandled(), 0);
+        }
+    }, [initialTab, task?.id, focusInput, activeTab, onFocusHandled]);
+
+    useEffect(() => {
+        if (!focusInput) return;
+        const normalizedFocus = normalizeFocusInput(focusInput);
+        if (!normalizedFocus) return;
+        if (!task?.id) return;
+        if (focusTaskId && String(focusTaskId) !== String(task.id)) return;
+        
+        const focusKey = `${task.id}-${normalizedFocus}`;
+        if (lastFocusRequestRef.current === focusKey) return;
+        lastFocusRequestRef.current = focusKey;
+        
+        const focusWithRetry = (focusFn) => {
+            let attempts = 0;
+            const tryFocus = () => {
+                attempts++;
+                if (focusFn()) return;
+                if (attempts < 6) {
+                    setTimeout(tryFocus, 120);
+                }
+            };
+            setTimeout(tryFocus, 50);
+        };
+        
+        if (normalizedFocus === 'comment') {
+            if (activeTab !== 'comments') {
+                setActiveTab('comments');
+            }
+            focusWithRetry(() => {
+                if (!commentTextareaRef.current) return false;
+                commentTextareaRef.current.focus();
+                commentTextareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return true;
+            });
+        } else if (normalizedFocus === 'title') {
+            if (activeTab !== 'details') {
+                setActiveTab('details');
+            }
+            focusWithRetry(() => {
+                if (!titleInputRef.current) return false;
+                titleInputRef.current.focus();
+                titleInputRef.current.select?.();
+                return true;
+            });
+        } else if (normalizedFocus === 'description') {
+            if (activeTab !== 'details') {
+                setActiveTab('details');
+            }
+            focusWithRetry(() => {
+                if (!descriptionTextareaRef.current) return false;
+                descriptionTextareaRef.current.focus();
+                descriptionTextareaRef.current.select?.();
+                return true;
+            });
+        } else if (normalizedFocus === 'checklist') {
+            if (activeTab !== 'checklist') {
+                setActiveTab('checklist');
+            }
+            focusWithRetry(() => {
+                if (!checklistInputRef.current) return false;
+                checklistInputRef.current.focus();
+                checklistInputRef.current.select?.();
+                return true;
+            });
+        }
+
+        if (typeof onFocusHandled === 'function') {
+            setTimeout(() => onFocusHandled(), 0);
+        }
+    }, [focusInput, focusTaskId, task?.id, activeTab, onFocusHandled]);
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [newTag, setNewTag] = useState('');
     const [tags, setTags] = useState(() => {
@@ -81,6 +174,29 @@ const TaskDetailModal = ({
     const titleInputRef = useRef(null);
     const descriptionTextareaRef = useRef(null);
     const mentionSuggestionsRef = useRef(null);
+    const checklistInputRef = useRef(null);
+    const lastFocusRequestRef = useRef(null);
+    const lastInitialTabRef = useRef(null);
+    
+    const normalizeFocusInput = (value) => {
+        if (!value) return null;
+        const normalized = String(value).trim().toLowerCase();
+        if (!normalized) return null;
+        
+        if (['1', 'true', 'yes', 'comment', 'comments', 'commentinput', 'comment-box', 'commentbox', 'comment-input', 'commentpopup', 'comment-popup'].includes(normalized)) {
+            return 'comment';
+        }
+        if (['title', 'tasktitle', 'name'].includes(normalized)) {
+            return 'title';
+        }
+        if (['description', 'details', 'desc'].includes(normalized)) {
+            return 'description';
+        }
+        if (['checklist', 'checklistinput', 'checklist-input', 'checklistitem', 'checklist-item'].includes(normalized)) {
+            return 'checklist';
+        }
+        return null;
+    };
     
     // Helper function to preserve cursor position when updating text fields
     const updateFieldWithCursorPreservation = (element, newValue, setter) => {
@@ -1990,6 +2106,7 @@ const TaskDetailModal = ({
                                 {/* Add Checklist Item */}
                                 <div className="flex gap-2">
                                     <input
+                                        ref={checklistInputRef}
                                         type="text"
                                         value={newChecklistItem}
                                         onChange={(e) => setNewChecklistItem(e.target.value)}

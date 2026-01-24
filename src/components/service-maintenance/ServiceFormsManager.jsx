@@ -36,6 +36,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
   const user = window.storage?.getUser?.();
   const isAdmin = user?.role?.toLowerCase?.() === 'admin';
   const [featureUnavailable, setFeatureUnavailable] = useState(false);
+  const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -365,30 +366,30 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-      <div className="relative flex w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isDark ? 'bg-gray-950/70' : 'bg-white/70'} backdrop-blur-sm`}>
+      <div className={`relative flex w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl border shadow-xl ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
         {/* Left: list of templates */}
-        <div className="w-64 border-r border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className={`w-64 border-r p-3 ${isDark ? 'border-gray-800 bg-gray-900/60' : 'border-gray-100 bg-gray-50'}`}>
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Service forms
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Reusable checklists for jobcards
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               <i className="fa-solid fa-xmark text-sm" />
             </button>
           </div>
 
           {featureUnavailable && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+            <div className={`mb-3 rounded-lg border px-3 py-2 text-[11px] ${isDark ? 'border-amber-700 bg-amber-900/30 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
               <div className="flex items-start gap-2">
                 <i className="fa-solid fa-triangle-exclamation mt-0.5 text-[10px]" />
                 <div>
@@ -407,7 +408,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
             <button
               type="button"
               onClick={resetEditor}
-              className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow hover:bg-primary-700"
+              className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600"
             >
               <i className="fa-solid fa-plus text-[11px]" />
               New form
@@ -416,7 +417,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
 
           <div className="space-y-1 overflow-y-auto text-xs">
             {loading && (
-              <div className="py-4 text-center text-slate-500 dark:text-slate-400">
+              <div className={`py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Loading forms…
               </div>
             )}
@@ -430,18 +431,18 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                   onClick={() => handleEditTemplate(tpl)}
                   className={`flex w-full flex-col rounded-lg px-2 py-1.5 text-left transition ${
                     editor.id === tpl.id
-                      ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-100'
-                      : 'hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                      ? (isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-50 text-blue-700')
+                      : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
                   }`}
                 >
                   <span className="text-[11px] font-semibold">{tpl.name}</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                  <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                     {tpl.category || 'General'}
                   </span>
                 </button>
               ))}
             {!loading && (!templates || templates.length === 0) && (
-              <div className="py-4 text-center text-[11px] text-slate-500 dark:text-slate-400">
+              <div className={`py-4 text-center text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 No forms yet. Create your first checklist.
               </div>
             )}
@@ -453,20 +454,20 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                   {editor.id ? 'Edit form' : 'New form'}
                 </h2>
                 {editor.isActive ? (
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
                     Active
                   </span>
                 ) : (
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                     Inactive
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Configure questions once, then attach this form to any jobcard.
               </p>
             </div>
@@ -476,7 +477,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                   type="button"
                   onClick={handleDelete}
                   disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-full border border-rose-200 px-3 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                  className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-rose-700 text-rose-300 hover:bg-rose-950/40' : 'border-rose-200 text-rose-700 hover:bg-rose-50'}`}
                 >
                   <i className="fa-regular fa-trash-can text-[10px]" />
                   Delete
@@ -486,7 +487,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-1.5 text-xs font-semibold text-white shadow hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving && (
                   <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-white" />
@@ -499,7 +500,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                <label className={`mb-1 block text-[11px] font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                   Form name
                 </label>
                 <input
@@ -509,12 +510,12 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                     setEditor((prev) => ({ ...prev, name: e.target.value }))
                   }
                   placeholder="e.g. Pre-service inspection"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-gray-50 text-gray-900 focus:border-blue-500'}`}
                 />
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-2">
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                  <label className={`mb-1 block text-[11px] font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                     Category
                   </label>
                   <input
@@ -524,11 +525,11 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                       setEditor((prev) => ({ ...prev, category: e.target.value }))
                     }
                     placeholder="e.g. Safety, Commissioning"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className={`w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-gray-50 text-gray-900 focus:border-blue-500'}`}
                   />
                 </div>
                 <div className="flex items-end">
-                  <label className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                  <label className={`inline-flex items-center gap-1 text-[11px] font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                     <input
                       type="checkbox"
                       checked={editor.isActive}
@@ -538,7 +539,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                           isActive: e.target.checked,
                         }))
                       }
-                      className="h-3 w-3 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600"
+                      className={`h-3 w-3 rounded text-blue-600 focus:ring-blue-500 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}
                     />
                     Active
                   </label>
@@ -547,7 +548,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-600 dark:text-slate-300">
+              <label className={`mb-1 block text-[11px] font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                 Description / instructions
               </label>
               <textarea
@@ -557,18 +558,18 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                   setEditor((prev) => ({ ...prev, description: e.target.value }))
                 }
                 placeholder="Short description visible to technicians when they open the form."
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                className={`w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-gray-50 text-gray-900 focus:border-blue-500'}`}
               />
             </div>
 
             <div className="mt-2 flex items-center justify-between">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <div className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Fields & checklist items
               </div>
               <button
                 type="button"
                 onClick={handleAddField}
-                className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-medium transition-all ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
               >
                 <i className="fa-solid fa-plus text-[9px]" />
                 Add question
@@ -601,7 +602,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                 return (
                 <div
                   key={field.id}
-                  className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs shadow-sm dark:border-slate-700 dark:bg-slate-900/60"
+                  className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-gray-50'} rounded-xl border p-3 text-xs shadow-sm`}
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <input
@@ -611,14 +612,14 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                         handleFieldChange(field.id, { label: e.target.value })
                       }
                       placeholder="Question or checklist item"
-                      className="flex-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className={`flex-1 rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-white text-gray-900 focus:border-blue-500'}`}
                     />
                     <select
                       value={field.type || 'text'}
                       onChange={(e) =>
                         handleFieldChange(field.id, { type: e.target.value })
                       }
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className={`rounded-lg border px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-white text-gray-700 focus:border-blue-500'}`}
                     >
                       <option value="text">Short text</option>
                       <option value="textarea">Long text</option>
@@ -629,7 +630,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                     <button
                       type="button"
                       onClick={() => handleRemoveField(field.id)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
                       <i className="fa-solid fa-trash text-[10px]" />
                     </button>
@@ -642,10 +643,10 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                         handleFieldChange(field.id, { helpText: e.target.value })
                       }
                       placeholder="Helper text or instructions for this field"
-                      className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className={`w-full rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-white text-gray-900 focus:border-blue-500'}`}
                     />
                     <div>
-                      <label className="mb-1 block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                      <label className={`mb-1 block text-[10px] font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Options (for dropdown)
                       </label>
                       <input
@@ -661,11 +662,11 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                           })
                         }
                         placeholder="Option 1, Option 2, Option 3"
-                        className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                        className={`w-full rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-white text-gray-900 focus:border-blue-500'}`}
                       />
                     </div>
                     <div className="flex items-end justify-end">
-                      <label className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                      <label className={`inline-flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                         <input
                           type="checkbox"
                           checked={!!field.required}
@@ -674,7 +675,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                               required: e.target.checked,
                             })
                           }
-                          className="h-3 w-3 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600"
+                          className={`h-3 w-3 rounded text-blue-600 focus:ring-blue-500 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}
                         />
                         Required
                       </label>
@@ -683,7 +684,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                   {previousFields.length > 0 && (
                     <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                       <div>
-                        <label className="mb-1 block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                        <label className={`mb-1 block text-[10px] font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                           Show this question only when
                         </label>
                         <select
@@ -706,7 +707,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                               equals: defaultEquals,
                             });
                           }}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          className={`w-full rounded-lg border px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-white text-gray-700 focus:border-blue-500'}`}
                         >
                           <option value="">Always visible</option>
                           {previousFields.map((pf) => (
@@ -718,7 +719,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                       </div>
                       {field.visibilityCondition?.fieldId && controllingOptions.length > 0 && (
                         <div>
-                          <label className="mb-1 block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                          <label className={`mb-1 block text-[10px] font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Equals
                           </label>
                           <select
@@ -729,7 +730,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                                 equals: e.target.value,
                               })
                             }
-                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                            className={`w-full rounded-lg border px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 focus:border-blue-500' : 'border-gray-200 bg-white text-gray-700 focus:border-blue-500'}`}
                           >
                             {controllingOptions.map((opt) => (
                               <option key={opt} value={opt}>
@@ -750,7 +751,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
               })}
 
               {(editor.fields || []).length === 0 && (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                <div className={`rounded-lg border border-dashed px-4 py-6 text-center text-[11px] ${isDark ? 'border-gray-800 bg-gray-900/60 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                   No questions added yet. Start by adding checklist items or form
                   fields.
                 </div>

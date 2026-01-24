@@ -8,6 +8,7 @@ const PermissionGate =
 
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
+  const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [jobCardsReady, setJobCardsReady] = useState(!!window.JobCards);
@@ -348,6 +349,7 @@ const JobCardFormsSection = ({ jobCard }) => {
   const isAdmin = user?.role?.toLowerCase?.() === 'admin';
 
   const token = window.storage?.getToken?.();
+  const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
 
   const syncAnswersState = (instances) => {
     const next = {};
@@ -559,17 +561,17 @@ const JobCardFormsSection = ({ jobCard }) => {
   ).length;
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+    <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-4 shadow-sm`}>
       <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-300">
+          <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
             <i className="fa-solid fa-list-check text-sm" />
           </span>
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
               Forms &amp; checklists
             </div>
-            <div className="text-sm text-slate-100">
+            <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
               {featureUnavailable
                 ? 'Forms feature not enabled in this environment'
                 : overallCount === 0
@@ -581,14 +583,14 @@ const JobCardFormsSection = ({ jobCard }) => {
         {isAdmin && (
           <div className="flex items-center gap-2 text-[11px]">
             {featureUnavailable ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-200">
+              <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-medium ${isDark ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-100 text-amber-700'}`}>
                 <i className="fa-solid fa-triangle-exclamation text-[10px]" />
                 Forms disabled
               </span>
             ) : (
               <>
                 <select
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className={`rounded-lg border px-2 py-1 text-[11px] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-200 bg-gray-50 text-gray-900'}`}
                   value={attachTemplateId}
                   disabled={loadingTemplates}
                   onChange={(e) => setAttachTemplateId(e.target.value)}
@@ -606,7 +608,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                   type="button"
                   onClick={handleAttachTemplate}
                   disabled={!attachTemplateId}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary-500 px-3 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-3 py-1 text-[11px] font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <i className="fa-solid fa-plus text-[9px]" />
                   Add
@@ -618,14 +620,14 @@ const JobCardFormsSection = ({ jobCard }) => {
       </header>
 
       {loadingForms && (
-        <div className="flex items-center gap-2 text-xs text-slate-300">
-          <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-400" />
+        <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>
+          <span className={`h-4 w-4 animate-spin rounded-full border-b-2 ${isDark ? 'border-blue-400' : 'border-blue-500'}`} />
           <span>Loading forms for this job card…</span>
         </div>
       )}
 
       {!loadingForms && !featureUnavailable && forms.length === 0 && (
-        <p className="text-xs text-slate-300">
+        <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>
           No forms have been attached to this job card yet.
         </p>
       )}
@@ -640,15 +642,15 @@ const JobCardFormsSection = ({ jobCard }) => {
 
           const statusClasses =
             status === 'completed'
-              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40'
+              ? (isDark ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200')
               : status === 'in_progress'
-              ? 'bg-sky-500/10 text-sky-300 border-sky-400/40'
-              : 'bg-slate-700/60 text-slate-100 border-slate-600';
+              ? (isDark ? 'bg-sky-500/10 text-sky-300 border-sky-400/40' : 'bg-sky-50 text-sky-700 border-sky-200')
+              : (isDark ? 'bg-gray-800 text-gray-100 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200');
 
           return (
             <div
               key={form.id}
-              className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 text-xs text-slate-100"
+              className={`${isDark ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-100 bg-white text-gray-900'} rounded-xl border p-3 text-xs`}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
@@ -668,7 +670,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                     </span>
                   </div>
                   {(tpl.description || '').trim() && (
-                    <div className="mt-0.5 text-[11px] text-slate-300">
+                    <div className={`mt-0.5 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       {tpl.description}
                     </div>
                   )}
@@ -678,10 +680,10 @@ const JobCardFormsSection = ({ jobCard }) => {
                     type="button"
                     onClick={() => handleSaveForm(form, false)}
                     disabled={savingFormId === form.id}
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-600 px-3 py-1 text-[11px] font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-gray-700 text-gray-100 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                   >
                     {savingFormId === form.id && (
-                      <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-white" />
+                      <span className={`h-3 w-3 animate-spin rounded-full border-b-2 ${isDark ? 'border-white' : 'border-gray-600'}`} />
                     )}
                     <span>Save</span>
                   </button>
@@ -689,7 +691,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                     type="button"
                     onClick={() => handleSaveForm(form, true)}
                     disabled={savingFormId === form.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <i className="fa-solid fa-check text-[9px]" />
                     <span>Mark complete</span>
@@ -698,7 +700,7 @@ const JobCardFormsSection = ({ jobCard }) => {
               </div>
 
               {fields.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-700 px-3 py-2 text-[11px] text-slate-300">
+                <div className={`rounded-lg border border-dashed px-3 py-2 text-[11px] ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
                   This form has no visible fields configured yet.
                 </div>
               ) : (
@@ -732,18 +734,18 @@ const JobCardFormsSection = ({ jobCard }) => {
                       onChange: (e) =>
                         handleAnswerChange(form.id, fieldId, e.target.value),
                       className:
-                        'w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500',
+                        `w-full rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-100 placeholder-gray-400 focus:border-blue-500' : 'border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-500 focus:border-blue-500'}`,
                     };
 
                     return (
                       <div key={fieldId} className="space-y-1">
                         <label
                           htmlFor={commonProps.id}
-                          className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-200"
+                          className={`flex items-center justify-between gap-2 text-[11px] font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}
                         >
                           <span>{field.label || 'Field'}</span>
                           {field.required && (
-                            <span className="text-[10px] font-semibold text-rose-300">
+                            <span className={`text-[10px] font-semibold ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>
                               Required
                             </span>
                           )}
@@ -788,7 +790,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                           />
                         )}
                         {field.helpText && (
-                          <p className="text-[10px] text-slate-400">
+                          <p className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             {field.helpText}
                           </p>
                         )}
@@ -833,57 +835,66 @@ const JobCardFormsSection = ({ jobCard }) => {
   };
 
   return (
-    <div className="relative p-4 min-h-[calc(100vh-56px)]">
-      <div className="flex flex-col gap-4 mb-6">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Service & Maintenance
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Choose between classic scheduling and the mobile-first capture flow. Both work offline and will sync when connectivity returns.
-            </p>
-          </div>
-          <span
-            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
-              isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-            }`}
-          >
+    <div className="relative p-6 min-h-[calc(100vh-56px)]">
+      <div className="flex flex-col gap-6 mb-6">
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                <i className={`fa-solid fa-screwdriver-wrench ${isDark ? 'text-gray-300' : 'text-gray-600'}`}></i>
+              </div>
+              <div>
+                <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  Service &amp; Maintenance
+                </h1>
+                <p className={`mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Choose between classic scheduling and the mobile-first capture flow. Both work offline and sync when connectivity returns.
+                </p>
+              </div>
+            </div>
             <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+              className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                isOnline
+                  ? isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-100 text-emerald-700'
+                  : isDark ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-100 text-amber-700'
               }`}
-            />
-            {isOnline ? 'Online' : 'Offline mode'}
-          </span>
+            >
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                }`}
+              />
+              {isOnline ? 'Online' : 'Offline mode'}
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} border rounded-xl shadow-sm overflow-hidden`}>
             <div className="p-5 sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                     Classic View
                   </p>
-                  <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mt-1">
+                  <h2 className={`text-xl font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     Job Card Manager
                   </h2>
-                  <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+                  <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                     Full dashboard view with scheduling, timelines, history, and advanced filters. Use when you need the high-level overview.
                   </p>
                 </div>
-                <div className="hidden sm:flex items-center justify-center h-12 w-12 rounded-full bg-primary-50 text-primary-600 dark:bg-primary-900/40 dark:text-primary-200">
+                <div className={`hidden sm:flex items-center justify-center h-12 w-12 rounded-full ${isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-50 text-blue-600'}`}>
                   <i className="fa-regular fa-clipboard-list text-lg" />
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
+              <div className={`mt-4 flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                   <i className="fa-solid fa-laptop text-[11px]" />
                   Desktop optimised
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                   <i className="fa-solid fa-cloud-arrow-up text-[11px]" />
                   Auto-sync offline data
                 </span>
@@ -893,7 +904,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                 <button
                   type="button"
                   onClick={handleOpenClassic}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 active:bg-primary-800 shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 transition-all"
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 active:bg-blue-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-all ${isDark ? 'focus-visible:ring-offset-gray-900' : 'focus-visible:ring-offset-white'}`}
                 >
                   <i className="fa-solid fa-table-columns text-xs" />
                   Open Classic Manager
@@ -907,13 +918,13 @@ const JobCardFormsSection = ({ jobCard }) => {
                       window.dispatchEvent(new Event('jobcards:open'));
                     }
                   }}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 active:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/40 dark:text-primary-200 transition-all"
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${isDark ? 'text-blue-200 bg-blue-500/10 hover:bg-blue-500/20' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
                 >
                   <i className="fa-solid fa-plus text-xs" />
                   New job card
                 </button>
                 {!jobCardsReady || !window.JobCards ? (
-                  <span className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                     Loading job cards module&hellip;
                   </span>
                 ) : null}
@@ -928,17 +939,17 @@ const JobCardFormsSection = ({ jobCard }) => {
                   const isAdmin = user?.role?.toLowerCase?.() === 'admin';
                   if (!isAdmin) return null;
                   return (
-                    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                    <div className={`mt-4 rounded-xl border border-dashed px-3 py-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
+                          <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-100 text-blue-700'}`}>
                             <i className="fa-solid fa-list-check text-[11px]" />
                           </span>
                           <div>
                             <div className="text-[11px] font-semibold uppercase tracking-wide">
                               Forms &amp; checklists
                             </div>
-                            <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                            <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                               Design reusable service forms and attach them to job cards.
                             </div>
                           </div>
@@ -1010,7 +1021,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                               );
                             }
                           }}
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-primary-700 shadow-sm ring-1 ring-primary-100 hover:bg-primary-50 dark:bg-primary-900/40 dark:text-primary-100 dark:ring-primary-800/60 dark:hover:bg-primary-900/60"
+                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-sm ring-1 transition-all ${isDark ? 'bg-blue-500/10 text-blue-200 ring-blue-900/60 hover:bg-blue-500/20' : 'bg-white text-blue-700 ring-blue-100 hover:bg-blue-50'}`}
                         >
                           <i className="fa-solid fa-pen-to-square text-[10px]" />
                           Open form builder
@@ -1023,7 +1034,7 @@ const JobCardFormsSection = ({ jobCard }) => {
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-gradient-to-br from-primary-600 via-primary-500 to-blue-500 text-white shadow-lg">
+          <div className={`relative overflow-hidden rounded-xl border ${isDark ? 'border-gray-800' : 'border-gray-100'} bg-gradient-to-br from-primary-600 via-primary-500 to-blue-500 text-white shadow-sm`}>
             <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
             <div className="absolute -bottom-24 -left-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
             <div className="relative p-5 sm:p-6">
@@ -1038,15 +1049,15 @@ const JobCardFormsSection = ({ jobCard }) => {
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white/80">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/15">
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/15">
                   <i className="fa-solid fa-mobile-screen text-[11px]" />
                   Optimised for touch
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/15">
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/15">
                   <i className="fa-solid fa-pen-nib text-[11px]" />
                   Signature capture
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/15">
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/15">
                   <i className="fa-solid fa-wifi-slash text-[11px]" />
                   Works offline
                 </span>
@@ -1055,7 +1066,7 @@ const JobCardFormsSection = ({ jobCard }) => {
               <div className="mt-5 flex flex-col sm:flex-row gap-3">
                 <a
                   href="/job-card"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-primary-600 bg-white hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-400 focus-visible:ring-offset-primary-600 transition-all"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-primary-600 bg-white hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-400 focus-visible:ring-offset-primary-600 transition-all"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -1065,7 +1076,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 transition-all"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-white/10 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 transition-all"
                 >
                   <i className="fa-regular fa-copy text-xs" />
                   {copyStatus}
@@ -1085,8 +1096,8 @@ const JobCardFormsSection = ({ jobCard }) => {
           />
         ) : (
           <div className="flex items-center justify-center">
-            <div className="text-center text-sm text-gray-500">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-3" />
+            <div className={`text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <div className={`animate-spin rounded-full h-6 w-6 border-b-2 mx-auto mb-3 ${isDark ? 'border-blue-400' : 'border-blue-500'}`} />
               <p>Job cards module is still loading. You can continue to use the mobile form in the meantime.</p>
             </div>
           </div>
@@ -1096,49 +1107,49 @@ const JobCardFormsSection = ({ jobCard }) => {
       {/* Full-area job card detail overlay (within main content, not over sidebar) */}
       {loadingJobCard && !selectedJobCard && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-8 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-            <p className="text-gray-700 dark:text-slate-200">Loading job card...</p>
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-100 text-gray-700'} rounded-xl border p-8 text-center`}>
+            <div className={`animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4 ${isDark ? 'border-blue-400' : 'border-blue-500'}`}></div>
+            <p>Loading job card...</p>
           </div>
         </div>
       )}
       {showJobCardDetail && selectedJobCard && (
-        <div className="absolute inset-0 z-40 flex flex-col bg-slate-950/80 backdrop-blur-sm">
+        <div className={`absolute inset-0 z-40 flex flex-col ${isDark ? 'bg-gray-950/80' : 'bg-white/95'} backdrop-blur-sm`}>
           {/* Top bar */}
-          <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-lg">
+          <div className={`flex items-center justify-between px-6 py-4 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} border-b shadow-sm`}>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={handleCloseJobCardDetail}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800/70 text-slate-100 hover:bg-slate-700"
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 aria-label="Back to job cards"
               >
                 <i className="fa-solid fa-arrow-left" />
               </button>
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Job Card
                 </div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold text-white">
+                  <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     {selectedJobCard.jobCardNumber || 'New job card'}
                   </h2>
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                       (selectedJobCard.status || 'draft').toString().toLowerCase() === 'completed'
-                        ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40'
+                        ? (isDark ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200')
                         : (selectedJobCard.status || 'draft').toString().toLowerCase() === 'open'
-                        ? 'bg-sky-500/10 text-sky-300 border-sky-400/40'
+                        ? (isDark ? 'bg-sky-500/10 text-sky-300 border-sky-400/40' : 'bg-sky-50 text-sky-700 border-sky-200')
                         : (selectedJobCard.status || 'draft').toString().toLowerCase() === 'cancelled'
-                        ? 'bg-rose-500/10 text-rose-300 border-rose-400/40'
-                        : 'bg-slate-700/60 text-slate-100 border-slate-600'
+                        ? (isDark ? 'bg-rose-500/10 text-rose-300 border-rose-400/40' : 'bg-rose-50 text-rose-700 border-rose-200')
+                        : (isDark ? 'bg-gray-800 text-gray-100 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200')
                     }`}
                   >
                     <span className="h-2 w-2 rounded-full bg-current" />
                     {(selectedJobCard.status || 'draft').toString().toUpperCase()}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-300">
+                <p className={`mt-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>
                   {selectedJobCard.clientName || 'Unknown client'} •{' '}
                   {selectedJobCard.agentName || 'Unknown technician'}
                 </p>
@@ -1156,7 +1167,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                   );
                 }
               }}
-              className="inline-flex items-center gap-2 rounded-full bg-primary-500 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-primary-600"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600"
             >
               <i className="fa-solid fa-pen" />
               Edit job card
@@ -1169,21 +1180,21 @@ const JobCardFormsSection = ({ jobCard }) => {
               {/* Left / main column */}
               <div className="xl:col-span-2 space-y-6">
                 {/* Key info */}
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
-                  <div className="grid gap-4 md:grid-cols-3 text-sm text-slate-100">
+                <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 shadow-sm`}>
+                  <div className={`grid gap-4 md:grid-cols-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Client
                       </div>
                       <div className="mt-1">
                         {selectedJobCard.clientName || '–'}
                         {selectedJobCard.siteName && (
-                          <span className="ml-1 text-slate-400">• {selectedJobCard.siteName}</span>
+                          <span className={`ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>• {selectedJobCard.siteName}</span>
                         )}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Technician
                       </div>
                       <div className="mt-1">
@@ -1191,16 +1202,16 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Created
                       </div>
                       <div className="mt-1">{formatDate(selectedJobCard.createdAt)}</div>
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-4 sm:grid-cols-3 text-xs text-slate-300">
+                  <div className={`mt-4 grid gap-4 sm:grid-cols-3 text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Location
                       </div>
                       <div className="mt-1">
@@ -1208,7 +1219,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Departure
                       </div>
                       <div className="mt-1">
@@ -1218,7 +1229,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Arrival
                       </div>
                       <div className="mt-1">
@@ -1231,24 +1242,24 @@ const JobCardFormsSection = ({ jobCard }) => {
                 </section>
 
                 {/* Narrative */}
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+                <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-4`}>
                   <header className="flex items-center gap-2">
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-300">
+                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
                       <i className="fa-solid fa-clipboard-list text-sm" />
                     </span>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Visit summary
                       </div>
-                      <div className="text-sm text-slate-100">
+                      <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>
                     </div>
                   </header>
 
-                  <div className="grid gap-4 md:grid-cols-2 text-sm text-slate-100">
+                  <div className={`grid gap-4 md:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Diagnosis
                       </div>
                       <p className="mt-1 leading-relaxed">
@@ -1256,7 +1267,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </p>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Actions taken
                       </div>
                       <p className="mt-1 leading-relaxed">
@@ -1267,10 +1278,10 @@ const JobCardFormsSection = ({ jobCard }) => {
 
                   {selectedJobCard.otherComments ? (
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                      <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Customer feedback &amp; notes
                       </div>
-                      <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-100 whitespace-pre-wrap">
+                      <div className={`rounded-xl border border-dashed p-3 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
                         {selectedJobCard.otherComments}
                       </div>
                     </div>
@@ -1278,16 +1289,16 @@ const JobCardFormsSection = ({ jobCard }) => {
                 </section>
 
                 {/* Travel */}
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+                <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-4`}>
                   <header className="flex items-center gap-2">
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-300">
+                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-600'}`}>
                       <i className="fa-solid fa-car-side text-sm" />
                     </span>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Travel &amp; usage
                       </div>
-                      <div className="text-sm text-slate-100">
+                      <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                         {typeof selectedJobCard.travelKilometers === 'number'
                           ? `${selectedJobCard.travelKilometers.toFixed(1)} km travelled`
                           : 'Travel distance not recorded'}
@@ -1295,9 +1306,9 @@ const JobCardFormsSection = ({ jobCard }) => {
                     </div>
                   </header>
 
-                  <div className="grid gap-4 sm:grid-cols-3 text-sm text-slate-100">
+                  <div className={`grid gap-4 sm:grid-cols-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Vehicle
                       </div>
                       <div className="mt-1">
@@ -1305,7 +1316,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         KM before
                       </div>
                       <div className="mt-1">
@@ -1313,7 +1324,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         KM after
                       </div>
                       <div className="mt-1">
@@ -1330,17 +1341,17 @@ const JobCardFormsSection = ({ jobCard }) => {
               {/* Right column: map + photos */}
               <div className="space-y-6">
                 {/* Map */}
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
+                <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 shadow-sm`}>
                   <header className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
+                      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
                         <i className="fa-solid fa-location-dot text-sm" />
                       </span>
                       <div>
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                           Job location
                         </div>
-                        <div className="text-sm text-slate-100">
+                        <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                           {selectedJobCard.location ||
                             selectedJobCard.siteName ||
                             selectedJobCard.clientName ||
@@ -1349,7 +1360,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </div>
                     </div>
                   </header>
-                  <div className="mt-3 h-64 rounded-xl overflow-hidden border border-slate-800">
+                  <div className={`mt-3 h-64 rounded-xl overflow-hidden border ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                     {getJobCardCoordinates(selectedJobCard) ? (
                       (() => {
                         const coords = getJobCardCoordinates(selectedJobCard);
@@ -1384,7 +1395,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                             rel="noopener noreferrer"
                             className="group block h-full w-full"
                           >
-                            <div className="relative h-full w-full bg-slate-900">
+                            <div className={`relative h-full w-full ${isDark ? 'bg-gray-900' : 'bg-gray-100'}`}>
                               <iframe
                                 title="Job location preview"
                                 src={embedUrl}
@@ -1392,22 +1403,22 @@ const JobCardFormsSection = ({ jobCard }) => {
                                 loading="lazy"
                                 referrerPolicy="no-referrer-when-downgrade"
                               />
-                              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/90 to-transparent px-4 py-3">
-                                <div className="flex items-center justify-between gap-3 text-xs text-slate-100">
+                              <div className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t ${isDark ? 'from-gray-900/90' : 'from-white/90'} to-transparent px-4 py-3`}>
+                                <div className={`flex items-center justify-between gap-3 text-xs ${isDark ? 'text-gray-100' : 'text-gray-700'}`}>
                                   <div className="flex items-center gap-2">
-                                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/20 text-sky-300">
+                                    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-600'}`}>
                                       <i className="fa-solid fa-location-dot text-sm" />
                                     </span>
                                     <div>
                                       <p className="font-semibold">
                                         Open this location in OpenStreetMap
                                       </p>
-                                      <p className="text-[11px] text-slate-300">
+                                      <p className={`text-[11px] ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>
                                         {latFixed}, {lngFixed}
                                       </p>
                                     </div>
                                   </div>
-                                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-slate-800/80 px-2 py-1 text-[10px] font-medium text-slate-200 group-hover:bg-slate-700">
+                                  <span className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium ${isDark ? 'bg-gray-800 text-gray-200 group-hover:bg-gray-700' : 'bg-white/80 text-gray-600 group-hover:bg-white'}`}>
                                     <span>View full map</span>
                                     <i className="fa-solid fa-arrow-up-right-from-square" />
                                   </span>
@@ -1418,15 +1429,15 @@ const JobCardFormsSection = ({ jobCard }) => {
                         );
                       })()
                     ) : (
-                      <div className="flex h-full items-center justify-center bg-slate-950/60">
+                      <div className={`flex h-full items-center justify-center ${isDark ? 'bg-gray-950/60' : 'bg-gray-50'}`}>
                         <div className="text-center">
-                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 mb-2">
-                            <i className="fa-regular fa-map text-slate-400" />
+                          <div className={`inline-flex h-10 w-10 items-center justify-center rounded-full mb-2 ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                            <i className={`fa-regular fa-map ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
                           </div>
-                          <p className="text-sm font-medium text-slate-100">
+                          <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             No GPS data recorded
                           </p>
-                          <p className="text-xs text-slate-400 mt-1">
+                          <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Ask the technician to enable location services for future visits.
                           </p>
                         </div>
@@ -1436,17 +1447,17 @@ const JobCardFormsSection = ({ jobCard }) => {
                 </section>
 
                 {/* Photos */}
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
+                <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 shadow-sm`}>
                   <header className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pink-500/10 text-pink-300">
+                      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-pink-500/20 text-pink-300' : 'bg-pink-50 text-pink-600'}`}>
                         <i className="fa-regular fa-image text-sm" />
                       </span>
                       <div>
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                           Photos
                         </div>
-                        <div className="text-sm text-slate-100">
+                        <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                           {Array.isArray(selectedJobCard.photos)
                             ? selectedJobCard.photos.length
                             : 0}{' '}
@@ -1464,7 +1475,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                       {selectedJobCard.photos.map((photo, idx) => (
                         <figure
                           key={idx}
-                          className="group relative overflow-hidden rounded-xl bg-slate-800"
+                          className={`group relative overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
                         >
                           <img
                             src={typeof photo === 'string' ? photo : photo.url}
@@ -1475,12 +1486,12 @@ const JobCardFormsSection = ({ jobCard }) => {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
-                      <i className="fa-regular fa-image text-slate-500 text-xl mb-2" />
-                      <p className="text-sm text-slate-300">
+                    <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>
+                      <i className={`fa-regular fa-image text-xl mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                      <p className="text-sm">
                         No photos have been attached to this job card.
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Encourage technicians to capture photos for better traceability.
                       </p>
                     </div>
@@ -1489,7 +1500,7 @@ const JobCardFormsSection = ({ jobCard }) => {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-4 text-xs text-slate-400">
+            <div className={`mt-4 flex items-center justify-between border-t pt-4 text-xs ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-100 text-gray-500'}`}>
               <div className="flex items-center gap-2">
                 <i className="fa-regular fa-clock" />
                 <span>
@@ -1499,7 +1510,7 @@ const JobCardFormsSection = ({ jobCard }) => {
               </div>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                 onClick={handleCloseJobCardDetail}
               >
                 <i className="fa-solid fa-xmark" />
@@ -1516,8 +1527,8 @@ const JobCardFormsSection = ({ jobCard }) => {
             onClose={() => setShowFormsManager(false)}
           />
         ) : (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-            <div className="rounded-xl bg-slate-900 px-4 py-3 text-sm text-slate-100 shadow-lg">
+          <div className={`fixed inset-0 z-50 flex items-center justify-center ${isDark ? 'bg-gray-950/70' : 'bg-white/70'} backdrop-blur-sm`}>
+            <div className={`${isDark ? 'bg-gray-900 text-gray-100 border-gray-800' : 'bg-white text-gray-700 border-gray-100'} rounded-xl border px-4 py-3 text-sm shadow-lg`}>
               Loading form builder&hellip;
             </div>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from '../react-window.js';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback, useContext } from '../react-window.js';
 
 // For now, we'll still use window dependencies until we migrate services
 const storage = typeof window !== 'undefined' ? window.storage : null;
@@ -7,12 +7,25 @@ const ProjectDetail = typeof window !== 'undefined' ? window.ProjectDetail : nul
 const SectionCommentWidget = typeof window !== 'undefined' ? window.SectionCommentWidget : null;
 
 
+// Create a fallback context that always exists to ensure consistent hook calls
+// This prevents React error #300 by ensuring useContext is always called with a valid context
+const createFallbackAuthContext = () => {
+    if (!window._fallbackAuthContext) {
+        window._fallbackAuthContext = React.createContext({
+            user: null,
+            logout: () => {},
+            loading: false,
+            refreshUser: async () => null
+        });
+    }
+    return window._fallbackAuthContext;
+};
+
 // Safe useAuth wrapper - always returns a consistent hook result
-// React tracks hook calls consistently - if useAuth throws, we catch and return default
+// CRITICAL FIX for React error #300: Must always call hooks unconditionally
 const useAuthSafe = () => {
-    // CRITICAL: Always call window.useAuth() unconditionally - no conditional checks
-    // This ensures React sees the same hook call pattern on every render
-    // Following the pattern from App.jsx which always calls useAuth in try-catch
+    // CRITICAL: Always call useContext unconditionally - no conditional checks
+    const authContext = window.AuthContext || createFallbackAuthContext();
     
     let user = null;
     let logout = () => {
@@ -23,10 +36,7 @@ const useAuthSafe = () => {
     let refreshUser = async () => null;
     
     try {
-        // Always call window.useAuth() - React tracks this consistently
-        // If it doesn't exist, this will throw ReferenceError, which we catch
-        // If context isn't available, it will throw React error #321, which we also catch
-        const authState = window.useAuth();
+        const authState = useContext(authContext);
         if (authState && typeof authState === 'object') {
             user = authState.user || null;
             logout = authState.logout || logout;
@@ -34,25 +44,16 @@ const useAuthSafe = () => {
             refreshUser = authState.refreshUser || refreshUser;
         }
     } catch (error) {
-        // React error #321/#300 means context not found - expected if AuthProvider isn't ready
-        // ReferenceError means window.useAuth doesn't exist yet
-        // Both are recoverable - component will re-render when provider/useAuth is ready
         const isContextError = error.message && (
             error.message.includes('321') || 
             error.message.includes('300') ||
             error.message.includes('Context')
         );
-        const isReferenceError = error.name === 'ReferenceError' || 
-            (error.message && error.message.includes('useAuth'));
-        
-        // Only log if it's an unexpected error
-        if (!isContextError && !isReferenceError) {
-            console.warn('⚠️ Projects: useAuth hook threw an error:', error);
+        if (!isContextError) {
+            console.warn('⚠️ Projects: AuthContext threw an error:', error);
         }
-        // Fall through to use default values
     }
     
-    // Always return the same structure - ensures consistent return value
     return {
         user,
         logout,

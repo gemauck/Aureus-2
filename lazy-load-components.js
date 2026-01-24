@@ -1,6 +1,6 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 20260109-speech-bubble-fix - Updated for speech bubble tail feature
-console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
+// VERSION: 20260124-weekly-fms-override - Ensure WeeklyFMSReviewTracker override
+console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
@@ -211,39 +211,11 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
                 }
             }
             if (src.includes('WeeklyFMSReviewTracker.jsx') || src.includes('WeeklyFMSReviewTracker.js')) {
-                // Check if vite-projects module already loaded it
+                // If a Vite bundle already registered it, still load dist to ensure
+                // the latest tracker UI overrides any stale bundle.
                 if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
-                    console.log('✅ WeeklyFMSReviewTracker already available from vite-projects module - skipping dist load');
-                    resolve();
-                    return;
+                    console.log('✅ WeeklyFMSReviewTracker already available from vite-projects module - loading dist override anyway');
                 }
-                
-                // Wait for vite-projects module to load it (up to 2 seconds)
-                // If it's not available after that, load from dist as fallback
-                let attempts = 0;
-                const maxAttempts = 20; // 2 seconds (20 * 100ms)
-                let resolvedFromVite = false;
-                
-                const checkViteModule = setInterval(() => {
-                    attempts++;
-                    if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
-                        console.log('✅ WeeklyFMSReviewTracker available from vite-projects module (after ' + (attempts * 100) + 'ms)');
-                        clearInterval(checkViteModule);
-                        resolvedFromVite = true;
-                        resolve();
-                        return;
-                    } else if (attempts >= maxAttempts) {
-                        console.warn('⚠️ WeeklyFMSReviewTracker not available from vite-projects after ' + maxAttempts + ' attempts');
-                        console.warn('⚠️ Loading from dist as fallback...');
-                        clearInterval(checkViteModule);
-                        // Continue with dist loading - don't resolve here, let it load from dist
-                        // The promise will resolve in script.onload below when dist loads successfully
-                    }
-                }, 100);
-                
-                // Give vite-projects a quick chance, then continue with dist loading if needed
-                // Don't return early - let the function continue to load from dist as fallback
-                // If vite-projects loads it, we already resolved above
             }
             
             // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
@@ -323,7 +295,8 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
             const needsCacheBusting = src.includes('DailyNotes') || src.includes('Manufacturing') || 
                                      src.includes('ProjectProgressTracker') || 
                                      src.includes('ProjectDetail') || 
-                                     src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') || 
+                                     src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') ||
+                                     src.includes('WeeklyFMSReviewTracker') ||
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
@@ -332,6 +305,7 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
                                      scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') ||
+                                     scriptSrc.includes('WeeklyFMSReviewTracker') ||
                                      scriptSrc.includes('Users.jsx') || scriptSrc.includes('Users.js') || 
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
                                      scriptSrc.includes('/projects/Projects') || 
@@ -368,7 +342,7 @@ console.log('🚀 lazy-load-components.js v20260109-speech-bubble-fix loaded');
                 // First, fetch the file to validate it's JavaScript before loading as script
                 // This prevents HTML (404 pages) from being executed as JavaScript
                 // Use no-cache for DailyNotes, Manufacturing, ProjectProgressTracker, ProjectDetail, and ManagementMeetingNotes to ensure fresh version, default for others
-                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('ProjectDetail') || scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ? 'no-cache' : 'default';
+            const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('ProjectDetail') || scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('WeeklyFMSReviewTracker') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ? 'no-cache' : 'default';
                 
                 // Retry logic for server errors (502, 503, 504)
                 const attemptLoad = (attempt = 1, maxAttempts = 3) => {

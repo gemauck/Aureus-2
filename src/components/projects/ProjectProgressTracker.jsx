@@ -61,6 +61,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         focusField: focusFieldProp = null,
         focusYear: focusYearProp = null,
         focusMonthName: focusMonthNameProp = null,
+        focusInput: focusInputProp = null,
         onFocusHandled: onFocusHandledProp = null
     } = props || {};
 
@@ -439,15 +440,28 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 ? Number(focusYearProp)
                 : null;
 
+        const normalizeFocusInput = (value) => {
+            if (value === null || value === undefined) return null;
+            const normalized = String(value).trim().toLowerCase();
+            if (!normalized || ['false', '0', 'no'].includes(normalized)) return null;
+            if (['comments', 'comment', 'commentinput', 'comment-input'].includes(normalized)) return 'comments';
+            if (['data', 'datalink', 'data-link'].includes(normalized)) return 'data';
+            if (['compliance', 'compliancelink', 'compliance-link'].includes(normalized)) return 'compliance';
+            return 'comments';
+        };
+        const normalizedFocusInput = normalizeFocusInput(focusInputProp);
+        const resolvedFieldFromFocusInput = normalizedFocusInput || null;
+
         focusRequestRef.current = {
             projectId: normalizedProjectId,
             monthIndex: normalizedMonthIndex,
             monthName: focusMonthNameProp || null,
-            field: focusFieldProp || 'comments',
-            year: normalizedYear
+            field: resolvedFieldFromFocusInput || focusFieldProp || 'comments',
+            year: normalizedYear,
+            openInput: !!normalizedFocusInput
         };
         pendingFocusRef.current = true;
-    }, [focusProjectIdProp, focusMonthIndexProp, focusFieldProp, focusYearProp, focusMonthNameProp]);
+    }, [focusProjectIdProp, focusMonthIndexProp, focusFieldProp, focusYearProp, focusMonthNameProp, focusInputProp]);
 
     useEffect(() => {
         if (!pendingFocusRef.current) {
@@ -510,6 +524,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     });
                 } catch (error) {
                     console.warn('⚠️ ProjectProgressTracker: scrollIntoView failed for focus cell:', error);
+                }
+                if (focusRequest.openInput && typeof targetCell.click === 'function') {
+                    setTimeout(() => {
+                        try {
+                            targetCell.click();
+                        } catch (error) {
+                            console.warn('⚠️ ProjectProgressTracker: Failed to open focused input:', error);
+                        }
+                    }, 150);
                 }
                 pendingFocusRef.current = false;
                 focusRequestRef.current = null;
@@ -763,6 +786,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
 
             if (field) {
                 params.set('field', field);
+            }
+            if (field) {
+                params.set('focusInput', field);
             }
 
             return `${basePath}#/projects?${params.toString()}`;

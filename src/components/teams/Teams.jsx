@@ -911,10 +911,21 @@ const Teams = () => {
     // Show minimal loading state to prevent renderer crash
     if (!isReady) {
         return (
-            <div className="p-4">
-                <div className="text-center py-12">
-                    <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
-                    <p className="text-sm text-gray-500">Loading Teams module...</p>
+            <div className="space-y-6">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                        <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
+                        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading...</p>
+                    </div>
+                </div>
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8 shadow-sm`}>
+                    <div className="text-center py-12">
+                        <div className={`inline-block animate-spin rounded-full h-8 w-8 border-b-2 mb-3 ${isDark ? 'border-blue-400' : 'border-blue-600'}`}></div>
+                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading Teams module...</p>
+                    </div>
                 </div>
             </div>
         );
@@ -923,117 +934,161 @@ const Teams = () => {
     // Additional safety check - if data arrays are too large, show warning
     if (documents.length > 1000 || workflows.length > 1000 || checklists.length > 1000 || notices.length > 1000) {
         return (
-            <div className="p-4">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <p className="text-sm text-yellow-800">⚠️ Too much data to display. Please contact support.</p>
+            <div className="space-y-6">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                        <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
+                        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Centralized documentation, workflows, and team collaboration</p>
+                    </div>
+                </div>
+                <div className={`${isDark ? 'bg-amber-900/20 border-amber-800' : 'bg-amber-50 border-amber-200'} border rounded-xl p-5 shadow-sm`}>
+                    <div className="flex items-start">
+                        <i className={`fas fa-exclamation-triangle mt-0.5 mr-3 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}></i>
+                        <div>
+                            <h3 className={`text-sm font-semibold mb-1 ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Too much data</h3>
+                            <p className={`text-sm ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Please contact support.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-3">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div className="flex-1 min-w-0">
-					<h1 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
-					<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Centralized documentation, workflows, and team collaboration</p>
+        <div className="space-y-6">
+            {/* Header - minimal theme matching Dashboard/Projects */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                        <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
+                                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Centralized documentation, workflows, and team collaboration</p>
+                            </div>
+                            {selectedTeam && (
+                                <button
+                                    onClick={() => {
+                                        setSelectedTeam(null);
+                                        if (window.RouteState) {
+                                            window.RouteState.setPageSubpath('teams', [], {
+                                                replace: false,
+                                                preserveSearch: false,
+                                                preserveHash: false
+                                            });
+                                        }
+                                    }}
+                                    className={`px-4 py-2.5 rounded-lg transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 shrink-0 ${
+                                        isDark
+                                            ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750'
+                                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                                    }`}
+                                    aria-label="Back to all teams"
+                                >
+                                    <i className="fas fa-arrow-left mr-2 text-xs" aria-hidden="true"></i>
+                                    <span className="hidden sm:inline">Back to All Teams</span>
+                                    <span className="sm:hidden">Back</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
                 </div>
-                {selectedTeam && (
-                    <button
-                        onClick={() => {
-                            setSelectedTeam(null);
-                            // Update URL to clear team ID
-                            if (window.RouteState) {
-                                window.RouteState.setPageSubpath('teams', [], {
-                                    replace: false,
-                                    preserveSearch: false,
-                                    preserveHash: false
-                                });
-                            }
-                        }}
-						className={`px-3 py-2 sm:py-1.5 text-xs sm:text-xs rounded-lg hover:bg-gray-200 transition whitespace-nowrap min-h-[44px] sm:min-h-0 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                    >
-                        <i className="fas fa-arrow-left mr-1.5"></i>
-                        <span className="hidden sm:inline">Back to All Teams</span>
-                        <span className="sm:hidden">Back</span>
-                    </button>
-                )}
             </div>
 
-            {/* Search and Filter Bar */}
+            {/* Search and Filter Bar - minimal theme */}
             {selectedTeam && (
-				<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                        <div className="flex-1 relative w-full min-w-0">
-                            <input
-                                type="text"
-                                placeholder="Search documents, workflows, checklists..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-								className={`w-full pl-8 pr-3 py-2 sm:py-1.5 text-sm sm:text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder-gray-400 min-h-[44px] sm:min-h-0 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'border-gray-300'}`}
-                            />
-							<i className={`fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-xs sm:text-xs ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Search documents, workflows, checklists..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark
+                                            ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400 focus:bg-gray-800'
+                                            : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'
+                                    }`}
+                                    aria-label="Search"
+                                />
+                                <i className={`fas fa-search absolute left-3 top-3.5 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                                {searchTerm && (
+                                    <button
+                                        onClick={() => setSearchTerm('')}
+                                        className={`absolute right-3 top-3.5 transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                                        title="Clear search"
+                                    >
+                                        <i className="fas fa-times text-sm"></i>
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex flex-wrap sm:flex-nowrap gap-2 overflow-x-auto sm:overflow-x-visible pb-1 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0">
+                        <div className={`flex items-center flex-wrap sm:flex-nowrap gap-2 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 shrink-0`} role="group" aria-label="Section tabs">
                             <button
                                 onClick={() => setActiveTab('documents')}
-                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                     activeTab === 'documents'
-                                        ? 'bg-primary-600 text-white'
-										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                             >
-                                <i className="fas fa-file-alt mr-1"></i>
+                                <i className="fas fa-file-alt mr-1.5"></i>
                                 <span className="hidden sm:inline">Documents</span>
                                 <span className="sm:hidden">Docs</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('workflows')}
-                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                     activeTab === 'workflows'
-                                        ? 'bg-primary-600 text-white'
-										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                             >
-                                <i className="fas fa-project-diagram mr-1"></i>
+                                <i className="fas fa-project-diagram mr-1.5"></i>
                                 <span className="hidden sm:inline">Workflows</span>
                                 <span className="sm:hidden">Work</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('checklists')}
-                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                     activeTab === 'checklists'
-                                        ? 'bg-primary-600 text-white'
-										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                             >
-                                <i className="fas fa-tasks mr-1"></i>
+                                <i className="fas fa-tasks mr-1.5"></i>
                                 <span className="hidden sm:inline">Checklists</span>
                                 <span className="sm:hidden">Check</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('notices')}
-                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                     activeTab === 'notices'
-                                        ? 'bg-primary-600 text-white'
-										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                             >
-                                <i className="fas fa-bullhorn mr-1"></i>
+                                <i className="fas fa-bullhorn mr-1.5"></i>
                                 <span className="hidden sm:inline">Notices</span>
                                 <span className="sm:hidden">Notice</span>
                             </button>
                             {selectedTeam?.id === 'management' && (
                                 <button
                                     onClick={() => setActiveTab('meeting-notes')}
-                                    className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                         activeTab === 'meeting-notes'
-                                            ? 'bg-primary-600 text-white'
-											: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                     }`}
                                 >
-                                    <i className="fas fa-clipboard-list mr-1"></i>
+                                    <i className="fas fa-clipboard-list mr-1.5"></i>
                                     <span className="hidden sm:inline">Meeting Notes</span>
                                     <span className="sm:hidden">Notes</span>
                                 </button>
@@ -1041,13 +1096,13 @@ const Teams = () => {
                             {selectedTeam?.id === 'data-analytics' && (
                                 <button
                                     onClick={() => setActiveTab('poa-review')}
-                                    className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
                                         activeTab === 'poa-review'
-                                            ? 'bg-primary-600 text-white'
-											: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                     }`}
                                 >
-                                    <i className="fas fa-file-excel mr-1"></i>
+                                    <i className="fas fa-file-excel mr-1.5"></i>
                                     <span className="hidden sm:inline">POA Review</span>
                                     <span className="sm:hidden">POA</span>
                                 </button>
@@ -1059,65 +1114,68 @@ const Teams = () => {
 
             {/* Overview - All Teams Grid */}
             {!selectedTeam && (
-                <div className="space-y-3">
+                <div className="space-y-6">
                     {/* Quick Stats */}
-						<div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Total Documents</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleDocuments.length}</p>
+                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Documents</p>
+                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleDocuments.length}</p>
                                 </div>
-								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
-									<i className={`fas fa-file-alt ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                    <i className={`fas fa-file-alt ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                 </div>
                             </div>
                         </div>
-						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Active Workflows</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleWorkflows.filter(w => w.status === 'Active').length}</p>
+                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Workflows</p>
+                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleWorkflows.filter(w => w.status === 'Active').length}</p>
                                 </div>
-								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-purple-900' : 'bg-purple-100'}`}>
-									<i className={`fas fa-project-diagram ${isDark ? 'text-purple-300' : 'text-purple-600'}`}></i>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                    <i className={`fas fa-project-diagram ${isDark ? 'text-purple-400' : 'text-purple-600'} text-sm`}></i>
                                 </div>
                             </div>
                         </div>
-						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Checklists</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleChecklists.length}</p>
+                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Checklists</p>
+                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleChecklists.length}</p>
                                 </div>
-								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-900' : 'bg-green-100'}`}>
-									<i className={`fas fa-tasks ${isDark ? 'text-green-300' : 'text-green-600'}`}></i>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                    <i className={`fas fa-tasks ${isDark ? 'text-green-400' : 'text-green-600'} text-sm`}></i>
                                 </div>
                             </div>
                         </div>
-						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Executions</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleWorkflowExecutions.length}</p>
+                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Executions</p>
+                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleWorkflowExecutions.length}</p>
                                 </div>
-								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-orange-900' : 'bg-orange-100'}`}>
-									<i className={`fas fa-play-circle ${isDark ? 'text-orange-300' : 'text-orange-600'}`}></i>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                    <i className={`fas fa-play-circle ${isDark ? 'text-amber-400' : 'text-amber-600'} text-sm`}></i>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Teams Grid */}
-					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Department Teams</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                    <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+                        <h2 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Department Teams</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
                             {teamsLoading ? (
-                                <div className="col-span-full text-center py-4 text-gray-500">Loading teams...</div>
+                                <div className={`col-span-full text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <div className={`inline-block animate-spin rounded-full h-6 w-6 border-b-2 mb-2 mx-auto ${isDark ? 'border-blue-400' : 'border-blue-600'}`}></div>
+                                    Loading teams...
+                                </div>
                             ) : teamsError ? (
-                                <div className="col-span-full text-center py-4 text-red-500">Error loading teams: {teamsError}</div>
+                                <div className={`col-span-full text-center py-6 text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>Error loading teams: {teamsError}</div>
                             ) : teams.length === 0 ? (
-                                <div className="col-span-full text-center py-4 text-gray-500">No teams available</div>
+                                <div className={`col-span-full text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No teams available</div>
                             ) : teams.map(team => {
                                 const isAccessible = isTeamAccessible(team.id);
                                 const counts = getTeamCounts(team.id);
@@ -1125,29 +1183,27 @@ const Teams = () => {
                                     <button
                                         key={team.id}
                                         onClick={() => handleSelectTeam(team)}
-										className={`text-left border rounded-lg p-3 transition group ${
-                                            isDark ? 'border-slate-700' : 'border-gray-200'
-                                        } ${isAccessible ? 'hover:shadow-md hover:border-primary-300' : 'opacity-60 cursor-not-allowed'}`}
+                                        className={`text-left border rounded-xl p-4 transition-all duration-200 group ${
+                                            isDark ? 'bg-gray-900 border-gray-800 hover:bg-gray-800 hover:border-gray-700' : 'bg-white border-gray-100 hover:bg-gray-50 hover:border-gray-200'
+                                        } ${isAccessible ? '' : 'opacity-60 cursor-not-allowed'}`}
                                         disabled={!isAccessible}
                                         aria-disabled={!isAccessible}
                                     >
                                         <div className="flex items-center justify-between mb-2">
-											<div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition ${isDark ? 'bg-slate-700 group-hover:bg-slate-600' : ''}`}>
-												<i className={`fas ${team.icon} text-${team.color}-600 text-lg ${isDark ? 'text-white' : ''}`}></i>
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                                <i className={`fas ${team.icon} text-lg ${isDark ? 'text-gray-300' : 'text-gray-600'}`}></i>
                                             </div>
-                                            <i className="fas fa-arrow-right text-gray-400 text-xs group-hover:text-primary-600 transition"></i>
+                                            <i className="fas fa-arrow-right text-gray-400 text-xs group-hover:text-blue-500 transition"></i>
                                         </div>
-										<h3 className={`font-semibold text-sm mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{team.name}</h3>
-										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{team.description}</p>
+                                        <h3 className={`font-semibold text-sm mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{team.name}</h3>
+                                        <p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{team.description}</p>
                                         {!isAccessible && (
-                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded ${
-                                                isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'
-                                            }`}>
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-lg ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                                                 <i className="fas fa-lock"></i>
                                                 Admin only
                                             </span>
                                         )}
-										<div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                        <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                             <span><i className="fas fa-file-alt mr-1"></i>{counts.documents}</span>
                                             <span><i className="fas fa-project-diagram mr-1"></i>{counts.workflows}</span>
                                             <span><i className="fas fa-tasks mr-1"></i>{counts.checklists}</span>
@@ -1159,24 +1215,24 @@ const Teams = () => {
                     </div>
 
                     {/* Recent Activity */}
-					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Recent Activity</h2>
+                    <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+                        <h2 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Recent Activity</h2>
                         {recentActivity.length > 0 ? (
-                            <div className="space-y-2">
+                            <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-200'}`}>
                                 {recentActivity.map((item, idx) => {
                                     const team = teams.find(t => t.id === (item.teamId || item.team));
                                     return (
-										<div key={idx} className={`flex items-center gap-3 py-2 border-b last:border-b-0 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
-											<div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-slate-700' : ''}`}>
-												<i className={`fas fa-${item.icon} text-${team?.color || 'gray'}-600 text-xs ${isDark ? 'text-white' : ''}`}></i>
+                                        <div key={idx} className="flex items-center gap-3 py-3 first:pt-0">
+                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                                <i className={`fas fa-${item.icon} text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
                                             </div>
                                             <div className="flex-1 min-w-0">
-												<p className={`text-xs font-medium truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
-												<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                <p className={`text-sm font-medium truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.title}</p>
+                                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                     {team?.name} • {item.type}
                                                 </p>
                                             </div>
-											<span className={`text-xs whitespace-nowrap ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
+                                            <span className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {new Date(item.createdAt || item.updatedAt || item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                                             </span>
                                         </div>
@@ -1184,9 +1240,9 @@ const Teams = () => {
                                 })}
                             </div>
                         ) : (
-                            <div className="text-center py-8">
-								<i className={`fas fa-history text-3xl mb-2 ${isDark ? 'text-slate-500' : 'text-gray-300'}`}></i>
-								<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No activity yet</p>
+                            <div className="text-center py-10">
+                                <i className={`fas fa-history text-3xl mb-2 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No activity yet</p>
                             </div>
                         )}
                     </div>
@@ -1195,11 +1251,11 @@ const Teams = () => {
 
             {/* Team Detail View */}
             {selectedTeam && (
-                <div className="space-y-3">
+                <div className="space-y-6">
                     {/* Team Header */}
-                    <div className={`bg-gradient-to-r from-${selectedTeam.color}-500 to-${selectedTeam.color}-600 rounded-lg p-4 text-white`}>
+                    <div className={`bg-gradient-to-r from-${selectedTeam.color}-500 to-${selectedTeam.color}-600 rounded-xl p-4 text-white`}>
                         <div className="flex items-center gap-3 mb-3">
-                            <div className={`w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
                                 <i className={`fas ${selectedTeam.icon} text-2xl`}></i>
                             </div>
                             <div>
@@ -1228,7 +1284,7 @@ const Teams = () => {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
                         <button
                             onClick={() => {
                                 setEditingDocument(null);
@@ -1276,22 +1332,22 @@ const Teams = () => {
                     </div>
 
                     {/* Content Display Based on Active Tab */}
-					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                         {activeTab === 'documents' && (
                             <div>
-									<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Documents Library</h3>
+									<h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Documents Library</h3>
                                 {displayDocuments.length > 0 ? (
                                     <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                                         {displayDocuments.map(doc => (
-                                            <div key={doc.id} className={`border rounded-lg p-3 hover:shadow-md transition ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                            <div key={doc.id} className={`border rounded-xl p-4 hover:shadow-md transition-all duration-200 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                                                 <div className="flex items-start justify-between mb-2">
-										<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
-											<i className={`fas fa-file-alt ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
+										<div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                            <i className={`fas fa-file-alt text-sm ${isDark ? 'text-blue-400' : 'text-blue-600'}`}></i>
                                                     </div>
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => handleViewDocument(doc)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
                                                             title="View"
                                                         >
                                                             <i className="fas fa-eye text-sm sm:text-xs"></i>
@@ -1301,26 +1357,26 @@ const Teams = () => {
                                                                 setEditingDocument(doc);
                                                                 setShowDocumentModal(true);
                                                             }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteDocument(doc.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-										<span className={`px-2 py-0.5 text-xs rounded mb-2 inline-block ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+										<span className={`px-2 py-0.5 text-xs rounded-lg mb-2 inline-block ${isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
                                                     {doc.category}
                                                 </span>
-										<h4 className={`font-semibold text-sm mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{doc.title}</h4>
-										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{doc.description}</p>
-										<div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+										<h4 className={`font-semibold text-sm mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{doc.title}</h4>
+										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{doc.description}</p>
+										<div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                     <span>v{doc.version}</span>
                                                     <span>{new Date(doc.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
                                                 </div>
@@ -1329,8 +1385,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className={`fas fa-file-alt text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No documents yet</p>
+                                        <i className={`fas fa-file-alt text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No documents yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingDocument(null);
@@ -1347,19 +1403,19 @@ const Teams = () => {
 
                         {activeTab === 'workflows' && (
                             <div>
-                                <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Workflows & Processes</h3>
+                                <h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Workflows & Processes</h3>
                                 {displayWorkflows.length > 0 ? (
 									<div className="space-y-3">
                                         {displayWorkflows.map(workflow => (
-                                            <div key={workflow.id} className={`border rounded-lg p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                            <div key={workflow.id} className={`border rounded-xl p-4 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
-										<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-purple-900' : 'bg-purple-100'}`}>
-											<i className={`fas fa-project-diagram ${isDark ? 'text-purple-300' : 'text-purple-600'}`}></i>
+										<div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                            <i className={`fas fa-project-diagram text-sm ${isDark ? 'text-purple-400' : 'text-purple-600'}`}></i>
                                                         </div>
                                                         <div className="flex-1">
-												<h4 className={`font-semibold text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{workflow.title}</h4>
-												<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{workflow.description}</p>
+												<h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{workflow.title}</h4>
+												<p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{workflow.description}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1 flex-wrap">
@@ -1377,14 +1433,14 @@ const Teams = () => {
                                                                 setEditingWorkflow(workflow);
                                                                 setShowWorkflowModal(true);
                                                             }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteWorkflow(workflow.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-sm sm:text-xs"></i>
@@ -1395,7 +1451,7 @@ const Teams = () => {
 										<div className="flex items-center gap-2 mb-2">
                                                     <span className={`px-2 py-1 text-xs rounded ${
 												workflow.status === 'Active' ? isDark ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700' :
-												workflow.status === 'Draft' ? isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700' :
+												workflow.status === 'Draft' ? isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700' :
 												isDark ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
                                                     }`}>
                                                         {workflow.status}
@@ -1407,7 +1463,7 @@ const Teams = () => {
                                                     ))}
                                                 </div>
                                                 
-										<div className={`flex items-center gap-4 text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+										<div className={`flex items-center gap-4 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                     <span><i className="fas fa-layer-group mr-1"></i>{workflow.steps?.length || 0} steps</span>
                                                     <span><i className="fas fa-clock mr-1"></i>Updated {new Date(workflow.updatedAt).toLocaleDateString('en-ZA')}</span>
                                                     <span><i className="fas fa-play-circle mr-1"></i>
@@ -1419,8 +1475,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className={`fas fa-project-diagram text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No workflows yet</p>
+                                        <i className={`fas fa-project-diagram text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No workflows yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingWorkflow(null);
@@ -1437,19 +1493,19 @@ const Teams = () => {
 
                         {activeTab === 'checklists' && (
                             <div>
-									<h3 className="text-sm font-semibold text-gray-900 mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Checklists & Forms</h3>
+									<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Checklists & Forms</h3>
                                 {displayChecklists.length > 0 ? (
                                     <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                                         {displayChecklists.map(checklist => (
-                                            <div key={checklist.id} className="border border-gray-200 rounded-lg p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}">
+                                            <div key={checklist.id} className={`border rounded-xl p-4 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
-										<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-900' : 'bg-green-100'}`}>
-											<i className={`fas fa-tasks ${isDark ? 'text-green-300' : 'text-green-600'}`}></i>
+										<div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                            <i className={`fas fa-tasks text-sm ${isDark ? 'text-green-400' : 'text-green-600'}`}></i>
                                                         </div>
                                                         <div>
-												<h4 className="font-semibold text-gray-900 text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}">{checklist.title}</h4>
-												<p className="text-xs text-gray-600 ${isDark ? 'text-slate-400' : 'text-gray-600'}">{checklist.items?.length || 0} items</p>
+                                                <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{checklist.title}</h4>
+                                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{checklist.items?.length || 0} items</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1">
@@ -1458,25 +1514,25 @@ const Teams = () => {
                                                                 setEditingChecklist(checklist);
                                                                 setShowChecklistModal(true);
                                                             }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteChecklist(checklist.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-										<span className={`px-2 py-1 text-xs rounded mb-2 inline-block ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+										<span className={`px-2 py-1 text-xs rounded mb-2 inline-block ${isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
                                                     {checklist.category}
                                                 </span>
-										<p className="text-xs text-gray-600 mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}">{checklist.description}</p>
-										<div className="flex items-center justify-between text-xs text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
+										<p className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{checklist.description}</p>
+                                        <div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                     <span><i className="fas fa-check-circle mr-1"></i>{checklist.frequency}</span>
                                                     <button className={`font-medium ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}>
                                                         Use Template →
@@ -1487,8 +1543,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className={`fas fa-tasks text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No checklists yet</p>
+                                        <i className={`fas fa-tasks text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No checklists yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingChecklist(null);
@@ -1505,7 +1561,7 @@ const Teams = () => {
 
                         {activeTab === 'notices' && (
                             <div>
-								<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Notice Board</h3>
+								<h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Notice Board</h3>
                                 {displayNotices.length > 0 ? (
                                     <div className="space-y-3">
                                         {displayNotices.map(notice => {
@@ -1528,11 +1584,11 @@ const Teams = () => {
                                                 : isDark ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700';
                                             
                                             return (
-                                            <div key={notice.id} className={`border-l-4 rounded-lg p-3 ${priorityClasses}`}>
+                                            <div key={notice.id} className={`border-l-4 rounded-xl p-4 ${priorityClasses}`}>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-2 flex-1">
                                                         <i className={`fas fa-bullhorn ${iconClasses}`}></i>
-												<h4 className={`font-semibold text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{notice.title}</h4>
+												<h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{notice.title}</h4>
                                                     </div>
                                                     <div className="flex gap-1 flex-wrap items-center">
                                                         <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClasses}`}>
@@ -1543,22 +1599,22 @@ const Teams = () => {
                                                                 setEditingNotice(notice);
                                                                 setShowNoticeModal(true);
                                                             }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteNotice(notice.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-												<p className={`text-sm mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{notice.content}</p>
-												<div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+												<p className={`text-sm mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{notice.content}</p>
+												<div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                     <span><i className="fas fa-user mr-1"></i>{notice.author}</span>
                                                     <span>{new Date(notice.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                 </div>
@@ -1568,8 +1624,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className={`fas fa-bullhorn text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No notices yet</p>
+                                        <i className={`fas fa-bullhorn text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No notices yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingNotice(null);
@@ -1594,11 +1650,11 @@ const Teams = () => {
                                     // Component was available but disappeared (shouldn't happen)
                                     return (
                                         <div className="text-center py-12">
-                                            <i className={`fas fa-clipboard-list text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                            <p className="text-sm text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'} mb-2">
+                                            <i className={`fas fa-clipboard-list text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                            <p className="text-sm text-gray-500 ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2">
                                                 Meeting Notes component not available
                                             </p>
-                                            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                                            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                                 Please refresh the page to load the component.
                                             </p>
                                         </div>
@@ -1607,11 +1663,11 @@ const Teams = () => {
                                     // Still loading
                                     return (
                                         <div className="text-center py-12">
-                                            <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                            <p className="text-sm text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'} mb-2">
+                                            <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                            <p className="text-sm text-gray-500 ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2">
                                                 Loading Meeting Notes component...
                                             </p>
-                                            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                                            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                                 Please wait while the component loads.
                                             </p>
                                         </div>
@@ -1632,11 +1688,11 @@ const Teams = () => {
                             if (!ComponentToRender) {
                                 return (
                                     <div className="text-center py-12">
-                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'} mb-2`}>
+                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
                                             Loading POA Review component...
                                         </p>
-                                        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                                        <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                             Please wait while the component loads.
                                         </p>
                                     </div>
@@ -1722,11 +1778,11 @@ const Teams = () => {
             {/* Document View Modal */}
             {showDocumentViewModal && viewingDocument && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                    <div className={`rounded-lg max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-                        <div className={`sticky top-0 border-b px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between z-10 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`rounded-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-lg ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+                        <div className={`sticky top-0 border-b px-4 py-3 flex items-center justify-between z-10 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                             <div className="flex-1 min-w-0 pr-2">
-                                <h3 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{viewingDocument.title}</h3>
-                                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                <h3 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{viewingDocument.title}</h3>
+                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                     {viewingDocument.category} • Version {viewingDocument.version}
                                 </p>
                             </div>
@@ -1735,7 +1791,7 @@ const Teams = () => {
                                     setShowDocumentViewModal(false);
                                     setViewingDocument(null);
                                 }}
-                                className={`text-gray-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 ${isDark ? 'hover:text-slate-200 text-slate-400' : 'hover:text-gray-600'}`}
+                                className={`text-gray-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 ${isDark ? 'hover:text-gray-200 text-gray-400' : 'hover:text-gray-600'}`}
                             >
                                 <i className="fas fa-times text-lg"></i>
                             </button>
@@ -1743,28 +1799,28 @@ const Teams = () => {
 
                         <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                             {viewingDocument.description && (
-                                <div className={`border rounded-lg p-3 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
+                                <div className={`border rounded-xl p-4 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
                                     <p className={`text-sm ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>{viewingDocument.description}</p>
                                 </div>
                             )}
 
                             <div className="prose prose-sm max-w-none">
-                                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900 ${isDark ? 'text-slate-100' : 'text-gray-900'}">
+                                <pre className={`whitespace-pre-wrap font-sans text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                     {viewingDocument.content}
                                 </pre>
                             </div>
 
                             {viewingDocument.attachments && viewingDocument.attachments.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Attachments</h4>
+                                    <h4 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Attachments</h4>
                                     <div className="space-y-2">
                                         {viewingDocument.attachments.map((att, idx) => (
-                                            <div key={idx} className={`flex items-center justify-between p-2 rounded border ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                            <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
                                                 <div className="flex items-center gap-2">
-                                                    <i className="fas fa-file text-gray-400 ${isDark ? 'text-slate-400' : 'text-gray-600'}"></i>
-                                                    <span className="text-sm text-gray-900 ${isDark ? 'text-slate-100' : 'text-gray-900'}">{att.name}</span>
+                                                    <i className={`fas fa-file text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
+                                                    <span className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{att.name}</span>
                                                 </div>
-                                                <span className="text-xs text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
+                                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                     {(att.size / 1024).toFixed(2)} KB
                                                 </span>
                                             </div>
@@ -1775,7 +1831,7 @@ const Teams = () => {
 
                             {viewingDocument.tags && viewingDocument.tags.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Tags</h4>
+                                    <h4 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Tags</h4>
                                     <div className="flex flex-wrap gap-2">
                                         {viewingDocument.tags.map(tag => (
                                             <span key={tag} className={`px-2 py-1 rounded text-xs ${isDark ? 'bg-primary-900/50 text-primary-300' : 'bg-primary-100 text-primary-700'}`}>
@@ -1786,7 +1842,7 @@ const Teams = () => {
                                 </div>
                             )}
 
-                            <div className={`pt-4 border-t flex items-center justify-between text-xs ${isDark ? 'border-slate-700 text-slate-400' : 'border-gray-200 text-gray-500'}`}>
+                            <div className={`pt-4 border-t flex items-center justify-between text-xs ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
                                 <span>Created by {viewingDocument.createdBy}</span>
                                 <span>
                                     Last updated: {new Date(viewingDocument.updatedAt).toLocaleDateString('en-ZA', {

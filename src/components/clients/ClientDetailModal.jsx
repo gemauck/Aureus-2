@@ -116,11 +116,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Check if current user is admin
     const user = window.storage?.getUser?.() || {};
     const isAdmin = user?.role?.toLowerCase() === 'admin';
+    const canViewContracts = isAdmin;
     
     // Now initialize other state and refs AFTER formData
     const [activeTab, setActiveTab] = useState(() => {
         // If user tries to access contracts tab but is not admin, default to overview
-        if (initialTab === 'contracts' && !isAdmin) {
+        if (initialTab === 'contracts' && !canViewContracts) {
             return 'overview';
         }
         // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
@@ -129,6 +130,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         return initialTab;
     });
+    const lastInitialTabRef = useRef(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
     
     // Track optimistic updates in STATE (not refs) so React re-renders when they change
@@ -450,14 +452,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
+        let nextTab = initialTab;
+        
         // If user tries to access contracts tab but is not admin, default to overview
-        if (initialTab === 'contracts' && !isAdmin) {
-            setActiveTab('overview');
-        } else if (initialTab && initialTab !== activeTab) {
-            // Only update if the desired tab is different from the current one
-            setActiveTab(initialTab);
+        if (initialTab === 'contracts' && !canViewContracts) {
+            nextTab = 'overview';
         }
-    }, [initialTab, isAdmin, activeTab]);
+        // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
+        if (initialTab === 'service' || initialTab === 'maintenance') {
+            nextTab = 'service-maintenance';
+        }
+        
+        // Only update when the incoming initialTab actually changes
+        if (nextTab && lastInitialTabRef.current !== nextTab) {
+            setActiveTab(nextTab);
+            lastInitialTabRef.current = nextTab;
+        }
+    }, [initialTab, isAdmin]);
     
     // MANUFACTURING PATTERN: Only sync formData when client ID changes (switching to different client)
     // Reset initial loading state when client changes
@@ -655,7 +666,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
         // Prevent non-admins from accessing contracts tab
-        if (tab === 'contracts' && !isAdmin) {
+        if (tab === 'contracts' && !canViewContracts) {
             return;
         }
         // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
@@ -3268,7 +3279,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             const clientOnlyTabs = [];
                             if (isConverted) {
                                 clientOnlyTabs.push('opportunities', 'projects', 'service-maintenance');
-                                if (isAdmin) {
+                                if (canViewContracts) {
                                     clientOnlyTabs.push('contracts');
                                 }
                             }
@@ -5343,7 +5354,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         )}
 
                         {/* Contracts Tab */}
-                        {activeTab === 'contracts' && (
+                        {activeTab === 'contracts' && canViewContracts && (
                             <div className="space-y-4">
                                 {/* Billing Terms Section */}
                                 <div>

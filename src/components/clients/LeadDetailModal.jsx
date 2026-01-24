@@ -38,6 +38,7 @@ const LeadDetailModal = ({
         }
         return initialTab;
     });
+    const lastInitialTabRef = useRef(initialTab);
     const [hasBeenSaved, setHasBeenSaved] = useState(false); // Track if lead has been saved at least once
     
     // Fetch lead data when leadId changes
@@ -1093,14 +1094,23 @@ const LeadDetailModal = ({
             return;
         }
         
+        let nextTab = initialTab;
+        
         // If user tries to access proposals tab but is not admin, default to overview
         if (initialTab === 'proposals' && !isAdmin) {
-            setActiveTab('overview');
-        } else if (initialTab && initialTab !== activeTab) {
-            // Only update if initialTab actually changed and we're not auto-saving
-            setActiveTab(initialTab);
+            nextTab = 'overview';
         }
-    }, [initialTab, isAdmin, activeTab]);
+        // If user tries to access projects tab (which no longer exists), default to overview
+        if (initialTab === 'projects') {
+            nextTab = 'overview';
+        }
+        
+        // Only update when the incoming initialTab actually changes
+        if (nextTab && lastInitialTabRef.current !== nextTab) {
+            setActiveTab(nextTab);
+            lastInitialTabRef.current = nextTab;
+        }
+    }, [initialTab, isAdmin]);
     
     // MANUFACTURING PATTERN: Only sync formData when lead ID changes (switching to different lead)
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props

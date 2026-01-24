@@ -132,6 +132,7 @@ const useTheme = () => {
 try {
     window.ThemeProvider = ThemeProvider;
     window.useTheme = useTheme;
+    window.ThemeContext = ThemeContext;
     if (window.debug && !window.debug.performanceMode) {
     }
 } catch (error) {

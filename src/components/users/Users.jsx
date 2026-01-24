@@ -4,6 +4,7 @@ const storage = window.storage;
 
 const Users = () => {
     const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
+    const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
     
     // Check if current user is admin (case-insensitive)
     const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
@@ -680,15 +681,15 @@ const Users = () => {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center">
-                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
-                    <p className="text-gray-600 dark:text-gray-400 mb-4">You need administrator privileges to access the Users page.</p>
+                    <i className={`fas fa-lock text-4xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
+                    <p className={`mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>You need administrator privileges to access the Users page.</p>
                     <button
                         onClick={() => {
                             // Navigate to dashboard
                             window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'dashboard' } }));
                         }}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 text-sm font-medium"
                     >
                         Go to Dashboard
                     </button>
@@ -702,26 +703,31 @@ const Users = () => {
     console.log('🔄 Render - showInviteModal:', showInviteModal, 'InviteModal:', typeof InviteModal, 'forceUpdate:', forceUpdate);
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-semibold text-gray-900">User Management</h1>
-                    <p className="text-xs text-gray-600">Manage users, roles, and permissions</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                        <i className={`fas fa-user-cog ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>User Management</h1>
+                        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Manage users, roles, and permissions</p>
+                    </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3">
                     <button
                         onClick={handleInviteUser}
-                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium"
+                        className="px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 text-sm font-medium min-h-[44px] sm:min-h-0"
                     >
-                        <i className="fas fa-envelope mr-1.5"></i>
+                        <i className="fas fa-envelope mr-2"></i>
                         Invite User
                     </button>
                     <button
                         onClick={handleAddUser}
-                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs font-medium"
+                        className="px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 text-sm font-medium min-h-[44px] sm:min-h-0"
                     >
-                        <i className="fas fa-plus mr-1.5"></i>
+                        <i className="fas fa-plus mr-2"></i>
                         Add User
                     </button>
                 </div>
@@ -731,60 +737,60 @@ const Users = () => {
             {loading && (
                 <div className="flex items-center justify-center py-12">
                     <div className="text-center">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-3"></div>
-                        <p className="text-sm text-gray-600">Loading users...</p>
+                        <div className={`inline-block animate-spin rounded-full h-8 w-8 border-b-2 mb-3 ${isDark ? 'border-blue-400' : 'border-blue-600'}`}></div>
+                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading users...</p>
                     </div>
                 </div>
             )}
 
             {/* Stats Cards */}
             {!loading && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 shadow-sm`}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-600 mb-0.5">Total Users</p>
-                            <p className="text-xl font-bold text-gray-900">{users.length}</p>
+                            <p className={`text-xs mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Users</p>
+                            <p className={`text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{users.length}</p>
                         </div>
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-users text-blue-600"></i>
+                        <div className={`w-10 h-10 ${isDark ? 'bg-gray-800' : 'bg-blue-100'} rounded-lg flex items-center justify-center`}>
+                            <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
                         </div>
                     </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 shadow-sm`}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-600 mb-0.5">Active Users</p>
-                            <p className="text-xl font-bold text-gray-900">
+                            <p className={`text-xs mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Active Users</p>
+                            <p className={`text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {users.filter(u => u.status === 'Active').length}
                             </p>
                         </div>
-                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-user-check text-green-600"></i>
+                        <div className={`w-10 h-10 ${isDark ? 'bg-gray-800' : 'bg-green-100'} rounded-lg flex items-center justify-center`}>
+                            <i className={`fas fa-user-check ${isDark ? 'text-gray-300' : 'text-green-600'}`}></i>
                         </div>
                     </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 shadow-sm`}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-600 mb-0.5">Administrators</p>
-                            <p className="text-xl font-bold text-gray-900">
+                            <p className={`text-xs mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Administrators</p>
+                            <p className={`text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {getUserCountByRole('admin')}
                             </p>
                         </div>
-                        <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-user-shield text-red-600"></i>
+                        <div className={`w-10 h-10 ${isDark ? 'bg-gray-800' : 'bg-red-100'} rounded-lg flex items-center justify-center`}>
+                            <i className={`fas fa-user-shield ${isDark ? 'text-gray-300' : 'text-red-600'}`}></i>
                         </div>
                     </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 shadow-sm`}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-600 mb-0.5">Departments</p>
-                            <p className="text-xl font-bold text-gray-900">{departments.length}</p>
+                            <p className={`text-xs mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Departments</p>
+                            <p className={`text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{departments.length}</p>
                         </div>
-                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-building text-purple-600"></i>
+                        <div className={`w-10 h-10 ${isDark ? 'bg-gray-800' : 'bg-purple-100'} rounded-lg flex items-center justify-center`}>
+                            <i className={`fas fa-building ${isDark ? 'text-gray-300' : 'text-purple-600'}`}></i>
                         </div>
                     </div>
                 </div>
@@ -793,8 +799,8 @@ const Users = () => {
 
             {/* Filters and Search */}
             {!loading && (
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <div className="flex items-center justify-between gap-3">
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 shadow-sm`}>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     {/* Search */}
                     <div className="flex-1 relative">
                         <input
@@ -802,16 +808,33 @@ const Users = () => {
                             placeholder="Search users by name or email..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className={`w-full pl-10 pr-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                                isDark
+                                    ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400 focus:bg-gray-800'
+                                    : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'
+                            }`}
                         />
-                        <i className="fas fa-search absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+                        <i className={`fas fa-search absolute left-3 top-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className={`absolute right-3 top-3 transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                                title="Clear search"
+                            >
+                                <i className="fas fa-times text-sm"></i>
+                            </button>
+                        )}
                     </div>
 
                     {/* Role Filter */}
                     <select
                         value={filterRole}
                         onChange={(e) => setFilterRole(e.target.value)}
-                        className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                            isDark
+                                ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800'
+                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+                        }`}
                     >
                         <option value="all">All Roles</option>
                         {Object.keys(roleDefinitions).map(role => (
@@ -823,7 +846,11 @@ const Users = () => {
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                            isDark
+                                ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800'
+                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+                        }`}
                     >
                         <option value="all">All Status</option>
                         <option value="Active">Active</option>
@@ -831,23 +858,23 @@ const Users = () => {
                     </select>
 
                     {/* View Mode Toggle */}
-                    <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+                    <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} flex border rounded-xl p-1.5`}>
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`px-2.5 py-1.5 text-xs ${
+                            className={`px-3 py-2 text-sm rounded-lg transition-all duration-200 ${
                                 viewMode === 'grid'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                         >
                             <i className="fas fa-th"></i>
                         </button>
                         <button
                             onClick={() => setViewMode('table')}
-                            className={`px-2.5 py-1.5 text-xs border-l border-gray-300 ${
+                            className={`px-3 py-2 text-sm rounded-lg transition-all duration-200 ${
                                 viewMode === 'table'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                         >
                             <i className="fas fa-list"></i>
@@ -865,7 +892,7 @@ const Users = () => {
                         filteredUsers.map(user => {
                             const role = roleDefinitions[user.role];
                             return (
-                                <div key={user.id} className="bg-white rounded-lg border border-gray-200 p-3 hover:shadow-md transition">
+                                <div key={user.id} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 hover:shadow-md transition-all duration-200`}>
                                     <div className="flex items-start justify-between mb-2">
                                         <div className="flex items-center gap-2 flex-1">
                                             <div className="relative">
@@ -880,13 +907,13 @@ const Users = () => {
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <h3 className="font-semibold text-gray-900 text-sm truncate">{user.name}</h3>
+                                                    <h3 className={`font-semibold text-sm truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{user.name}</h3>
                                                     {isUserOnline(user) && (
                                                         <span className="text-[10px] text-green-600 font-medium">●</span>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                                                <p className="text-[10px] text-gray-400 mt-0.5">{formatLastSeen(user)}</p>
+                                                <p className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{user.email}</p>
+                                                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{formatLastSeen(user)}</p>
                                             </div>
                                         </div>
                                         <button
@@ -894,7 +921,7 @@ const Users = () => {
                                             className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                                                 user.status === 'Active'
                                                     ? 'bg-green-100 text-green-600'
-                                                    : 'bg-gray-100 text-gray-400'
+                                                    : isDark ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400'
                                             }`}
                                             title={user.status === 'Active' ? 'Deactivate' : 'Activate'}
                                         >
@@ -904,26 +931,26 @@ const Users = () => {
 
                                     <div className="space-y-1.5 mb-3">
                                         <div className="flex items-center gap-2 text-xs">
-                                            <i className="fas fa-user-tag text-gray-400 w-3"></i>
+                                            <i className={`fas fa-user-tag w-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium bg-${role?.color || 'gray'}-100 text-${role?.color || 'gray'}-700`}>
                                                 {role?.name || user.role}
                                             </span>
                                         </div>
                                         {user.department && (
-                                            <div className="flex items-center gap-2 text-xs text-gray-600">
-                                                <i className="fas fa-building text-gray-400 w-3"></i>
+                                            <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                <i className={`fas fa-building w-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                                 <span>{user.department}</span>
                                             </div>
                                         )}
                                         {user.phone && (
-                                            <div className="flex items-center gap-2 text-xs text-gray-600">
-                                                <i className="fas fa-phone text-gray-400 w-3"></i>
+                                            <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                <i className={`fas fa-phone w-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
                                                 <span>{user.phone}</span>
                                             </div>
                                         )}
                                     </div>
 
-                                    <div className="flex gap-1.5 pt-2 border-t border-gray-200">
+                                    <div className={`flex gap-1.5 pt-2 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
                                         <button
                                             type="button"
                                             onClick={(e) => {
@@ -931,7 +958,9 @@ const Users = () => {
                                                 e.stopPropagation();
                                                 handleEditUser(user);
                                             }}
-                                            className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition font-medium"
+                                            className={`flex-1 px-2 py-1 text-xs rounded transition font-medium ${
+                                                isDark ? 'bg-gray-800 text-gray-200 hover:bg-gray-750' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
                                         >
                                             <i className="fas fa-edit mr-1"></i>
                                             Edit
@@ -953,7 +982,9 @@ const Users = () => {
                                                     alert('Error clicking delete button: ' + error.message);
                                                 }
                                             }}
-                                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition font-medium"
+                                            className={`px-2 py-1 text-xs rounded transition font-medium ${
+                                                isDark ? 'bg-red-900/30 text-red-300 hover:bg-red-900/40' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                            }`}
                                         >
                                             <i className="fas fa-trash mr-1"></i>
                                             Delete
@@ -963,12 +994,12 @@ const Users = () => {
                             );
                         })
                     ) : (
-                        <div className="col-span-full text-center py-12">
-                            <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
-                            <p className="text-sm text-gray-500">No users found</p>
+                        <div className={`col-span-full text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8`}>
+                            <i className={`fas fa-users text-4xl mb-3 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
+                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No users found</p>
                             <button
                                 onClick={handleAddUser}
-                                className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                className="mt-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 text-sm font-medium"
                             >
                                 Add First User
                             </button>
@@ -977,99 +1008,99 @@ const Users = () => {
                 </div>
             ) : (
                 // Table View
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full">
+                            <thead className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
                                 <tr>
                                     <th 
-                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer transition-colors select-none ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
                                         onClick={() => handleSort('name')}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <span>User</span>
                                             {sortColumn === 'name' ? (
-                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                             ) : (
-                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                                <i className={`fas fa-sort ${isDark ? 'text-gray-500' : 'text-gray-400'} opacity-50 text-sm`}></i>
                                             )}
                                         </div>
                                     </th>
                                     <th 
-                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer transition-colors select-none ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
                                         onClick={() => handleSort('email')}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <span>Email</span>
                                             {sortColumn === 'email' ? (
-                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                             ) : (
-                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                                <i className={`fas fa-sort ${isDark ? 'text-gray-500' : 'text-gray-400'} opacity-50 text-sm`}></i>
                                             )}
                                         </div>
                                     </th>
                                     <th 
-                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer transition-colors select-none ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
                                         onClick={() => handleSort('role')}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <span>Role</span>
                                             {sortColumn === 'role' ? (
-                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                             ) : (
-                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                                <i className={`fas fa-sort ${isDark ? 'text-gray-500' : 'text-gray-400'} opacity-50 text-sm`}></i>
                                             )}
                                         </div>
                                     </th>
                                     <th 
-                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer transition-colors select-none ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
                                         onClick={() => handleSort('department')}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <span>Department</span>
                                             {sortColumn === 'department' ? (
-                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                             ) : (
-                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                                <i className={`fas fa-sort ${isDark ? 'text-gray-500' : 'text-gray-400'} opacity-50 text-sm`}></i>
                                             )}
                                         </div>
                                     </th>
                                     <th 
-                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer transition-colors select-none ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
                                         onClick={() => handleSort('status')}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <span>Status</span>
                                             {sortColumn === 'status' ? (
-                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                             ) : (
-                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                                <i className={`fas fa-sort ${isDark ? 'text-gray-500' : 'text-gray-400'} opacity-50 text-sm`}></i>
                                             )}
                                         </div>
                                     </th>
                                     <th 
-                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer transition-colors select-none ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
                                         onClick={() => handleSort('lastSeen')}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <span>Last Seen</span>
                                             {sortColumn === 'lastSeen' ? (
-                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                             ) : (
-                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                                <i className={`fas fa-sort ${isDark ? 'text-gray-500' : 'text-gray-400'} opacity-50 text-sm`}></i>
                                             )}
                                         </div>
                                     </th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-100">
+                            <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
                                 {filteredUsers.length > 0 ? (
                                     filteredUsers.map(user => {
                                         const role = roleDefinitions[user.role];
                                         return (
-                                            <tr key={user.id} className="hover:bg-gray-50">
-                                                <td className="px-3 py-2">
+                                            <tr key={user.id} className={isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
+                                                <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
                                                         <div className="relative">
                                                             <div className={`w-8 h-8 rounded-full bg-${role?.color || 'gray'}-100 flex items-center justify-center`}>
@@ -1083,7 +1114,7 @@ const Users = () => {
                                                         </div>
                                                         <div>
                                                             <div className="flex items-center gap-1.5">
-                                                                <span className="font-medium text-gray-900 text-sm">{user.name}</span>
+                                                                <span className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{user.name}</span>
                                                                 {isUserOnline(user) && (
                                                                     <span className="text-[10px] text-green-600 font-medium">●</span>
                                                                 )}
@@ -1091,35 +1122,35 @@ const Users = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-2 text-xs text-gray-600">{user.email}</td>
-                                                <td className="px-3 py-2">
+                                                <td className={`px-4 py-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{user.email}</td>
+                                                <td className="px-4 py-3">
                                                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium bg-${role?.color || 'gray'}-100 text-${role?.color || 'gray'}-700`}>
                                                         {role?.name || user.role}
                                                     </span>
                                                 </td>
-                                                <td className="px-3 py-2 text-xs text-gray-600">{user.department || '-'}</td>
-                                                <td className="px-3 py-2">
+                                                <td className={`px-4 py-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{user.department || '-'}</td>
+                                                <td className="px-4 py-3">
                                                     <button
                                                         onClick={() => handleToggleStatus(user)}
                                                         className={`px-2 py-0.5 rounded text-[10px] font-medium ${
                                                             user.status === 'Active'
                                                                 ? 'bg-green-100 text-green-700'
-                                                                : 'bg-gray-100 text-gray-600'
+                                                                : isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                                                         }`}
                                                     >
                                                         {user.status}
                                                     </button>
                                                 </td>
-                                                <td className="px-3 py-2">
+                                                <td className="px-4 py-3">
                                                     <div className="flex flex-col">
                                                         {isUserOnline(user) ? (
                                                             <span className="text-[10px] text-green-600 font-medium">Online</span>
                                                         ) : (
-                                                            <span className="text-[10px] text-gray-500">{formatLastSeen(user)}</span>
+                                                            <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{formatLastSeen(user)}</span>
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-2">
+                                                <td className="px-4 py-3">
                                                     <div className="flex gap-1">
                                                         <button
                                                             type="button"
@@ -1128,7 +1159,7 @@ const Users = () => {
                                                                 e.stopPropagation();
                                                                 handleEditUser(user);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            className={`p-1 transition ${isDark ? 'text-gray-500 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
@@ -1150,7 +1181,7 @@ const Users = () => {
                                                                     alert('Error clicking delete button: ' + error.message);
                                                                 }
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            className={`p-1 transition ${isDark ? 'text-gray-500 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
@@ -1162,7 +1193,7 @@ const Users = () => {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                                        <td colSpan="7" className={`px-6 py-12 text-center ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                             <i className="fas fa-users text-4xl mb-3 opacity-50"></i>
                                             <p className="text-sm">No users found</p>
                                         </td>
@@ -1176,33 +1207,33 @@ const Users = () => {
 
             {/* Pending Invitations */}
             {invitations.filter(inv => inv.status === 'pending').length > 0 && (
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-900">Pending Invitations</h3>
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 shadow-sm`}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Pending Invitations</h3>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'}`}>
                             {invitations.filter(inv => inv.status === 'pending').length} pending
                         </span>
                     </div>
                     <div className="space-y-2">
                         {invitations.filter(inv => inv.status === 'pending').map(invitation => (
-                            <div key={invitation.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                            <div key={invitation.id} className={`${isDark ? 'bg-gray-800' : 'bg-gray-50'} flex items-center justify-between p-3 rounded-lg`}>
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                                        <i className="fas fa-envelope text-yellow-600 text-xs"></i>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-yellow-900' : 'bg-yellow-100'}`}>
+                                        <i className={`fas fa-envelope text-xs ${isDark ? 'text-yellow-200' : 'text-yellow-600'}`}></i>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-medium text-gray-900">{invitation.email}</p>
-                                        <p className="text-xs text-gray-500">
+                                        <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{invitation.email}</p>
+                                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                             Invited as {roleDefinitions[invitation.role]?.name || invitation.role} • 
                                             {invitation.department && ` ${invitation.department} •`}
                                             Expires {new Date(invitation.expiresAt).toLocaleDateString()}
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex gap-1">
+                                <div className="flex gap-2">
                                     <button
                                         onClick={() => handleResendInvitation(invitation)}
-                                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition"
+                                        className={`px-3 py-1.5 text-xs rounded transition ${isDark ? 'bg-blue-900/30 text-blue-200 hover:bg-blue-900/40' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
                                         title="Resend Invitation"
                                     >
                                         <i className="fas fa-redo mr-1"></i>
@@ -1223,7 +1254,7 @@ const Users = () => {
                                             e.preventDefault();
                                             e.stopPropagation();
                                         }}
-                                        className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition cursor-pointer"
+                                        className={`px-3 py-1.5 text-xs rounded transition cursor-pointer ${isDark ? 'bg-red-900/30 text-red-300 hover:bg-red-900/40' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                         title="Delete Invitation"
                                         type="button"
                                     >

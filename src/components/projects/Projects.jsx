@@ -17,6 +17,36 @@ const getStatusColorClasses = (status) => {
     return statusMap[status] || 'bg-gray-100 text-gray-700';
 };
 
+const formatProjectDate = (dateValue) => {
+    if (!dateValue) return '';
+
+    const rawValue = typeof dateValue === 'string' ? dateValue.trim() : dateValue;
+    if (!rawValue) return '';
+
+    const parsed = new Date(rawValue);
+    if (Number.isNaN(parsed.getTime())) {
+        return typeof dateValue === 'string' ? dateValue : '';
+    }
+
+    const hasTime = typeof dateValue === 'string' && /[T\s]\d{2}:\d{2}/.test(dateValue);
+    const options = hasTime
+        ? { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+        : { year: 'numeric', month: 'short', day: 'numeric' };
+
+    return parsed.toLocaleString(undefined, options);
+};
+
+const formatProjectDateRange = (startDate, dueDate) => {
+    const formattedStart = formatProjectDate(startDate);
+    const formattedEnd = formatProjectDate(dueDate);
+
+    if (formattedStart && formattedEnd) {
+        return `${formattedStart} - ${formattedEnd}`;
+    }
+
+    return formattedStart || formattedEnd || 'No dates';
+};
+
 // Create a fallback context that always exists to ensure consistent hook calls
 // This prevents React error #300 by ensuring useContext is always called with a valid context
 const createFallbackAuthContext = () => {
@@ -72,23 +102,10 @@ const useAuthSafe = () => {
         // Fall through to use defaults
     }
     
-    // Fallback: Try window.useAuth if we didn't get valid data from context
-    // This is safe because we've already called our hook (useContext) above
-    if ((!user && !loading) && window.useAuth && typeof window.useAuth === 'function') {
-        try {
-            const authState = window.useAuth();
-            if (authState && typeof authState === 'object') {
-                user = authState.user || null;
-                logout = authState.logout || logout;
-                loading = authState.loading !== undefined ? authState.loading : false;
-                refreshUser = authState.refreshUser || refreshUser;
-            }
-        } catch (error) {
-            // Ignore errors here since we already tried useContext
-            // This is just a fallback
-        }
-    }
-    
+    // IMPORTANT: Do not call any other hooks conditionally here.
+    // Calling window.useAuth() would add a hook only on some renders,
+    // which triggers React error #300 (hook order mismatch).
+
     // Always return the same structure - ensures consistent return value
     return {
         user,
@@ -96,6 +113,38 @@ const useAuthSafe = () => {
         loading,
         refreshUser
     };
+};
+
+// Create a fallback theme context to keep hook calls consistent
+const createFallbackThemeContext = () => {
+    if (!window._fallbackThemeContext) {
+        window._fallbackThemeContext = React.createContext({
+            theme: 'light',
+            isDark: false,
+            toggleTheme: () => {},
+            toggleSystemPreference: () => {},
+            isFollowingSystem: false,
+            systemPreference: 'light'
+        });
+    }
+    return window._fallbackThemeContext;
+};
+
+// Safe theme hook wrapper - always calls useContext unconditionally
+const useThemeSafe = () => {
+    const themeContext = window.ThemeContext || createFallbackThemeContext();
+    let isDark = false;
+
+    try {
+        const themeState = useContext(themeContext);
+        if (themeState && typeof themeState === 'object') {
+            isDark = !!themeState.isDark;
+        }
+    } catch (error) {
+        // Ignore context errors; fall back to light mode defaults
+    }
+
+    return { isDark };
 };
 
 const Projects = () => {
@@ -106,7 +155,7 @@ const Projects = () => {
     const { logout } = useAuthSafe();
     
     // Get theme
-    const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
+    const { isDark } = useThemeSafe();
     const [projects, setProjects] = useState([]); // Projects are database-only
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
@@ -166,6 +215,9 @@ const Projects = () => {
             if (params.year) {
                 searchParams.set('year', String(params.year));
             }
+            if (params.focusInput !== undefined && params.focusInput !== null) {
+                searchParams.set('focusInput', String(params.focusInput));
+            }
 
             const newHash = `${basePath}?${searchParams.toString()}`;
 
@@ -182,7 +234,8 @@ const Projects = () => {
                 monthIndex: typeof params.monthIndex === 'number' && !Number.isNaN(params.monthIndex) ? params.monthIndex : null,
                 month: params.month || null,
                 field: params.field || null,
-                year: params.year || null
+                year: params.year || null,
+                focusInput: params.focusInput ?? null
             });
         } catch (error) {
             console.error('❌ Projects: Failed to set progress tracker hash:', error);
@@ -204,6 +257,7 @@ const Projects = () => {
             params.delete('month');
             params.delete('field');
             params.delete('year');
+            params.delete('focusInput');
             const cleanQuery = params.toString();
             const normalizedPath = pathPart || '/projects';
             const newHash = `#${normalizedPath}${cleanQuery ? `?${cleanQuery}` : ''}`;
@@ -230,6 +284,7 @@ const Projects = () => {
                 if (params.get('progressTracker')) {
                     const rawMonthIndex = params.get('monthIndex');
                     const rawYear = params.get('year');
+                    const focusInput = params.get('focusInput');
                     const parsedMonthIndex = rawMonthIndex !== null ? Number(rawMonthIndex) : null;
                     const parsedYear = rawYear !== null ? Number(rawYear) : null;
 
@@ -238,7 +293,8 @@ const Projects = () => {
                         monthIndex: parsedMonthIndex !== null && !Number.isNaN(parsedMonthIndex) ? parsedMonthIndex : null,
                         month: params.get('month') || null,
                         field: params.get('field') || null,
-                        year: parsedYear !== null && !Number.isNaN(parsedYear) ? parsedYear : null
+                        year: parsedYear !== null && !Number.isNaN(parsedYear) ? parsedYear : null,
+                        focusInput: focusInput || null
                     });
                     setShowProgressTracker(true);
                 } else {
@@ -275,6 +331,9 @@ const Projects = () => {
         }
         if (options.task !== undefined && options.task !== null) {
             searchParams.set('task', options.task);
+        }
+        if (options.focusInput !== undefined && options.focusInput !== null) {
+            searchParams.set('focusInput', options.focusInput);
         }
         // If task is explicitly null, don't add it (effectively removes it from URL)
         
@@ -358,7 +417,8 @@ const Projects = () => {
                             window.dispatchEvent(new CustomEvent('openTask', {
                                 detail: { 
                                     taskId: options.task,
-                                    tab: options.tab || 'details'
+                                    tab: options.tab || 'details',
+                                    focusInput: options?.focusInput || null
                                 }
                             }));
                         }, 1000); // Increased delay to ensure ProjectDetail is loaded and tasks are available
@@ -366,9 +426,9 @@ const Projects = () => {
                         // Handle tab navigation if specified
                         // ProjectDetail component will handle tab switching
                         setTimeout(() => {
-                            window.dispatchEvent(new CustomEvent('switchProjectTab', {
-                                detail: { tab: options.tab, section: options.section, commentId: options.commentId }
-                            }));
+                        window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                            detail: { tab: options.tab, section: options.section, commentId: options.commentId, focusInput: options?.focusInput || null }
+                        }));
                         }, 100);
                     }
                 } else {
@@ -391,15 +451,16 @@ const Projects = () => {
                                 if (options?.task) {
                                     console.log('📋 Projects: Task specified in openEntityDetail event (API fetch), will open task:', options.task);
                                     // Wait for ProjectDetail to load and tasks to be available, then dispatch openTask event
-                                    setTimeout(() => {
-                                        console.log('📋 Projects: Dispatching openTask event for task:', options.task);
-                                        window.dispatchEvent(new CustomEvent('openTask', {
-                                            detail: { 
-                                                taskId: options.task,
-                                                tab: options.tab || 'details'
-                                            }
-                                        }));
-                                    }, 1000); // Increased delay to ensure ProjectDetail is loaded and tasks are available
+                                setTimeout(() => {
+                                    console.log('📋 Projects: Dispatching openTask event for task:', options.task);
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { 
+                                            taskId: options.task,
+                                            tab: options.tab || 'details',
+                                            focusInput: options?.focusInput || null
+                                        }
+                                    }));
+                                }, 1000); // Increased delay to ensure ProjectDetail is loaded and tasks are available
                                 } else if (options?.tab) {
                                     // Handle tab navigation if specified
                                     setTimeout(() => {
@@ -520,6 +581,7 @@ const Projects = () => {
                     // Clear sessionStorage to prevent auto-opening a project
                     sessionStorage.removeItem('openProjectId');
                     sessionStorage.removeItem('openTaskId');
+                    sessionStorage.removeItem('openTaskFocusInput');
                     if (selectedProject || viewingProject) {
                         setSelectedProject(null);
                         setViewingProject(null);
@@ -528,6 +590,7 @@ const Projects = () => {
                     // URL contains a project ID - open that project
                     const projectId = route.segments[0];
                     const taskId = route.search?.get('task');
+                    const focusInput = route.search?.get('focusInput');
                     
                     // CRITICAL: Verify actual URL matches route before opening project
                     // This prevents opening project when URL was just changed to /projects
@@ -567,7 +630,8 @@ const Projects = () => {
                                     window.dispatchEvent(new CustomEvent('openTask', {
                                         detail: { 
                                             taskId: taskId,
-                                            tab: tab || 'details'
+                                            tab: tab || 'details',
+                                            focusInput: focusInput || null
                                         }
                                     }));
                                     
@@ -584,17 +648,17 @@ const Projects = () => {
                                 setTimeout(() => {
                                     if (tab) {
                                         window.dispatchEvent(new CustomEvent('switchProjectTab', {
-                                            detail: { tab, section, commentId }
+                                            detail: { tab, section, commentId, focusInput: focusInput || null }
                                         }));
                                     }
                                     if (section) {
                                         window.dispatchEvent(new CustomEvent('switchProjectSection', {
-                                            detail: { section, commentId }
+                                            detail: { section, commentId, focusInput: focusInput || null }
                                         }));
                                     }
                                     if (commentId) {
                                         window.dispatchEvent(new CustomEvent('scrollToComment', {
-                                            detail: { commentId }
+                                            detail: { commentId, focusInput: focusInput || null }
                                         }));
                                     }
                                 }, 100);
@@ -620,7 +684,8 @@ const Projects = () => {
                                     window.dispatchEvent(new CustomEvent('openTask', {
                                         detail: { 
                                             taskId: taskId,
-                                            tab: 'details'
+                                            tab: 'details',
+                                            focusInput: focusInput || null
                                         }
                                     }));
                                     
@@ -659,10 +724,11 @@ const Projects = () => {
                                             const dispatchOpenTask = (attempt = 1) => {
                                                 console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
                                                 window.dispatchEvent(new CustomEvent('openTask', {
-                                                    detail: { 
-                                                        taskId: taskId,
-                                                        tab: 'details'
-                                                    }
+                                            detail: { 
+                                                taskId: taskId,
+                                                tab: 'details',
+                                                focusInput: focusInput || null
+                                            }
                                                 }));
                                                 
                                                 // Retry up to 5 times with increasing delays
@@ -808,6 +874,7 @@ const Projects = () => {
             // Clear sessionStorage to prevent auto-opening a project
             sessionStorage.removeItem('openProjectId');
             sessionStorage.removeItem('openTaskId');
+            sessionStorage.removeItem('openTaskFocusInput');
             // Clear the project detail view when explicitly navigating to projects list
             if (viewingProject) {
                 setViewingProject(null);
@@ -1095,6 +1162,7 @@ const Projects = () => {
                     
                     const projectIdToOpen = sessionStorage.getItem('openProjectId');
                     const taskIdToOpen = sessionStorage.getItem('openTaskId');
+                    const taskFocusInputToOpen = sessionStorage.getItem('openTaskFocusInput');
                     if (projectIdToOpen && shouldOpenFromStorage) {
                         console.log('🔍 Projects: Checking sessionStorage for project to open:', projectIdToOpen);
                         let project = apiProjects.find(p => String(p.id) === String(projectIdToOpen));
@@ -1127,7 +1195,7 @@ const Projects = () => {
                                             const dispatchOpenTask = (attempt = 1) => {
                                                 console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskIdToOpen);
                                                 window.dispatchEvent(new CustomEvent('openTask', {
-                                                    detail: { taskId: taskIdToOpen, tab: 'details' }
+                                                    detail: { taskId: taskIdToOpen, tab: 'details', focusInput: taskFocusInputToOpen || null }
                                                 }));
                                                 
                                                 // Retry up to 5 times with increasing delays
@@ -1160,6 +1228,7 @@ const Projects = () => {
                             if (taskIdToOpen) {
                                 console.log('📋 Projects: Task ID found in sessionStorage, will open task:', taskIdToOpen);
                                 sessionStorage.removeItem('openTaskId');
+                                sessionStorage.removeItem('openTaskFocusInput');
                                 
                                 // Use retry logic to ensure ProjectDetail catches the event
                                 const dispatchOpenTask = (attempt = 1) => {
@@ -1167,7 +1236,8 @@ const Projects = () => {
                                     window.dispatchEvent(new CustomEvent('openTask', {
                                         detail: { 
                                             taskId: taskIdToOpen,
-                                            tab: 'details'
+                                            tab: 'details',
+                                            focusInput: taskFocusInputToOpen || null
                                         }
                                     }));
                                     
@@ -1184,12 +1254,14 @@ const Projects = () => {
                             console.warn('⚠️ Projects: Project not found in loaded projects and API fetch failed:', projectIdToOpen);
                             sessionStorage.removeItem('openProjectId');
                             sessionStorage.removeItem('openTaskId');
+                            sessionStorage.removeItem('openTaskFocusInput');
                         }
                     } else if (projectIdToOpen && !shouldOpenFromStorage) {
                         // We're on the projects list but sessionStorage has a project ID - clear it
                         console.log('🧹 Projects: Clearing sessionStorage project ID - navigating to projects list');
                         sessionStorage.removeItem('openProjectId');
                         sessionStorage.removeItem('openTaskId');
+                        sessionStorage.removeItem('openTaskFocusInput');
                     }
                     
                 }
@@ -1247,6 +1319,7 @@ const Projects = () => {
         
         let projectId = null;
         let taskId = null;
+        let focusInput = null;
         
         // PRIORITY: Check hash first (for hash-based routing like #/projects/123?task=456 or #/projects/123?docSectionId=...)
         // This is critical for email links which use hash-based routing
@@ -1392,6 +1465,10 @@ const Projects = () => {
                 if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
                     projectId = currentRoute.segments[0];
                     taskId = currentRoute.search?.get('task');
+                    const focusInput = currentRoute.search?.get('focusInput');
+                    if (taskId && focusInput) {
+                        sessionStorage.setItem('openTaskFocusInput', focusInput);
+                    }
                 }
             } else {
                 // Use sessionStorage if RouteState not available
@@ -1417,6 +1494,8 @@ const Projects = () => {
                 sessionStorage.setItem('openProjectId', projectId);
                 if (taskId) {
                     sessionStorage.setItem('openTaskId', taskId);
+                } else {
+                    sessionStorage.removeItem('openTaskFocusInput');
                 }
                 
                 // Try to fetch from API immediately (don't wait for projects to load)
@@ -1754,13 +1833,16 @@ const Projects = () => {
         if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
             projectId = currentRoute.segments[0];
             taskId = currentRoute.search?.get('task');
+            focusInput = currentRoute.search?.get('focusInput');
         } else {
             // Check sessionStorage as fallback
             const storedProjectId = sessionStorage.getItem('openProjectId');
             const storedTaskId = sessionStorage.getItem('openTaskId');
+            const storedFocusInput = sessionStorage.getItem('openTaskFocusInput');
             if (storedProjectId) {
                 projectId = storedProjectId;
                 taskId = storedTaskId;
+                focusInput = storedFocusInput;
                 console.log('📦 Projects: Using project ID from sessionStorage:', projectId);
             }
         }
@@ -1777,7 +1859,7 @@ const Projects = () => {
                 console.log('📋 Projects: Already viewing project, dispatching openTask for task:', taskId);
                 setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('openTask', {
-                        detail: { taskId: taskId, tab: 'details' }
+                        detail: { taskId: taskId, tab: 'details', focusInput: focusInput || null }
                     }));
                 }, 500);
             }
@@ -1791,6 +1873,9 @@ const Projects = () => {
                 sessionStorage.setItem('openProjectId', projectId);
                 if (taskId) {
                     sessionStorage.setItem('openTaskId', taskId);
+                    if (focusInput) {
+                        sessionStorage.setItem('openTaskFocusInput', focusInput);
+                    }
                 }
             }
             return;
@@ -1825,7 +1910,7 @@ const Projects = () => {
                         if (taskId) {
                             setTimeout(() => {
                                 window.dispatchEvent(new CustomEvent('openTask', {
-                                    detail: { taskId: taskId, tab: 'details' }
+                                    detail: { taskId: taskId, tab: 'details', focusInput: focusInput || null }
                                 }));
                             }, 2000);
                         }
@@ -1865,12 +1950,13 @@ const Projects = () => {
                 console.log('📋 Projects: Task ID found in route, will open task:', taskId);
                 setTimeout(() => {
                     console.log('📋 Projects: Dispatching openTask event for task:', taskId);
-                    window.dispatchEvent(new CustomEvent('openTask', {
-                        detail: { 
-                            taskId: taskId,
-                            tab: 'details'
-                        }
-                    }));
+                                                window.dispatchEvent(new CustomEvent('openTask', {
+                                                    detail: { 
+                                                        taskId: taskId,
+                                                        tab: 'details',
+                                                        focusInput: focusInput || null
+                                                    }
+                                                }));
                 }, 500); // Reduced delay since we're not waiting for refresh
             }
             
@@ -2822,8 +2908,24 @@ const Projects = () => {
 
             if (selectedProject) {
                 // Editing existing project
-                const updatedProject = { ...selectedProject, ...projectData };
-                const apiResponse = await window.DatabaseAPI.updateProject(selectedProject.id, updatedProject);
+                const hasClientField = Object.prototype.hasOwnProperty.call(projectData, 'client');
+                const normalizedClient = hasClientField
+                    ? projectData.client
+                    : (selectedProject.clientName ?? selectedProject.client ?? '');
+
+                const updatePayload = {
+                    name: projectData.name,
+                    description: projectData.description,
+                    type: projectData.type,
+                    status: projectData.status,
+                    startDate: projectData.startDate,
+                    dueDate: projectData.dueDate,
+                    assignedTo: projectData.assignedTo,
+                    client: normalizedClient,
+                    clientName: normalizedClient
+                };
+
+                const apiResponse = await window.DatabaseAPI.updateProject(selectedProject.id, updatePayload);
                 
                 // Extract the project from the response structure { data: { project: {...} } }
                 const updatedProjectFromAPI = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
@@ -2841,13 +2943,13 @@ const Projects = () => {
                 } else {
                     console.error('❌ API did not return updated project, using local update');
                     const updatedProjects = projects.map(p => 
-                        p.id === selectedProject.id ? updatedProject : p
+                        p.id === selectedProject.id ? { ...selectedProject, ...updatePayload } : p
                     );
                     setProjects(updatedProjects);
                 }
                 
                 // Update client's projectIds if client changed
-                if (projectData.client && projectData.client !== selectedProject.client) {
+                if (hasClientField && projectData.client !== selectedProject.client) {
                     updateClientProjectIds(selectedProject.client, projectData.client, selectedProject.id);
                 }
             } else {
@@ -2958,6 +3060,31 @@ const Projects = () => {
         // Show confirmation modal instead of browser confirm
         setDeleteConfirmation({ show: true, projectId });
     }, [projects, viewingProject, logout, updateClientProjectIds]);
+
+    const handleProjectUpdateFromDetail = useCallback((updatedProject) => {
+        if (!updatedProject) return;
+
+        if (typeof window.updateViewingProject === 'function') {
+            window.updateViewingProject(updatedProject);
+            return;
+        }
+
+        const normalized = {
+            ...updatedProject,
+            client: updatedProject.clientName || updatedProject.client || ''
+        };
+
+        setViewingProject(prev => {
+            if (!prev || String(prev.id) !== String(normalized.id)) {
+                return normalized;
+            }
+            return { ...prev, ...normalized };
+        });
+
+        setProjects(prevProjects => prevProjects.map(p => (
+            String(p.id) === String(normalized.id) ? { ...p, ...normalized } : p
+        )));
+    }, []);
     
     // Memoize the onBack handler to prevent unnecessary re-renders
     // Must be at top level (not inside conditional blocks) to follow Rules of Hooks
@@ -2986,6 +3113,7 @@ const Projects = () => {
         // Clear sessionStorage to prevent auto-opening
         sessionStorage.removeItem('openProjectId');
         sessionStorage.removeItem('openTaskId');
+        sessionStorage.removeItem('openTaskFocusInput');
         
         // Update RouteState (this will trigger route change event, but we've already set flags)
         if (window.RouteState) {
@@ -3227,6 +3355,7 @@ const Projects = () => {
                         ? trackerFocus.year
                         : null,
                 focusMonthName: trackerFocus?.month || null,
+                focusInput: trackerFocus?.focusInput ?? null,
                 onFocusHandled: () => setTrackerFocus(null)
             };
             
@@ -3642,6 +3771,7 @@ const Projects = () => {
                     project={viewingProject} 
                     onBack={handleBackToProjects}
                     onDelete={handleDeleteProject}
+                    onProjectUpdate={handleProjectUpdateFromDetail}
                 />;
             } catch (error) {
                 console.error('Error rendering ProjectDetail:', error);
@@ -3993,7 +4123,7 @@ const Projects = () => {
                                         </div>
                                         <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             <i className={`fas fa-calendar mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
-                                            {project.startDate} - {project.dueDate}
+                                            {formatProjectDateRange(project.startDate, project.dueDate)}
                                         </div>
                                         <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             <i className={`fas fa-user mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
@@ -4045,10 +4175,7 @@ const Projects = () => {
                                                 </td>
                                                 <td className="px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                        {project.startDate && project.dueDate 
-                                                            ? `${project.startDate} - ${project.dueDate}`
-                                                            : project.dueDate || project.startDate || 'No dates'
-                                                        }
+                                                        {formatProjectDateRange(project.startDate, project.dueDate)}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-3 whitespace-nowrap">

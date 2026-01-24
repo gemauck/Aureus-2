@@ -877,19 +877,29 @@ async function handler(req, res) {
         return badRequest(res, `Invalid project type. Allowed types are: ${allowedTypes.join(', ')}`)
       }
       
-      // Find or create client by name if clientName is provided
+      // Find or create client by name if client info is provided
+      const hasClientField = Object.prototype.hasOwnProperty.call(body, 'client');
+      const hasClientNameField = Object.prototype.hasOwnProperty.call(body, 'clientName');
+      const hasClientIdField = Object.prototype.hasOwnProperty.call(body, 'clientId');
+      const hasClientInput = hasClientField || hasClientNameField;
+      let normalizedClientName = hasClientField ? body.client : body.clientName;
+
+      if (typeof normalizedClientName === 'string') {
+        normalizedClientName = normalizedClientName.trim();
+      }
+
       let clientId = null;
-      if (body.clientName) {
+      if (hasClientInput && normalizedClientName) {
         try {
           let client = await prisma.client.findFirst({ 
-            where: { name: body.clientName } 
+            where: { name: normalizedClientName } 
           });
           
           // If client doesn't exist, create it
           if (!client) {
             client = await prisma.client.create({
               data: {
-                name: body.clientName,
+                name: normalizedClientName,
                 type: 'client',
                 industry: 'Other',
                 status: 'active',
@@ -910,8 +920,8 @@ async function handler(req, res) {
       const updateData = {
         name: body.name,
         description: body.description,
-        clientName: body.clientName || body.client,
-        clientId: clientId || body.clientId,
+        clientName: hasClientInput ? (normalizedClientName || '') : undefined,
+        clientId: hasClientInput ? clientId : (hasClientIdField ? body.clientId : undefined),
         status: body.status,
         startDate: normalizedStartDate ? new Date(normalizedStartDate) : undefined,
         dueDate: normalizedDueDate ? new Date(normalizedDueDate) : undefined,

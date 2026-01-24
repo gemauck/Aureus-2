@@ -372,6 +372,13 @@ function initializeProjectDetail() {
             }, [activeSection, hasDocumentCollectionProcess, trackerReady, loadTrackerComponent]);
 
 
+            // Only render MonthlyDocumentCollectionTracker when activeSection is documentCollection
+            // This prevents it from being rendered when not needed, but DocumentCollectionProcessSection
+            // stays mounted to prevent remounting issues
+            if (activeSection !== 'documentCollection') {
+                return null;
+            }
+
             // Check component availability directly from window (not from closure)
             // This ensures we always get the current state, even after remount
             const currentTracker = window.MonthlyDocumentCollectionTracker;
@@ -398,13 +405,6 @@ function initializeProjectDetail() {
                         </div>
                     </div>
                 );
-            }
-
-            // Only render MonthlyDocumentCollectionTracker when activeSection is documentCollection
-            // This prevents it from being rendered when not needed, but DocumentCollectionProcessSection
-            // stays mounted to prevent remounting issues
-            if (activeSection !== 'documentCollection') {
-                return null;
             }
             
             // Use React.createElement to render the component dynamically
@@ -631,6 +631,7 @@ function initializeProjectDetail() {
             const WeeklyFMSReviewTracker = window.WeeklyFMSReviewTracker;
             const [trackerReady, setTrackerReady] = useStateSection(() => !!window.WeeklyFMSReviewTracker);
             const [loadAttempts, setLoadAttempts] = useStateSection(0);
+            const [trackerVersion, setTrackerVersion] = useStateSection(0);
             const maxAttempts = 50; // 5 seconds (50 * 100ms)
 
             useEffectSection(() => {
@@ -675,6 +676,23 @@ function initializeProjectDetail() {
                     window.removeEventListener('viteProjectsReady', handleViteReady);
                 };
             }, [trackerReady]);
+
+            useEffectSection(() => {
+                const handleTrackerUpdated = () => {
+                    if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
+                        setTrackerReady(true);
+                        setTrackerVersion(prev => prev + 1);
+                    }
+                };
+
+                window.addEventListener('weeklyFMSReviewTrackerUpdated', handleTrackerUpdated);
+                window.addEventListener('viteProjectsReady', handleTrackerUpdated);
+
+                return () => {
+                    window.removeEventListener('weeklyFMSReviewTrackerUpdated', handleTrackerUpdated);
+                    window.removeEventListener('viteProjectsReady', handleTrackerUpdated);
+                };
+            }, []);
 
 
             if (!trackerReady || !window.WeeklyFMSReviewTracker) {
@@ -732,7 +750,7 @@ function initializeProjectDetail() {
             
             return (
                 <LatestTracker
-                    key={`tracker-${project?.id || 'default'}`}
+                    key={`tracker-${project?.id || 'default'}-${trackerVersion}`}
                     project={project}
                     onBack={handleBackToOverview}
                 />
@@ -1171,7 +1189,8 @@ function initializeProjectDetail() {
             window.updateProjectUrl({
                 tab: section,
                 section: options.section,
-                commentId: options.commentId
+                commentId: options.commentId,
+                focusInput: options.focusInput
             });
             }
         } catch (error) {
@@ -1189,7 +1208,15 @@ function initializeProjectDetail() {
             return;
         }
         
-        const { task: taskId = null, comment: commentId = null, clearTask = false, clearComment = false, replace = false } = options;
+        const { 
+            task: taskId = null, 
+            comment: commentId = null, 
+            focusInput = null,
+            clearTask = false, 
+            clearComment = false, 
+            clearFocusInput = false,
+            replace = false 
+        } = options;
         
         // Build search params
         const searchParams = new URLSearchParams();
@@ -1202,6 +1229,10 @@ function initializeProjectDetail() {
         // Update comment parameter
         if (commentId && !clearComment) {
             searchParams.set('commentId', String(commentId));
+        }
+
+        if (focusInput && !clearFocusInput) {
+            searchParams.set('focusInput', String(focusInput));
         }
         
         const searchString = searchParams.toString();
@@ -1227,6 +1258,11 @@ function initializeProjectDetail() {
                     urlOptions.commentId = commentId;
                 } else if (clearComment) {
                     urlOptions.commentId = null;
+                }
+                if (focusInput && !clearFocusInput) {
+                    urlOptions.focusInput = focusInput;
+                } else if (clearFocusInput) {
+                    urlOptions.focusInput = null;
                 }
                 // window.updateProjectUrl only takes options, not projectId (it uses viewingProject.id internally)
                 window.updateProjectUrl(urlOptions);
@@ -1571,6 +1607,16 @@ function initializeProjectDetail() {
             
             const taskId = event.detail.taskId;
             const tab = event.detail.tab || 'details';
+            const searchParams = new URLSearchParams(window.location.search || '');
+            const hashParams = window.location.hash?.includes('?')
+                ? new URLSearchParams(window.location.hash.split('?')[1])
+                : null;
+            const focusInput =
+                event.detail.focusInput ||
+                searchParams.get('focusInput') ||
+                (hashParams && hashParams.get('focusInput')) ||
+                null;
+            const normalizedTab = ['details', 'comments', 'checklist'].includes(tab) ? tab : null;
             
             try {
                 // Find the task in the tasks array (including subtasks)
@@ -1620,6 +1666,13 @@ function initializeProjectDetail() {
                             return;
                         }
                         
+                        if (focusInput || normalizedTab) {
+                            setTaskFocusInput({
+                                taskId: foundTask.id,
+                                focusInput: focusInput || null,
+                                tab: normalizedTab
+                            });
+                        }
                         setViewingTask(foundTask);
                         setViewingTaskParent(foundParent);
                         setShowTaskDetailModal(true);
@@ -1639,6 +1692,13 @@ function initializeProjectDetail() {
                             return;
                         }
                         
+                        if (focusInput || normalizedTab) {
+                            setTaskFocusInput({
+                                taskId: foundTask.id,
+                                focusInput: focusInput || null,
+                                tab: normalizedTab
+                            });
+                        }
                         setViewingTask(foundTask);
                         setViewingTaskParent(foundParent);
                         setShowTaskDetailModal(true);
@@ -1792,9 +1852,9 @@ function initializeProjectDetail() {
     useEffect(() => {
         const handleSwitchTab = (event) => {
             if (!event.detail) return;
-            const { tab, section, commentId } = event.detail;
+            const { tab, section, commentId, focusInput } = event.detail;
             if (tab) {
-                switchSection(tab, { section, commentId });
+                switchSection(tab, { section, commentId, focusInput });
             }
         };
         
@@ -1806,9 +1866,9 @@ function initializeProjectDetail() {
     useEffect(() => {
         const handleSwitchSection = (event) => {
             if (!event.detail) return;
-            const { section, commentId } = event.detail;
+            const { section, commentId, focusInput } = event.detail;
             if (section) {
-                switchSection(activeSection, { section, commentId });
+                switchSection(activeSection, { section, commentId, focusInput });
             }
         };
         
@@ -1820,12 +1880,21 @@ function initializeProjectDetail() {
     useEffect(() => {
         const handleScrollToComment = (event) => {
             if (!event.detail || !event.detail.commentId) return;
-            const { commentId, taskId } = event.detail;
+            const { commentId, taskId, focusInput: eventFocusInput } = event.detail;
+            const searchParams = new URLSearchParams(window.location.search || '');
+            const hashParams = window.location.hash?.includes('?')
+                ? new URLSearchParams(window.location.hash.split('?')[1])
+                : null;
+            const focusInput = eventFocusInput ||
+                searchParams.get('focusInput') ||
+                (hashParams && hashParams.get('focusInput')) ||
+                null;
             
             // Update URL with commentId (and taskId if provided)
             updateUrl({ 
                 task: taskId || undefined,
-                comment: commentId 
+                comment: commentId,
+                focusInput: focusInput || undefined
             });
             
             // Try to scroll to the comment element
@@ -1972,6 +2041,59 @@ function initializeProjectDetail() {
         hasMonthlyFMSReviewProcessChangedRef.current = false;
     }, [project.id]); // Re-sync whenever we switch to a different project
 
+    // Track if document collection process exists
+    // Normalize the value from project prop (handle boolean, string, number, undefined)
+    const normalizeHasDocumentCollectionProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    
+    const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(() => 
+        normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
+    );
+    const [forceDocumentCollectionDeepLink, setForceDocumentCollectionDeepLink] = useState(false);
+    // Track if hasDocumentCollectionProcess was explicitly changed by user
+    const hasDocumentCollectionProcessChangedRef = useRef(false);
+    
+    // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
+    // But only if it hasn't been explicitly changed by the user recently
+    useEffect(() => {
+        const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
+        
+        // Only sync if:
+        // 1. The value actually changed, AND
+        // 2. It wasn't explicitly changed by the user (to prevent overwriting user changes)
+        if (normalizedValue !== hasDocumentCollectionProcess && !hasDocumentCollectionProcessChangedRef.current) {
+            setHasDocumentCollectionProcess(normalizedValue);
+        } else if (hasDocumentCollectionProcessChangedRef.current) {
+        }
+    }, [project.hasDocumentCollectionProcess, project.id, hasDocumentCollectionProcess]);
+    
+    // Also sync on mount to ensure we have the latest value
+    useEffect(() => {
+        const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
+        setHasDocumentCollectionProcess(normalizedValue);
+    }, [project.id]); // Re-sync whenever we switch to a different project
+    
+    // Preload MonthlyDocumentCollectionTracker when project has document collection process enabled
+    useEffect(() => {
+        if (!hasDocumentCollectionProcess && !forceDocumentCollectionDeepLink) return;
+        
+        // If component is already available, no need to preload
+        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+            return;
+        }
+
+        // Preload the component immediately
+        if (window.loadComponent && typeof window.loadComponent === 'function') {
+            window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
+                .catch(() => {
+                    // Silently fail - component will load when needed
+                });
+        }
+    }, [hasDocumentCollectionProcess, forceDocumentCollectionDeepLink, project.id]);
+
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
     // is active so the MonthlyDocumentCollectionTracker can show the target comment.
@@ -2016,9 +2138,15 @@ function initializeProjectDetail() {
                                          deepDocumentId !== 'undefined' && 
                                          deepDocumentId.trim() !== '';
                 
+                const hasDocCollectionDeepLink = !!(deepSectionId && isValidDocumentId && deepMonth) || !!deepCommentId;
+                if (hasDocCollectionDeepLink) {
+                    setForceDocumentCollectionDeepLink(true);
+                } else if (forceDocumentCollectionDeepLink) {
+                    setForceDocumentCollectionDeepLink(false);
+                }
+
                 // If we have full params with valid document ID, switch to document collection tab
                 if (deepSectionId && isValidDocumentId && deepMonth) {
-                    // Only switch if not already on document collection tab
                     if (activeSection !== 'documentCollection') {
                         switchSection('documentCollection');
                     }
@@ -2037,14 +2165,15 @@ function initializeProjectDetail() {
                                                    project?.hasDocumentCollectionProcess === 1 ||
                                                    (typeof project?.hasDocumentCollectionProcess === 'string' && 
                                                     project?.hasDocumentCollectionProcess?.toLowerCase() === 'true');
+                    const canShowDocCollection = projectHasDocCollection || hasDocCollectionDeepLink;
                     
                     console.log('📧 ProjectDetail: projectHasDocCollection:', projectHasDocCollection);
                     
-                    if (projectHasDocCollection && activeSection !== 'documentCollection') {
+                    if (canShowDocCollection && activeSection !== 'documentCollection') {
                         // Switch to document collection tab - the tracker will search for the comment
                         console.log('📧 ProjectDetail: Switching to document collection tab to search for comment:', deepCommentId);
                         switchSection('documentCollection');
-                    } else if (projectHasDocCollection && activeSection === 'documentCollection') {
+                    } else if (canShowDocCollection && activeSection === 'documentCollection') {
                         console.log('📧 ProjectDetail: Already on document collection tab, comment search should run in tracker');
                     } else {
                         console.log('⚠️ ProjectDetail: Cannot switch - projectHasDocCollection:', projectHasDocCollection, 'activeSection:', activeSection);
@@ -2124,7 +2253,7 @@ function initializeProjectDetail() {
         
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess]);
+    }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess, forceDocumentCollectionDeepLink]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal
@@ -2193,15 +2322,27 @@ function initializeProjectDetail() {
                     return;
                 }
                 
-                // Also check for commentId in URL
+                // Also check for commentId/focusInput/tab in URL
                 let commentId = null;
+                let focusInput = null;
+                let taskTab = null;
                 if (params) {
                     commentId = params.get('commentId');
+                    focusInput = params.get('focusInput');
+                    const tabParam = params.get('tab');
+                    if (tabParam && ['details', 'comments', 'checklist'].includes(tabParam)) {
+                        taskTab = tabParam;
+                    }
                 } else {
                     const search = window.location.search || '';
                     if (search) {
                         const searchParams = new URLSearchParams(search);
                         commentId = searchParams.get('commentId');
+                        focusInput = searchParams.get('focusInput');
+                        const tabParam = searchParams.get('tab');
+                        if (tabParam && ['details', 'comments', 'checklist'].includes(tabParam)) {
+                            taskTab = tabParam;
+                        }
                     }
                 }
                 
@@ -2263,6 +2404,13 @@ function initializeProjectDetail() {
                         
                         // OPTIMIZED: Open task immediately if modal is ready, otherwise poll quickly
                         if (typeof window.TaskDetailModal === 'function') {
+                            if (focusInput || taskTab) {
+                                setTaskFocusInput({
+                                    taskId: foundTask.id,
+                                    focusInput: focusInput || null,
+                                    tab: taskTab || null
+                                });
+                            }
                             setViewingTask(foundTask);
                             setViewingTaskParent(foundParent);
                             setShowTaskDetailModal(true);
@@ -2300,6 +2448,13 @@ function initializeProjectDetail() {
                                         return;
                                     }
                                     
+                                    if (focusInput || taskTab) {
+                                        setTaskFocusInput({
+                                            taskId: foundTask.id,
+                                            focusInput: focusInput || null,
+                                            tab: taskTab || null
+                                        });
+                                    }
                                     setViewingTask(foundTask);
                                     setViewingTaskParent(foundParent);
                                     setShowTaskDetailModal(true);
@@ -2347,6 +2502,13 @@ function initializeProjectDetail() {
                                         return;
                                     }
                                     
+                                    if (focusInput || taskTab) {
+                                        setTaskFocusInput({
+                                            taskId: task.id,
+                                            focusInput: focusInput || null,
+                                            tab: taskTab || null
+                                        });
+                                    }
                                     setViewingTask(task);
                                     setViewingTaskParent(null);
                                     setShowTaskDetailModal(true);
@@ -2402,56 +2564,6 @@ function initializeProjectDetail() {
         };
     }, [project?.id, tasks]);
     
-    // Track if document collection process exists
-    // Normalize the value from project prop (handle boolean, string, number, undefined)
-    const normalizeHasDocumentCollectionProcess = (value) => {
-        if (value === true || value === 'true' || value === 1) return true;
-        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-        return false;
-    };
-    
-    const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(() => 
-        normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
-    );
-    
-    // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
-    // But only if it hasn't been explicitly changed by the user recently
-    useEffect(() => {
-        const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
-        
-        // Only sync if:
-        // 1. The value actually changed, AND
-        // 2. It wasn't explicitly changed by the user (to prevent overwriting user changes)
-        if (normalizedValue !== hasDocumentCollectionProcess && !hasDocumentCollectionProcessChangedRef.current) {
-            setHasDocumentCollectionProcess(normalizedValue);
-        } else if (hasDocumentCollectionProcessChangedRef.current) {
-        }
-    }, [project.hasDocumentCollectionProcess, project.id]);
-    
-    // Also sync on mount to ensure we have the latest value
-    useEffect(() => {
-        const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
-        setHasDocumentCollectionProcess(normalizedValue);
-    }, [project.id]); // Re-sync whenever we switch to a different project
-
-    // Preload MonthlyDocumentCollectionTracker when project has document collection process enabled
-    useEffect(() => {
-        if (!hasDocumentCollectionProcess) return;
-        
-        // If component is already available, no need to preload
-        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-            return;
-        }
-
-        // Preload the component immediately
-        if (window.loadComponent && typeof window.loadComponent === 'function') {
-            window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
-                .catch(() => {
-                    // Silently fail - component will load when needed
-                });
-        }
-    }, [hasDocumentCollectionProcess, project.id]);
-    
     // Ref to prevent duplicate saves when manually adding document collection process
     const skipNextSaveRef = useRef(false);
     const saveTimeoutRef = useRef(null);
@@ -2465,6 +2577,7 @@ function initializeProjectDetail() {
     const [showListModal, setShowListModal] = useState(false);
     const [showProjectModal, setShowProjectModal] = useState(false);
     const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
+    const [taskFocusInput, setTaskFocusInput] = useState(null); // { taskId, focusInput, tab }
     const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [editingList, setEditingList] = useState(null);
@@ -2816,9 +2929,6 @@ function initializeProjectDetail() {
         }
     }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, hasWeeklyFMSReviewProcess]);
     
-    // Track if hasDocumentCollectionProcess was explicitly changed by user
-    const hasDocumentCollectionProcessChangedRef = useRef(false);
-    
     // Save back to project whenever they change
     // NOTE: tasks is NOT in dependencies - tasks are managed via Task API, not project JSON
     useEffect(() => {
@@ -3003,6 +3113,25 @@ function initializeProjectDetail() {
         }
     };
 
+    const formatProjectDate = (dateValue) => {
+        if (!dateValue) return '';
+
+        const rawValue = typeof dateValue === 'string' ? dateValue.trim() : dateValue;
+        if (!rawValue) return '';
+
+        const parsed = new Date(rawValue);
+        if (Number.isNaN(parsed.getTime())) {
+            return typeof dateValue === 'string' ? dateValue : '';
+        }
+
+        const hasTime = typeof dateValue === 'string' && /[T\s]\d{2}:\d{2}/.test(dateValue);
+        const options = hasTime
+            ? { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+            : { year: 'numeric', month: 'short', day: 'numeric' };
+
+        return parsed.toLocaleString(undefined, options);
+    };
+
     // Overview Section
     const OverviewSection = () => {
         // CRITICAL: Ensure tasks is always an array
@@ -3050,11 +3179,11 @@ function initializeProjectDetail() {
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-0.5">Start Date</label>
-                            <p className="text-sm text-gray-900">{project.startDate || 'Not set'}</p>
+                            <p className="text-sm text-gray-900">{formatProjectDate(project.startDate) || 'Not set'}</p>
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-0.5">Due Date</label>
-                            <p className="text-sm text-gray-900">{project.dueDate || 'Not set'}</p>
+                            <p className="text-sm text-gray-900">{formatProjectDate(project.dueDate) || 'Not set'}</p>
                         </div>
                         {project.description && (
                             <div className="md:col-span-2">
@@ -3390,7 +3519,9 @@ function initializeProjectDetail() {
         const projectLink = project ? `#/projects/${project.id}` : '#/projects';
         const finalTaskId = updatedTargetTask.id || taskId;
         // Build task-specific link with query parameter for direct navigation to task
-        const taskLink = finalTaskId ? `${projectLink}?task=${finalTaskId}` : projectLink;
+        const taskLink = finalTaskId
+            ? `${projectLink}?task=${encodeURIComponent(finalTaskId)}&focusInput=comment`
+            : projectLink;
         const taskTitle = updatedTargetTask.title || originalTask.title || 'Task';
         const projectName = project?.name || 'Project';
 
@@ -4093,6 +4224,7 @@ function initializeProjectDetail() {
         isClosingRef.current = false;
         // Clear the closed task ID ref since user is explicitly opening a (possibly different) task
         closedTaskIdRef.current = null;
+        setTaskFocusInput(null);
         
         setViewingTask(task);
         setViewingTaskParent(parentTask);
@@ -4161,6 +4293,7 @@ function initializeProjectDetail() {
         
         // Mark as closing
         isClosingRef.current = true;
+        setTaskFocusInput(null);
         
         // CRITICAL: Set flag FIRST before any state changes or URL updates
         // This prevents any handlers from reopening the modal
@@ -6696,11 +6829,11 @@ function initializeProjectDetail() {
             {/* Always render DocumentCollectionProcessSection when hasDocumentCollectionProcess is true */}
             {/* This prevents remounting when switching between sections */}
             {/* Use a stable key based on project ID to prevent remounts */}
-            {hasDocumentCollectionProcess && (
+            {(hasDocumentCollectionProcess || forceDocumentCollectionDeepLink) && (
                 <DocumentCollectionProcessSection
                     key={`doc-collection-${project?.id || 'default'}`}
                     project={project}
-                    hasDocumentCollectionProcess={hasDocumentCollectionProcess}
+                    hasDocumentCollectionProcess={hasDocumentCollectionProcess || forceDocumentCollectionDeepLink}
                     activeSection={activeSection}
                     onBack={handleBackToOverview}
                 />
@@ -6794,10 +6927,15 @@ function initializeProjectDetail() {
                     project={project}
                     onSave={async (projectData) => {
                         try {
+                            const hasClientField = Object.prototype.hasOwnProperty.call(projectData, 'client');
+                            const normalizedClient = hasClientField
+                                ? projectData.client
+                                : (project.clientName ?? project.client ?? '');
+
                             const payload = {
                                 ...projectData,
-                                clientName: projectData.client || project.clientName || project.client || '',
-                                client: projectData.client || project.client || ''
+                                clientName: normalizedClient,
+                                client: normalizedClient
                             };
 
                             const projectApi = window.DatabaseAPI?.updateProject
@@ -6888,6 +7026,10 @@ function initializeProjectDetail() {
                     taskLists={taskLists}
                     project={project}
                     users={users}
+                    focusInput={taskFocusInput?.focusInput || null}
+                    focusTaskId={taskFocusInput?.taskId || null}
+                    initialTab={taskFocusInput?.tab || null}
+                    onFocusHandled={() => setTaskFocusInput(null)}
                     onUpdate={handleUpdateTaskFromDetail}
                     onAddSubtask={handleAddSubtask}
                     onViewSubtask={handleViewTaskDetail}

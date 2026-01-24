@@ -384,6 +384,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+    const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
+    const templateDropdownRef = useRef(null);
+    
+    // Close template dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (templateDropdownRef.current && !templateDropdownRef.current.contains(event.target)) {
+                setIsTemplateDropdownOpen(false);
+            }
+        };
+        
+        if (isTemplateDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [isTemplateDropdownOpen]);
     const [showTemplateList, setShowTemplateList] = useState(true);
     const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
     const [editingSection, setEditingSection] = useState(null);
@@ -1597,7 +1613,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     
                     const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
                     // Deep-link directly to the document collection cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
@@ -1979,18 +1995,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            // Only proceed if sections are loaded
-            if (!sections || sections.length === 0) {
-                console.log('🔍 MonthlyDocumentCollectionTracker: Sections not loaded yet, skipping deep link check');
-                return;
-            }
-            
             // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
             let params = null;
             let deepSectionId = null;
             let deepDocumentId = null;
             let deepMonth = null;
             let deepCommentId = null;
+            let deepYear = null;
             
             // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
             const hash = window.location.hash || '';
@@ -2002,6 +2013,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     deepDocumentId = params.get('docDocumentId');
                     deepMonth = params.get('docMonth');
                     deepCommentId = params.get('commentId');
+                    deepYear = params.get('docYear') || params.get('year');
                 }
             }
             
@@ -2014,6 +2026,51 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (!deepDocumentId) deepDocumentId = searchParams.get('docDocumentId');
                 if (!deepMonth) deepMonth = searchParams.get('docMonth');
                 if (!deepCommentId) deepCommentId = searchParams.get('commentId');
+                if (!deepYear) deepYear = searchParams.get('docYear') || searchParams.get('year');
+            }
+            
+            const parsedDeepYear = deepYear ? Number(deepYear) : null;
+            const normalizedDeepYear = parsedDeepYear && !Number.isNaN(parsedDeepYear) ? parsedDeepYear : null;
+            let isValidDocumentId = deepDocumentId && 
+                                    deepDocumentId !== 'undefined' && 
+                                    deepDocumentId.trim() !== '';
+            
+            if (normalizedDeepYear && normalizedDeepYear !== selectedYear && deepSectionId && isValidDocumentId && deepMonth) {
+                if (!deepCommentId) {
+                    pendingCommentOpenRef.current = {
+                        sectionId: deepSectionId,
+                        documentId: deepDocumentId,
+                        month: deepMonth
+                    };
+                }
+                handleYearChange(normalizedDeepYear);
+                return;
+            }
+            
+            // Only proceed if sections are loaded
+            if (!sections || sections.length === 0) {
+                if (deepSectionId && isValidDocumentId && deepMonth) {
+                    const yearsToSearch = Object.keys(sectionsByYear || {});
+                    for (const year of yearsToSearch) {
+                        const yearSections = sectionsByYear[year] || [];
+                        const matchingSection = yearSections.find(s => String(s.id) === String(deepSectionId));
+                        const matchingDoc = matchingSection?.documents?.find(d => String(d.id) === String(deepDocumentId));
+                        if (matchingSection && matchingDoc) {
+                            const targetYear = Number(year);
+                            if (!Number.isNaN(targetYear) && targetYear !== selectedYear) {
+                                pendingCommentOpenRef.current = {
+                                    sectionId: deepSectionId,
+                                    documentId: deepDocumentId,
+                                    month: deepMonth
+                                };
+                                handleYearChange(targetYear);
+                                return;
+                            }
+                        }
+                    }
+                }
+                console.log('🔍 MonthlyDocumentCollectionTracker: Sections not loaded yet, skipping deep link check');
+                return;
             }
             
             console.log('🔍 MonthlyDocumentCollectionTracker: Deep link params:', {
@@ -2025,9 +2082,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             });
             
             // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
-            let isValidDocumentId = deepDocumentId && 
-                                     deepDocumentId !== 'undefined' && 
-                                     deepDocumentId.trim() !== '';
+            isValidDocumentId = deepDocumentId && 
+                                deepDocumentId !== 'undefined' && 
+                                deepDocumentId.trim() !== '';
+            
+            if (deepSectionId && isValidDocumentId && deepMonth) {
+                const section = sections.find(s => String(s.id) === String(deepSectionId));
+                const doc = section?.documents?.find(d => String(d.id) === String(deepDocumentId));
+                if (!section || !doc) {
+                    const yearsToSearch = Object.keys(sectionsByYear || {});
+                    for (const year of yearsToSearch) {
+                        const yearSections = sectionsByYear[year] || [];
+                        const matchingSection = yearSections.find(s => String(s.id) === String(deepSectionId));
+                        const matchingDoc = matchingSection?.documents?.find(d => String(d.id) === String(deepDocumentId));
+                        if (matchingSection && matchingDoc) {
+                            const targetYear = Number(year);
+                            if (!Number.isNaN(targetYear) && targetYear !== selectedYear) {
+                                pendingCommentOpenRef.current = {
+                                    sectionId: deepSectionId,
+                                    documentId: deepDocumentId,
+                                    month: deepMonth
+                                };
+                                handleYearChange(targetYear);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
             
             // If we have commentId, search for the comment (even if we have some params, verify they're correct)
             // This handles cases where commentId is present but other params might be wrong or missing
@@ -2344,7 +2426,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);
         }
-    }, [sections, sectionsByYear, selectedYear, months]);
+    }, [sections, sectionsByYear, selectedYear, months, handleYearChange]);
     
     // Check for deep link on mount and when sections load
     useEffect(() => {
@@ -2465,9 +2547,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
         }
         
-        const textColorClass = statusConfig && statusConfig.color 
+        const baseTextColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
             : 'text-gray-400';
+        
+        const textColorClass = isSelected ? 'text-white' : baseTextColorClass;
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -2598,7 +2682,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     // Update URL with deep link when opening popup
                                     const [sectionId, documentId, month] = cellKey.split('-');
                                     if (sectionId && documentId && month && project?.id) {
-                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}`;
+                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}`;
                                         
                                         if (window.RouteState && window.RouteState.navigate) {
                                             window.RouteState.navigate({
@@ -3321,7 +3405,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             onClick={() => {
                                                 // Update URL when clicking on a comment to enable sharing
                                                 if (section && doc && comment.id) {
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
                                                     
                                                     // Update URL using RouteState if available, otherwise use hash
                                                     if (window.RouteState && window.RouteState.navigate) {
@@ -3401,7 +3485,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
                                                     if (!section || !doc || !comment.id) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard
@@ -3506,23 +3590,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             {/* Header */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={onBack} 
-                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">Monthly Document Collection Tracker</h1>
-                            <p className="text-sm text-gray-600 mt-0.5">
-                                {project?.name}
-                                {project?.client && ` • ${project.client}`}
-                                {' • Facilities: '}
-                                <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
-                            </p>
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={onBack} 
+                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <i className="fas fa-arrow-left"></i>
+                            </button>
+                            <div>
+                                <h1 className="text-xl font-bold text-gray-900">Monthly Document Collection Tracker</h1>
+                                <p className="text-sm text-gray-600 mt-0.5">
+                                    {project?.name}
+                                    {project?.client && ` • ${project.client}`}
+                                    {' • Facilities: '}
+                                    <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                                </p>
+                            </div>
                         </div>
+                        
+                        <button
+                            onClick={handleExportToExcel}
+                            disabled={isExporting || sections.length === 0}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5 self-start lg:self-auto"
+                        >
+                            {isExporting ? (
+                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
+                            ) : (
+                                <><i className="fas fa-file-excel"></i><span>Export</span></>
+                            )}
+                        </button>
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2">
@@ -3557,18 +3655,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         </div>
                         
                         <button
-                            onClick={handleExportToExcel}
-                            disabled={isExporting || sections.length === 0}
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                        >
-                            {isExporting ? (
-                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
-                            ) : (
-                                <><i className="fas fa-file-excel"></i><span>Export</span></>
-                            )}
-                        </button>
-                        
-                        <button
                             onClick={handleAddSection}
                             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                         >
@@ -3576,48 +3662,75 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         </button>
                         
                         <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
-                            <button
-                                onClick={() => setShowApplyTemplateModal(true)}
-                                className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                            >
-                                <i className="fas fa-magic"></i><span>Apply Template</span>
-                            </button>
-                            <button
-                                onClick={() => setShowTemplateModal(true)}
-                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                            >
-                                <i className="fas fa-layer-group"></i><span>Templates</span>
-                            </button>
-                            <button
-                                onClick={() => {
-                                    try {
-                                        if (!sections || sections.length === 0) {
-                                            alert('There are no sections in this year to save as a template.');
-                                            return;
-                                        }
-                                        const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
-                                        const name = window.prompt('Template name', defaultName);
-                                        if (!name || !name.trim()) {
-                                            return;
-                                        }
-                                        setEditingTemplate(null);
-                                        setPrefilledTemplate({
-                                            name: name.trim(),
-                                            description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
-                                            sections: buildTemplateSectionsFromCurrent()
-                                        });
-                                        setShowTemplateList(false);
-                                        setShowTemplateModal(true);
-                                    } catch (e) {
-                                        console.error('❌ Failed to prepare template from current year:', e);
-                                        alert('Could not prepare template from current year. See console for details.');
-                                    }
-                                }}
-                                className="px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                                title="Save current year as template"
-                            >
-                                <i className="fas fa-save"></i><span>Save Template</span>
-                            </button>
+                            <div className="relative" ref={templateDropdownRef}>
+                                <button
+                                    onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
+                                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                                >
+                                    <i className="fas fa-layer-group"></i><span>Templates</span>
+                                    <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
+                                </button>
+                                
+                                {isTemplateDropdownOpen && (
+                                    <div className="absolute left-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                                        <button
+                                            onClick={() => {
+                                                setShowApplyTemplateModal(true);
+                                                setIsTemplateDropdownOpen(false);
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2 transition-colors"
+                                        >
+                                            <i className="fas fa-magic text-purple-600"></i>
+                                            <span>Apply Template</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowTemplateModal(true);
+                                                setIsTemplateDropdownOpen(false);
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 transition-colors"
+                                        >
+                                            <i className="fas fa-layer-group text-indigo-600"></i>
+                                            <span>Manage Templates</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                try {
+                                                    if (!sections || sections.length === 0) {
+                                                        alert('There are no sections in this year to save as a template.');
+                                                        setIsTemplateDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
+                                                    const name = window.prompt('Template name', defaultName);
+                                                    if (!name || !name.trim()) {
+                                                        setIsTemplateDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    setEditingTemplate(null);
+                                                    setPrefilledTemplate({
+                                                        name: name.trim(),
+                                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
+                                                        sections: buildTemplateSectionsFromCurrent()
+                                                    });
+                                                    setShowTemplateList(false);
+                                                    setShowTemplateModal(true);
+                                                    setIsTemplateDropdownOpen(false);
+                                                } catch (e) {
+                                                    console.error('❌ Failed to prepare template from current year:', e);
+                                                    alert('Could not prepare template from current year. See console for details.');
+                                                    setIsTemplateDropdownOpen(false);
+                                                }
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2 transition-colors"
+                                            title="Save current year as template"
+                                        >
+                                            <i className="fas fa-save text-amber-600"></i>
+                                            <span>Save Template</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

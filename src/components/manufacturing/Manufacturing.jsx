@@ -50,6 +50,7 @@ try {
   }
   
   const { user } = useAuth();
+  const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
   
   // Helper function to safely call DatabaseAPI methods
   const safeCallAPI = async (methodName, ...args) => {
@@ -1152,89 +1153,236 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   }, []);
 
-  // Parse CSV content to JSON format
+  // Parse CSV content to JSON format (supports quoted fields + delimiter detection)
   const parseCSV = useCallback((csvContent) => {
-    const lines = csvContent.trim().split('\n');
-    if (lines.length < 2) {
-      throw new Error('CSV must have at least a header row and one data row');
-    }
+    const content = (csvContent || '').replace(/^\uFEFF/, '');
+    const delimiterCandidates = [',', ';', '\t', '|'];
 
-    const headers = lines[0].split(',').map(h => h.trim());
-    const rows = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue; // Skip empty lines
-
-      // Simple CSV parsing (handles quoted fields)
-      const values = [];
-      let current = '';
+    const detectDelimiter = (text) => {
+      const counts = new Map(delimiterCandidates.map((char) => [char, 0]));
       let inQuotes = false;
+      let linesChecked = 0;
 
-      for (let j = 0; j < line.length; j++) {
-        const char = line[j];
-        
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+
         if (char === '"') {
-          if (inQuotes && line[j + 1] === '"') {
-            // Escaped quote
-            current += '"';
-            j++;
+          if (inQuotes && text[i + 1] === '"') {
+            i++;
           } else {
-            // Toggle quote state
             inQuotes = !inQuotes;
           }
-        } else if (char === ',' && !inQuotes) {
-          values.push(current.trim());
-          current = '';
-        } else {
-          current += char;
+          continue;
+        }
+
+        if (!inQuotes) {
+          if (counts.has(char)) {
+            counts.set(char, counts.get(char) + 1);
+            continue;
+          }
+
+          if (char === '\n' || char === '\r') {
+            if (char === '\r' && text[i + 1] === '\n') {
+              i++;
+            }
+            linesChecked += 1;
+            if (linesChecked >= 5) break;
+          }
         }
       }
-      values.push(current.trim()); // Add last value
 
-      if (values.length !== headers.length) {
-        console.warn(`⚠️  Row ${i + 1} has ${values.length} columns, expected ${headers.length}. Skipping.`);
+      let best = ',';
+      let bestCount = counts.get(best) || 0;
+      for (const char of delimiterCandidates) {
+        const count = counts.get(char) || 0;
+        if (count > bestCount) {
+          best = char;
+          bestCount = count;
+        }
+      }
+      return best;
+    };
+
+    const delimiter = detectDelimiter(content);
+    const rows = [];
+    let current = '';
+    let row = [];
+    let inQuotes = false;
+
+    const pushRow = () => {
+      if (row.some(cell => String(cell || '').trim() !== '')) {
+        rows.push(row);
+      }
+      row = [];
+    };
+
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i];
+
+      if (char === '"') {
+        if (inQuotes && content[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
         continue;
       }
 
-      const row = {};
-      // Find supplier index for use when processing Supplier Part Numbers
-      const supplierIndex = headers.findIndex(h => h === 'Supplier');
-      const supplierValue = supplierIndex >= 0 ? (values[supplierIndex] || '').trim() : '';
-      
+      if (char === delimiter && !inQuotes) {
+        row.push(current);
+        current = '';
+        continue;
+      }
+
+      if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && content[i + 1] === '\n') {
+          i++;
+        }
+        row.push(current);
+        current = '';
+        pushRow();
+        continue;
+      }
+
+      current += char;
+    }
+
+    row.push(current);
+    pushRow();
+
+    if (rows.length < 2) {
+      throw new Error('CSV must have at least a header row and one data row');
+    }
+
+    const normalizeHeader = (header) =>
+      String(header || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+    const headerMap = {
+      sku: 'sku',
+      itemcode: 'sku',
+      itemnumber: 'sku',
+      stockcode: 'sku',
+      itemid: 'sku',
+      itemno: 'sku',
+      productcode: 'sku',
+      productid: 'sku',
+      productno: 'sku',
+      barcode: 'sku',
+      name: 'name',
+      itemname: 'name',
+      productname: 'name',
+      item: 'name',
+      description: 'description',
+      desc: 'description',
+      itemdesc: 'description',
+      itemdescription: 'description',
+      productdescription: 'description',
+      partdescription: 'description',
+      partnumber: 'partNumber',
+      partno: 'partNumber',
+      partnum: 'partNumber',
+      part: 'partNumber',
+      category: 'category',
+      type: 'type',
+      quantity: 'quantity',
+      qty: 'quantity',
+      qtyonhand: 'quantity',
+      unit: 'unit',
+      unitcost: 'unitCost',
+      unitprice: 'unitCost',
+      costperunit: 'unitCost',
+      totalvalue: 'totalValue',
+      totalcost: 'totalValue',
+      reorderpoint: 'reorderPoint',
+      reorderqty: 'reorderQty',
+      reorderquantity: 'reorderQty',
+      location: 'location',
+      supplier: 'supplier',
+      thumbnail: 'thumbnail',
+      legacypartnumber: 'legacyPartNumber',
+      manufacturingpartnumber: 'manufacturingPartNumber',
+      supplierpartnumbers: 'supplierPartNumbers',
+      locationcode: 'locationCode'
+    };
+
+    const headers = rows[0].map((h) => String(h || '').trim().replace(/^\uFEFF/, ''));
+    const dataRows = [];
+    let missingNameWarnings = 0;
+    const maxMissingNameWarnings = 10;
+
+    const mapHeaderToField = (header) => {
+      const raw = String(header || '').trim();
+      const rawLower = raw.toLowerCase();
+      const normalized = normalizeHeader(raw);
+      if (headerMap[normalized]) return headerMap[normalized];
+
+      if (rawLower.includes('name')) return 'name';
+      if (rawLower.includes('desc')) return 'description';
+      if (rawLower.includes('part') && (rawLower.includes('number') || rawLower.includes('#') || rawLower.includes('no'))) return 'partNumber';
+      if (rawLower.includes('part') && rawLower.includes('code')) return 'partNumber';
+      if (rawLower.includes('sku')) return 'sku';
+      if (rawLower.includes('barcode')) return 'sku';
+      if (rawLower.includes('item') && (rawLower.includes('code') || rawLower.includes('id') || rawLower.includes('no'))) return 'sku';
+      if (rawLower.includes('stock') && rawLower.includes('code')) return 'sku';
+      if (rawLower.includes('product') && (rawLower.includes('code') || rawLower.includes('id') || rawLower.includes('no'))) return 'sku';
+      if (rawLower.includes('qty')) return 'quantity';
+      if (rawLower.includes('unit cost') || rawLower.includes('unit price') || rawLower.includes('cost per unit')) return 'unitCost';
+      if (rawLower.includes('total') && rawLower.includes('value')) return 'totalValue';
+      if (rawLower.includes('total') && rawLower.includes('cost')) return 'totalValue';
+      if (rawLower.includes('reorder') && rawLower.includes('point')) return 'reorderPoint';
+      if (rawLower.includes('reorder') && (rawLower.includes('qty') || rawLower.includes('quantity'))) return 'reorderQty';
+      if (rawLower.includes('location') && rawLower.includes('code')) return 'locationCode';
+      if (rawLower.includes('location')) return 'location';
+      if (rawLower.includes('supplier') && rawLower.includes('part')) return 'supplierPartNumbers';
+      if (rawLower.includes('supplier')) return 'supplier';
+      if (rawLower.includes('legacy') && rawLower.includes('part')) return 'legacyPartNumber';
+      if (rawLower.includes('manufacturing') && rawLower.includes('part')) return 'manufacturingPartNumber';
+      if (rawLower.includes('thumbnail') || rawLower.includes('image')) return 'thumbnail';
+
+      return normalized || rawLower.replace(/\s+/g, '');
+    };
+
+    for (let i = 1; i < rows.length; i++) {
+      let values = rows[i].map((value) => (value ?? ''));
+
+      if (values.length < headers.length) {
+        while (values.length < headers.length) values.push('');
+      } else if (values.length > headers.length) {
+        const merged = values.slice(0, headers.length - 1);
+        merged.push(values.slice(headers.length - 1).join(delimiter));
+        values = merged;
+      }
+
+      const rowObj = {};
+      const supplierIndex = headers.findIndex((h) => normalizeHeader(h) === 'supplier');
+      const supplierValue = supplierIndex >= 0 ? String(values[supplierIndex] || '').trim() : '';
+
       headers.forEach((header, index) => {
-        let value = values[index] || '';
-        
-        // Parse JSON arrays for Supplier Part Numbers
-        // Supports two formats:
-        // 1. Array of objects: [{"supplier": "Supplier Name", "partNumber": "PART123"}, ...]
-        // 2. Array of strings (legacy): ["PART1", "PART2"] - converts to objects using Supplier field
-        if (header === 'Supplier Part Numbers' && value) {
+        let value = values[index] ?? '';
+        if (typeof value === 'string') value = value.trim();
+
+        const normalizedHeader = normalizeHeader(header);
+        const apiField = mapHeaderToField(header);
+
+        if (normalizedHeader === 'supplierpartnumbers' && value) {
           try {
-            // Remove extra quotes if present
             value = value.replace(/^["']|["']$/g, '');
-            // Try to parse as JSON
             if (value.startsWith('[') && value.endsWith(']')) {
               const parsed = JSON.parse(value);
-              // Check if it's an array of objects (new format)
               if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0].supplier !== undefined) {
-                // Already in correct format: [{supplier: "...", partNumber: "..."}]
                 value = parsed;
               } else if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-                // Legacy format: ["PART1", "PART2"] - convert to objects
-                // Use the Supplier field from CSV if available, otherwise empty
                 value = parsed.map(partNum => ({ supplier: supplierValue, partNumber: partNum }));
               } else {
                 value = [];
               }
             } else if (value) {
-              // Single string value - convert to object format
               value = [{ supplier: supplierValue, partNumber: value }];
             } else {
               value = [];
             }
           } catch (e) {
-            // If parsing fails, treat as single value or empty
             if (value) {
               value = [{ supplier: supplierValue, partNumber: value }];
             } else {
@@ -1242,50 +1390,40 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             }
           }
         }
-        
-        // Convert numeric fields
-        if (['Quantity', 'Unit Cost', 'Total Value', 'Reorder Point', 'Reorder Qty'].includes(header)) {
-          value = value ? parseFloat(value) : (header === 'Quantity' ? 0 : 0);
-        }
-        
-        // Map CSV headers to API field names
-        const fieldMap = {
-          'SKU': 'sku',
-          'Name': 'name',
-          'Category': 'category',
-          'Type': 'type',
-          'Quantity': 'quantity',
-          'Unit': 'unit',
-          'Unit Cost': 'unitCost',
-          'Total Value': 'totalValue',
-          'Reorder Point': 'reorderPoint',
-          'Reorder Qty': 'reorderQty',
-          'Location': 'location',
-          'Supplier': 'supplier',
-          'Thumbnail': 'thumbnail',
-          'Legacy Part Number': 'legacyPartNumber',
-          'Manufacturing Part Number': 'manufacturingPartNumber',
-          'Supplier Part Numbers': 'supplierPartNumbers',
-          'Location Code': 'locationCode'
-        };
 
-        const apiField = fieldMap[header] || header.toLowerCase().replace(/\s+/g, '');
-        
-        // Only include non-empty values (except for numeric fields which should be 0 if empty)
+        if (
+          ['quantity', 'unitcost', 'totalvalue', 'reorderpoint', 'reorderqty'].includes(normalizedHeader) ||
+          ['quantity', 'unitCost', 'totalValue', 'reorderPoint', 'reorderQty'].includes(apiField)
+        ) {
+          value = value ? parseFloat(value) : 0;
+        }
+
         if (value !== '' && value !== null && value !== undefined) {
-          row[apiField] = value;
+          rowObj[apiField] = value;
         }
       });
 
-      // Only add row if it has at least a name
-      if (row.name) {
-        rows.push(row);
+      const nameCandidate = rowObj.name || rowObj.description || rowObj.partNumber || rowObj.sku;
+      if (nameCandidate) {
+        if (!rowObj.name) rowObj.name = nameCandidate;
+        dataRows.push(rowObj);
       } else {
-        console.warn(`⚠️  Row ${i + 1} skipped: missing required 'name' field`);
+        missingNameWarnings += 1;
+        if (missingNameWarnings <= maxMissingNameWarnings) {
+          console.warn(`⚠️  Row ${i + 1} skipped: missing required 'name' field`);
+        }
       }
     }
 
-    return rows;
+    if (missingNameWarnings > maxMissingNameWarnings) {
+      console.warn(`⚠️  ${missingNameWarnings} rows skipped: missing required 'name' field (delimiter "${delimiter}")`);
+    }
+
+    if (dataRows.length === 0) {
+      console.warn('⚠️ Bulk upload: no valid rows detected. Headers:', headers);
+    }
+
+    return dataRows;
   }, []);
 
   // Handle bulk upload from CSV or Excel file
@@ -1331,19 +1469,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         throw new Error('DatabaseAPI not available');
       }
 
-      const response = await window.DatabaseAPI.makeRequest('/manufacturing/inventory', {
+      const result = await window.DatabaseAPI.makeRequest('/manufacturing/inventory', {
         method: 'POST',
         body: JSON.stringify({ items: processedItems })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(errorData.message || `Upload failed: ${response.status}`);
-      }
-
-      const result = await response.json();
-      const created = result.data?.created || result.created || 0;
-      const errors = result.data?.errors || result.errors || 0;
+      const created = result?.data?.created ?? result?.created ?? 0;
+      const errors = result?.data?.errors ?? result?.errors ?? 0;
 
       // Refresh inventory
       if (window.DatabaseAPI && typeof window.DatabaseAPI.getInventory === 'function') {
@@ -1377,13 +1509,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     } finally {
       setIsBulkUploading(false);
       setBulkUploadProgress({ current: 0, total: 0 });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   }, [parseCSV, selectedLocationId]);
 
   // Handle file input change
   const handleFileInputChange = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target?.files?.[0];
+    if (!file) {
+      console.warn('⚠️ Bulk upload: no file selected from input.');
+      return;
+    }
+
+    console.info('📄 Bulk upload file selected:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
 
     const fileName = file.name.toLowerCase();
     const isCSV = fileName.endsWith('.csv');
@@ -1437,9 +1581,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   // Trigger file input click
   const handleBulkUploadClick = useCallback(() => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+    const input = fileInputRef.current;
+    if (!input) {
+      window.alert('Upload control not ready. Please refresh the page.');
+      return;
     }
+    // Reset value so selecting the same file still triggers onChange
+    input.value = '';
+    input.click();
   }, []);
 
   const getInitialInventory = () => [];
@@ -1511,73 +1660,73 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const prodStats = getProductionStats();
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white p-3 rounded-lg border border-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500">Total Inventory Value</p>
-                <p className="text-lg font-semibold text-gray-900 mt-1">{formatCurrency(invStats.totalValue)}</p>
-                <p className="text-xs text-gray-500 mt-1">{invStats.totalItems.toLocaleString()} items</p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Inventory Value</p>
+                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{formatCurrency(invStats.totalValue)}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{invStats.totalItems.toLocaleString()} items</p>
               </div>
-              <div className="bg-blue-50 p-2 rounded-lg">
-                <i className="fas fa-boxes text-blue-600"></i>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
+                <i className={`fas fa-boxes ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-gray-200">
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500">Low Stock Alerts</p>
-                <p className="text-lg font-semibold text-gray-900 mt-1">{invStats.lowStockItems}</p>
-                <p className="text-xs text-gray-500 mt-1">Items need reorder</p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Low Stock Alerts</p>
+                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{invStats.lowStockItems}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Items need reorder</p>
               </div>
-              <div className="bg-yellow-50 p-2 rounded-lg">
-                <i className="fas fa-exclamation-triangle text-yellow-600"></i>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-yellow-50'}`}>
+                <i className={`fas fa-exclamation-triangle ${isDark ? 'text-gray-300' : 'text-yellow-600'}`}></i>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-gray-200">
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500">Active Production Orders</p>
-                <p className="text-lg font-semibold text-gray-900 mt-1">{prodStats.activeOrders}</p>
-                <p className="text-xs text-gray-500 mt-1">{prodStats.pendingUnits} units pending</p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Active Production Orders</p>
+                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{prodStats.activeOrders}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{prodStats.pendingUnits} units pending</p>
               </div>
-              <div className="bg-green-50 p-2 rounded-lg">
-                <i className="fas fa-industry text-green-600"></i>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-green-50'}`}>
+                <i className={`fas fa-industry ${isDark ? 'text-gray-300' : 'text-green-600'}`}></i>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-gray-200">
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500">Total Production (Month)</p>
-                <p className="text-lg font-semibold text-gray-900 mt-1">{prodStats.totalProduction}</p>
-                <p className="text-xs text-gray-500 mt-1">{prodStats.completedOrders} orders completed</p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Production (Month)</p>
+                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{prodStats.totalProduction}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{prodStats.completedOrders} orders completed</p>
               </div>
-              <div className="bg-purple-50 p-2 rounded-lg">
-                <i className="fas fa-chart-line text-purple-600"></i>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-purple-50'}`}>
+                <i className={`fas fa-chart-line ${isDark ? 'text-gray-300' : 'text-purple-600'}`}></i>
               </div>
             </div>
           </div>
         </div>
 
         {/* Recent Activity & Alerts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Low Stock Alerts */}
-          <div className="bg-white rounded-lg border border-gray-200">
-            <div className="p-3 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <i className="fas fa-exclamation-triangle text-yellow-600"></i>
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
+            <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+              <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                <i className={`fas fa-exclamation-triangle ${isDark ? 'text-gray-300' : 'text-yellow-600'}`}></i>
                 Low Stock Alerts
               </h3>
             </div>
-            <div className="p-3">
+            <div className="p-4">
               <div className="space-y-2">
                 {inventory.filter(item => {
                   const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
@@ -1585,16 +1734,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 }).slice(0, 5).map(item => {
                   const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
                   return (
-                    <div key={item.id} className="flex items-center justify-between p-2 bg-yellow-50 rounded border border-yellow-200">
+                    <div key={item.id} className={`${isDark ? 'bg-yellow-900/20 border-yellow-800' : 'bg-yellow-50 border-yellow-200'} flex items-center justify-between p-3 rounded-lg border`}>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                        <p className="text-xs text-gray-500">{item.sku} • {item.location}</p>
+                        <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.name}</p>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.sku} • {item.location}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-yellow-700">{availableQty} / {item.quantity} {item.unit}</p>
-                        <p className="text-xs text-gray-500">Reorder: {item.reorderPoint}</p>
+                        <p className={`text-sm font-semibold ${isDark ? 'text-yellow-200' : 'text-yellow-700'}`}>{availableQty} / {item.quantity} {item.unit}</p>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Reorder: {item.reorderPoint}</p>
                         {(item.allocatedQuantity || 0) > 0 && (
-                          <p className="text-xs text-orange-600">Allocated: {item.allocatedQuantity}</p>
+                          <p className={`text-xs ${isDark ? 'text-orange-300' : 'text-orange-600'}`}>Allocated: {item.allocatedQuantity}</p>
                         )}
                       </div>
                     </div>
@@ -1605,24 +1754,24 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
 
           {/* Active Production Orders */}
-          <div className="bg-white rounded-lg border border-gray-200">
-            <div className="p-3 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <i className="fas fa-industry text-blue-600"></i>
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
+            <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+              <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                <i className={`fas fa-industry ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
                 Active Production Orders
               </h3>
             </div>
-            <div className="p-3">
+            <div className="p-4">
               <div className="space-y-2">
                 {productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').map(order => (
-                  <div key={order.id} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-200">
+                  <div key={order.id} className={`${isDark ? 'bg-blue-900/20 border-blue-800' : 'bg-blue-50 border-blue-200'} flex items-center justify-between p-3 rounded-lg border`}>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{order.productName}</p>
-                      <p className="text-xs text-gray-500">{order.id} • {order.assignedTo}</p>
+                      <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{order.productName}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{order.id} • {order.assignedTo}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-blue-700">{order.quantityProduced}/{order.quantity}</p>
-                      <p className="text-xs text-gray-500">Target: {order.targetDate}</p>
+                      <p className={`text-sm font-semibold ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>{order.quantityProduced}/{order.quantity}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Target: {order.targetDate}</p>
                     </div>
                   </div>
                 ))}
@@ -1632,41 +1781,41 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         </div>
 
         {/* Recent Stock Movements */}
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="p-3 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <i className="fas fa-exchange-alt text-purple-600"></i>
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
+          <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+              <i className={`fas fa-exchange-alt ${isDark ? 'text-gray-300' : 'text-purple-600'}`}></i>
               Recent Stock Movements
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className={isDark ? 'bg-gray-800 border-b border-gray-800' : 'bg-gray-50 border-b border-gray-100'}>
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Item</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Quantity</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">From → To</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Date</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Type</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Item</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Quantity</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>From → To</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Reference</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className={`${isDark ? 'divide-gray-800' : 'divide-gray-100'} divide-y`}>
                 {movements.slice(0, 10).map(movement => (
-                  <tr key={movement.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
-                    <td className="px-3 py-2">
+                  <tr key={movement.id} className={isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
+                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{movement.date}</td>
+                    <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
                         {movement.type}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
-                      <div className="text-xs text-gray-500">{movement.sku}</div>
+                    <td className="px-4 py-3">
+                      <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{movement.itemName}</div>
+                      <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{movement.sku}</div>
                     </td>
-                    <td className="px-3 py-2 text-sm font-semibold text-gray-900">{movement.quantity > 0 ? '+' : ''}{movement.quantity}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation} → {movement.toLocation || 'N/A'}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{movement.quantity > 0 ? '+' : ''}{movement.quantity}</td>
+                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{movement.fromLocation} → {movement.toLocation || 'N/A'}</td>
+                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{movement.reference}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1977,16 +2126,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {/* Controls */}
-        <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-1">
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3 flex-1">
               {/* Location Selector */}
               <select
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white font-medium"
+                className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
+                  isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                }`}
                 title="Select Stock Location"
               >
                 <option value="all">All Locations</option>
@@ -1997,7 +2148,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 ))}
               </select>
               <div className="relative flex-1 max-w-md">
-                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
+                <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                 <input
                   key="inventory-search-input"
                   ref={searchInputRef}
@@ -2039,13 +2190,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       activeInputRef.current = null;
                     }, 300);
                   }}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
+                  }`}
                 />
               </div>
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                  isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                }`}
               >
                 <option value="all">All Categories</option>
                 {uniqueCategories.map(cat => (
@@ -2054,14 +2209,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </option>
                 ))}
               </select>
-              <div className="text-xs text-gray-500 whitespace-nowrap">
+              <div className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Showing {filteredInventory.length} of {inventory.length}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={refreshAllManufacturingData}
-                className={`px-3 py-2 text-sm rounded-lg border ${isRefreshing ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300'} flex items-center gap-2`}
+                className={`px-4 py-2.5 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 ${
+                  isRefreshing
+                    ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700' : 'bg-gray-100 text-gray-500 border-gray-200'
+                    : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200'
+                }`}
                 disabled={isRefreshing}
                 title="Force refresh from server"
               >
@@ -2070,7 +2229,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </button>
               <button
                 onClick={handleDownloadTemplate}
-                className="px-3 py-2 text-sm rounded-lg flex items-center gap-2 border bg-white hover:bg-gray-50 border-gray-300"
+                className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                  isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+                }`}
                 title="Download Excel template with dropdowns for bulk upload"
               >
                 <i className="fas fa-file-download text-xs"></i>
@@ -2081,12 +2242,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 onChange={handleFileInputChange}
-                style={{ display: 'none' }}
+                className="sr-only"
               />
               <button
                 onClick={handleBulkUploadClick}
                 disabled={isBulkUploading}
-                className={`px-3 py-2 text-sm rounded-lg flex items-center gap-2 border ${isBulkUploading ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50 border-gray-300'}`}
+                className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                  isBulkUploading
+                    ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
+                    : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+                }`}
                 title="Upload CSV or Excel file to bulk import inventory items"
               >
                 <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
@@ -2095,7 +2260,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <button
                 onClick={handleExportInventory}
                 disabled={isExportingInventory}
-                className={`px-3 py-2 text-sm rounded-lg flex items-center gap-2 border ${isExportingInventory ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50 border-gray-300'}`}
+                className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                  isExportingInventory
+                    ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
+                    : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+                }`}
                 title="Export the full inventory dataset to Excel"
               >
                 <i className={`${isExportingInventory ? 'fas fa-spinner animate-spin' : 'fas fa-download'} text-xs`}></i>
@@ -2103,7 +2272,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </button>
               <button
                 onClick={openAddItemModal}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                className="px-4 py-2.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 transition-all duration-200"
               >
                 <i className="fas fa-plus text-xs"></i>
                 Add Item
@@ -2114,7 +2283,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
         {/* Diagnostics Banner */}
         <div className="px-1">
-          <div className="text-[11px] text-gray-500 flex items-center gap-3">
+          <div className={`text-[11px] flex items-center gap-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             <span>API: {window.DatabaseAPI?.API_BASE || 'n/a'}</span>
             <span>• Inventory: {inventory.length}</span>
             <span>• BOMs: {boms.length}</span>
@@ -2125,7 +2294,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         </div>
 
         {filteredInventory.length < inventory.length && (
-          <div className="text-xs text-gray-500 px-1">
+          <div className={`text-xs px-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             Some items are hidden by current search or category filter.
           </div>
         )}
@@ -2133,9 +2302,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         {/* Mobile Card View - Shows on mobile devices */}
         <div className="table-mobile space-y-3">
           {filteredInventory.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <i className="fas fa-box-open text-4xl mb-4 text-gray-300"></i>
-              <p className="text-sm">No inventory items found</p>
+            <div className={`text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6`}>
+              <i className={`fas fa-box-open text-4xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No inventory items found</p>
             </div>
           ) : (
             filteredInventory.map(item => {
@@ -2155,7 +2324,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               return (
                 <div 
                   key={item.id} 
-                  className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                  className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} mobile-card rounded-xl border p-4 shadow-sm cursor-pointer hover:shadow-md transition-all duration-200`}
                   onClick={() => setViewingInventoryItemDetail(item)}
                 >
                   <div className="flex items-start gap-3 mb-3">
@@ -9158,26 +9327,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
           {/* Right Column - Summary */}
           <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Summary</h2>
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+              <h2 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Summary</h2>
               <div className="space-y-3">
                 <div>
-                  <p className="text-xs text-gray-500">Status</p>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
                   <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize mt-1 ${getStatusColor(item.status)}`}>
                     {(item.status || '').replace('_', ' ')}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Total Value</p>
-                  <p className="text-lg font-bold text-blue-600 mt-1">{formatCurrency(item.totalValue || 0)}</p>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Value</p>
+                  <p className={`text-lg font-bold mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatCurrency(item.totalValue || 0)}</p>
                 </div>
                 {item.reorderPoint > 0 && (
-                  <div className={`p-3 rounded-lg ${availableQty <= item.reorderPoint ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                    <p className="text-xs font-medium text-gray-700">Stock Level</p>
-                    <p className={`text-sm font-bold mt-1 ${availableQty <= item.reorderPoint ? 'text-red-600' : 'text-green-600'}`}>
+                  <div className={`p-3 rounded-lg border ${availableQty <= item.reorderPoint ? (isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200') : (isDark ? 'bg-green-900/20 border-green-800' : 'bg-green-50 border-green-200')}`}>
+                    <p className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Stock Level</p>
+                    <p className={`text-sm font-bold mt-1 ${availableQty <= item.reorderPoint ? (isDark ? 'text-red-300' : 'text-red-600') : (isDark ? 'text-green-300' : 'text-green-600')}`}>
                       {availableQty <= item.reorderPoint ? 'Low Stock' : 'In Stock'}
                     </p>
-                    <p className="text-xs text-gray-600 mt-1">
+                    <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                       Available: {availableQty} / Reorder Point: {item.reorderPoint}
                     </p>
                   </div>
@@ -9188,13 +9357,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         </div>
 
         {/* Stock Ledger */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mt-4">
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 mt-4 shadow-sm`}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Stock Ledger</h2>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Stock Ledger</h2>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
                 onClick={() => handleRecordMovementForCurrentItem()}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200"
               >
                 <i className="fas fa-plus"></i>
                 Record Movement
@@ -9204,7 +9373,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <select
                     value={selectedMovementTemplateId}
                     onChange={(e) => setSelectedMovementTemplateId(e.target.value)}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
                   >
                     <option value="">Use existing movement...</option>
                     {recentMovementTemplates.map(movement => {
@@ -9222,10 +9391,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <button
                     onClick={() => handleRecordMovementForCurrentItem(selectedMovementTemplateId)}
                     disabled={!selectedMovementTemplateId}
-                    className={`px-3 py-2 text-sm rounded-lg border ${
+                    className={`px-4 py-2 text-sm rounded-lg border transition-all duration-200 ${
                       selectedMovementTemplateId
-                        ? 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
-                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                        ? (isDark ? 'bg-gray-800 text-blue-300 border-gray-700 hover:bg-gray-750' : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50')
+                        : (isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed')
                     }`}
                   >
                     Use Template
@@ -9357,25 +9526,28 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {/* Show detail view if viewing an item, otherwise show normal view */}
       {viewingInventoryItemDetail ? (
         <InventoryItemDetailView />
       ) : (
         <>
           {/* Header */}
-          <div className="bg-white rounded-lg border border-gray-200 p-3">
-            <div className="flex items-center justify-between">
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                <i className={`fas fa-industry ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
+              </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Manufacturing & Inventory Management</h2>
-                <p className="text-sm text-gray-500 mt-1">Comprehensive stock control and production management system</p>
+                <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Manufacturing</h2>
+                <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock control and production management</p>
               </div>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="bg-white rounded-lg border border-gray-200">
-            <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5`}>
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
                 { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
@@ -9390,10 +9562,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <button
                   key={tab.id}
                   onClick={() => changeTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
                     activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? (isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900')
+                      : (isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50')
                   }`}
                 >
                   <i className={`fas ${tab.icon} text-xs`}></i>

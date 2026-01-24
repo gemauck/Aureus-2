@@ -399,6 +399,47 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, []);
     
+    // Templates state
+    const [templates, setTemplates] = useState([]);
+
+    const getTemplateDisplayName = (template) => {
+        if (!template) return '';
+        const EXXARO_DEFAULT_NAME = 'Exxaro Grootegeluk weekly FMS review checklist for 2025';
+        if (template.name === EXXARO_DEFAULT_NAME || template.isDefault) {
+            return 'Default Checklist';
+        }
+        return template.name;
+    };
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+    
+    // UI state
+    const [showSectionModal, setShowSectionModal] = useState(false);
+    const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+    const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
+    const templateDropdownRef = useRef(null);
+    const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
+    const [showTemplateList, setShowTemplateList] = useState(true);
+    const [editingSection, setEditingSection] = useState(null);
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [editingSectionId, setEditingSectionId] = useState(null);
+    const [editingTemplate, setEditingTemplate] = useState(null);
+    
+    // Close template dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (templateDropdownRef.current && !templateDropdownRef.current.contains(event.target)) {
+                setIsTemplateDropdownOpen(false);
+            }
+        };
+        
+        if (isTemplateDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [isTemplateDropdownOpen]);
+    
     // Synchronize horizontal scrolling across all table containers
     useEffect(() => {
         // Clean up old refs when sections change
@@ -449,30 +490,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
     }, [sections.length]); // Re-run when sections change
     
-    // Templates state
-    const [templates, setTemplates] = useState([]);
-
-    const getTemplateDisplayName = (template) => {
-        if (!template) return '';
-        const EXXARO_DEFAULT_NAME = 'Exxaro Grootegeluk weekly FMS review checklist for 2025';
-        if (template.name === EXXARO_DEFAULT_NAME || template.isDefault) {
-            return 'Default Checklist';
-        }
-        return template.name;
-    };
-    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
-    
-    // UI state
-    const [showSectionModal, setShowSectionModal] = useState(false);
-    const [showDocumentModal, setShowDocumentModal] = useState(false);
-    const [showTemplateModal, setShowTemplateModal] = useState(false);
-    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
-    const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
-    const [showTemplateList, setShowTemplateList] = useState(true);
-    const [editingSection, setEditingSection] = useState(null);
-    const [editingDocument, setEditingDocument] = useState(null);
-    const [editingSectionId, setEditingSectionId] = useState(null);
-    const [editingTemplate, setEditingTemplate] = useState(null);
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
     // (POST) instead of trying to update an existing template.
@@ -1202,10 +1219,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Fallback to the coarser monthly key ("YYYY-MM") so any legacy
         // data written before weekly support still shows up.
-        // Only fall back if the weekly key was never set (not if it was explicitly cleared)
+        // Only fall back if the weekly key was never set (not if it was explicitly cleared).
+        // Also: if ANY weekly key exists for this month, do NOT use monthly fallback.
         const parts = weekKey.split('-');
         if (parts.length >= 2) {
             const monthKey = `${parts[0]}-${parts[1]}`;
+            const weeklyPrefix = `${parts[0]}-${parts[1]}-W`;
+            const hasWeeklyForMonth = Object.keys(collectionStatus || {}).some((key) =>
+                key.startsWith(weeklyPrefix)
+            );
+            if (hasWeeklyForMonth) {
+                return null;
+            }
             return collectionStatus[monthKey] || null;
         }
         
@@ -1249,9 +1274,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // This prevents fallback to monthly key when a week is explicitly cleared
     const setStatusForYear = (collectionStatus, week, status, year = selectedYear) => {
         const weekKey = getWeekKey(week, year);
-        if (!weekKey) return collectionStatus || {};
+        // Only allow weekly keys ("YYYY-MM-W##") for writes to avoid
+        // accidental month-wide status application.
+        if (!weekKey || !weekKey.includes('-W')) return collectionStatus || {};
         
         const newStatus = { ...(collectionStatus || {}) };
+        const [yearPart, monthPart] = weekKey.split('-');
+        const monthKey = `${yearPart}-${monthPart}`;
+        
+        // Remove any legacy monthly key so weeks don't inherit it on refresh.
+        if (Object.prototype.hasOwnProperty.call(newStatus, monthKey)) {
+            delete newStatus[monthKey];
+        }
         
         // If status is empty/null, explicitly set to empty string to mark as cleared
         // This prevents getStatusForYear from falling back to monthly key
@@ -1746,9 +1780,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         // Always use ref to get the latest selectedCells value (avoids stale closure)
         const currentSelectedCells = selectedCellsRef.current;
         
+        // Ensure week is properly resolved to a week object
+        let resolvedWeek = week;
+        if (typeof week === 'object' && week.number) {
+            // Already a week object, use it
+            resolvedWeek = week;
+        } else if (typeof week === 'string' || typeof week === 'number') {
+            // Try to resolve to a week object
+            const weekNum = typeof week === 'number' ? week : parseInt(week.toString().match(/W?(\d+)/i)?.[1] || '0', 10);
+            resolvedWeek = weeks.find(w => w.number === weekNum) || week;
+        }
+        
         // If applying to selected cells, get all selected cell keys
         let cellsToUpdate = [];
-        if (applyToSelected && currentSelectedCells.size > 0) {
+        if (applyToSelected && currentSelectedCells.size > 1) {
             // Parse all selected cell keys (format: sectionId-documentId-W##)
             cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
                 // Cell key format: "sectionId-documentId-W##" (e.g., "section1-doc1-W01")
@@ -1772,8 +1817,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 return { sectionId: secId, documentId: docId, week: weekObj || weekNum || weekPart };
             });
         } else {
-            // Just update the single cell
-            cellsToUpdate = [{ sectionId, documentId, week }];
+            // Just update the single cell - ensure we use the resolved week object
+            cellsToUpdate = [{ sectionId, documentId, week: resolvedWeek }];
         }
         
         // Update the sections for the current year
@@ -1796,6 +1841,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     // Apply status to all matching weeks for this document
                     let updatedStatus = doc.collectionStatus || {};
                     docUpdates.forEach(cell => {
+                        // Ensure week is properly resolved before setting status
+                        const weekKey = getWeekKey(cell.week, selectedYear);
+                        if (!weekKey) {
+                            console.warn('⚠️ Cannot resolve week key for:', cell.week, 'skipping update');
+                            return;
+                        }
                         updatedStatus = setStatusForYear(updatedStatus, cell.week, status, selectedYear);
                     });
                     
@@ -1926,7 +1977,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     const weekLabel = typeof week === 'object' ? week.label : week;
                     const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
                     // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docWeek=${encodeURIComponent(weekLabel)}&commentId=${encodeURIComponent(newCommentId)}`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docWeek=${encodeURIComponent(weekLabel)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
@@ -2500,9 +2551,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
         }
         
-        const textColorClass = statusConfig && statusConfig.color 
+        const baseTextColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
             : 'text-gray-400';
+        
+        const textColorClass = isSelected ? 'text-white' : baseTextColorClass;
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -2550,8 +2603,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const newStatus = e.target.value;
                             // Always use ref to get latest selectedCells value
                             const currentSelectedCells = selectedCellsRef.current;
-                            // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
-                            const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
+                            // Only apply to selected cells if:
+                            // 1. There are multiple selected cells (more than just this one)
+                            // 2. This cell is part of the selection
+                            // This prevents accidentally applying to cells that were selected unintentionally
+                            const applyToSelected = currentSelectedCells.size > 1 && currentSelectedCells.has(cellKey);
+                            
                             handleUpdateStatus(section.id, doc.id, week, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
@@ -2559,16 +2616,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             const newStatus = e.target.value;
                             if (newStatus !== status) {
                                 const currentSelectedCells = selectedCellsRef.current;
-                                const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
+                                // Only apply to selected cells if there are multiple selected
+                                const applyToSelected = currentSelectedCells.size > 1 && currentSelectedCells.has(cellKey);
                                 handleUpdateStatus(section.id, doc.id, week, newStatus, applyToSelected);
                             }
                         }}
                         onMouseDown={(e) => {
-                            // Allow Ctrl/Cmd+Click to bubble up for multi-select
-                            // Only stop propagation for normal clicks
+                            // Clear selection when clicking on dropdown (unless Ctrl/Cmd is held for multi-select)
                             if (!e.ctrlKey && !e.metaKey) {
+                                // Clear any existing selection when user clicks on dropdown
+                                const currentSelectedCells = selectedCellsRef.current;
+                                if (currentSelectedCells.size > 0) {
+                                    const newSet = new Set([cellKey]); // Keep only this cell selected
+                                    setSelectedCells(newSet);
+                                    selectedCellsRef.current = newSet;
+                                }
                                 e.stopPropagation();
                             }
+                            // Allow Ctrl/Cmd+Click to bubble up for multi-select
                         }}
                         onClick={(e) => {
                             // Handle Ctrl/Cmd+Click on the select itself for multi-select
@@ -3441,23 +3506,37 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             
             {/* Header */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={onBack} 
-                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">Weekly FMS Review Tracker</h1>
-                            <p className="text-sm text-gray-600 mt-0.5">
-                                {project?.name}
-                                {project?.client && ` • ${project.client}`}
-                                {' • Facilities: '}
-                                <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
-                            </p>
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={onBack} 
+                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <i className="fas fa-arrow-left"></i>
+                            </button>
+                            <div>
+                                <h1 className="text-xl font-bold text-gray-900">Weekly FMS Review Tracker</h1>
+                                <p className="text-sm text-gray-600 mt-0.5">
+                                    {project?.name}
+                                    {project?.client && ` • ${project.client}`}
+                                    {' • Facilities: '}
+                                    <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                                </p>
+                            </div>
                         </div>
+                        
+                        <button
+                            onClick={handleExportToExcel}
+                            disabled={isExporting || sections.length === 0}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5 self-start lg:self-auto"
+                        >
+                            {isExporting ? (
+                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
+                            ) : (
+                                <><i className="fas fa-file-excel"></i><span>Export</span></>
+                            )}
+                        </button>
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2">
@@ -3492,18 +3571,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         </div>
                         
                         <button
-                            onClick={handleExportToExcel}
-                            disabled={isExporting || sections.length === 0}
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                        >
-                            {isExporting ? (
-                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
-                            ) : (
-                                <><i className="fas fa-file-excel"></i><span>Export</span></>
-                            )}
-                        </button>
-                        
-                        <button
                             onClick={handleAddSection}
                             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                         >
@@ -3511,48 +3578,75 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         </button>
                         
                         <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
-                            <button
-                                onClick={() => setShowApplyTemplateModal(true)}
-                                className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                            >
-                                <i className="fas fa-magic"></i><span>Apply Template</span>
-                            </button>
-                            <button
-                                onClick={() => setShowTemplateModal(true)}
-                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                            >
-                                <i className="fas fa-layer-group"></i><span>Templates</span>
-                            </button>
-                            <button
-                                onClick={() => {
-                                    try {
-                                        if (!sections || sections.length === 0) {
-                                            alert('There are no sections in this year to save as a template.');
-                                            return;
-                                        }
-                                        const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
-                                        const name = window.prompt('Template name', defaultName);
-                                        if (!name || !name.trim()) {
-                                            return;
-                                        }
-                                        setEditingTemplate(null);
-                                        setPrefilledTemplate({
-                                            name: name.trim(),
-                                            description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
-                                            sections: buildTemplateSectionsFromCurrent()
-                                        });
-                                        setShowTemplateList(false);
-                                        setShowTemplateModal(true);
-                                    } catch (e) {
-                                        console.error('❌ Failed to prepare template from current year:', e);
-                                        alert('Could not prepare template from current year. See console for details.');
-                                    }
-                                }}
-                                className="px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                                title="Save current year as template"
-                            >
-                                <i className="fas fa-save"></i><span>Save Template</span>
-                            </button>
+                            <div className="relative" ref={templateDropdownRef}>
+                                <button
+                                    onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
+                                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                                >
+                                    <i className="fas fa-layer-group"></i><span>Templates</span>
+                                    <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
+                                </button>
+                                
+                                {isTemplateDropdownOpen && (
+                                    <div className="absolute left-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                                        <button
+                                            onClick={() => {
+                                                setShowApplyTemplateModal(true);
+                                                setIsTemplateDropdownOpen(false);
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2 transition-colors"
+                                        >
+                                            <i className="fas fa-magic text-purple-600"></i>
+                                            <span>Apply Template</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowTemplateModal(true);
+                                                setIsTemplateDropdownOpen(false);
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 transition-colors"
+                                        >
+                                            <i className="fas fa-layer-group text-indigo-600"></i>
+                                            <span>Manage Templates</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                try {
+                                                    if (!sections || sections.length === 0) {
+                                                        alert('There are no sections in this year to save as a template.');
+                                                        setIsTemplateDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
+                                                    const name = window.prompt('Template name', defaultName);
+                                                    if (!name || !name.trim()) {
+                                                        setIsTemplateDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    setEditingTemplate(null);
+                                                    setPrefilledTemplate({
+                                                        name: name.trim(),
+                                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
+                                                        sections: buildTemplateSectionsFromCurrent()
+                                                    });
+                                                    setShowTemplateList(false);
+                                                    setShowTemplateModal(true);
+                                                    setIsTemplateDropdownOpen(false);
+                                                } catch (e) {
+                                                    console.error('❌ Failed to prepare template from current year:', e);
+                                                    alert('Could not prepare template from current year. See console for details.');
+                                                    setIsTemplateDropdownOpen(false);
+                                                }
+                                            }}
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2 transition-colors"
+                                            title="Save current year as template"
+                                        >
+                                            <i className="fas fa-save text-amber-600"></i>
+                                            <span>Save Template</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3841,3 +3935,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
 // Make available globally
 window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
+if (typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('weeklyFMSReviewTrackerUpdated', {
+        detail: { source: 'dist' }
+    }));
+}
