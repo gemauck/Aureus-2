@@ -78,7 +78,7 @@ const AuditTrail = () => {
     const loadLogs = async () => {
         if (!AuditLogger || typeof AuditLogger.getAll !== 'function') {
             console.error('AuditLogger.getAll not available');
-            setError('AuditLogger not available');
+            setError('AuditLogger not available. Please refresh the page.');
             setLogs([]);
             setIsLoading(false);
             return;
@@ -86,16 +86,23 @@ const AuditTrail = () => {
         setIsLoading(true);
         setError(null);
         try {
+            console.log('📊 Loading audit logs...');
             const allLogs = await AuditLogger.getAll();
+            console.log('📊 Raw audit logs response:', allLogs);
+            
             // Ensure allLogs is an array
             const logsArray = Array.isArray(allLogs) ? allLogs : (allLogs?.logs && Array.isArray(allLogs.logs) ? allLogs.logs : []);
+            
+            console.log(`📊 Extracted ${logsArray.length} audit log entries`);
+            
             setLogs(logsArray);
             if (logsArray.length === 0) {
-                setError('No audit logs found. Perform some actions to generate logs.');
+                // Don't show error for empty logs - it's normal if no actions have been performed yet
+                console.log('ℹ️ No audit logs found. This is normal if no actions have been logged yet.');
             }
         } catch (error) {
-            console.error('Error loading audit logs:', error);
-            setError(`Failed to load audit logs: ${error.message}`);
+            console.error('❌ Error loading audit logs:', error);
+            setError(`Failed to load audit logs: ${error.message}. Please check your connection and try again.`);
             setLogs([]);
         } finally {
             setIsLoading(false);
@@ -320,15 +327,15 @@ const AuditTrail = () => {
 
             {/* Error Message */}
             {error && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
-                    <i className="fas fa-exclamation-triangle text-yellow-600 mt-0.5"></i>
+                <div className={`${isDark ? 'bg-yellow-900 border-yellow-700' : 'bg-yellow-50 border-yellow-200'} border rounded-lg p-3 flex items-start gap-2`}>
+                    <i className={`fas fa-exclamation-triangle ${isDark ? 'text-yellow-400' : 'text-yellow-600'} mt-0.5`}></i>
                     <div className="flex-1">
-                        <p className="text-xs text-yellow-800 font-medium mb-1">Notice</p>
-                        <p className="text-xs text-yellow-700">{error}</p>
+                        <p className={`text-xs ${isDark ? 'text-yellow-200' : 'text-yellow-800'} font-medium mb-1`}>Notice</p>
+                        <p className={`text-xs ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>{error}</p>
                     </div>
                     <button
                         onClick={() => setError(null)}
-                        className="text-yellow-600 hover:text-yellow-800"
+                        className={isDark ? 'text-yellow-400 hover:text-yellow-300' : 'text-yellow-600 hover:text-yellow-800'}
                     >
                         <i className="fas fa-times"></i>
                     </button>

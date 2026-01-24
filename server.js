@@ -907,6 +907,68 @@ app.all('/api/audit-logs', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for feedback operations (GET, POST /api/feedback)
+app.all('/api/feedback', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'feedback.js'))
+    if (!handler) {
+      console.error('❌ Feedback handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in feedback handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for feedback reply operations (POST /api/feedback/:id/replies)
+app.all('/api/feedback/:id/replies', async (req, res, next) => {
+  try {
+    // Extract feedback ID from URL
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    const pathSegments = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+    if (pathSegments.length >= 3 && pathSegments[0] === 'feedback') {
+      req.params = req.params || {}
+      req.params.id = pathSegments[1]
+    }
+    
+    const handler = await loadHandler(path.join(apiDir, 'feedback.js'))
+    if (!handler) {
+      console.error('❌ Feedback handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in feedback reply handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for clients list and create operations (GET, POST /api/clients)
 app.all('/api/clients', async (req, res, next) => {
   try {

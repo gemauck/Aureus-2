@@ -287,8 +287,8 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
                         </button>
                     )}
                     <div>
-                        <h2 className="text-xl font-semibold text-gray-900">Document Collection Checklist</h2>
-                        <p className="text-sm text-gray-600 mt-0.5">Track required documents for this project</p>
+                        <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Document Collection Checklist</h2>
+                        <p className="text-sm text-gray-500 mt-0.5">Track required documents for this project</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">

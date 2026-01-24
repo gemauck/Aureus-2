@@ -542,6 +542,19 @@ async function handler(req, res) {
           // Preserve group data (groupMemberships are objects, not JSON strings)
           // These come from Prisma relations and should be preserved as-is
           const rawGroupMemberships = lead.groupMemberships || parsed.groupMemberships
+          
+          // Debug: Log groupMemberships for first lead
+          if (leads.indexOf(lead) === 0) {
+            console.log('🔍 API: First lead groupMemberships from Prisma:', {
+              leadName: lead.name,
+              leadId: lead.id,
+              rawGroupMemberships: rawGroupMemberships,
+              isArray: Array.isArray(rawGroupMemberships),
+              length: rawGroupMemberships?.length || 0,
+              value: JSON.stringify(rawGroupMemberships, null, 2)
+            });
+          }
+          
           if (rawGroupMemberships && Array.isArray(rawGroupMemberships)) {
             parsed.groupMemberships = rawGroupMemberships
           } else {
@@ -1565,7 +1578,20 @@ async function handler(req, res) {
             clientFollowUps: true,
             clientServices: true,
             projects: { select: { id: true, name: true, status: true } },
-            externalAgent: true
+            externalAgent: true,
+            // CRITICAL: Include groupMemberships to ensure they're returned in response
+            groupMemberships: {
+              include: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    industry: true
+                  }
+                }
+              }
+            }
           }
         })
         if (!existing) {
@@ -1600,7 +1626,20 @@ async function handler(req, res) {
               clientFollowUps: true,
               clientServices: true,
               projects: { select: { id: true, name: true, status: true } },
-              externalAgent: true
+              externalAgent: true,
+              // CRITICAL: Include groupMemberships to ensure they're returned in response
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      industry: true
+                    }
+                  }
+                }
+              }
             }
           })
           

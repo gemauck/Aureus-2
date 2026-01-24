@@ -312,11 +312,11 @@ const MyNotes = () => {
                 <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm p-6 mb-4`}>
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 <i className="fas fa-sticky-note mr-2 text-primary-500"></i>
                                 My Notes
                             </h1>
-                            <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                 Personal notes - {notes.length} note{notes.length !== 1 ? 's' : ''}
                             </p>
                         </div>

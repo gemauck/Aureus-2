@@ -3600,8 +3600,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <i className="fas fa-arrow-left"></i>
                             </button>
                             <div>
-                                <h1 className="text-xl font-bold text-gray-900">Monthly Document Collection Tracker</h1>
-                                <p className="text-sm text-gray-600 mt-0.5">
+                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Monthly Document Collection Tracker</h1>
+                                <p className="text-sm text-gray-500 mt-0.5">
                                     {project?.name}
                                     {project?.client && ` • ${project.client}`}
                                     {' • Facilities: '}

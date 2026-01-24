@@ -302,8 +302,8 @@ const ClientNewsFeed = () => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Client News Feed</h1>
-                    <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Client News Feed</h1>
+                    <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Stay updated with client and lead activities and news
                     </p>
                 </div>

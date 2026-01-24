@@ -41,6 +41,24 @@ async function handler(req, res) {
           }
         }
         
+        // Check if externalAgentId column exists before including relation
+        let hasExternalAgentId = false
+        try {
+          // Check for column with case-insensitive table name (PostgreSQL stores unquoted identifiers in lowercase)
+          const columnCheck = await prisma.$queryRaw`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'Client' AND column_name = 'externalAgentId'
+          `
+          hasExternalAgentId = Array.isArray(columnCheck) && columnCheck.length > 0
+          if (!hasExternalAgentId) {
+            console.warn('⚠️ externalAgentId column does not exist, skipping externalAgent relation')
+          }
+        } catch (columnCheckError) {
+          console.warn('⚠️ Failed to check for externalAgentId column, assuming it does not exist:', columnCheckError.message)
+          hasExternalAgentId = false
+        }
+        
         // Check if ClientCompanyGroup table exists before trying to include it
         let hasGroupMembershipsTable = true
         try {
@@ -85,6 +103,7 @@ async function handler(req, res) {
                     }
                   }
                 } : {}),
+                ...(hasExternalAgentId ? { externalAgent: true } : {}),
                 ...(hasGroupMembershipsTable ? {
                   groupMemberships: {
                     include: {
@@ -1413,6 +1432,11 @@ async function handler(req, res) {
           jsonFieldsToUpdate.billingTermsJsonb = billingTermsObj
         }
         
+        // Handle externalAgentId separately
+        if (body.externalAgentId !== undefined) {
+          updateData.externalAgentId = body.externalAgentId || null
+        }
+        
         // Merge all update data
         Object.assign(updateData, jsonFieldsToUpdate)
         
@@ -1425,7 +1449,35 @@ async function handler(req, res) {
         
         try {
           // Phase 2: Dual-write update - writes to both String and JSONB
-          const client = await prisma.client.update({ where: { id }, data: updateData })
+          const client = await prisma.client.update({ 
+            where: { id }, 
+            data: updateData,
+            include: {
+              clientContacts: true,
+              clientComments: true,
+              clientSites: true,
+              clientContracts: true,
+              clientProposals: true,
+              clientFollowUps: true,
+              clientServices: true,
+              projects: { select: { id: true, name: true, status: true } },
+              ...(hasExternalAgentId ? { externalAgent: true } : {}),
+              ...(hasGroupMembershipsTable ? {
+                groupMemberships: {
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        industry: true
+                      }
+                    }
+                  }
+                }
+              } : {})
+            }
+          })
           // Parse JSON fields before returning (will read from JSONB first)
           const parsedClient = parseClientJsonFields(client)
           return ok(res, { client: parsedClient })

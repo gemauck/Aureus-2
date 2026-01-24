@@ -106,6 +106,16 @@ const CompanyGroupSelector = ({
                 }
                 setShowAddGroupModal(false);
                 
+                // Trigger refresh of main clients/leads list
+                window.dispatchEvent(new CustomEvent('clientGroupUpdated', { 
+                    detail: { clientId, action: 'added' } 
+                }));
+                
+                // Force LiveDataSync to refresh if available
+                if (window.LiveDataSync?.forceSync) {
+                    window.LiveDataSync.forceSync().catch(() => {});
+                }
+                
                 // Refresh available groups
                 const available = allGroups.filter(g => 
                     !updated.some(gm => gm.groupId === g.id)
@@ -140,6 +150,16 @@ const CompanyGroupSelector = ({
             setGroupMemberships(updated);
             if (onGroupMembershipsChange) {
                 onGroupMembershipsChange(updated);
+            }
+            
+            // Trigger refresh of main clients/leads list
+            window.dispatchEvent(new CustomEvent('clientGroupUpdated', { 
+                detail: { clientId, action: 'removed' } 
+            }));
+            
+            // Force LiveDataSync to refresh if available
+            if (window.LiveDataSync?.forceSync) {
+                window.LiveDataSync.forceSync().catch(() => {});
             }
             
             // Refresh available groups

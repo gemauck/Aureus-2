@@ -1050,6 +1050,11 @@ async function handler(req, res) {
         const jsonFieldsData = prepareJsonFieldsForDualWrite(body)
         Object.assign(updateData, jsonFieldsData)
         
+        // Handle externalAgentId separately
+        if (body.externalAgentId !== undefined) {
+          updateData.externalAgentId = body.externalAgentId || null
+        }
+        
         // If industry is being updated, ensure it exists in Industry table
         if (updateData.industry && updateData.industry.trim()) {
           const industryName = updateData.industry.trim()
@@ -1095,7 +1100,21 @@ async function handler(req, res) {
               clientProposals: true,
               clientFollowUps: true,
               clientServices: true,
-              projects: { select: { id: true, name: true, status: true } }
+              projects: { select: { id: true, name: true, status: true } },
+              externalAgent: true,
+              // CRITICAL: Include groupMemberships to ensure they're returned in response
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      industry: true
+                    }
+                  }
+                }
+              }
             }
           })
           
@@ -1119,7 +1138,21 @@ async function handler(req, res) {
             clientProposals: true,
             clientFollowUps: true,
             clientServices: true,
-            projects: { select: { id: true, name: true, status: true } }
+            projects: { select: { id: true, name: true, status: true } },
+            externalAgent: true,
+            // CRITICAL: Include groupMemberships to ensure they're returned in response
+            groupMemberships: {
+              include: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    industry: true
+                  }
+                }
+              }
+            }
           }
         })
         

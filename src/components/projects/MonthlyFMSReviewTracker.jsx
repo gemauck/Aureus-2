@@ -403,6 +403,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const pendingCommentOpenRef = useRef(null);
     const [users, setUsers] = useState([]);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
@@ -1977,6 +1978,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             let deepDocumentId = null;
             let deepMonth = null;
             let deepCommentId = null;
+            let deepYear = null;
             
             // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
             const hash = window.location.hash || '';
@@ -1988,6 +1990,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     deepDocumentId = params.get('docDocumentId');
                     deepMonth = params.get('docMonth');
                     deepCommentId = params.get('commentId');
+                    deepYear = params.get('docYear') || params.get('year');
                 }
             }
             
@@ -2000,7 +2003,29 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     if (!deepDocumentId) deepDocumentId = params.get('docDocumentId');
                     if (!deepMonth) deepMonth = params.get('docMonth');
                     if (!deepCommentId) deepCommentId = params.get('commentId');
+                    if (!deepYear) deepYear = params.get('docYear') || params.get('year');
                 }
+            }
+            
+            const parsedDeepYear = deepYear ? Number(deepYear) : null;
+            const normalizedDeepYear = parsedDeepYear && !Number.isNaN(parsedDeepYear) ? parsedDeepYear : null;
+            let isValidDocumentId = deepDocumentId && 
+                                    deepDocumentId !== 'undefined' && 
+                                    deepDocumentId.trim() !== '';
+            
+            // If year is specified and different from current, switch to that year first
+            if (normalizedDeepYear && normalizedDeepYear !== selectedYear && deepSectionId && isValidDocumentId && deepMonth) {
+                if (!deepCommentId) {
+                    // Store pending comment open for after year change
+                    pendingCommentOpenRef.current = {
+                        sectionId: deepSectionId,
+                        documentId: deepDocumentId,
+                        month: deepMonth
+                    };
+                }
+                handleYearChange(normalizedDeepYear);
+                // Return early - will retry after year changes
+                return;
             }
             
             if (deepSectionId && deepDocumentId && deepMonth) {
@@ -2103,12 +2128,62 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     }
                 }, 200);
                 
-                // Comment deep linking removed - no scrolling functionality
+                // Scroll to specific comment if commentId is provided
+                if (deepCommentId) {
+                    const scrollToComment = () => {
+                        const commentElement = window.document.getElementById(`comment-${deepCommentId}`);
+                        const container = commentPopupContainerRef.current;
+                        if (commentElement && container) {
+                            // Calculate scroll position to center the comment in the container
+                            // Use offsetTop relative to the container's scrollable content
+                            const containerScrollTop = container.scrollTop;
+                            const commentOffsetTop = commentElement.offsetTop - container.offsetTop;
+                            const containerHeight = container.clientHeight;
+                            const commentHeight = commentElement.offsetHeight;
+                            
+                            // Center the comment vertically in the visible area
+                            const targetScrollTop = commentOffsetTop - (containerHeight / 2) + (commentHeight / 2);
+                            
+                            container.scrollTo({
+                                top: Math.max(0, targetScrollTop),
+                                behavior: 'smooth'
+                            });
+                            
+                            // Highlight the comment briefly with a subtle animation
+                            commentElement.style.transition = 'background-color 0.3s ease';
+                            commentElement.style.backgroundColor = '#fef3c7'; // yellow highlight
+                            setTimeout(() => {
+                                commentElement.style.backgroundColor = '';
+                                setTimeout(() => {
+                                    commentElement.style.transition = '';
+                                }, 300);
+                            }, 2000);
+                            
+                            console.log('✅ Scrolled to comment:', deepCommentId);
+                            return true;
+                        }
+                        return false;
+                    };
+                    
+                    // Try scrolling immediately, then retry a few times (wait for popup to render)
+                    setTimeout(() => {
+                        if (!scrollToComment()) {
+                            let scrollAttempts = 0;
+                            const maxScrollAttempts = 10;
+                            const scrollRetry = setInterval(() => {
+                                scrollAttempts++;
+                                if (scrollToComment() || scrollAttempts >= maxScrollAttempts) {
+                                    clearInterval(scrollRetry);
+                                }
+                            }, 200);
+                        }
+                    }, 100); // Small delay to ensure popup is rendered
+                }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply monthly FMS review deep-link:', error);
         }
-    }, [sections]);
+    }, [sections, sectionsByYear, selectedYear, handleYearChange]);
     
     // Check for deep link on mount and when sections load
     useEffect(() => {
@@ -2130,6 +2205,16 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
     }, [checkAndOpenDeepLink]);
+    
+    // When year changes, check if we have a pending comment to open
+    useEffect(() => {
+        if (pendingCommentOpenRef.current && sections && sections.length > 0) {
+            const timer = setTimeout(() => {
+                checkAndOpenDeepLink();
+            }, 500); // Wait a bit longer for sections to render after year change
+            return () => clearTimeout(timer);
+        }
+    }, [selectedYear, sections.length, checkAndOpenDeepLink]);
     
     // ============================================================
     // RENDER STATUS CELL
@@ -2270,9 +2355,41 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                 
                                 if (isPopupOpen) {
                                     setHoverCommentCell(null);
+                                    // Clear URL params when closing popup (but preserve project path)
+                                    if (window.RouteState && window.RouteState.navigate && project?.id) {
+                                        window.RouteState.navigate({
+                                            page: 'projects',
+                                            segments: [String(project.id)],
+                                            hash: '',
+                                            search: '',
+                                            replace: false,
+                                            preserveSearch: false,
+                                            preserveHash: false
+                                        });
+                                    }
                                 } else {
                                     // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);
+                                    
+                                    // Update URL with deep link when opening popup
+                                    const [sectionId, documentId, month] = cellKey.split('-');
+                                    if (sectionId && documentId && month && project?.id) {
+                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}`;
+                                        
+                                        if (window.RouteState && window.RouteState.navigate) {
+                                            window.RouteState.navigate({
+                                                page: 'projects',
+                                                segments: [String(project.id)],
+                                                hash: deepLinkUrl.replace('#', ''),
+                                                replace: false,
+                                                preserveSearch: false,
+                                                preserveHash: false
+                                            });
+                                        } else {
+                                            window.location.hash = deepLinkUrl;
+                                        }
+                                    }
+                                    
                                     // Trigger position update after state is set
                                     setTimeout(() => {
                                         const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
@@ -2990,16 +3107,64 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                    {comments.map((comment, idx) => (
+                                <div 
+                                    key={`comment-container-${hoverCommentCell}`}
+                                    ref={commentPopupContainerRef}
+                                    className="comment-scroll-container mb-2"
+                                >
+                                    <div className="space-y-2 pr-1">
+                                        {comments.map((comment, idx) => (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
                                             id={comment.id ? `comment-${comment.id}` : undefined}
-                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group"
+                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group cursor-pointer"
+                                            onClick={() => {
+                                                // Update URL when clicking on a comment to enable sharing
+                                                if (section && doc && comment.id) {
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    
+                                                    // Update URL using RouteState if available, otherwise use hash
+                                                    if (window.RouteState && window.RouteState.navigate) {
+                                                        const url = new URL(window.location.href);
+                                                        url.hash = deepLinkUrl.replace('#', '');
+                                                        window.RouteState.navigate({
+                                                            page: 'projects',
+                                                            segments: [String(project?.id || '')],
+                                                            hash: deepLinkUrl.replace('#', ''),
+                                                            replace: false,
+                                                            preserveSearch: false,
+                                                            preserveHash: false
+                                                        });
+                                                    } else {
+                                                        window.location.hash = deepLinkUrl;
+                                                    }
+                                                    
+                                                    // Copy to clipboard
+                                                    const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
+                                                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                        navigator.clipboard.writeText(fullUrl).then(() => {
+                                                            // Show brief feedback
+                                                            const button = window.document.querySelector(`[data-copy-link="${comment.id}"]`);
+                                                            if (button) {
+                                                                const originalHTML = button.innerHTML;
+                                                                button.innerHTML = '<i class="fas fa-check text-[9px]"></i>';
+                                                                button.className = button.className.replace('text-gray-400', 'text-green-600');
+                                                                setTimeout(() => {
+                                                                    button.innerHTML = originalHTML;
+                                                                    button.className = button.className.replace('text-green-600', 'text-gray-400');
+                                                                }, 1500);
+                                                            }
+                                                        }).catch(err => {
+                                                            console.warn('Failed to copy link:', err);
+                                                        });
+                                                    }
+                                                }
+                                            }}
+                                            title="Click to copy link to this comment"
                                         >
                                             <p
-                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-6"
+                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-12"
                                                 dangerouslySetInnerHTML={{
                                                     __html:
                                                         window.MentionHelper && comment.text
@@ -3022,17 +3187,52 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                 })() : 'No date'}</span>
                                             </div>
                                             <button
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent triggering comment click
                                                     if (!section || !doc) return;
                                                     handleDeleteComment(section.id, doc.id, month, comment.id);
                                                 }}
-                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
+                                                title="Delete comment"
                                             >
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
+                                            <button
+                                                data-copy-link={comment.id}
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent triggering comment click
+                                                    if (!section || !doc || !comment.id) return;
+                                                    
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
+                                                    
+                                                    // Copy to clipboard
+                                                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                        navigator.clipboard.writeText(fullUrl).then(() => {
+                                                            // Show feedback
+                                                            const button = e.currentTarget;
+                                                            const originalHTML = button.innerHTML;
+                                                            button.innerHTML = '<i class="fas fa-check text-[9px]"></i>';
+                                                            button.className = button.className.replace('text-gray-400', 'text-green-600');
+                                                            setTimeout(() => {
+                                                                button.innerHTML = originalHTML;
+                                                                button.className = button.className.replace('text-green-600', 'text-gray-400');
+                                                            }, 1500);
+                                                        }).catch(err => {
+                                                            console.warn('Failed to copy link:', err);
+                                                        });
+                                                    }
+                                                }}
+                                                className="absolute top-1 right-6 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                type="button"
+                                                title="Copy link to this comment"
+                                            >
+                                                <i className="fas fa-link text-[9px]"></i>
+                                            </button>
                                         </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -3096,8 +3296,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                 <i className="fas fa-arrow-left"></i>
                             </button>
                             <div>
-                                <h1 className="text-xl font-bold text-gray-900">Monthly FMS Review Tracker</h1>
-                                <p className="text-sm text-gray-600 mt-0.5">
+                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Monthly FMS Review Tracker</h1>
+                                <p className="text-sm text-gray-500 mt-0.5">
                                     {project?.name}
                                     {project?.client && ` • ${project.client}`}
                                     {' • Facilities: '}

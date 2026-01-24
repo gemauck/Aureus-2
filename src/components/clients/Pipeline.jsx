@@ -1325,9 +1325,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             return;
         }
         
-        e.preventDefault();
-        e.stopPropagation();
-        
+        // Don't prevent default immediately - wait to see if it's a drag or click
         console.log('🖱️ MouseDown triggered', { itemId: item.id });
         
         const cardElement = e.currentTarget;
@@ -1336,37 +1334,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
         // Calculate offset from mouse click point to card's top-left corner
         const offsetX = e.clientX - cardRect.left;
         const offsetY = e.clientY - cardRect.top;
-        
-        // Create a simple ghost element with card content
-        const ghost = document.createElement('div');
-        ghost.id = 'pipeline-drag-ghost';
-        ghost.innerHTML = cardElement.innerHTML;
-        ghost.className = cardElement.className;
-        
-        // Apply styles directly - set each property individually
-        ghost.style.position = 'fixed';
-        ghost.style.left = `${cardRect.left}px`;
-        ghost.style.top = `${cardRect.top}px`;
-        ghost.style.width = `${cardRect.width}px`;
-        ghost.style.zIndex = '99999';
-        ghost.style.opacity = '0.9';
-        ghost.style.pointerEvents = 'none';
-        ghost.style.transform = 'rotate(2deg) scale(1.03)';
-        ghost.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
-        ghost.style.transition = 'none';
-        ghost.style.cursor = 'grabbing';
-        ghost.style.backgroundColor = 'white';
-        ghost.style.borderRadius = '0.5rem';
-        ghost.style.padding = '0.75rem';
-        ghost.style.border = '1px solid #e5e7eb';
-        
-        document.body.appendChild(ghost);
-        dragGhostRef.current = ghost;
-        console.log('👻 Ghost element created and appended', ghost);
-        
-        // Make original card semi-transparent
-        cardElement.style.opacity = '0.3';
-        cardElement.style.transition = 'none';
         
         const dragState = {
             item,
@@ -1381,21 +1348,74 @@ function doesOpportunityBelongToClient(opportunity, client) {
             initialStage: item.stage,
             cardElement,
             hasMoved: false,
-            targetStage: null
+            targetStage: null,
+            wasClick: false
         };
         
         dragStateRef.current = dragState;
-        setMouseDragState(dragState);
-        setDraggedItem(item);
-        setDraggedType(type);
-        setIsDragging(true);
         
         // Mouse move handler - update ghost position IMMEDIATELY
         const mouseMoveHandler = (moveEvent) => {
             const state = dragStateRef.current;
+            if (!state) {
+                return;
+            }
+            
+            // Check if we've moved enough to consider it a drag
+            const deltaX = moveEvent.clientX - state.startX;
+            const deltaY = moveEvent.clientY - state.startY;
+            const minDragDistance = 5;
+            
+            // Only prevent default and create ghost once we start dragging
+            if (!state.hasMoved && (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance)) {
+                state.hasMoved = true;
+                moveEvent.preventDefault();
+                moveEvent.stopPropagation();
+                
+                // Create ghost element only when dragging starts
+                const ghost = document.createElement('div');
+                ghost.id = 'pipeline-drag-ghost';
+                ghost.innerHTML = cardElement.innerHTML;
+                ghost.className = cardElement.className;
+                
+                // Apply styles directly - set each property individually
+                ghost.style.position = 'fixed';
+                ghost.style.left = `${cardRect.left}px`;
+                ghost.style.top = `${cardRect.top}px`;
+                ghost.style.width = `${cardRect.width}px`;
+                ghost.style.zIndex = '99999';
+                ghost.style.opacity = '0.9';
+                ghost.style.pointerEvents = 'none';
+                ghost.style.transform = 'rotate(2deg) scale(1.03)';
+                ghost.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.15)';
+                ghost.style.transition = 'none';
+                ghost.style.cursor = 'grabbing';
+                ghost.style.backgroundColor = 'white';
+                ghost.style.borderRadius = '0.5rem';
+                ghost.style.padding = '0.75rem';
+                ghost.style.border = '1px solid #e5e7eb';
+                
+                document.body.appendChild(ghost);
+                dragGhostRef.current = ghost;
+                console.log('👻 Ghost element created and appended', ghost);
+                
+                // Make original card semi-transparent
+                cardElement.style.opacity = '0.3';
+                cardElement.style.transition = 'none';
+                
+                // Set drag state
+                setMouseDragState(dragState);
+                setDraggedItem(item);
+                setDraggedType(type);
+                setIsDragging(true);
+            }
+            
+            if (!state.hasMoved) {
+                return; // Not dragging yet, don't interfere
+            }
+            
             const ghostEl = dragGhostRef.current;
-            if (!state || !ghostEl) {
-                console.log('⚠️ MouseMove: Missing state or ghost', { state: !!state, ghost: !!ghostEl });
+            if (!ghostEl) {
                 return;
             }
             
@@ -1416,38 +1436,29 @@ function doesOpportunityBelongToClient(opportunity, client) {
             state.currentX = moveEvent.clientX;
             state.currentY = moveEvent.clientY;
             
-            // Check if we've moved enough to consider it a drag
-            const deltaX = moveEvent.clientX - state.startX;
-            const deltaY = moveEvent.clientY - state.startY;
-            const minDragDistance = 5;
+            // Find which column we're over
+            const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+            let columnName = null;
             
-            if (Math.abs(deltaX) > minDragDistance || Math.abs(deltaY) > minDragDistance) {
-                state.hasMoved = true;
-                
-                // Find which column we're over
-                const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-                let columnName = null;
-                
-                if (elementBelow) {
-                    const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
-                    if (columnContainer) {
-                        const heading = columnContainer.querySelector('h3');
-                        if (heading) {
-                            columnName = heading.textContent?.trim();
-                        }
-                    }
-                    if (!columnName) {
-                        const dataColumn = elementBelow.closest('[data-column-name]');
-                        if (dataColumn) {
-                            columnName = dataColumn.dataset.columnName;
-                        }
+            if (elementBelow) {
+                const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
+                if (columnContainer) {
+                    const heading = columnContainer.querySelector('h3');
+                    if (heading) {
+                        columnName = heading.textContent?.trim();
                     }
                 }
-                
-                if (columnName && columnName !== state.targetStage) {
-                    state.targetStage = columnName;
-                    setDraggedOverStage(columnName);
+                if (!columnName) {
+                    const dataColumn = elementBelow.closest('[data-column-name]');
+                    if (dataColumn) {
+                        columnName = dataColumn.dataset.columnName;
+                    }
                 }
+            }
+            
+            if (columnName && columnName !== state.targetStage) {
+                state.targetStage = columnName;
+                setDraggedOverStage(columnName);
             }
         };
         
@@ -1460,7 +1471,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             document.removeEventListener('mousemove', mouseMoveHandler);
             document.removeEventListener('mouseup', mouseUpHandler);
             
-            // Remove ghost element
+            // Remove ghost element if it exists
             if (ghostEl && ghostEl.parentNode) {
                 ghostEl.parentNode.removeChild(ghostEl);
             }
@@ -1483,6 +1494,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }
             
             const { item, type, targetStage, initialStage, hasMoved } = state;
+            
+            // If no movement occurred, it was a click - allow it to proceed
+            if (!hasMoved) {
+                // Reset state immediately so click handler can work
+                dragStateRef.current = null;
+                setMouseDragState(null);
+                setDraggedItem(null);
+                setDraggedType(null);
+                setIsDragging(false);
+                setDraggedOverStage(null);
+                // Don't prevent default - let the click event fire
+                return;
+            }
             
             // Handle drop
             if (hasMoved && targetStage && targetStage !== initialStage) {
@@ -2166,6 +2190,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         if (isDragging && draggedItem?.id === item.id) {
                                                             return;
                                                         }
+                                                        // Don't trigger if mouse drag is active for this item
+                                                        if (mouseDragState?.item?.id === item.id && mouseDragState?.hasMoved) {
+                                                            return;
+                                                        }
                                                         if (onItemClick) {
                                                             onItemClick(item);
                                                         }
@@ -2541,8 +2569,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Sales Pipeline</h1>
-                    <p className="text-sm text-gray-600 mt-1">Track deals through AIDA framework</p>
+                    <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Sales Pipeline</h1>
+                    <p className="text-sm text-gray-500 mt-0.5">Track deals through AIDA framework</p>
                 </div>
                 <div className="flex gap-3">
                     <button

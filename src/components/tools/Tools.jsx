@@ -2,6 +2,7 @@
 const { useState, useEffect, useMemo } = React;
 
 const Tools = () => {
+    const { isDark } = window.useTheme?.() || { isDark: false };
     const [currentTool, setCurrentTool] = useState(null);
     const [toolComponents, setToolComponents] = useState({
         PDFToWordConverter: null,
@@ -174,8 +175,8 @@ const Tools = () => {
             return (
                 <div className="max-w-6xl mx-auto">
                     <div className="mb-4">
-                        <h1 className="text-lg font-bold text-gray-900">Staff Tools</h1>
-                        <p className="text-xs text-gray-600 mt-0.5">Productivity tools and utilities for daily tasks</p>
+                        <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Staff Tools</h1>
+                        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Productivity tools and utilities for daily tasks</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -186,7 +187,7 @@ const Tools = () => {
                                 key={tool.id}
                                 onClick={() => hasComponent && !tool.comingSoon && setCurrentTool(tool)}
                                 disabled={tool.comingSoon || !hasComponent}
-                                className={`bg-white rounded-lg border border-gray-200 p-4 text-left transition-all hover:shadow-md ${
+                                className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 text-left transition-all hover:shadow-md ${
                                     tool.comingSoon || !hasComponent
                                         ? 'opacity-60 cursor-not-allowed' 
                                         : 'hover:border-gray-300 cursor-pointer'

@@ -1404,7 +1404,7 @@ const MainLayout = () => {
             title={!sidebarOpen ? item.label : ''}
         >
             <i className={`fas ${item.icon} ${sidebarOpen ? 'text-base' : 'text-lg'} ${currentPage === item.id ? '' : 'opacity-70'}`}></i>
-            {sidebarOpen && <span className={`text-sm font-medium ${currentPage === item.id ? '' : 'font-normal'}`}>{item.label}</span>}
+            {sidebarOpen && <span className={`text-base font-medium ${currentPage === item.id ? '' : 'font-normal'}`}>{item.label}</span>}
         </button>
     );
 
@@ -1450,7 +1450,7 @@ const MainLayout = () => {
                 {/* Logo */}
                 <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'}`}>
                     {sidebarOpen && (
-                        <h1 className={`abcotronics-logo font-semibold text-base tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        <h1 className={`abcotronics-logo font-semibold text-lg tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {companyName}
                         </h1>
                     )}
@@ -1459,7 +1459,7 @@ const MainLayout = () => {
                         className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
                         aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                     >
-                        <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-base`}></i>
+                        <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-lg`}></i>
                     </button>
                 </div>
 
@@ -1479,21 +1479,21 @@ const MainLayout = () => {
                 {/* User Profile */}
                 <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-100'} p-4`}>
                     <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
-                        <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center ${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium text-sm`}>
+                        <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center ${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium text-base`}>
                             {user?.name?.charAt(0) || 'U'}
                         </div>
                         {sidebarOpen && (
                             <>
                                 <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} truncate`}>{user?.name}</p>
-                                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate capitalize`}>{user?.role}</p>
+                                    <p className={`text-base font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} truncate`}>{user?.name}</p>
+                                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate capitalize`}>{user?.role}</p>
                                 </div>
                                 <button 
                                     onClick={logout}
                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
                                     title="Logout"
                                 >
-                                    <i className="fas fa-sign-out-alt text-sm"></i>
+                                    <i className="fas fa-sign-out-alt text-base"></i>
                                 </button>
                             </>
                         )}
@@ -1526,7 +1526,7 @@ const MainLayout = () => {
                         
                         {/* Logo - MOBILE ONLY */}
                         {isMobile && (
-                            <h1 className={`abcotronics-logo font-semibold text-base truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            <h1 className={`abcotronics-logo font-semibold text-lg truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {companyName}
                             </h1>
                         )}

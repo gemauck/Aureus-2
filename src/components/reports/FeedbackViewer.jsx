@@ -38,13 +38,16 @@ const FeedbackViewer = () => {
     const loadFeedback = async () => {
         setLoading(true);
         try {
+            console.log('📊 Loading feedback...');
             const response = await window.api.getFeedback({
                 includeUser: true,
                 includeReplies: true
             });
             
+            console.log('📊 Feedback API response:', response);
+            
             // Check if we got a health check response by mistake
-            if (response?.platform || response?.status === 'ok' && response?.timestamp) {
+            if (response?.platform || (response?.status === 'ok' && response?.timestamp)) {
                 console.error('❌ Got health check response instead of feedback!');
                 console.error('   Response:', response);
                 console.error('   This means /api/feedback is routing to wrong endpoint');
@@ -56,8 +59,10 @@ const FeedbackViewer = () => {
             const feedbackData = response?.data || response || [];
             const feedbackArray = Array.isArray(feedbackData) ? feedbackData : [];
             
+            console.log(`📊 Extracted ${feedbackArray.length} feedback items`);
             
-            if (feedbackArray.length > 0) {
+            if (feedbackArray.length === 0) {
+                console.log('ℹ️ No feedback found in database. This is normal if no feedback has been submitted yet.');
             }
             
             setFeedback(feedbackArray);

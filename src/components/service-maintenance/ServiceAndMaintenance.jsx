@@ -847,7 +847,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                 <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                   Service &amp; Maintenance
                 </h1>
-                <p className={`mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Choose between classic scheduling and the mobile-first capture flow. Both work offline and sync when connectivity returns.
                 </p>
               </div>

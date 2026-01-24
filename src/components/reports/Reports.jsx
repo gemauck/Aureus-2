@@ -54,8 +54,8 @@ const Reports = () => {
         <div className="space-y-3">
             {/* Header */}
             <div>
-                <h1 className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Reports & Feedback</h1>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-0.5`}>
+                <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Reports & Feedback</h1>
+                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                     System activity monitoring, audit logs, and user feedback
                 </p>
             </div>

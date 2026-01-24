@@ -375,7 +375,20 @@ async function handler(req, res) {
             clientFollowUps: true,
             clientServices: true,
             projects: { select: { id: true, name: true, status: true } },
-            externalAgent: true
+            externalAgent: true,
+            // CRITICAL: Include groupMemberships to ensure they're returned in response
+            groupMemberships: {
+              include: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    industry: true
+                  }
+                }
+              }
+            }
           }
         })
         if (!existing) {
@@ -1039,7 +1052,21 @@ async function handler(req, res) {
             clientProposals: true,
             clientFollowUps: true,
             clientServices: true,
-            projects: { select: { id: true, name: true, status: true } }
+            projects: { select: { id: true, name: true, status: true } },
+            externalAgent: true,
+            // CRITICAL: Include groupMemberships to ensure they're returned in response
+            groupMemberships: {
+              include: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    industry: true
+                  }
+                }
+              }
+            }
           }
         })
         
