@@ -14,7 +14,15 @@ if (!ReactInstance || typeof ReactInstance !== 'object') {
 }
 
 // Validate hooks
-const requiredHooks = ['useState', 'useEffect', 'useRef', 'useCallback', 'useMemo', 'useLayoutEffect'];
+const requiredHooks = [
+  'useState',
+  'useEffect',
+  'useRef',
+  'useCallback',
+  'useMemo',
+  'useLayoutEffect',
+  'useContext'
+];
 for (const hook of requiredHooks) {
   if (typeof ReactInstance[hook] !== 'function') {
     throw new Error(`React hook ${hook} is not a function`);
@@ -28,6 +36,7 @@ export const useRef = ReactInstance.useRef;
 export const useCallback = ReactInstance.useCallback;
 export const useMemo = ReactInstance.useMemo;
 export const useLayoutEffect = ReactInstance.useLayoutEffect;
+export const useContext = ReactInstance.useContext;
 export const createElement = ReactInstance.createElement;
 
 // Export React components and utilities
