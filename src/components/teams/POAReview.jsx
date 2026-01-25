@@ -515,7 +515,15 @@ const POAReview = () => {
                 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-                    throw new Error(errorData.message || errorData.error || 'Failed to process file');
+                    const msg = (typeof errorData.error === 'object' && errorData.error?.message)
+                        ? errorData.error.message
+                        : (typeof errorData.error === 'string' ? errorData.error : null)
+                        || errorData.message
+                        || (typeof errorData.errorDetails === 'object' && errorData.errorDetails?.message)
+                        || (typeof errorData.errorDetails === 'string' ? errorData.errorDetails : null)
+                        || 'Failed to process file';
+                    console.error('POA Review process-excel API error:', errorData);
+                    throw new Error(msg);
                 }
                 
                 const result = await response.json();

@@ -2807,9 +2807,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);
                                     
-                                    // Update URL with deep link when opening popup
-                                    if (section && doc && weekObj && project?.id) {
-                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docWeek=${encodeURIComponent(weekObj.label)}&docYear=${encodeURIComponent(selectedYear)}`;
+                                    // Update URL with deep link when opening popup (week is the week param; weekLabel is derived from it)
+                                    if (section && doc && weekLabel && project?.id) {
+                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docWeek=${encodeURIComponent(weekLabel)}&docYear=${encodeURIComponent(selectedYear)}`;
                                         
                                         if (window.RouteState && window.RouteState.navigate) {
                                             window.RouteState.navigate({

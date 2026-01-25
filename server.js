@@ -3,7 +3,7 @@ import 'dotenv/config'
 // Load .env.local for local development (overrides .env)
 import dotenv from 'dotenv'
 import { existsSync, readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { dirname, join } from 'path'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -188,7 +188,7 @@ async function loadHandler(handlerPath) {
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const module = await import(`file://${handlerPath}`)
+      const module = await import(pathToFileURL(handlerPath).href)
       
       if (!module.default) {
         console.error(`❌ Handler ${handlerPath} does not have a default export`)
@@ -1855,6 +1855,32 @@ app.all('/api/users', async (req, res, next) => {
 
 // Explicit mapping for individual opportunity operations (GET, PUT, DELETE /api/opportunities/[id])
 // This route is handled by the dynamic route resolution below
+
+// POA Review: explicit routes so handlers load reliably (avoids dynamic path resolution issues)
+app.post('/api/poa-review/process-excel', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-excel.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ POA Review process-excel handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
+app.post('/api/poa-review/process-batch', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-batch.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ POA Review process-batch handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {

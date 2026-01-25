@@ -82,6 +82,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 retainerAmount: 0,
                 taxExempt: false,
                 notes: ''
+            }),
+            kyc: typeof client.kyc === 'string' ? JSON.parse(client.kyc || '{}') : (client.kyc || {
+                clientType: '',
+                legalEntity: { registeredLegalName: '', tradingName: '', registrationNumber: '', vatNumber: '', incomeTaxNumber: '', registeredAddress: '', principalPlaceOfBusiness: '', countryOfIncorporation: '' },
+                directors: [],
+                beneficialOwners: [],
+                businessProfile: { industrySector: '', coreBusinessActivities: '', primaryOperatingLocations: '', yearsInOperation: '' },
+                bankingDetails: { bankName: '', accountHolderName: '', accountNumber: '', branchCode: '', accountType: '' }
             })
         } : {
             name: '',
@@ -109,6 +117,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 retainerAmount: 0,
                 taxExempt: false,
                 notes: ''
+            },
+            kyc: {
+                clientType: '',
+                legalEntity: { registeredLegalName: '', tradingName: '', registrationNumber: '', vatNumber: '', incomeTaxNumber: '', registeredAddress: '', principalPlaceOfBusiness: '', countryOfIncorporation: '' },
+                directors: [],
+                beneficialOwners: [],
+                businessProfile: { industrySector: '', coreBusinessActivities: '', primaryOperatingLocations: '', yearsInOperation: '' },
+                bankingDetails: { bankName: '', accountHolderName: '', accountNumber: '', branchCode: '', accountType: '' }
             }
         };
         
@@ -186,6 +202,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 retainerAmount: 0,
                 taxExempt: false,
                 notes: ''
+            }),
+            kyc: typeof client.kyc === 'string' ? JSON.parse(client.kyc || '{}') : (client.kyc || {
+                clientType: '',
+                legalEntity: { registeredLegalName: '', tradingName: '', registrationNumber: '', vatNumber: '', incomeTaxNumber: '', registeredAddress: '', principalPlaceOfBusiness: '', countryOfIncorporation: '' },
+                directors: [],
+                beneficialOwners: [],
+                businessProfile: { industrySector: '', coreBusinessActivities: '', primaryOperatingLocations: '', yearsInOperation: '' },
+                bankingDetails: { bankName: '', accountHolderName: '', accountNumber: '', branchCode: '', accountType: '' }
             })
         } : {
             name: '',
@@ -213,6 +237,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 retainerAmount: 0,
                 taxExempt: false,
                 notes: ''
+            },
+            kyc: {
+                clientType: '',
+                legalEntity: { registeredLegalName: '', tradingName: '', registrationNumber: '', vatNumber: '', incomeTaxNumber: '', registeredAddress: '', principalPlaceOfBusiness: '', countryOfIncorporation: '' },
+                directors: [],
+                beneficialOwners: [],
+                businessProfile: { industrySector: '', coreBusinessActivities: '', primaryOperatingLocations: '', yearsInOperation: '' },
+                bankingDetails: { bankName: '', accountHolderName: '', accountNumber: '', branchCode: '', accountType: '' }
             }
         };
         return parsedClient;
@@ -3493,8 +3525,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             
                             // Base tabs - for leads, exclude calendar and notes
                             const baseTabs = isLead 
-                                ? ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes']  // Leads: all tabs including calendar and notes
-                                : ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes'];  // Clients: all tabs
+                                ? ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc']  // Leads: all tabs including KYC
+                                : ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc'];  // Clients: all tabs including KYC
                             
                             // Tabs that should only show for clients or converted leads
                             const clientOnlyTabs = [];
@@ -3532,10 +3564,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     tab === 'service-maintenance' ? 'wrench' :
                                     tab === 'contracts' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
+                                    tab === 'kyc' ? 'id-card' :
                                     'comment-alt'
                                 } mr-1 sm:mr-2`}></i>
-                                <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
-                                <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab.charAt(0).toUpperCase()}</span>
+                                <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : tab === 'kyc' ? 'KYC' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
+                                <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab === 'kyc' ? 'KYC' : tab.charAt(0).toUpperCase()}</span>
                             </button>
                         ))}
                     </div>

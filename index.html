@@ -966,24 +966,21 @@
                 const stored = getStoredVersion();
                 const dismissed = getDismissedVersion();
 
-                // Log version check for debugging
-                console.log('🔍 Version check:', { stored, latest, dismissed, forceShow });
+                // Only log when something actionable happens (reduces console noise)
+                var versionDebug = typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_VERSION_CHECK') === 'true';
 
-                // If version changed
                 if (stored && stored !== latest) {
                     console.log('✅ New version detected!', { old: stored, new: latest });
-                    // Show banner if user hasn't dismissed this specific new version
                     if (dismissed !== latest || forceShow) {
                         console.log('📢 Showing update notification banner');
                         showBanner();
-                    } else {
+                    } else if (versionDebug) {
                         console.log('ℹ️ New version available but user dismissed it');
                     }
                 } else if (!stored) {
-                    // First time - just store the version
-                    console.log('📦 First version check - storing version:', latest);
-                } else {
-                    console.log('✅ Version unchanged:', latest);
+                    if (versionDebug) console.log('📦 First version check - storing version:', latest);
+                } else if (versionDebug) {
+                    console.log('🔍 Version unchanged:', latest);
                 }
 
                 // Always update stored version

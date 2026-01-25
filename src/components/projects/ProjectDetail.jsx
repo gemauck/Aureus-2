@@ -174,6 +174,227 @@ function initializeProjectDetail() {
     const KanbanView = window.KanbanView;
     const DocumentCollectionModal = window.DocumentCollectionModal;
 
+    // Time tracking section: stable component so inputs/buttons stay interactive (not recreated on parent render)
+    const TimeTrackingSection = ({ project: timeProject }) => {
+        const [entries, setEntries] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [timerRunning, setTimerRunning] = useState(false);
+        const [timerStartedAt, setTimerStartedAt] = useState(null);
+        const [timerDescription, setTimerDescription] = useState('');
+        const [manualDate, setManualDate] = useState(() => new Date().toISOString().slice(0, 10));
+        const [manualHours, setManualHours] = useState('');
+        const [manualDescription, setManualDescription] = useState('');
+        const [elapsed, setElapsed] = useState(0);
+        const timerTickRef = useRef(null);
+
+        const loadEntries = useCallback(async () => {
+            if (!timeProject?.id || !window.DatabaseAPI?.getTimeEntries) return;
+            setLoading(true);
+            try {
+                const res = await window.DatabaseAPI.getTimeEntries(timeProject.id);
+                const list = (res && res.data) != null ? (Array.isArray(res.data) ? res.data : []) : [];
+                setEntries(list);
+            } catch (e) {
+                console.warn('Time entries load failed:', e);
+                setEntries([]);
+            } finally {
+                setLoading(false);
+            }
+        }, [timeProject?.id]);
+
+        useEffect(() => {
+            loadEntries();
+        }, [loadEntries]);
+
+        useEffect(() => {
+            if (!timerRunning || !timerStartedAt) {
+                if (timerTickRef.current) clearInterval(timerTickRef.current);
+                return;
+            }
+            const tick = () => setElapsed(Math.floor((Date.now() - timerStartedAt) / 1000));
+            tick();
+            timerTickRef.current = setInterval(tick, 1000);
+            return () => { if (timerTickRef.current) clearInterval(timerTickRef.current); };
+        }, [timerRunning, timerStartedAt]);
+
+        const formatElapsed = (sec) => {
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const s = sec % 60;
+            return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+        };
+
+        const handleStartTimer = () => {
+            setTimerStartedAt(Date.now());
+            setTimerRunning(true);
+        };
+
+        const handleStopTimer = async () => {
+            if (!timerRunning || !timerStartedAt || !timeProject?.id || !window.DatabaseAPI?.createTimeEntry) return;
+            const sec = Math.floor((Date.now() - timerStartedAt) / 1000);
+            const hours = Math.round((sec / 3600) * 100) / 100;
+            setTimerRunning(false);
+            setTimerStartedAt(null);
+            setElapsed(0);
+            try {
+                const res = await window.DatabaseAPI.createTimeEntry({
+                    date: new Date().toISOString(),
+                    hours,
+                    projectId: timeProject.id,
+                    projectName: timeProject.name || '',
+                    description: timerDescription || 'Timer entry'
+                });
+                const newEntry = res?.data;
+                if (newEntry) setEntries(prev => [newEntry, ...prev]);
+                setTimerDescription('');
+            } catch (e) {
+                console.warn('Save timer entry failed:', e);
+                alert('Could not save time entry. Please try again.');
+            }
+        };
+
+        const handleAddManual = async () => {
+            const hours = parseFloat(manualHours);
+            if (!Number.isFinite(hours) || hours <= 0 || !timeProject?.id || !window.DatabaseAPI?.createTimeEntry) return;
+            try {
+                const res = await window.DatabaseAPI.createTimeEntry({
+                    date: manualDate + 'T12:00:00.000Z',
+                    hours,
+                    projectId: timeProject.id,
+                    projectName: timeProject.name || '',
+                    description: manualDescription || ''
+                });
+                const newEntry = res?.data;
+                if (newEntry) setEntries(prev => [newEntry, ...prev]);
+                setManualHours('');
+                setManualDescription('');
+            } catch (e) {
+                console.warn('Add manual entry failed:', e);
+                alert('Could not add time entry. Please try again.');
+            }
+        };
+
+        const handleDeleteEntry = async (id) => {
+            if (!window.DatabaseAPI?.deleteTimeEntry || !confirm('Delete this time entry?')) return;
+            try {
+                await window.DatabaseAPI.deleteTimeEntry(id);
+                setEntries(prev => prev.filter(e => e.id !== id));
+            } catch (e) {
+                console.warn('Delete entry failed:', e);
+                alert('Could not delete entry.');
+            }
+        };
+
+        if (!timeProject?.id) return null;
+
+        const totalHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
+
+        return (
+            <div className="space-y-4" style={{ position: 'relative', zIndex: 1 }}>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Track time</h2>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="flex items-center gap-2">
+                            <div className="text-2xl font-mono tabular-nums text-gray-900 min-w-[6rem]">
+                                {timerRunning ? formatElapsed(elapsed) : '00:00:00'}
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="What are you working on?"
+                                value={timerDescription}
+                                onChange={e => setTimerDescription(e.target.value)}
+                                className="px-2 py-1.5 border border-gray-300 rounded text-sm w-48"
+                                autoComplete="off"
+                            />
+                            {!timerRunning ? (
+                                <button
+                                    type="button"
+                                    onClick={handleStartTimer}
+                                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-1.5"
+                                >
+                                    <i className="fas fa-play"></i> Start
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleStopTimer}
+                                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center gap-1.5"
+                                >
+                                    <i className="fas fa-stop"></i> Stop
+                                </button>
+                            )}
+                        </div>
+                        <span className="text-gray-400">or</span>
+                        <div className="flex flex-wrap items-end gap-2">
+                            <input
+                                type="date"
+                                value={manualDate}
+                                onChange={e => setManualDate(e.target.value)}
+                                className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                            />
+                            <input
+                                type="number"
+                                step="0.25"
+                                min="0.25"
+                                placeholder="Hours"
+                                value={manualHours}
+                                onChange={e => setManualHours(e.target.value)}
+                                className="px-2 py-1.5 border border-gray-300 rounded text-sm w-20"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Description"
+                                value={manualDescription}
+                                onChange={e => setManualDescription(e.target.value)}
+                                className="px-2 py-1.5 border border-gray-300 rounded text-sm w-40"
+                                autoComplete="off"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddManual}
+                                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium flex items-center gap-1.5"
+                            >
+                                <i className="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-sm font-semibold text-gray-900">Time entries</h2>
+                        <span className="text-xs text-gray-600">Total: {totalHours.toFixed(2)} h</span>
+                    </div>
+                    {loading ? (
+                        <p className="text-sm text-gray-500">Loading…</p>
+                    ) : entries.length === 0 ? (
+                        <p className="text-sm text-gray-500">No time logged yet. Start the timer or add a manual entry.</p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {entries.map(e => (
+                                <li key={e.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                                    <div>
+                                        <span className="text-sm text-gray-900">{e.description || '—'}</span>
+                                        <span className="text-xs text-gray-500 ml-2">
+                                            {e.date ? new Date(e.date).toLocaleDateString() : ''} · {(e.hours || 0).toFixed(2)} h
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteEntry(e.id)}
+                                        className="text-red-600 hover:text-red-800 p-1"
+                                        title="Delete"
+                                    >
+                                        <i className="fas fa-trash text-xs"></i>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     // Extract DocumentCollectionProcessSection outside ProjectDetail to prevent recreation on every render
     // This ensures the component reference is stable and doesn't cause MonthlyDocumentCollectionTracker to remount
     const DocumentCollectionProcessSection = (() => {
@@ -1147,7 +1368,7 @@ function initializeProjectDetail() {
             if (params) {
                 tabFromUrl = params.get('tab');
                 // Validate tab value
-                if (tabFromUrl && !['overview', 'tasks', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
+                if (tabFromUrl && !['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
                     tabFromUrl = null;
                 }
             }
@@ -6576,6 +6797,17 @@ function initializeProjectDetail() {
                         <i className="fas fa-tasks mr-1.5"></i>
                         Tasks
                     </button>
+                    <button
+                        onClick={() => switchSection('time')}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeSection === 'time'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-clock mr-1.5"></i>
+                        Time
+                    </button>
                     {hasDocumentCollectionProcess && (
                         <button
                             onClick={() => switchSection('documentCollection')}
@@ -6704,6 +6936,8 @@ function initializeProjectDetail() {
             })()}
             
             {activeSection === 'overview' && <OverviewSection />}
+
+            {activeSection === 'time' && <TimeTrackingSection project={project} />}
             
             {activeSection === 'tasks' && (
                 <>

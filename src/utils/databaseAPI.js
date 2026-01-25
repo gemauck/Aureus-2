@@ -1391,8 +1391,11 @@ const DatabaseAPI = {
     },
 
     // TIME TRACKING OPERATIONS
-    async getTimeEntries() {
-        const response = await this.makeRequest('/time-entries');
+    async getTimeEntries(projectId) {
+        const path = projectId
+            ? `/time-entries?projectId=${encodeURIComponent(projectId)}`
+            : '/time-entries';
+        const response = await this.makeRequest(path);
         return response;
     },
 
