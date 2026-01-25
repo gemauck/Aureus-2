@@ -6001,6 +6001,11 @@ function initializeProjectDetail() {
             
             console.log('✅ API update successful:', apiResponse);
             
+            // Update parent immediately so the Monthly FMS Review tab persists on navigation/refresh
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: true });
+            }
+            
             // Clear cache for this project to ensure fresh data
             if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
                 try {
