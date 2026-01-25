@@ -4124,8 +4124,18 @@ const Clients = React.memo(() => {
                             throw apiCallError; // Re-throw to be caught by outer catch
                         }
                     } else {
-                        // For new clients, send ALL comprehensive data to API
-                        // FIXED: Default to 'active' instead of 'inactive' for new clients
+                        // NEW CLIENT: optimistic update – add to list and close modal immediately, then persist in background
+                        const tempId = 'new-' + Date.now();
+                        const optimisticClient = { ...comprehensiveClient, id: tempId };
+                        const newClientsOptimistic = [...clients, optimisticClient];
+                        setClients(newClientsOptimistic);
+                        safeStorage.setClients(newClientsOptimistic);
+                        handlePauseSync(false);
+                        if (window.LiveDataSync?.start) {
+                            window.LiveDataSync.start();
+                        }
+                        handleClientModalClose(true); // close modal and show new client in list immediately
+                        
                         const apiCreateData = {
                             name: comprehensiveClient.name,
                             type: comprehensiveClient.type || 'client',
@@ -4141,7 +4151,6 @@ const Clients = React.memo(() => {
                             projectIds: comprehensiveClient.projectIds,
                             comments: comprehensiveClient.comments,
                             sites: comprehensiveClient.sites,
-                            // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             services: comprehensiveClient.services,
@@ -4149,78 +4158,70 @@ const Clients = React.memo(() => {
                             kyc: comprehensiveClient.kyc
                         };
                         
-                        apiResponse = await window.api.createClient(apiCreateData);
-                        
-                        // Update comprehensive client with API response
-                        if (apiResponse?.data?.client?.id) {
-                            comprehensiveClient.id = apiResponse.data.client.id;
+                        try {
+                            apiResponse = await window.api.createClient(apiCreateData);
+                        } catch (createErr) {
+                            // Rollback optimistic update on API failure
+                            setClients(prev => prev.filter(c => c.id !== tempId));
+                            safeStorage.setClients(clients); // restore previous list
+                            const msg = createErr?.message || 'Unknown error';
+                            if (msg.includes('name required') || msg.includes('name is required')) {
+                                alert('Error: Client name is required.');
+                            } else if (msg.toLowerCase().includes('duplicate') || msg.toLowerCase().includes('already exists')) {
+                                alert(`Error: ${msg}\n\nA client with this name may already exist.`);
+                            } else {
+                                alert('Failed to add client: ' + msg);
+                            }
+                            return null;
                         }
                         
-                        // Trigger immediate LiveDataSync to ensure all users see the new client
-                        // Also immediately refresh clients list to show new client without waiting for sync
+                        const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
+                        if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
+                            savedClient.notes = comprehensiveClient.notes;
+                        }
+                        const finalClient = { ...savedClient, ...comprehensiveClient };
+                        if (apiResponse?.data?.client?.id) {
+                            finalClient.id = apiResponse.data.client.id;
+                        }
                         
-                        // Batch cache clearing operations (non-blocking, don't wait)
+                        // Replace optimistic row with real client from API
+                        setClients(prev => {
+                            const next = prev.map(c => c.id === tempId ? finalClient : c);
+                            safeStorage.setClients(next);
+                            return next;
+                        });
+                        
                         Promise.all([
                             window.ClientCache?.clearCache?.(),
                             window.DatabaseAPI?.clearCache?.('/clients'),
                             window.DatabaseAPI?.clearCache?.('/leads'),
                             window.dataManager?.invalidate?.('clients')
-                        ]).catch(() => {}); // Ignore errors, these are non-critical
-                        
-                        // Trigger background refresh and sync (non-blocking)
-                        // requestIdleCallback polyfills on some browsers throw if the options object
-                        // is not an actual IdleRequestOptions instance, so guard aggressively
+                        ]).catch(() => {});
                         const scheduleRefresh = (cb) => {
                             if (typeof window.requestIdleCallback === 'function') {
-                                try {
-                                    window.requestIdleCallback(cb);
-                                    return;
-                                } catch (idleErr) {
-                                    // Fallback to setTimeout if requestIdleCallback fails
-                                }
+                                try { window.requestIdleCallback(cb); return; } catch (_) {}
                             }
                             setTimeout(cb, 0);
                         };
-                        
-                        // CRITICAL: Don't call loadClients immediately - it overwrites the optimistic update
-                        // Instead, just trigger a background sync after a delay to ensure other users see the update
-                        // The optimistic update above (setClients) already shows the new client in the UI
-                        scheduleRefresh(async () => {
-                            // Only sync in background - don't reload clients as it would overwrite optimistic update
-                            window.LiveDataSync?.forceSync?.().catch(() => {}); // Background sync for other users
-                        });
+                        scheduleRefresh(() => window.LiveDataSync?.forceSync?.().catch(() => {}));
+                        return finalClient;
                     }
                     
-                    // Prepare saved client with merged data from API response and comprehensiveClient
-                    // CRITICAL: Always merge notes from comprehensiveClient to ensure latest typed notes are preserved
+                    // Prepare saved client with merged data from API response and comprehensiveClient (update path only)
                     const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
                     if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
                         savedClient.notes = comprehensiveClient.notes;
                     }
-                    // Merge all comprehensiveClient data to ensure nothing is lost
                     const finalClient = { ...savedClient, ...comprehensiveClient };
                     
-                    // Batch all state updates together to prevent multiple renders
                     if (selectedClient) {
                         const updated = clients.map(c => c.id === selectedClient.id ? finalClient : c);
                         if (updated.length !== clients.length) {
-                            // Data integrity check failed - skip update
                             return;
                         }
-                        // Single batched update - React 18+ will batch these automatically
                         setClients(updated);
                         safeStorage.setClients(updated);
-                        selectedClientRef.current = finalClient; // Update ref immediately (no delay needed)
-                    } else {
-                        const newClients = [...clients, finalClient];
-                        if (newClients.length !== clients.length + 1) {
-                            // Data integrity check failed - skip update
-                            return;
-                        }
-                        // Single batched update
-                        setClients(newClients);
-                        safeStorage.setClients(newClients);
-                        selectedClientRef.current = finalClient; // Update ref immediately
+                        selectedClientRef.current = finalClient;
                     }
                     
                 } catch (apiError) {

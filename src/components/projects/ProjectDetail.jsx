@@ -2194,6 +2194,24 @@ function initializeProjectDetail() {
         switchSection('overview');
     }, [switchSection]);
     
+    // Sync activeSection from URL on mount (ensures Time tab etc. persist after hard refresh)
+    useEffect(() => {
+        if (!project?.id) return;
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        let params = null;
+        if (hash.includes('?')) {
+            const parts = hash.split('?');
+            if (parts.length > 1) params = new URLSearchParams(parts[1]);
+        }
+        if (!params && search) params = new URLSearchParams(search);
+        const tabFromUrl = params?.get('tab');
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'];
+        if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+            setActiveSection(tabFromUrl);
+        }
+    }, [project?.id]);
+
     // Listen for switchProjectTab event to handle programmatic tab switching
     useEffect(() => {
         const handleSwitchTab = (event) => {
@@ -4687,12 +4705,19 @@ function initializeProjectDetail() {
         setCreatingTaskWithStatus(null);
         setShowTaskDetailModal(false);
         
-        // CRITICAL: Navigate to clean project URL (without task parameter)
+        // CRITICAL: Navigate to clean project URL (without task parameter but keep tab/section)
         // This ensures the URL reflects that we're viewing the project, not a task
         // Use RouteState.navigate as PRIMARY method to ensure routing system recognizes the change
         const projectId = String(project?.id);
         if (projectId) {
-            const cleanProjectUrl = `${window.location.origin}/projects/${projectId}`;
+            const searchPreservingTab = (() => {
+                const q = new URLSearchParams(window.location.search || (window.location.hash && window.location.hash.includes('?') ? (window.location.hash.split('?')[1] || '') : ''));
+                q.delete('task');
+                q.delete('commentId');
+                q.delete('focusInput');
+                return q.toString() ? '?' + q.toString() : '';
+            })();
+            const cleanProjectUrl = `${window.location.origin}/projects/${projectId}${searchPreservingTab}`;
             
             // Method 1: RouteState.navigate (PRIMARY - ensures routing system recognizes navigation)
             // Do this FIRST to ensure the routing system knows we've navigated away from the task
@@ -4701,7 +4726,7 @@ function initializeProjectDetail() {
                     window.RouteState.navigate({
                         page: 'projects',
                         segments: [projectId],
-                        search: '', // Explicitly empty - no task parameter
+                        search: searchPreservingTab,
                         preserveSearch: false,
                         preserveHash: false,
                         replace: true // Use replace to avoid adding to history
@@ -4722,21 +4747,28 @@ function initializeProjectDetail() {
             
             // Method 3: Dispatch a route change event to notify other systems
             // This ensures all routing listeners know we've navigated away from the task
-            try {
-                window.dispatchEvent(new CustomEvent('route:change', {
-                    detail: {
-                        page: 'projects',
-                        segments: [projectId],
-                        search: ''
-                    }
-                }));
-                console.log('✅ ProjectDetail: Dispatched route:change event');
+                try {
+                    window.dispatchEvent(new CustomEvent('route:change', {
+                        detail: {
+                            page: 'projects',
+                            segments: [projectId],
+                            search: searchPreservingTab
+                        }
+                    }));
+                    console.log('✅ ProjectDetail: Dispatched route:change event');
             } catch (e) {
                 console.warn('⚠️ Failed to dispatch route change event:', e);
             }
             
-            // Method 4: Also update via updateUrl function (for consistency with other handlers)
-            updateUrl({ clearTask: true });
+            // Method 4: Also update via updateProjectUrl so tab is preserved when clearing task
+            if (window.updateProjectUrl) {
+                window.updateProjectUrl({
+                    tab: activeSection && activeSection !== 'overview' ? activeSection : undefined,
+                    task: null,
+                    commentId: null,
+                    focusInput: null
+                });
+            }
             
             // Method 5: Set up a persistent monitor to prevent the closed task from being restored to URL
             // This runs indefinitely to catch any delayed handlers or effects that try to restore the task
@@ -4762,7 +4794,7 @@ function initializeProjectDetail() {
                             window.RouteState.navigate({
                                 page: 'projects',
                                 segments: [projectId],
-                                search: '',
+                                search: searchPreservingTab,
                                 preserveSearch: false,
                                 preserveHash: false,
                                 replace: true
@@ -4799,7 +4831,7 @@ function initializeProjectDetail() {
                                 window.RouteState.navigate({
                                     page: 'projects',
                                     segments: [projectId],
-                                    search: '',
+                                    search: searchPreservingTab,
                                     preserveSearch: false,
                                     preserveHash: false,
                                     replace: true
@@ -4839,14 +4871,14 @@ function initializeProjectDetail() {
                     
                     if (isClosedTask) {
                         console.warn('⚠️ ProjectDetail: URL has closed task parameter, forcing clean URL and keeping flags');
-                        // Force clean the URL
-                        const cleanUrl = `${window.location.origin}/projects/${projectId}`;
+                        // Force clean the URL (preserve tab)
+                        const cleanUrl = `${window.location.origin}/projects/${projectId}${searchPreservingTab}`;
                         window.history.replaceState({}, '', cleanUrl);
                         if (window.RouteState) {
                             window.RouteState.navigate({
                                 page: 'projects',
                                 segments: [projectId],
-                                search: '',
+                                search: searchPreservingTab,
                                 preserveSearch: false,
                                 preserveHash: false,
                                 replace: true
@@ -5711,8 +5743,14 @@ function initializeProjectDetail() {
         setHasTimeProcess(true);
         switchSection('time');
         setShowDocumentProcessDropdown(false);
-        await persistProjectData({ nextHasTimeProcess: true });
-        hasTimeProcessChangedRef.current = false;
+        try {
+            await persistProjectData({ nextHasTimeProcess: true });
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasTimeProcess: true });
+            }
+        } finally {
+            hasTimeProcessChangedRef.current = false;
+        }
     };
 
     const handleRemoveModule = async (moduleKey) => {
@@ -5720,23 +5758,47 @@ function initializeProjectDetail() {
         if (moduleKey === 'time') {
             hasTimeProcessChangedRef.current = true;
             setHasTimeProcess(false);
-            await persistProjectData({ nextHasTimeProcess: false });
-            hasTimeProcessChangedRef.current = false;
+            try {
+                await persistProjectData({ nextHasTimeProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasTimeProcess: false });
+                }
+            } finally {
+                hasTimeProcessChangedRef.current = false;
+            }
         } else if (moduleKey === 'documentCollection') {
             hasDocumentCollectionProcessChangedRef.current = true;
             setHasDocumentCollectionProcess(false);
-            await persistProjectData({ nextHasDocumentCollectionProcess: false });
-            hasDocumentCollectionProcessChangedRef.current = false;
+            try {
+                await persistProjectData({ nextHasDocumentCollectionProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasDocumentCollectionProcess: false });
+                }
+            } finally {
+                hasDocumentCollectionProcessChangedRef.current = false;
+            }
         } else if (moduleKey === 'weeklyFMSReview') {
             hasWeeklyFMSReviewProcessChangedRef.current = true;
             setHasWeeklyFMSReviewProcess(false);
-            await persistProjectData({ nextHasWeeklyFMSReviewProcess: false });
-            hasWeeklyFMSReviewProcessChangedRef.current = false;
+            try {
+                await persistProjectData({ nextHasWeeklyFMSReviewProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasWeeklyFMSReviewProcess: false });
+                }
+            } finally {
+                hasWeeklyFMSReviewProcessChangedRef.current = false;
+            }
         } else if (moduleKey === 'monthlyFMSReview') {
             hasMonthlyFMSReviewProcessChangedRef.current = true;
             setHasMonthlyFMSReviewProcess(false);
-            await persistProjectData({ nextHasMonthlyFMSReviewProcess: false });
-            hasMonthlyFMSReviewProcessChangedRef.current = false;
+            try {
+                await persistProjectData({ nextHasMonthlyFMSReviewProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: false });
+                }
+            } finally {
+                hasMonthlyFMSReviewProcessChangedRef.current = false;
+            }
         }
     };
 

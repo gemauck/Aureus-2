@@ -173,6 +173,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
     const [showGroupSelector, setShowGroupSelector] = useState(false);
     const [selectedGroupId, setSelectedGroupId] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
@@ -357,7 +358,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, [formData, onSave]);
     
     // Track last processed client data to detect changes
-    const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, id: null });
+    const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, kyc: null, id: null });
     
     // Track when a save just happened to prevent immediate overwriting
     const justSavedRef = useRef(false);
@@ -390,12 +391,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const currentClientId = formDataRef.current?.id;
         if (currentClientId !== client.id) {
             // Different client - reset tracking and let the main useEffect handle it
-            lastClientDataRef.current = { followUps: null, notes: null, comments: null, id: client.id };
+            lastClientDataRef.current = { followUps: null, notes: null, comments: null, kyc: null, id: client.id };
             justSavedRef.current = false;
             return;
         }
         
-        // Parse followUps, notes, and comments from client prop
+        // Parse followUps, notes, comments, and kyc from client prop
         const clientFollowUps = typeof client.followUps === 'string' 
             ? (client.followUps.trim() ? JSON.parse(client.followUps) : [])
             : (Array.isArray(client.followUps) ? client.followUps : []);
@@ -405,6 +406,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const clientComments = typeof client.comments === 'string' 
             ? (client.comments.trim() ? JSON.parse(client.comments) : [])
             : (Array.isArray(client.comments) ? client.comments : []);
+        const clientKyc = (() => {
+            if (client.kyc != null && typeof client.kyc === 'object') return client.kyc;
+            if (typeof client.kyc === 'string' && client.kyc.trim()) { try { return JSON.parse(client.kyc); } catch (_) {} }
+            if (client.kycJsonb != null && typeof client.kycJsonb === 'object') return client.kycJsonb;
+            return {};
+        })();
         
         // CRITICAL: Compare with CURRENT formData, not just last processed data
         // This prevents overwriting data that's already in formData
@@ -412,35 +419,42 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const currentFormFollowUps = currentFormData.followUps || [];
         const currentFormNotes = currentFormData.notes || '';
         const currentFormComments = currentFormData.comments || [];
+        const currentFormKyc = currentFormData.kyc || {};
         
         const currentFormFollowUpsStr = JSON.stringify(currentFormFollowUps);
         const currentFormCommentsStr = JSON.stringify(currentFormComments);
+        const currentFormKycStr = JSON.stringify(currentFormKyc);
         const clientFollowUpsStr = JSON.stringify(clientFollowUps);
         const clientCommentsStr = JSON.stringify(clientComments);
+        const clientKycStr = JSON.stringify(clientKyc);
         
         // Only update if client prop data is DIFFERENT from current formData
         const followUpsDifferent = clientFollowUpsStr !== currentFormFollowUpsStr;
         const notesDifferent = clientNotes !== currentFormNotes;
         const commentsDifferent = clientCommentsStr !== currentFormCommentsStr;
+        const kycDifferent = clientKycStr !== currentFormKycStr;
         
         // Also check against last processed data to avoid unnecessary updates
         const lastFollowUpsStr = JSON.stringify(lastClientDataRef.current.followUps);
         const lastNotes = lastClientDataRef.current.notes;
         const lastCommentsStr = JSON.stringify(lastClientDataRef.current.comments);
+        const lastKycStr = JSON.stringify(lastClientDataRef.current.kyc);
         
         const followUpsChanged = clientFollowUpsStr !== lastFollowUpsStr;
         const notesChanged = clientNotes !== lastNotes;
         const commentsChanged = clientCommentsStr !== lastCommentsStr;
+        const kycChanged = clientKycStr !== lastKycStr;
         
         // Only update if:
         // 1. Client prop data is different from last processed data (to avoid duplicate updates)
         // 2. AND client prop data is different from current formData (to avoid overwriting with same data)
-        if ((followUpsChanged && followUpsDifferent) || (notesChanged && notesDifferent) || (commentsChanged && commentsDifferent)) {
-            console.log('🔄 Updating formData from client prop (followUps/notes/comments):', {
+        if ((followUpsChanged && followUpsDifferent) || (notesChanged && notesDifferent) || (commentsChanged && commentsDifferent) || (kycChanged && kycDifferent)) {
+            console.log('🔄 Updating formData from client prop (followUps/notes/comments/kyc):', {
                 clientId: client.id,
                 followUpsChanged: followUpsChanged && followUpsDifferent,
                 notesChanged: notesChanged && notesDifferent,
                 commentsChanged: commentsChanged && commentsDifferent,
+                kycChanged: kycChanged && kycDifferent,
                 followUpsCount: clientFollowUps.length,
                 notesLength: clientNotes.length,
                 commentsCount: clientComments.length,
@@ -454,6 +468,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 followUps: clientFollowUps,
                 notes: clientNotes,
                 comments: clientComments,
+                kyc: clientKyc,
                 id: client.id
             };
             
@@ -462,7 +477,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     ...prev,
                     ...(followUpsChanged && followUpsDifferent ? { followUps: clientFollowUps } : {}),
                     ...(notesChanged && notesDifferent ? { notes: clientNotes } : {}),
-                    ...(commentsChanged && commentsDifferent ? { comments: clientComments } : {})
+                    ...(commentsChanged && commentsDifferent ? { comments: clientComments } : {}),
+                    ...(kycChanged && kycDifferent ? { kyc: clientKyc } : {})
                 };
                 formDataRef.current = updated;
                 return updated;
@@ -473,6 +489,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 followUps: clientFollowUps,
                 notes: clientNotes,
                 comments: clientComments,
+                kyc: clientKyc,
                 id: client.id
             };
         }
@@ -895,11 +912,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const finalSites = sites.length > 0 ? sites : (existingSites.length > 0 ? existingSites : (parsedClient.sites || []));
                 const finalOpportunities = opportunities.length > 0 ? opportunities : (existingOpportunities.length > 0 ? existingOpportunities : (parsedClient.opportunities || []));
                 
+                // CRITICAL: Preserve in-memory KYC so user edits are not overwritten when API response arrives late
+                const apiKyc = parsedClient.kyc || {};
+                const formKyc = currentFormData.kyc || {};
+                const mergedKyc = {
+                    ...apiKyc,
+                    ...formKyc,
+                    legalEntity: { ...(apiKyc.legalEntity || {}), ...(formKyc.legalEntity || {}) },
+                    businessProfile: { ...(apiKyc.businessProfile || {}), ...(formKyc.businessProfile || {}) },
+                    bankingDetails: { ...(apiKyc.bankingDetails || {}), ...(formKyc.bankingDetails || {}) }
+                };
+                
                 const mergedData = {
                     ...parsedClient,
                     contacts: finalContacts,
                     sites: finalSites,
-                    opportunities: finalOpportunities
+                    opportunities: finalOpportunities,
+                    kyc: mergedKyc
                 };
                 
                 // CRITICAL: Always update formData immediately when API data arrives
@@ -975,6 +1004,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (tab === 'service' || tab === 'maintenance') {
             tab = 'service-maintenance';
         }
+        // CRITICAL: When leaving KYC tab, flush save immediately so KYC persists on navigation or hard refresh
+        if (activeTab === 'kyc' && tab !== 'kyc' && formData?.id && typeof onSave === 'function') {
+            const latest = formDataRef.current || formData;
+            if (latest && initialDataLoadedForClientIdRef.current === latest.id) {
+                onSave(latest, true).catch(() => {});
+            }
+        }
         setActiveTab(tab);
         if (onTabChange) {
             onTabChange(tab);
@@ -988,6 +1024,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 console.warn('⚠️ Failed to save tab to localStorage:', e);
             }
         }
+    };
+    
+    // Close handler: when on KYC tab, save first so KYC persists on navigation/hard refresh
+    const handleClose = () => {
+        if (activeTab === 'kyc' && formData?.id && typeof onSave === 'function') {
+            const latest = formDataRef.current || formData;
+            if (latest && initialDataLoadedForClientIdRef.current === latest.id) {
+                onSave(latest, true).finally(() => { if (onClose) onClose(); });
+                return;
+            }
+        }
+        if (onClose) onClose();
     };
     
     // Job cards state - MUST be declared before loadJobCards function
@@ -3367,6 +3415,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
+        setIsSubmitting(true);
         hasUserEditedForm.current = false; // Reset after save
         // Use formDataRef so we always send the latest (e.g. KYC tab edits) even if state hasn't flushed
         const latest = formDataRef.current || formData;
@@ -3379,21 +3429,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         justSavedRef.current = true;
         saveTimestampRef.current = Date.now();
         
-        // Use onUpdate if provided (for updates that should close the modal)
-        // Otherwise use onSave
-        // For new clients/leads (client is null), explicitly pass stayInEditMode=false to close modal after save
-        if (onUpdate && client) {
-            await onUpdate(clientData);
-        } else {
-            // For new clients/leads, pass stayInEditMode=false to close modal after save
-            // For existing clients/leads, default is false anyway, but make it explicit
-            await onSave(clientData, false);
+        try {
+            if (onUpdate && client) {
+                await onUpdate(clientData);
+            } else {
+                await onSave(clientData, false);
+            }
+        } finally {
+            setIsSubmitting(false);
+            setTimeout(() => {
+                justSavedRef.current = false;
+            }, 3000);
         }
-        
-        // Clear the flag after 3 seconds (enough time for parent to refresh and propagate)
-        setTimeout(() => {
-            justSavedRef.current = false;
-        }, 3000);
     };
 
     // Get projects that belong to this client (match by clientId or clientName)
@@ -3457,10 +3504,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }));
         }
         
-        // Close modal when navigating away
-        if (onClose) {
-            onClose();
-        }
+        // Close modal when navigating away (handleClose saves KYC first when on that tab)
+        handleClose();
     };
 
     return (
@@ -3474,9 +3519,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        if (onClose) {
-                                            onClose();
-                                        }
+                                        handleClose();
                                     }}
                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 mr-2`}
                                     title="Go back"
@@ -3500,9 +3543,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 detail: { viewMode: targetView } 
                                             }));
                                         }
-                                        if (onClose) {
-                                            onClose();
-                                        }
+                                        handleClose();
                                     }}
                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                                 >
@@ -3602,7 +3643,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             )}
                             {!isFullPage && (
                                 <button 
-                                    onClick={onClose} 
+                                    onClick={handleClose} 
                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} p-2 rounded transition-colors`}
                                 >
                                     <i className="fas fa-times text-lg"></i>
@@ -6490,17 +6531,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             <div className="flex gap-3">
                                 <button 
                                     type="button" 
-                                    onClick={onClose} 
+                                    onClick={handleClose} 
                                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                                 >
                                     Cancel
                                 </button>
                                 <button 
                                     type="submit" 
-                                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                                    disabled={isSubmitting}
+                                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed"
                                 >
-                                    <i className="fas fa-save mr-1.5"></i>
-                                    {client ? `Update ${entityLabel}` : `Add ${entityLabel}`}
+                                    {isSubmitting ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin mr-1.5"></i>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-save mr-1.5"></i>
+                                            {client ? `Update ${entityLabel}` : `Add ${entityLabel}`}
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>

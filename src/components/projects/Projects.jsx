@@ -591,6 +591,9 @@ const Projects = () => {
                     const projectId = route.segments[0];
                     const taskId = route.search?.get('task');
                     const focusInput = route.search?.get('focusInput');
+                    const tab = route.search?.get('tab');
+                    const section = route.search?.get('section');
+                    const commentId = route.search?.get('commentId');
                     
                     // CRITICAL: Verify actual URL matches route before opening project
                     // This prevents opening project when URL was just changed to /projects
@@ -618,10 +621,6 @@ const Projects = () => {
                         // Check if we're already viewing this project
                         if (viewingProject && String(viewingProject.id) === String(projectId)) {
                             // Already viewing this project, but check if we need to handle tab/section/task
-                            const tab = route.search?.get('tab');
-                            const section = route.search?.get('section');
-                            const commentId = route.search?.get('commentId');
-                            
                             if (taskId) {
                                 console.log('📋 Projects: Will open task with retry logic:', taskId);
                                 // Use retry logic to ensure ProjectDetail catches the event
@@ -697,6 +696,13 @@ const Projects = () => {
                                 
                                 // Start after 1 second, then retry at 2s, 3s, 4s, 5s
                                 setTimeout(() => dispatchOpenTask(1), 1000);
+                            } else if (tab) {
+                                // Persist tab from URL on load (e.g. Time tab after hard refresh)
+                                setTimeout(() => {
+                                    window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                        detail: { tab, section, commentId, focusInput: focusInput || null }
+                                    }));
+                                }, 150);
                             }
                         } else {
                             console.log('⚠️ Projects: Project not in cache, fetching from API:', projectId);
@@ -739,6 +745,13 @@ const Projects = () => {
                                             
                                             // Start after 1 second, then retry at 2s, 3s, 4s, 5s
                                             setTimeout(() => dispatchOpenTask(1), 1000);
+                                        } else if (tab) {
+                                            // Persist tab from URL on load (e.g. Time tab after hard refresh)
+                                            setTimeout(() => {
+                                                window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                                    detail: { tab, section, commentId, focusInput: focusInput || null }
+                                                }));
+                                            }, 150);
                                         }
                                     } else {
                                         console.warn('⚠️ Projects: API did not return project data for:', projectId);
@@ -2662,6 +2675,18 @@ const Projects = () => {
                     if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                     return false;
                 })(),
+                hasTimeProcess: (() => {
+                    const value = fullProject.hasTimeProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
+                hasMonthlyFMSReviewProcess: (() => {
+                    const value = fullProject.hasMonthlyFMSReviewProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
                 weeklyFMSReviewSections: Array.isArray(fullProject.weeklyFMSReviewSections) ? fullProject.weeklyFMSReviewSections : []
             };
             
@@ -2699,6 +2724,18 @@ const Projects = () => {
                         if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                         return false;
                     })(),
+                    hasTimeProcess: (() => {
+                        const value = updatedProject.hasTimeProcess;
+                        if (value === true || value === 'true' || value === 1) return true;
+                        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                        return false;
+                    })(),
+                    hasMonthlyFMSReviewProcess: (() => {
+                        const value = updatedProject.hasMonthlyFMSReviewProcess;
+                        if (value === true || value === 'true' || value === 1) return true;
+                        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                        return false;
+                    })(),
                     weeklyFMSReviewSections: Array.isArray(updatedProject.weeklyFMSReviewSections) ? updatedProject.weeklyFMSReviewSections : []
                 };
                 
@@ -2707,8 +2744,8 @@ const Projects = () => {
                     if (!prev || prev.id !== normalized.id) {
                         return normalized;
                     }
-                    // Compare important fields to see if anything actually changed
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
+                    // Compare important fields to see if anything actually changed (include module flags so tabs persist on navigation)
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = normalized[field];
