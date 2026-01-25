@@ -1,4 +1,5 @@
 // Leads API endpoint
+import { Prisma } from '@prisma/client'
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
@@ -80,13 +81,20 @@ async function handler(req, res) {
         // Check if externalAgentId column exists before including relation
         let hasExternalAgentId = false
         try {
-          // Check for column with case-insensitive table name (PostgreSQL stores unquoted identifiers in lowercase)
+          // Check for column; support both 'Client' and 'client' (PostgreSQL / Prisma)
           const columnCheck = await prisma.$queryRaw`
             SELECT column_name 
             FROM information_schema.columns 
-            WHERE LOWER(table_name) = 'client' AND column_name = 'externalAgentId'
+            WHERE table_name = 'Client' AND column_name = 'externalAgentId'
           `
           hasExternalAgentId = Array.isArray(columnCheck) && columnCheck.length > 0
+          if (!hasExternalAgentId) {
+            const altCheck = await prisma.$queryRaw`
+              SELECT column_name FROM information_schema.columns 
+              WHERE LOWER(table_name) = 'client' AND column_name = 'externalAgentId'
+            `
+            hasExternalAgentId = Array.isArray(altCheck) && altCheck.length > 0
+          }
           if (!hasExternalAgentId) {
             console.warn('⚠️ externalAgentId column does not exist, skipping externalAgent relation')
           }
@@ -120,8 +128,9 @@ async function handler(req, res) {
           // Use defensive includes - if relations fail, try without them
           try {
             const includeObj = {
-              // Only include externalAgent if the column exists
-              ...(hasExternalAgentId ? { externalAgent: true } : {}),
+              // Always include externalAgent so it shows in the leads list (e.g. "New Mining Company")
+              // If column is missing, the catch below retries without it
+              externalAgent: true,
               // Include starredBy relation only if we have a valid userId
               ...(validUserId ? {
                 starredBy: {
@@ -134,21 +143,20 @@ async function handler(req, res) {
                   }
                 }
               } : {}),
-              // Include group memberships only if table exists
-              ...(hasGroupMembershipsTable ? {
-                groupMemberships: {
-                  include: {
-                    group: {
-                      select: {
-                        id: true,
-                        name: true,
-                        type: true,
-                        industry: true
-                      }
+              // Always include group memberships so Company Group shows in leads list
+              // If relation fails, catch below retries without it; hydration then fills from ClientCompanyGroup
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      industry: true
                     }
                   }
                 }
-              } : {}),
+              },
               // Phase 3 & 6: Include normalized tables
               clientContacts: {
                 select: {
@@ -188,8 +196,6 @@ async function handler(req, res) {
               clientServices: true
             }
             
-            // If table doesn't exist, we'll set empty groupMemberships after query
-            
             leads = await prisma.client.findMany({ 
               where: { 
                 type: 'lead'
@@ -198,14 +204,6 @@ async function handler(req, res) {
               include: includeObj,
               orderBy: { createdAt: 'desc' } 
             })
-            
-            // If table doesn't exist, manually set empty groupMemberships
-            if (!hasGroupMembershipsTable) {
-              leads = leads.map(lead => ({
-                ...lead,
-                groupMemberships: []
-              }))
-            }
           } catch (relationError) {
             // Check if it's the externalAgentId column missing error
             const isMissingColumnError = relationError.code === 'P2022' && 
@@ -535,6 +533,62 @@ async function handler(req, res) {
           }
         }
         
+        // If any leads have externalAgentId but no externalAgent (e.g. from fallback query), look up and attach
+        const idsNeedingAgent = [...new Set(leads.filter(l => l.externalAgentId && !l.externalAgent).map(l => l.externalAgentId))];
+        if (idsNeedingAgent.length > 0) {
+          try {
+            const agents = await prisma.externalAgent.findMany({
+              where: { id: { in: idsNeedingAgent } },
+              select: { id: true, name: true }
+            });
+            const agentByKey = Object.fromEntries(agents.map(a => [a.id, a]));
+            leads = leads.map(l => {
+              if (l.externalAgentId && !l.externalAgent && agentByKey[l.externalAgentId]) {
+                return { ...l, externalAgent: agentByKey[l.externalAgentId] };
+              }
+              return l;
+            });
+          } catch (e) {
+            console.warn('⚠️ Could not hydrate external agents for leads:', e.message);
+          }
+        }
+        
+        // Hydrate groupMemberships from ClientCompanyGroup so Company Group column always has data
+        const leadIdsNeedingGroups = leads.filter(l => !l.groupMemberships || !Array.isArray(l.groupMemberships) || l.groupMemberships.length === 0).map(l => l.id);
+        if (leadIdsNeedingGroups.length > 0) {
+          try {
+            // Use raw SQL so we never depend on Prisma relation shape; works even if relation fails
+            const rows = await prisma.$queryRaw`
+              SELECT m.id, m."clientId", m."groupId", m.role,
+                     g.id as "g_id", g.name as "g_name", g.type as "g_type", g.industry as "g_industry"
+              FROM "ClientCompanyGroup" m
+              INNER JOIN "Client" g ON g.id = m."groupId"
+              WHERE m."clientId" IN (${Prisma.join(leadIdsNeedingGroups)})
+            `;
+            const byClientId = {};
+            for (const r of (rows || [])) {
+              const cid = r.clientId;
+              if (!byClientId[cid]) byClientId[cid] = [];
+              byClientId[cid].push({
+                id: r.id,
+                clientId: r.clientId,
+                groupId: r.groupId,
+                role: r.role,
+                group: r.g_id ? { id: r.g_id, name: r.g_name || '', type: r.g_type || null, industry: r.g_industry || null } : null
+              });
+            }
+            leads = leads.map(l => {
+              const hydrated = byClientId[l.id];
+              if (hydrated && hydrated.length > 0) {
+                return { ...l, groupMemberships: hydrated };
+              }
+              return l;
+            });
+          } catch (e) {
+            console.warn('⚠️ Could not hydrate group memberships for leads:', e.message);
+          }
+        }
+        
         // Parse JSON fields (services, contacts, etc.) and extract tags
         const parsedLeads = leads.map(lead => {
           const parsed = parseClientJsonFields(lead);
@@ -560,6 +614,12 @@ async function handler(req, res) {
           } else {
             parsed.groupMemberships = []
           }
+          
+          // Explicitly preserve externalAgent and externalAgentId (Prisma relation)
+          parsed.externalAgentId = lead.externalAgentId ?? lead.externalAgent?.id ?? null
+          parsed.externalAgent = lead.externalAgent
+            ? { id: lead.externalAgent.id, name: lead.externalAgent.name || '' }
+            : null
           
           // Check if current user has starred this lead
           // starredBy will always be an array (empty if no matches) due to Prisma relation behavior
@@ -1559,12 +1619,17 @@ async function handler(req, res) {
         console.log('📥 Received externalAgentId in update request:', body.externalAgentId, '→', updateData.externalAgentId);
       }
       
+      // groupIds is applied via ClientCompanyGroup (replace memberships); not part of Client updateData
+      const groupIdsToSet = body.groupIds === undefined
+        ? undefined
+        : (Array.isArray(body.groupIds) ? body.groupIds.filter(Boolean) : [])
+      
       // Debug logging to verify updateData is constructed correctly
       console.log(`📝 [LEADS] Update data for lead ${id}:`, JSON.stringify(updateData, null, 2))
       console.log(`📝 [LEADS] Fields in body:`, Object.keys(body || {}))
       
-      // Check if updateData is empty (only has type) - this would mean no fields were provided
-      if (Object.keys(updateData).length === 1 && updateData.type) {
+      // Check if updateData is empty (only has type) and no groupIds - nothing to do
+      if (Object.keys(updateData).length === 1 && updateData.type && groupIdsToSet === undefined) {
         console.warn(`⚠️ [LEADS] Update data is empty (only type field) - no fields to update for lead ${id}`)
         // Return the existing lead without updating
         const existing = await prisma.client.findUnique({ 
@@ -1600,6 +1665,49 @@ async function handler(req, res) {
         const parsedLead = parseClientJsonFields(existing)
         return ok(res, { lead: parsedLead })
       }
+      
+      // When only groupIds are being updated, replace ClientCompanyGroup and return lead
+      if (Object.keys(updateData).length === 1 && updateData.type && groupIdsToSet !== undefined) {
+        try {
+          const existing = await prisma.client.findUnique({ where: { id } })
+          if (!existing || existing.type !== 'lead') {
+            return existing ? badRequest(res, 'Not a lead') : notFound(res)
+          }
+          await prisma.clientCompanyGroup.deleteMany({ where: { clientId: id } })
+          for (const gid of groupIdsToSet) {
+            if (gid) {
+              await prisma.clientCompanyGroup.create({
+                data: { clientId: id, groupId: String(gid), role: 'member' }
+              })
+            }
+          }
+          const updated = await prisma.client.findUnique({
+            where: { id },
+            include: {
+              clientContacts: true,
+              clientComments: true,
+              clientSites: true,
+              clientContracts: true,
+              clientProposals: true,
+              clientFollowUps: true,
+              clientServices: true,
+              projects: { select: { id: true, name: true, status: true } },
+              externalAgent: true,
+              groupMemberships: {
+                include: {
+                  group: { select: { id: true, name: true, type: true, industry: true } }
+                }
+              }
+            }
+          })
+          if (!updated) return notFound(res)
+          const parsedLead = parseClientJsonFields(updated)
+          return ok(res, { lead: parsedLead })
+        } catch (groupErr) {
+          console.error('❌ [LEADS] Failed to update lead group memberships:', groupErr)
+          return serverError(res, 'Failed to update group memberships', groupErr.message)
+        }
+      }
         
       try {
           // First verify the lead exists and is actually a lead
@@ -1614,7 +1722,7 @@ async function handler(req, res) {
           }
           
           // Now update it
-          const lead = await prisma.client.update({ 
+          let lead = await prisma.client.update({ 
             where: { id }, 
             data: updateData,
             include: {
@@ -1642,6 +1750,37 @@ async function handler(req, res) {
               }
             }
           })
+          
+          // Apply group membership replacement if provided
+          if (groupIdsToSet !== undefined) {
+            await prisma.clientCompanyGroup.deleteMany({ where: { clientId: id } })
+            for (const gid of groupIdsToSet) {
+              if (gid) {
+                await prisma.clientCompanyGroup.create({
+                  data: { clientId: id, groupId: String(gid), role: 'member' }
+                })
+              }
+            }
+            lead = await prisma.client.findUnique({
+              where: { id },
+              include: {
+                clientContacts: true,
+                clientComments: true,
+                clientSites: true,
+                clientContracts: true,
+                clientProposals: true,
+                clientFollowUps: true,
+                clientServices: true,
+                projects: { select: { id: true, name: true, status: true } },
+                externalAgent: true,
+                groupMemberships: {
+                  include: {
+                    group: { select: { id: true, name: true, type: true, industry: true } }
+                  }
+                }
+              }
+            })
+          }
           
         // CRITICAL DEBUG: Immediately re-query database to verify persistence
         const verifyLead = await prisma.client.findUnique({ where: { id } })

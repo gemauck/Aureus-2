@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
@@ -103,21 +104,19 @@ async function handler(req, res) {
                     }
                   }
                 } : {}),
-                ...(hasExternalAgentId ? { externalAgent: true } : {}),
-                ...(hasGroupMembershipsTable ? {
-                  groupMemberships: {
-                    include: {
-                      group: {
-                        select: {
-                          id: true,
-                          name: true,
-                          type: true,
-                          industry: true
-                        }
+                externalAgent: true,
+                groupMemberships: {
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        industry: true
                       }
                     }
                   }
-                } : {}),
+                },
                 // Phase 3 & 6: Include normalized tables
                 clientContacts: {
                   select: {
@@ -241,14 +240,6 @@ async function handler(req, res) {
                 createdAt: 'desc'
               }
             })
-            
-            // If table doesn't exist, manually set empty groupMemberships
-            if (!hasGroupMembershipsTable) {
-              rawClients = rawClients.map(client => ({
-                ...client,
-                groupMemberships: []
-              }))
-            }
           } catch (relationError) {
             // If relations fail, try query with minimal relations (still include groupMemberships)
             console.warn('⚠️ Query with relations failed:', {
@@ -485,6 +476,53 @@ async function handler(req, res) {
           }
         }
         
+        // Hydrate externalAgent and groupMemberships so listing always has Company Group and External Agent
+        try {
+          const idsNeedingAgent = [...new Set(rawClients.filter(c => c.externalAgentId && !c.externalAgent).map(c => c.externalAgentId))];
+          if (idsNeedingAgent.length > 0) {
+            const agents = await prisma.externalAgent.findMany({
+              where: { id: { in: idsNeedingAgent } },
+              select: { id: true, name: true }
+            });
+            const agentByKey = Object.fromEntries(agents.map(a => [a.id, a]));
+            rawClients = rawClients.map(c => {
+              if (c.externalAgentId && !c.externalAgent && agentByKey[c.externalAgentId]) {
+                return { ...c, externalAgent: agentByKey[c.externalAgentId] };
+              }
+              return c;
+            });
+          }
+          const clientIdsNeedingGroups = rawClients.filter(c => !c.groupMemberships || !Array.isArray(c.groupMemberships) || c.groupMemberships.length === 0).map(c => c.id);
+          if (clientIdsNeedingGroups.length > 0) {
+            const rows = await prisma.$queryRaw`
+              SELECT m.id, m."clientId", m."groupId", m.role,
+                     g.id as "g_id", g.name as "g_name", g.type as "g_type", g.industry as "g_industry"
+              FROM "ClientCompanyGroup" m
+              INNER JOIN "Client" g ON g.id = m."groupId"
+              WHERE m."clientId" IN (${Prisma.join(clientIdsNeedingGroups)})
+            `;
+            const byClientId = {};
+            for (const r of (rows || [])) {
+              const cid = r.clientId;
+              if (!byClientId[cid]) byClientId[cid] = [];
+              byClientId[cid].push({
+                id: r.id,
+                clientId: r.clientId,
+                groupId: r.groupId,
+                role: r.role,
+                group: r.g_id ? { id: r.g_id, name: r.g_name || '', type: r.g_type || null, industry: r.g_industry || null } : null
+              });
+            }
+            rawClients = rawClients.map(c => {
+              const hydrated = byClientId[c.id];
+              if (hydrated && hydrated.length > 0) return { ...c, groupMemberships: hydrated };
+              return c;
+            });
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not hydrate client list relations:', e.message);
+        }
+        
         // Prisma returns objects with relations - parse JSON fields
         const clients = rawClients
         
@@ -536,23 +574,11 @@ async function handler(req, res) {
         // Parse JSON fields before returning and add starred status
         const parsedClients = clients.map(client => {
           const parsed = parseClientJsonFields(client)
-          // Check if current user has starred this client
           parsed.isStarred = validUserId && client.starredBy && Array.isArray(client.starredBy) && client.starredBy.length > 0
-          
-          // Preserve group data (groupMemberships are objects, not JSON strings)
-          // These come from Prisma relations and should be preserved as-is
           const rawGroupMemberships = client.groupMemberships || parsed.groupMemberships
-          if (rawGroupMemberships && Array.isArray(rawGroupMemberships)) {
-            parsed.groupMemberships = rawGroupMemberships
-          } else {
-            parsed.groupMemberships = []
-          }
-          
-          // CRITICAL: Ensure group data is always present (even if null/undefined, set to empty array for JSON serialization)
-          if (!parsed.groupMemberships) {
-            parsed.groupMemberships = []
-          }
-          
+          parsed.groupMemberships = (rawGroupMemberships && Array.isArray(rawGroupMemberships)) ? rawGroupMemberships : []
+          parsed.externalAgentId = client.externalAgentId ?? client.externalAgent?.id ?? null
+          parsed.externalAgent = client.externalAgent ? { id: client.externalAgent.id, name: client.externalAgent.name || '' } : null
           return parsed
         })
         

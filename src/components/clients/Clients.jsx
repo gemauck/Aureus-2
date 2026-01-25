@@ -415,6 +415,13 @@ function resolveGroupNames(entity) {
     return groupNames;
 }
 
+/** Shared display for list tables: prefer API relation, then resolve from loaded externalAgents by id */
+function getExternalAgentDisplay(entity, externalAgentsList = []) {
+    if (!entity) return '—';
+    const name = entity.externalAgent?.name ?? (entity.externalAgentId && externalAgentsList.find(a => a.id === entity.externalAgentId)?.name);
+    return name || '—';
+}
+
 function normalizeLeadStages(leadsArray = []) {
     if (!Array.isArray(leadsArray)) {
         return [];
@@ -1686,7 +1693,7 @@ const Clients = React.memo(() => {
         isClientsLoading = true;
         const loadStartTime = performance.now();
         try {
-            // If force refresh, clear caches first
+            // If force refresh, clear caches first so Company Group (and External Agent) come from API
             if (forceRefresh) {
                 if (window.dataManager?.invalidate) {
                     window.dataManager.invalidate('clients');
@@ -1698,6 +1705,9 @@ const Clients = React.memo(() => {
                     window.ClientCache.clearCache();
                 }
                 pipelineOpportunitiesLoadedRef.current.clear();
+                // Clear processClientData cache so we don't reuse stale processed data missing groupMemberships
+                clientDataCache = null;
+                clientDataCacheTimestamp = 0;
             }
             
             // IMMEDIATELY show cached data without waiting for API (unless force refresh)
@@ -2202,6 +2212,36 @@ const Clients = React.memo(() => {
                     });
                 }); // End startTransition
                 
+                // If any clients are missing group memberships (e.g. ACME with group "Test" not showing), fetch from /api/clients/:id/groups
+                const clientsNeedingGroups = clientsOnly.filter(c => !c.groupMemberships || !Array.isArray(c.groupMemberships) || c.groupMemberships.length === 0);
+                if (clientsNeedingGroups.length > 0 && !groupMembershipsFetchRef.current) {
+                    groupMembershipsFetchRef.current = true;
+                    const token = window.storage?.getToken?.();
+                    if (token) {
+                        Promise.all(clientsNeedingGroups.slice(0, 15).map(async (client) => {
+                            try {
+                                const res = await fetch(`/api/clients/${client.id}/groups`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' });
+                                if (!res.ok) return null;
+                                const data = await res.json();
+                                const gs = data?.data?.groupMemberships ?? data?.groupMemberships ?? [];
+                                if (gs.length) return { clientId: client.id, groupMemberships: gs };
+                            } catch (_) {}
+                            return null;
+                        })).then(results => {
+                            const map = new Map(results.filter(Boolean).map(r => [r.clientId, r.groupMemberships]));
+                            if (map.size) {
+                                setClients(prev => prev.map(c => {
+                                    const gs = map.get(c.id);
+                                    if (!gs?.length) return c;
+                                    return { ...c, groupMemberships: gs.map(g => ({ ...g, group: g.group ? { id: g.group.id, name: g.group.name, type: g.group.type, industry: g.group.industry } : null })) };
+                                }));
+                            }
+                        }).finally(() => { groupMembershipsFetchRef.current = false; });
+                    } else {
+                        groupMembershipsFetchRef.current = false;
+                    }
+                }
+                
                 // Only update leads if they're mixed with clients in the API response
                 // (Leads typically come from a separate getLeads() endpoint via loadLeads())
                 // Use startTransition to prevent jittering during background updates
@@ -2555,34 +2595,44 @@ const Clients = React.memo(() => {
         }
     }, [viewMode, leadSortField, leadSortDirection]);
 
-    // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
-    // Skip if user is editing to prevent data loss
+    // Load external agents when viewing clients or leads so both tables can show External Agent
+    useEffect(() => {
+        const onList = viewMode === 'clients' || viewMode === 'leads';
+        if (!onList || externalAgents.length > 0) return;
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        let cancelled = false;
+        setIsLoadingExternalAgents(true);
+        fetch('/api/external-agents', {
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include'
+        })
+            .then(res => res.ok ? res.json() : Promise.reject(new Error(res.statusText)))
+            .then(data => {
+                if (cancelled) return;
+                const list = data?.data?.externalAgents ?? data?.externalAgents ?? [];
+                setExternalAgents(Array.isArray(list) ? list : []);
+            })
+            .catch(() => { if (!cancelled) setExternalAgents([]); })
+            .finally(() => { if (!cancelled) setIsLoadingExternalAgents(false); });
+        return () => { cancelled = true; };
+    }, [viewMode, externalAgents.length]);
+
+    // When switching to Leads: clear cache and force fresh load so Company Group (and External Agent) are always present.
+    // Stale cache can lack groupMemberships and show "None" incorrectly.
     useEffect(() => {
         if (viewMode === 'leads' && !isUserEditingRef.current) {
-            // Check if we already have leads data - if so, use it (fast!)
-            if (leads.length > 0) {
-                // Trigger background sync to update in background without blocking UI
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(() => {});
-                }
-                return;
+            if (window.DatabaseAPI?.clearCache) {
+                window.DatabaseAPI.clearCache('/leads');
             }
-            
-            // Only force refresh if we don't have data
-            const currentUser = window.storage?.getUser?.();
-            const userEmail = currentUser?.email || 'unknown';
-            
-            // Load leads (will use cache if available, then refresh in background)
             setTimeout(async () => {
-                await loadLeads(false); // Don't force refresh - use cache if available
-                
-                // Trigger background sync for fresh data
+                await loadLeads(true); // Force refresh so list includes groupMemberships
                 if (window.LiveDataSync?.forceSync) {
                     window.LiveDataSync.forceSync().catch(() => {});
                 }
             }, 100);
         }
-    }, [viewMode, leads.length]);
+    }, [viewMode]);
 
     // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
     // Skip if user is editing to prevent data loss
@@ -2594,24 +2644,14 @@ const Clients = React.memo(() => {
         }
     }, [clients.length]);
     
+    // When switching to Clients: clear cache and force fresh load so Company Group (and External Agent) are always present.
     useEffect(() => {
         if (viewMode === 'clients' && !isUserEditingRef.current) {
-            // Check if we already have clients data - if so, use it (fast!)
-            if (hasClientsRef.current) {
-                // Trigger background sync to update in background without blocking UI
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(() => {});
-                }
-                return;
+            if (window.DatabaseAPI?.clearCache) {
+                window.DatabaseAPI.clearCache('/clients');
             }
-            
-            // Only force refresh if we don't have data
-            const currentUser = window.storage?.getUser?.();
-            const userEmail = currentUser?.email || 'unknown';
-            
-            // Load clients (will use cache if available, then refresh in background)
             setTimeout(async () => {
-                await loadClients(false); // Don't force refresh - use cache if available
+                await loadClients(true); // Force refresh so list includes groupMemberships
                 
                 // Trigger background sync for fresh data
                 if (window.LiveDataSync?.forceSync) {
@@ -3454,81 +3494,36 @@ const Clients = React.memo(() => {
                 console.log('  - Will display:', groupNames.length > 0 ? groupNames.join(', ') : 'None');
             }
                 
-            // CRITICAL: If any leads are missing groupMemberships, fetch them directly
-            // This ensures groups show up even if the main API response doesn't include them
-            const leadsNeedingGroups = mappedLeads.filter(lead => 
-                !lead.groupMemberships || 
-                !Array.isArray(lead.groupMemberships) || 
-                lead.groupMemberships.length === 0
-            );
-            
-            if (leadsNeedingGroups.length > 0 && !groupMembershipsFetchRef.current) {
-                // Fetch groups for leads that don't have them (non-blocking)
-                setTimeout(async () => {
-                    const token = window.storage?.getToken?.();
-                    if (!token) return;
-                    
-                    try {
-                        groupMembershipsFetchRef.current = true;
-                        const leadsWithGroups = await Promise.all(
-                            leadsNeedingGroups.slice(0, 10).map(async (lead) => {
-                                try {
-                                    const response = await fetch(`/api/clients/${lead.id}/groups`, {
-                                        headers: {
-                                            'Authorization': `Bearer ${token}`,
-                                            'Content-Type': 'application/json'
-                                        },
-                                        credentials: 'include'
-                                    });
-                                    if (response.ok) {
-                                        const data = await response.json();
-                                        const groups = data?.data?.groupMemberships || data?.groupMemberships || [];
-                                        if (groups.length > 0) {
-                                            return { leadId: lead.id, groupMemberships: groups };
-                                        }
-                                    }
-                                } catch (err) {
-                                    // Silently fail for individual requests
-                                }
-                                return null;
-                            })
-                        );
-                        
-                        const groupsMap = new Map();
-                        leadsWithGroups.forEach(item => {
-                            if (item) {
-                                groupsMap.set(item.leadId, item.groupMemberships);
-                            }
-                        });
-                        
-                        if (groupsMap.size > 0) {
-                            setLeads(prevLeads => prevLeads.map(lead => {
-                                const groups = groupsMap.get(lead.id);
-                                if (groups) {
-                                    return {
-                                        ...lead,
-                                        groupMemberships: groups.map(g => ({
-                                            ...g,
-                                            group: g.group ? {
-                                                id: g.group.id || null,
-                                                name: g.group.name || null,
-                                                type: g.group.type || null
-                                            } : null
-                                        }))
-                                    };
-                                }
-                                return lead;
-                            }));
-                        }
-                    } catch (error) {
-                        // Silently fail - this is a background enrichment
-                    } finally {
-                        groupMembershipsFetchRef.current = false;
-                    }
-                }, 1000); // Wait 1 second after main load
-            }
-            
             setLeads(mappedLeads);
+            // If any leads have no company group from API (e.g. cache or older deploy), fetch from /api/clients/:id/groups
+            const needGroups = mappedLeads.filter(l => !l.groupMemberships?.length);
+            if (needGroups.length > 0 && !groupMembershipsFetchRef.current) {
+              groupMembershipsFetchRef.current = true;
+              const token = window.storage?.getToken?.();
+              if (token) {
+                Promise.all(needGroups.slice(0, 15).map(async (lead) => {
+                  try {
+                    const res = await fetch(`/api/clients/${lead.id}/groups`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' });
+                    if (!res.ok) return null;
+                    const data = await res.json();
+                    const gs = data?.data?.groupMemberships ?? data?.groupMemberships ?? [];
+                    if (gs.length) return { leadId: lead.id, groupMemberships: gs };
+                  } catch (_) {}
+                  return null;
+                })).then(results => {
+                  const map = new Map(results.filter(Boolean).map(r => [r.leadId, r.groupMemberships]));
+                  if (map.size) {
+                    setLeads(prev => prev.map(l => {
+                      const gs = map.get(l.id);
+                      if (!gs?.length) return l;
+                      return { ...l, groupMemberships: gs.map(g => ({ ...g, group: g.group ? { id: g.group.id, name: g.group.name, type: g.group.type, industry: g.group.industry } : null })) };
+                    }));
+                  }
+                }).finally(() => { groupMembershipsFetchRef.current = false; });
+              } else {
+                groupMembershipsFetchRef.current = false;
+              }
+            }
             // leadsCount now calculated from leads.length via useMemo
             
             // Log count update for debugging
@@ -5590,18 +5585,18 @@ const Clients = React.memo(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Run once on mount
     
-    // Load groups when Groups tab is active (refresh from API if needed)
+    // Load groups when Groups tab or Leads tab is active (Leads needs groups for Company Group dropdown)
     useEffect(() => {
         if (viewMode === 'groups' && lastLoadedViewModeRef.current !== 'groups') {
             lastLoadedViewModeRef.current = 'groups';
-            // Always refresh from API when tab is clicked to ensure fresh data
-            // But groups should already be loaded from cache, so this is just a background update
             loadGroups(true);
-        } else if (viewMode !== 'groups') {
+        } else if (viewMode === 'leads' && groups.length === 0) {
+            loadGroups(false);
+        } else if (viewMode !== 'groups' && viewMode !== 'leads') {
             lastLoadedViewModeRef.current = null;
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewMode]); // Only depend on viewMode, not loadGroups to prevent infinite loops
+    }, [viewMode, groups.length]); // Only depend on viewMode and groups.length, not loadGroups to prevent infinite loops
 
     // Filter groups (actual group entities, not clients with groups)
     const filteredGroups = useMemo(() => {
@@ -6043,6 +6038,59 @@ const Clients = React.memo(() => {
             alert('Failed to update external agent. Please try again.');
         }
     }, [externalAgents]);
+
+    const updateLeadField = useCallback(async (leadId, patch, stateUpdater) => {
+        if (!leadId) return;
+        const original = leadsRef.current?.find(l => l.id === leadId);
+        try {
+            setLeads(prev => {
+                const next = prev.map(l => l.id === leadId ? stateUpdater(l) : l);
+                try { window.storage?.setLeads?.(next); } catch (_) {}
+                return next;
+            });
+            const token = window.storage?.getToken?.();
+            if (!token) { alert('Authentication required'); throw new Error('auth'); }
+            if (window.api?.updateLead) {
+                await window.api.updateLead(leadId, patch);
+            } else {
+                const res = await fetch(`/api/leads/${leadId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(patch)
+                });
+                if (!res.ok) throw new Error('Update failed');
+            }
+            if (window.ClientCache?.clearCache) window.ClientCache.clearCache();
+            if (window.DatabaseAPI?.clearCache) window.DatabaseAPI.clearCache('/leads');
+            if (window.LiveDataSync?.forceSync) window.LiveDataSync.forceSync().catch(() => {});
+        } catch (err) {
+            if (original) {
+                setLeads(prev => prev.map(l => l.id === leadId ? original : l));
+            }
+            alert('Failed to save. Please try again.');
+        }
+    }, []);
+
+    const handleUpdateLeadStatus = useCallback((leadId, status) => {
+        const normalized = status ? (status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()) : 'Potential';
+        updateLeadField(leadId, { status: normalized }, l => ({ ...l, status: normalized }));
+    }, [updateLeadField]);
+
+    const handleUpdateLeadStage = useCallback((leadId, stage) => {
+        const normalized = stage ? (stage.charAt(0).toUpperCase() + stage.slice(1).toLowerCase()) : 'Awareness';
+        updateLeadField(leadId, { stage: normalized }, l => ({ ...l, stage: normalized }));
+    }, [updateLeadField]);
+
+    const handleUpdateLeadCompanyGroup = useCallback((leadId, groupId) => {
+        const groupIds = groupId ? [String(groupId)] : [];
+        updateLeadField(leadId, { groupIds }, l => ({
+            ...l,
+            groupMemberships: groupId && groups.length
+                ? [{ groupId, group: groups.find(g => g.id === groupId) || { id: groupId, name: '' } }]
+                : []
+        }));
+    }, [updateLeadField, groups]);
 
     useEffect(() => {
         const handleLeadEvent = (event) => {
@@ -6577,7 +6625,7 @@ const Clients = React.memo(() => {
                                 onClick={() => handleSort('companyGroup')}
                             >
                                 <div className="flex items-center">
-                                Company Group
+                                    Company Group
                                     {sortField === 'companyGroup' && (
                                         <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
@@ -6621,8 +6669,8 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
                         {parsedClientsData.length === 0 ? (
                             <tr>
-                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
+                                <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
                             </tr>
@@ -6654,27 +6702,8 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // Use resolveGroupNames which handles all the normalization and extraction
-                                            // Prefer groupMemberships directly, fall back to parsedGroups if needed
                                             const groupNames = resolveGroupNames(client);
-                                            
-                                            // Debug: Log first client to see what data we have
-                                            if (parsedClientsData.indexOf(client) === 0) {
-                                                console.log('🔍 First client in table:', {
-                                                    name: client.name,
-                                                    id: client.id,
-                                                    hasGroupMemberships: !!client.groupMemberships,
-                                                    groupMembershipsType: typeof client.groupMemberships,
-                                                    groupMembershipsIsArray: Array.isArray(client.groupMemberships),
-                                                    groupMembershipsLength: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 0,
-                                                    hasParsedGroups: !!client.parsedGroups,
-                                                    parsedGroupsLength: Array.isArray(client.parsedGroups) ? client.parsedGroups.length : 0,
-                                                    groupNames: groupNames,
-                                                    groupNamesLength: groupNames.length
-                                                });
-                                            }
-                                            
-                                            return groupNames.length > 0 
+                                            return groupNames.length > 0
                                                 ? <span>{groupNames.join(', ')}</span>
                                                 : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
                                         })()}
@@ -8403,70 +8432,69 @@ const Clients = React.memo(() => {
                                         </div>
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                            lead.status === 'Active' || lead.status === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                            lead.status === 'Potential' || lead.status === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                            lead.status === 'Proposal' || lead.status === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
-                                            lead.status === 'Tender' || lead.status === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
-                                            lead.status === 'Disinterested' || lead.status === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
-                                            (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800')
-                                        }`}>
-                                            {lead.status || 'Potential'}
-                                        </span>
+                                    <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                        <select
+                                            value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.status || 'potential').toLowerCase())) || 'Potential'}
+                                            onChange={e => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                            className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                (lead.status || '').toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                (lead.status || '').toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                (lead.status || '').toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                (lead.status || '').toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                                (lead.status || '').toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                                (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
+                                            }`}
+                                        >
+                                            <option value="Potential">Potential</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Inactive">Inactive</option>
+                                            <option value="On Hold">On Hold</option>
+                                            <option value="Qualified">Qualified</option>
+                                            <option value="Disinterested">Disinterested</option>
+                                            <option value="Proposal">Proposal</option>
+                                            <option value="Tender">Tender</option>
+                                        </select>
                                     </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                            lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                            lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                            lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
-                                            (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                        }`}>
-                                            {lead.stage || 'Awareness'}
-                                        </span>
+                                    <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                        <select
+                                            value={['Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.stage || 'awareness').toLowerCase())) || 'Awareness'}
+                                            onChange={e => handleUpdateLeadStage(lead.id, e.target.value)}
+                                            className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                (lead.stage || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                                (lead.stage || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                (lead.stage || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                            }`}
+                                        >
+                                            <option value="Awareness">Awareness</option>
+                                            <option value="Interest">Interest</option>
+                                            <option value="Desire">Desire</option>
+                                            <option value="Action">Action</option>
+                                        </select>
                                     </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {(() => {
-                                            // Simple: just get group names from groupMemberships
-                                            const groupNames = resolveGroupNames(lead);
-                                            
-                                            // Debug: Log first lead to see what data we have
-                                            if (paginatedLeads.indexOf(lead) === 0) {
-                                                console.log('🔍 First lead in table:', {
-                                                    name: lead.name,
-                                                    id: lead.id,
-                                                    hasGroupMemberships: !!lead.groupMemberships,
-                                                    groupMembershipsType: typeof lead.groupMemberships,
-                                                    groupMembershipsIsArray: Array.isArray(lead.groupMemberships),
-                                                    groupMembershipsLength: Array.isArray(lead.groupMemberships) ? lead.groupMemberships.length : 0,
-                                                    groupMembershipsValue: JSON.stringify(lead.groupMemberships, null, 2),
-                                                    groupNames: groupNames,
-                                                    groupNamesLength: groupNames.length,
-                                                    hasExternalAgent: !!lead.externalAgent,
-                                                    externalAgentName: lead.externalAgent?.name,
-                                                    externalAgentId: lead.externalAgentId
-                                                });
-                                            }
-                                            
-                                            return groupNames.length > 0 
-                                                ? <span>{groupNames.join(', ')}</span>
-                                                : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
-                                        })()}
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`} onClick={e => e.stopPropagation()}>
+                                        <select
+                                            value={((lead.groupMemberships && lead.groupMemberships[0] && (lead.groupMemberships[0].groupId || (lead.groupMemberships[0].group && lead.groupMemberships[0].group.id))) || '').toString()}
+                                            onChange={e => handleUpdateLeadCompanyGroup(lead.id, e.target.value || null)}
+                                            className={`w-full min-w-[6rem] px-2 py-1 text-xs rounded border cursor-pointer appearance-none ${isDark ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-white text-gray-800 border-gray-200'}`}
+                                        >
+                                            <option value="">None</option>
+                                            {groups.map(g => (
+                                                <option key={g.id} value={g.id}>{g.name}</option>
+                                            ))}
+                                        </select>
                                     </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                                        {(() => {
-                                            // Debug: Log external agent for first lead
-                                            if (paginatedLeads.indexOf(lead) === 0) {
-                                                console.log('🔍 First lead external agent:', {
-                                                    name: lead.name,
-                                                    hasExternalAgent: !!lead.externalAgent,
-                                                    externalAgent: lead.externalAgent,
-                                                    externalAgentId: lead.externalAgentId,
-                                                    willDisplay: lead.externalAgent?.name || '—'
-                                                });
-                                            }
-                                            return lead.externalAgent?.name || '—';
-                                        })()}
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`} onClick={e => e.stopPropagation()}>
+                                        <select
+                                            value={lead.externalAgentId || ''}
+                                            onChange={e => handleUpdateLeadExternalAgent(lead.id, e.target.value || null)}
+                                            className={`w-full min-w-[5.5rem] px-2 py-1 text-xs rounded border cursor-pointer appearance-none ${isDark ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-white text-gray-800 border-gray-200'}`}
+                                        >
+                                            <option value="">—</option>
+                                            {externalAgents.map(a => (
+                                                <option key={a.id} value={a.id}>{a.name}</option>
+                                            ))}
+                                        </select>
                                     </td>
                                 </tr>
                             ))
