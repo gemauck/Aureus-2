@@ -6,7 +6,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
-import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
+import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } from '../_lib/clientJsonFields.js'
 
 async function handler(req, res) {
   try {
@@ -36,7 +36,7 @@ async function handler(req, res) {
                    "lastContact", address, website, notes, contacts, "followUps", 
                    "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
                    proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
-                   thumbnail, "rssSubscribed"
+                   thumbnail, "rssSubscribed", kyc
             FROM "Client"
             WHERE id = ${id}
           `
@@ -76,7 +76,8 @@ async function handler(req, res) {
                 createdAt: true,
                 updatedAt: true,
                 thumbnail: true,
-                rssSubscribed: true
+                rssSubscribed: true,
+                kyc: true
               }
             })
           } catch (prismaError) {
@@ -328,7 +329,7 @@ async function handler(req, res) {
         const parsedClient = parseClientJsonFields(client)
         
         // Legacy parsing for other fields (if parseClientJsonFields didn't handle them)
-        const jsonFields = ['followUps', 'projectIds', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+        const jsonFields = ['followUps', 'projectIds', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services', 'kyc']
         for (const field of jsonFields) {
           try {
             const value = parsedClient[field]
@@ -338,16 +339,16 @@ async function handler(req, res) {
               } catch (parseError) {
                 // Set safe defaults on parse error
                 console.warn(`⚠️ Failed to parse JSON field "${field}" for client ${id}:`, parseError.message)
-                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : field === 'kyc' ? DEFAULT_KYC : []
               }
             } else if (!value) {
               // Set defaults for missing/null fields
-              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : field === 'kyc' ? DEFAULT_KYC : []
             }
           } catch (fieldError) {
             console.warn(`⚠️ Error processing field "${field}" for client ${id}:`, fieldError.message)
             // Set safe default
-            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : field === 'kyc' ? DEFAULT_KYC : []
           }
         }
         

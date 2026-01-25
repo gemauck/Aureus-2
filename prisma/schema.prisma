@@ -162,6 +162,7 @@ model Client {
   thumbnail       String   @default("")
   services        String   @default("[]")
   rssSubscribed   Boolean  @default(true)
+  kyc             String   @default("{}")
 
   // JSONB columns for improved performance (Phase 1 Migration)
   // These columns are populated from String columns above
@@ -174,6 +175,7 @@ model Client {
   billingTermsJsonb Json?           @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
   proposalsJsonb    Json?           @default("[]")
   servicesJsonb     Json?           @default("[]")
+  kycJsonb          Json?           @default("{}")
   owner             User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   externalAgent     ExternalAgent?  @relation(fields: [externalAgentId], references: [id])
   newsArticles      ClientNews[]

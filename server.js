@@ -1481,6 +1481,47 @@ app.all('/api/projects/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for time-entries (GET list / POST create, and GET/PUT/DELETE by id) – connected to DB
+app.all('/api/time-entries', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'time-entries.js'))
+    if (!handler) {
+      console.error('❌ Time-entries handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in time-entries handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+app.all('/api/time-entries/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'time-entries.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in time-entries handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for document-collection-templates list and create operations (GET, POST /api/document-collection-templates)
 app.all('/api/document-collection-templates', async (req, res, next) => {
   try {

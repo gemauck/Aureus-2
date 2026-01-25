@@ -9,12 +9,10 @@ import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    
-    // Parse the URL path (already has /api/ stripped by server)
-    // Strip query parameters before splitting
-    const urlPath = req.url.split('?')[0].split('#')[0]
-    const pathSegments = urlPath.split('/').filter(Boolean)
-    const id = pathSegments[pathSegments.length - 1]
+    // Parse the URL path: strip /api prefix so we work with both catch-all and explicit /api/time-entries route
+    const urlPath = (req.url || '').split('?')[0].split('#')[0]
+    const pathSegments = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+    const id = pathSegments.length >= 2 ? pathSegments[pathSegments.length - 1] : null
 
     // List Time Entries (GET /api/time-entries or GET /api/time-entries?projectId=xxx)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'time-entries') {

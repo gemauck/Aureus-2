@@ -125,7 +125,7 @@ async function handler(req, res) {
                      "lastContact", address, website, notes, contacts, "followUps", 
                      "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
                      proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
-                     thumbnail, "rssSubscribed"
+                     thumbnail, "rssSubscribed", kyc
               FROM "Client"
               WHERE id = ${id} AND type = 'lead'
             `
@@ -337,6 +337,11 @@ async function handler(req, res) {
         updateData.billingTerms = typeof body.billingTerms === 'string' 
           ? body.billingTerms 
           : JSON.stringify(body.billingTerms)
+      }
+      if (body.kyc !== undefined) {
+        const kycDual = prepareJsonFieldsForDualWrite({ kyc: body.kyc })
+        if (kycDual.kyc !== undefined) updateData.kyc = kycDual.kyc
+        if (kycDual.kycJsonb !== undefined) updateData.kycJsonb = kycDual.kycJsonb
       }
       // CRITICAL: Update comments JSON field in Client table
       if (body.comments !== undefined) {

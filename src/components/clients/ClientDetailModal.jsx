@@ -6230,6 +6230,144 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             </div>
                         )}
 
+                        {/* KYC Tab */}
+                        {activeTab === 'kyc' && (
+                            <div className="space-y-6">
+                                <div className="text-center border-b border-gray-200 pb-3">
+                                    <h2 className="text-lg font-semibold text-gray-900">ABCOTRONICS</h2>
+                                    <p className="text-sm font-medium text-gray-700 mt-0.5">Know Your Customer (KYC) Information Requirements</p>
+                                    <div className="border-t border-gray-300 w-16 mx-auto mt-2" style={{ borderBottomWidth: 0 }} aria-hidden></div>
+                                </div>
+
+                                {(() => {
+                                    const k = formData.kyc || {};
+                                    const le = k.legalEntity || {};
+                                    const bp = k.businessProfile || {};
+                                    const bd = k.bankingDetails || {};
+                                    const updateKyc = (path, value) => {
+                                        setFormData(prev => {
+                                            const next = { ...prev, kyc: { ...(prev.kyc || {}) } };
+                                            if (path.includes('.')) {
+                                                const [group, key] = path.split('.');
+                                                next.kyc[group] = { ...(next.kyc[group] || {}), [key]: value };
+                                            } else {
+                                                next.kyc[path] = value;
+                                            }
+                                            formDataRef.current = next;
+                                            return next;
+                                        });
+                                    };
+                                    const clientTypes = ['Individual', 'Company', 'Close Corporation', 'Trust', 'Government / State-Owned Entity'];
+                                    const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent';
+                                    const labelCls = 'block text-sm font-medium text-gray-700 mb-1';
+                                    return (
+                                        <>
+                                            {/* SECTION 1 – CLIENT TYPE */}
+                                            <section>
+                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 1 – CLIENT TYPE</h3>
+                                                <div className="border-b border-gray-200 mb-2" style={{ height: 1 }}></div>
+                                                <div className="flex flex-wrap gap-x-6 gap-y-1">
+                                                    {clientTypes.map(opt => (
+                                                        <label key={opt} className="inline-flex items-center gap-2 cursor-pointer">
+                                                            <input
+                                                                type="radio"
+                                                                name="kyc_clientType"
+                                                                checked={(k.clientType || '') === opt}
+                                                                onChange={() => updateKyc('clientType', opt)}
+                                                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                                            />
+                                                            <span className="text-sm text-gray-700">{opt}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </section>
+
+                                            {/* SECTION 2 – CLIENT IDENTIFICATION */}
+                                            <section>
+                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 2 – CLIENT IDENTIFICATION</h3>
+                                                <div className="border-b border-gray-200 mb-3" style={{ height: 1 }}></div>
+                                                <h4 className="text-sm font-medium text-gray-700 mb-2">2.1 Legal Entity Details</h4>
+                                                <div className={`grid gap-3 ${isFullPage ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                                                    {[
+                                                        { key: 'registeredLegalName', label: 'Registered Legal Name' },
+                                                        { key: 'tradingName', label: 'Trading Name (if different)' },
+                                                        { key: 'registrationNumber', label: 'Registration Number' },
+                                                        { key: 'vatNumber', label: 'VAT Number (if applicable)' },
+                                                        { key: 'incomeTaxNumber', label: 'Income Tax Number' },
+                                                        { key: 'registeredAddress', label: 'Registered Address' },
+                                                        { key: 'principalPlaceOfBusiness', label: 'Principal Place of Business' },
+                                                        { key: 'countryOfIncorporation', label: 'Country of Incorporation' }
+                                                    ].map(({ key, label }) => (
+                                                        <div key={key}>
+                                                            <label className={labelCls}>{label}</label>
+                                                            <input type="text" value={le[key] || ''} onChange={e => updateKyc('legalEntity.' + key, e.target.value)} className={inputCls} />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <p className="text-xs text-gray-500 mt-2">2.2 Directors / Members / Trustees (attach schedule if more than 3)</p>
+                                                <p className="text-xs text-gray-600 mb-2">For each: Full name, ID/Passport number, Nationality, Position/capacity, % Interest, Certified copy of ID/Passport, Proof of residential address (not older than 3 months)</p>
+                                                <textarea className={inputCls} rows={3} placeholder="List or describe directors/members/trustees…" value={k.directorsNotes || ''} onChange={e => setFormData(prev => { const n = { ...prev, kyc: { ...(prev.kyc || {}), directorsNotes: e.target.value } }; formDataRef.current = n; return n; })} />
+                                            </section>
+
+                                            {/* SECTION 3 – BENEFICIAL OWNERSHIP */}
+                                            <section>
+                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 3 – BENEFICIAL OWNERSHIP</h3>
+                                                <div className="border-b border-gray-200 mb-2" style={{ height: 1 }}></div>
+                                                <p className="text-xs text-gray-600 mb-2">3.1 Ultimate Beneficial Owner(s) (UBOs) – Any natural person owning or controlling 25% or more, or exercising effective control. For each: Full name, ID/Passport number, Country of residence, Nature of control, % Ownership or control, Certified copy of ID/Passport, Proof of residential address (not older than 3 months)</p>
+                                                <textarea className={inputCls} rows={3} placeholder="List UBOs…" value={k.ubosNotes || ''} onChange={e => setFormData(prev => { const n = { ...prev, kyc: { ...(prev.kyc || {}), ubosNotes: e.target.value } }; formDataRef.current = n; return n; })} />
+                                            </section>
+
+                                            {/* SECTION 4 – BUSINESS PROFILE */}
+                                            <section>
+                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 4 – BUSINESS PROFILE</h3>
+                                                <div className="border-b border-gray-200 mb-3" style={{ height: 1 }}></div>
+                                                <h4 className="text-sm font-medium text-gray-700 mb-2">4.1 Nature of Business</h4>
+                                                <div className={`grid gap-3 ${isFullPage ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                                                    <div>
+                                                        <label className={labelCls}>Industry sector (e.g. Mining, Forestry, Agriculture, Logistics, Other)</label>
+                                                        <input type="text" value={bp.industrySector || ''} onChange={e => updateKyc('businessProfile.industrySector', e.target.value)} className={inputCls} />
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}>Core business activities</label>
+                                                        <input type="text" value={bp.coreBusinessActivities || ''} onChange={e => updateKyc('businessProfile.coreBusinessActivities', e.target.value)} className={inputCls} />
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}>Primary operating locations</label>
+                                                        <input type="text" value={bp.primaryOperatingLocations || ''} onChange={e => updateKyc('businessProfile.primaryOperatingLocations', e.target.value)} className={inputCls} />
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}>Years in operation</label>
+                                                        <input type="text" value={bp.yearsInOperation || ''} onChange={e => updateKyc('businessProfile.yearsInOperation', e.target.value)} className={inputCls} />
+                                                    </div>
+                                                </div>
+                                            </section>
+
+                                            {/* SECTION 5 – BANKING DETAILS */}
+                                            <section>
+                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 5 – BANKING DETAILS</h3>
+                                                <div className="border-b border-gray-200 mb-3" style={{ height: 1 }}></div>
+                                                <h4 className="text-sm font-medium text-gray-700 mb-2">5.1 Banking Details</h4>
+                                                <div className={`grid gap-3 ${isFullPage ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                                                    {[
+                                                        { key: 'bankName', label: 'Bank name' },
+                                                        { key: 'accountHolderName', label: 'Account holder name' },
+                                                        { key: 'accountNumber', label: 'Account number' },
+                                                        { key: 'branchCode', label: 'Branch code' },
+                                                        { key: 'accountType', label: 'Account type' }
+                                                    ].map(({ key, label }) => (
+                                                        <div key={key}>
+                                                            <label className={labelCls}>{label}</label>
+                                                            <input type="text" value={bd[key] || ''} onChange={e => updateKyc('bankingDetails.' + key, e.target.value)} className={inputCls} />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </section>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
                         {/* Footer Actions */}
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200">
                             <div>

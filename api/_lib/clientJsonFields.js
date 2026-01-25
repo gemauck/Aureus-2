@@ -10,6 +10,37 @@ const DEFAULT_BILLING_TERMS = {
   notes: ''
 }
 
+const DEFAULT_KYC = {
+  clientType: '',
+  legalEntity: {
+    registeredLegalName: '',
+    tradingName: '',
+    registrationNumber: '',
+    vatNumber: '',
+    incomeTaxNumber: '',
+    registeredAddress: '',
+    principalPlaceOfBusiness: '',
+    countryOfIncorporation: ''
+  },
+  directors: [],
+  beneficialOwners: [],
+  businessProfile: {
+    industrySector: '',
+    coreBusinessActivities: '',
+    primaryOperatingLocations: '',
+    yearsInOperation: ''
+  },
+  bankingDetails: {
+    bankName: '',
+    accountHolderName: '',
+    accountNumber: '',
+    branchCode: '',
+    accountType: ''
+  },
+  directorsNotes: '',
+  ubosNotes: ''
+}
+
 // Phase 3: Triple-read - Normalized tables first, then JSONB, then String fallback
 export function parseClientJsonFields(client) {
   try {
@@ -273,10 +304,11 @@ export function parseClientJsonFields(client) {
     }
     
     // Other JSON fields - Phase 2: Read from JSONB first, fallback to String
-    // Only activityLog and billingTerms remain as JSON (not normalized)
+    // activityLog, billingTerms, kyc remain as JSON (not normalized)
     const jsonFieldMap = {
       'activityLog': 'activityLogJsonb',
-      'billingTerms': 'billingTermsJsonb'
+      'billingTerms': 'billingTermsJsonb',
+      'kyc': 'kycJsonb'
     }
     
     for (const [field, jsonbField] of Object.entries(jsonFieldMap)) {
@@ -290,13 +322,14 @@ export function parseClientJsonFields(client) {
           try {
             value = JSON.parse(stringValue)
           } catch (e) {
-            // Set safe defaults on parse error
-            value = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : []
+            value = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : field === 'kyc' ? DEFAULT_KYC : []
           }
         } else {
-          // Set defaults for missing/null fields
-          value = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : []
+          value = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : field === 'kyc' ? DEFAULT_KYC : []
         }
+      }
+      if (field === 'kyc' && (typeof value !== 'object' || value === null)) {
+        value = DEFAULT_KYC
       }
       
       parsed[field] = value
@@ -385,9 +418,38 @@ export function prepareJsonFieldsForDualWrite(body) {
     result.billingTerms = JSON.stringify(billingTermsObj)
     result.billingTermsJsonb = billingTermsObj
   }
+
+  // Handle kyc (object: clientType, legalEntity, directors, beneficialOwners, businessProfile, bankingDetails, directorsNotes, ubosNotes)
+  if (body.kyc !== undefined) {
+    let kycObj = DEFAULT_KYC
+    if (typeof body.kyc === 'object' && body.kyc !== null) {
+      const deepMerge = (defaultVal, from) => {
+        if (from === null || typeof from !== 'object') return defaultVal
+        const out = { ...defaultVal }
+        for (const k of Object.keys(from)) {
+          if (typeof from[k] === 'object' && from[k] !== null && !Array.isArray(from[k]) && typeof defaultVal[k] === 'object' && defaultVal[k] !== null) {
+            out[k] = deepMerge(defaultVal[k] || {}, from[k])
+          } else {
+            out[k] = from[k]
+          }
+        }
+        return out
+      }
+      kycObj = deepMerge(DEFAULT_KYC, body.kyc)
+    } else if (typeof body.kyc === 'string' && body.kyc.trim()) {
+      try {
+        const parsed = JSON.parse(body.kyc)
+        kycObj = typeof parsed === 'object' && parsed !== null ? { ...DEFAULT_KYC, ...parsed, legalEntity: { ...DEFAULT_KYC.legalEntity, ...(parsed.legalEntity || {}) }, businessProfile: { ...DEFAULT_KYC.businessProfile, ...(parsed.businessProfile || {}) }, bankingDetails: { ...DEFAULT_KYC.bankingDetails, ...(parsed.bankingDetails || {}) } } : DEFAULT_KYC
+      } catch (e) {
+        kycObj = DEFAULT_KYC
+      }
+    }
+    result.kyc = JSON.stringify(kycObj)
+    result.kycJsonb = kycObj
+  }
   
   return result
 }
 
-export { DEFAULT_BILLING_TERMS }
+export { DEFAULT_BILLING_TERMS, DEFAULT_KYC }
 

@@ -230,7 +230,11 @@ function initializeProjectDetail() {
         };
 
         const handleStopTimer = async () => {
-            if (!timerRunning || !timerStartedAt || !timeProject?.id || !window.DatabaseAPI?.createTimeEntry) return;
+            if (!timerRunning || !timerStartedAt || !timeProject?.id) return;
+            if (!window.DatabaseAPI?.createTimeEntry) {
+                alert('Time tracking is not connected. Please refresh the page.');
+                return;
+            }
             const sec = Math.floor((Date.now() - timerStartedAt) / 1000);
             const hours = Math.round((sec / 3600) * 100) / 100;
             setTimerRunning(false);
@@ -244,18 +248,26 @@ function initializeProjectDetail() {
                     projectName: timeProject.name || '',
                     description: timerDescription || 'Timer entry'
                 });
-                const newEntry = res?.data;
+                const newEntry = (res && (res.data ?? res.timeEntry ?? (res.id ? res : null))) || null;
                 if (newEntry) setEntries(prev => [newEntry, ...prev]);
+                else await loadEntries();
                 setTimerDescription('');
             } catch (e) {
                 console.warn('Save timer entry failed:', e);
-                alert('Could not save time entry. Please try again.');
+                alert('Could not save time entry: ' + (e?.message || 'Please try again.'));
             }
         };
 
         const handleAddManual = async () => {
             const hours = parseFloat(manualHours);
-            if (!Number.isFinite(hours) || hours <= 0 || !timeProject?.id || !window.DatabaseAPI?.createTimeEntry) return;
+            if (!Number.isFinite(hours) || hours <= 0 || !timeProject?.id) {
+                alert('Please enter a valid number of hours.');
+                return;
+            }
+            if (!window.DatabaseAPI?.createTimeEntry) {
+                alert('Time tracking is not connected. Please refresh the page.');
+                return;
+            }
             try {
                 const res = await window.DatabaseAPI.createTimeEntry({
                     date: manualDate + 'T12:00:00.000Z',
@@ -264,13 +276,17 @@ function initializeProjectDetail() {
                     projectName: timeProject.name || '',
                     description: manualDescription || ''
                 });
-                const newEntry = res?.data;
-                if (newEntry) setEntries(prev => [newEntry, ...prev]);
-                setManualHours('');
-                setManualDescription('');
+                const newEntry = (res && (res.data ?? res.timeEntry ?? (res.id ? res : null))) || null;
+                if (newEntry) {
+                    setEntries(prev => [newEntry, ...prev]);
+                    setManualHours('');
+                    setManualDescription('');
+                } else {
+                    await loadEntries();
+                }
             } catch (e) {
                 console.warn('Add manual entry failed:', e);
-                alert('Could not add time entry. Please try again.');
+                alert('Could not add time entry: ' + (e?.message || 'Please try again.'));
             }
         };
 
