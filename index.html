@@ -801,8 +801,15 @@
                     (error instanceof Error && error.message && error.message.includes('Not found')) ||
                     (error && typeof error === 'object' && (error.status === 404 || error.code === 404));
                 
-                // Only log non-database, non-opportunities-api, non-projects-api, non-server, non-already-exists, and non-not-found errors
-                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError && !isNotFoundError) {
+                // Check for rate limit (429) - expected when server throttles; app already shows "wait" and retries
+                const isRateLimitError = 
+                    allErrorText.includes('429') ||
+                    allErrorText.includes('too many requests') ||
+                    allErrorText.includes('rate limit') ||
+                    (error && typeof error === 'object' && (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED'));
+                
+                // Only log non-database, non-opportunities-api, non-projects-api, non-server, non-already-exists, non-not-found, and non-rate-limit errors
+                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError && !isNotFoundError && !isRateLimitError) {
                     console.error('🚨 Unhandled Promise Rejection:', {
                         reason: error,
                         promise: event.promise,

@@ -558,13 +558,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Load external agents function
     const loadExternalAgents = useCallback(async () => {
         try {
-            setIsLoadingExternalAgents(true);
             const token = window.storage?.getToken?.();
-            if (!token) {
-                setIsLoadingExternalAgents(false);
+            if (!token) return;
+            if (window.RateLimitManager?.isRateLimited?.()) {
+                setExternalAgents([]);
                 return;
             }
-            
+            setIsLoadingExternalAgents(true);
             const response = await fetch('/api/external-agents', {
                 method: 'GET',
                 headers: {
@@ -573,16 +573,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 },
                 credentials: 'include'
             });
-            
             if (response.ok) {
                 const data = await response.json();
                 const agentsList = data?.data?.externalAgents || data?.externalAgents || [];
                 setExternalAgents(agentsList);
+            } else if (response.status === 429) {
+                const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+                window.RateLimitManager?.setRateLimit?.(retryAfter);
+                setExternalAgents([]);
             } else {
                 console.error('Failed to load external agents:', response.statusText);
             }
         } catch (error) {
-            console.error('Error loading external agents:', error);
+            setExternalAgents([]);
+            if (error?.status !== 429 && error?.code !== 'RATE_LIMIT_EXCEEDED') {
+                console.error('Error loading external agents:', error);
+            }
         } finally {
             setIsLoadingExternalAgents(false);
         }
@@ -2035,6 +2041,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setIsLoadingGroups(false);
             return;
         }
+        if (window.RateLimitManager?.isRateLimited?.()) {
+            setAvailableGroups([]);
+            if (client?.id) setClientGroupMemberships([]);
+            return;
+        }
         
         // Use global request deduplication to prevent duplicate API calls
         const groupsRequestKey = window.RequestDeduplicator?.getRequestKey('/api/clients/groups', {});
@@ -2063,9 +2074,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             const groupsData = await groupsResponse.json();
                             const groups = groupsData?.data?.groups || groupsData?.groups || [];
                             setAvailableGroups(groups);
+                        } else if (groupsResponse.status === 429) {
+                            const retryAfter = parseInt(groupsResponse.headers.get('Retry-After') || '60', 10);
+                            window.RateLimitManager?.setRateLimit?.(retryAfter);
+                            setAvailableGroups([]);
                         }
                     } catch (error) {
-                        console.error('Error loading groups:', error);
+                        if (error?.status !== 429 && error?.code !== 'RATE_LIMIT_EXCEEDED') {
+                            console.error('Error loading groups:', error);
+                        }
                     } finally {
                         isLoadingGroupsRef.current = false;
                         setIsLoadingGroups(false);
@@ -2095,20 +2112,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             } else if (membershipsResponse.status === 404) {
                                 // 404 is expected when client has no groups or doesn't exist - silently handle
                                 setClientGroupMemberships([]);
+                            } else if (membershipsResponse.status === 429) {
+                                const retryAfter = parseInt(membershipsResponse.headers.get('Retry-After') || '60', 10);
+                                window.RateLimitManager?.setRateLimit?.(retryAfter);
+                                setClientGroupMemberships([]);
                             } else {
                                 // Other errors (403, etc.)
                                 console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
                                 setClientGroupMemberships([]);
                             }
                         } catch (groupError) {
-                            // Only log non-404 errors (404s are expected and handled gracefully)
-                            const is404Error = groupError?.message?.includes('404') || 
-                                             groupError?.status === 404 ||
-                                             groupError?.message?.includes('Not found');
-                            if (!is404Error) {
+                            const is429 = groupError?.status === 429 || groupError?.code === 'RATE_LIMIT_EXCEEDED';
+                            const is404 = groupError?.message?.includes('404') || groupError?.status === 404 || groupError?.message?.includes('Not found');
+                            if (!is429 && !is404) {
                                 console.error('❌ Error loading client groups:', groupError);
                             }
-                            // Continue without group data rather than breaking the UI
                             setClientGroupMemberships([]);
                         }
                     }, 3000); // 3 second deduplication window for memberships
@@ -2131,6 +2149,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         const groupsData = await groupsResponse.json();
                         const groups = groupsData?.data?.groups || groupsData?.groups || [];
                         setAvailableGroups(groups);
+                    } else if (groupsResponse.status === 429) {
+                        const retryAfter = parseInt(groupsResponse.headers.get('Retry-After') || '60', 10);
+                        window.RateLimitManager?.setRateLimit?.(retryAfter);
+                        setAvailableGroups([]);
                     }
                     
                     // Load client's current group memberships if client exists
@@ -2152,26 +2174,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
                                 setClientGroupMemberships([]);
                             } else if (membershipsResponse.status === 404) {
-                                // 404 is expected when client has no groups or doesn't exist - silently handle
+                                setClientGroupMemberships([]);
+                            } else if (membershipsResponse.status === 429) {
+                                const retryAfter = parseInt(membershipsResponse.headers.get('Retry-After') || '60', 10);
+                                window.RateLimitManager?.setRateLimit?.(retryAfter);
                                 setClientGroupMemberships([]);
                             } else {
                                 console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
                                 setClientGroupMemberships([]);
                             }
                         } catch (groupError) {
-                            console.error('❌ Error loading client groups:', groupError);
+                            if (groupError?.status !== 429 && groupError?.code !== 'RATE_LIMIT_EXCEEDED') {
+                                console.error('❌ Error loading client groups:', groupError);
+                            }
                             setClientGroupMemberships([]);
                         }
                     }
                 } catch (error) {
-                    console.error('Error loading groups:', error);
+                    if (error?.status !== 429 && error?.code !== 'RATE_LIMIT_EXCEEDED') {
+                        console.error('Error loading groups:', error);
+                    }
                 } finally {
                     isLoadingGroupsRef.current = false;
                     setIsLoadingGroups(false);
                 }
             }
         } catch (error) {
-            console.error('Error loading groups:', error);
+            if (error?.status !== 429 && error?.code !== 'RATE_LIMIT_EXCEEDED') {
+                console.error('Error loading groups:', error);
+            }
             isLoadingGroupsRef.current = false;
             setIsLoadingGroups(false);
         }

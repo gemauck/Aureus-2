@@ -2603,15 +2603,23 @@ const Clients = React.memo(() => {
         if (!onList || externalAgents.length > 0) return;
         const token = window.storage?.getToken?.();
         if (!token) return;
+        if (window.RateLimitManager?.isRateLimited?.()) return;
         let cancelled = false;
         setIsLoadingExternalAgents(true);
         fetch('/api/external-agents', {
             headers: { 'Authorization': `Bearer ${token}` },
             credentials: 'include'
         })
-            .then(res => res.ok ? res.json() : Promise.reject(new Error(res.statusText)))
+            .then(res => {
+                if (res.status === 429) {
+                    const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10);
+                    window.RateLimitManager?.setRateLimit?.(retryAfter);
+                    return Promise.reject(Object.assign(new Error('Too many requests'), { status: 429 }));
+                }
+                return res.ok ? res.json() : Promise.reject(new Error(res.statusText));
+            })
             .then(data => {
-                if (cancelled) return;
+                if (cancelled || !data) return;
                 const list = data?.data?.externalAgents ?? data?.externalAgents ?? [];
                 setExternalAgents(Array.isArray(list) ? list : []);
             })
@@ -2627,11 +2635,15 @@ const Clients = React.memo(() => {
             if (window.DatabaseAPI?.clearCache) {
                 window.DatabaseAPI.clearCache('/leads');
             }
-            setTimeout(async () => {
-                await loadLeads(true); // Force refresh so list includes groupMemberships
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(() => {});
-                }
+            setTimeout(() => {
+                (async () => {
+                    try {
+                        await loadLeads(true); // Force refresh so list includes groupMemberships
+                        if (window.LiveDataSync?.forceSync) {
+                            await window.LiveDataSync.forceSync();
+                        }
+                    } catch (_) { /* avoid unhandled rejection when rate-limited or network fails */ }
+                })();
             }, 100);
         }
     }, [viewMode]);
@@ -2652,13 +2664,15 @@ const Clients = React.memo(() => {
             if (window.DatabaseAPI?.clearCache) {
                 window.DatabaseAPI.clearCache('/clients');
             }
-            setTimeout(async () => {
-                await loadClients(true); // Force refresh so list includes groupMemberships
-                
-                // Trigger background sync for fresh data
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(() => {});
-                }
+            setTimeout(() => {
+                (async () => {
+                    try {
+                        await loadClients(true); // Force refresh so list includes groupMemberships
+                        if (window.LiveDataSync?.forceSync) {
+                            await window.LiveDataSync.forceSync();
+                        }
+                    } catch (_) { /* avoid unhandled rejection when rate-limited or network fails */ }
+                })();
             }, 100);
         }
     }, [viewMode]); // Removed clients.length to prevent infinite loops
@@ -4698,16 +4712,19 @@ const Clients = React.memo(() => {
                         
                         // Trigger immediate LiveDataSync to ensure all users see the new lead
                         // Also immediately refresh leads list to show new lead without waiting for sync
-                        setTimeout(async () => {
-                            // First, force refresh leads immediately
-                            await loadLeads(true); // Force refresh bypasses cache
-                            
-                            // Then trigger sync for other users
-                            if (window.LiveDataSync?.forceSync) {
-                                window.LiveDataSync.forceSync().catch(err => {
-                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
-                                });
-                            }
+                        setTimeout(() => {
+                            (async () => {
+                                try {
+                                    await loadLeads(true); // Force refresh bypasses cache
+                                    if (window.LiveDataSync?.forceSync) {
+                                        await window.LiveDataSync.forceSync();
+                                    }
+                                } catch (err) {
+                                    if (window.LiveDataSync?.forceSync) {
+                                        window.LiveDataSync.forceSync().catch(() => {});
+                                    }
+                                }
+                            })();
                         }, 300); // 300ms delay to ensure DB commit
                         
                         // Use the saved lead from database (with proper ID)
