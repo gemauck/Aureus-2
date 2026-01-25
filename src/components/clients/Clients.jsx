@@ -513,7 +513,9 @@ function processClientData(rawClients, cacheKey) {
         groupMemberships: normalizeGroupMemberships(
             c.groupMemberships,
             c.companyGroup || c.company_group || c.groups || c.group
-        )
+        ),
+        // Preserve KYC so it survives list load and hard refresh
+        kyc: (c.kyc != null && typeof c.kyc === 'object') ? c.kyc : (typeof c.kyc === 'string' && c.kyc.trim() ? (() => { try { return JSON.parse(c.kyc); } catch (_) { return {}; } })() : (c.kycJsonb != null && typeof c.kycJsonb === 'object' ? c.kycJsonb : {}))
         };
     });
     
@@ -4036,7 +4038,8 @@ const Clients = React.memo(() => {
                     retainerAmount: 0,
                     taxExempt: false,
                     notes: ''
-                }
+                },
+                kyc: clientFormData.kyc != null && typeof clientFormData.kyc === 'object' ? clientFormData.kyc : (typeof clientFormData.kyc === 'string' && clientFormData.kyc ? (() => { try { return JSON.parse(clientFormData.kyc); } catch (_) { return {}; } })() : {})
             };
             
             
@@ -4088,7 +4091,8 @@ const Clients = React.memo(() => {
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             services: comprehensiveClient.services,
-                            billingTerms: comprehensiveClient.billingTerms
+                            billingTerms: comprehensiveClient.billingTerms,
+                            kyc: comprehensiveClient.kyc
                         };
                         
                         try {
@@ -4127,7 +4131,8 @@ const Clients = React.memo(() => {
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             services: comprehensiveClient.services,
-                            billingTerms: comprehensiveClient.billingTerms
+                            billingTerms: comprehensiveClient.billingTerms,
+                            kyc: comprehensiveClient.kyc
                         };
                         
                         apiResponse = await window.api.createClient(apiCreateData);

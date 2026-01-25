@@ -368,7 +368,17 @@ sys.exit(0)
 
     } catch (error) {
         console.error('POA Review Excel API - Error:', error);
-        return serverError(res, `Failed to process Excel file: ${error.message}`);
+        // Return a clear, specific message so it is not mistaken for a DB error.
+        const msg = `Failed to process Excel file: ${error.message || error}`;
+        if (!res.headersSent && !res.writableEnded) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+                error: { code: 'POA_PROCESS_ERROR', message: msg, details: error.message || String(error) }
+            }));
+            return;
+        }
+        return serverError(res, msg);
     }
 }
 

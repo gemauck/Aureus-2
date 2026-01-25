@@ -20,10 +20,12 @@ async function handler(req, res) {
         WHERE table_schema = 'public'
       `
       
+      const count = tableCount[0]?.count
+      const tables = typeof count === 'bigint' ? Number(count) : (Number(count) || 0)
       return ok(res, {
         status: 'healthy',
         connectionTime: `${connectionTime}ms`,
-        tables: tableCount[0]?.count || 0,
+        tables,
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'production'
       })

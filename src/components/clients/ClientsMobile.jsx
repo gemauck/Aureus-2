@@ -168,7 +168,8 @@ const ClientsMobile = () => {
                     retainerAmount: 0,
                     taxExempt: false,
                     notes: ''
-                }
+                },
+                kyc: (clientFormData.kyc && typeof clientFormData.kyc === 'object') ? clientFormData.kyc : {}
             };
             
             // Always save to localStorage first for immediate persistence

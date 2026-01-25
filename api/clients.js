@@ -13,14 +13,15 @@ import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_T
 
 async function handler(req, res) {
   try {
-    // Parse the URL path - strip /api/ prefix if present
-    // Strip query parameters before splitting
-    const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
+    // Parse the URL path - use originalUrl or url (Express may give either)
+    const rawPath = (req.originalUrl || req.url || '').split('?')[0].split('#')[0]
+    const urlPath = rawPath.replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1] // For /api/clients/[id]
+    const isListOrCreate = (pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && (urlPath === '/clients' || urlPath === '/clients/'))
 
     // List Clients (GET /api/clients)
-    if (req.method === 'GET' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
+    if (req.method === 'GET' && isListOrCreate) {
       try {
         
         const userId = req.user?.sub
@@ -45,11 +46,11 @@ async function handler(req, res) {
         // Check if externalAgentId column exists before including relation
         let hasExternalAgentId = false
         try {
-          // Check for column with case-insensitive table name (PostgreSQL stores unquoted identifiers in lowercase)
+          // PostgreSQL stores table_name in lowercase in information_schema
           const columnCheck = await prisma.$queryRaw`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'Client' AND column_name = 'externalAgentId'
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE LOWER(table_name) = 'client' AND column_name = 'externalAgentId'
           `
           hasExternalAgentId = Array.isArray(columnCheck) && columnCheck.length > 0
           if (!hasExternalAgentId) {
@@ -65,9 +66,9 @@ async function handler(req, res) {
         try {
           const tableCheck = await prisma.$queryRaw`
             SELECT EXISTS (
-              SELECT FROM information_schema.tables 
-              WHERE table_name = 'ClientCompanyGroup'
-            ) as exists
+              SELECT 1 FROM information_schema.tables
+              WHERE LOWER(table_name) = 'clientcompanygroup'
+            ) as "exists"
           `
           hasGroupMembershipsTable = tableCheck && tableCheck[0] && tableCheck[0].exists === true
           if (!hasGroupMembershipsTable) {
@@ -82,14 +83,16 @@ async function handler(req, res) {
         let rawClients
         try {
           
-          // Query clients directly using Prisma - include both 'client' type and NULL types (legacy clients)
+          // Query clients directly using Prisma - include 'client', 'group', and legacy (null/empty) types
           // Use defensive includes - if relations fail, try without them
           try {
             rawClients = await prisma.client.findMany({
               where: {
                 OR: [
                   { type: 'client' },
-                  { type: 'group' }
+                  { type: 'group' },
+                  { type: null },
+                  { type: '' }
                 ]
               },
               include: {
@@ -432,7 +435,7 @@ async function handler(req, res) {
                          "lastContact", address, website, notes, contacts, "followUps", 
                          "projectIds", comments, sites, contracts, "activityLog", 
                          "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
-                         proposals, thumbnail, services, "rssSubscribed"
+                         proposals, thumbnail, services, "rssSubscribed", kyc, "kycJsonb"
                   FROM "Client"
                   WHERE (type = 'client' OR type = 'group' OR type IS NULL)
                   AND type != 'lead'
@@ -618,6 +621,7 @@ async function handler(req, res) {
           url: req.url,
           method: req.method
         })
+        console.error('   💡 Diagnose: GET /api/db-health (no auth) shows connection status and error details.')
         
         // Check if it's a connection error
         const isConnectionError = dbError.message?.includes("Can't reach database server") ||
@@ -647,17 +651,39 @@ async function handler(req, res) {
           })
         }
         
-        // Return detailed error for debugging (include error code and message)
-        const errorDetails = process.env.NODE_ENV === 'development' 
-          ? `${dbError.message || 'Unknown database error'} (Code: ${dbError.code || 'N/A'})`
-          : 'Database connection failed. Please check server logs for details.'
+        // Last-resort: try minimal query with no relations to avoid 500
+        try {
+          const minimal = await prisma.client.findMany({
+            orderBy: { createdAt: 'desc' },
+            take: 5000
+          })
+          const parsed = (minimal || []).map(c => {
+            const p = parseClientJsonFields({ ...c, groupMemberships: [], starredBy: [] })
+            p.groupMemberships = []
+            p.isStarred = false
+            return p
+          })
+          console.warn('⚠️ GET /api/clients fell back to minimal query (no relations). Check schema/migrations.')
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+          res.setHeader('Pragma', 'no-cache')
+          res.setHeader('Expires', '0')
+          return ok(res, { clients: parsed })
+        } catch (minimalErr) {
+          console.error('❌ Minimal clients query also failed:', minimalErr.message, minimalErr.code)
+        }
         
-        return serverError(res, 'Failed to list clients', errorDetails)
+        // Never 500 on list: return empty list so UI can load; server logs have the real error
+        console.error('❌ GET /api/clients returning empty list due to errors above. Fix DB/schema and restart.')
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
+        res.setHeader('X-Client-List-Degraded', '1')
+        return ok(res, { clients: [], _degraded: true, _error: process.env.NODE_ENV === 'development' ? dbError.message : undefined })
       }
     }
 
     // Create Client (POST /api/clients)
-    if (req.method === 'POST' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
+    if (req.method === 'POST' && isListOrCreate) {
       const body = req.body || {}
       if (!body.name) return badRequest(res, 'name required')
 
@@ -1207,7 +1233,24 @@ async function handler(req, res) {
       }
       if (req.method === 'PATCH') {
         const body = req.body || {}
-        
+        // PATCH uses hasExternalAgentId and hasGroupMembershipsTable in the update include below;
+        // they are only set in the GET list branch, so define here (schema has these relations).
+        let hasExternalAgentId = true
+        let hasGroupMembershipsTable = true
+        try {
+          const colCheck = await prisma.$queryRaw`
+            SELECT column_name FROM information_schema.columns
+            WHERE LOWER(table_name) = 'client' AND column_name = 'externalAgentId'
+          `
+          hasExternalAgentId = Array.isArray(colCheck) && colCheck.length > 0
+        } catch (_) {}
+        try {
+          const tblCheck = await prisma.$queryRaw`
+            SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE LOWER(table_name) = 'clientcompanygroup') as "exists"
+          `
+          hasGroupMembershipsTable = tblCheck?.[0]?.exists === true
+        } catch (_) {}
+
         // First verify this is actually a client (not a lead being updated through wrong endpoint)
         const existing = await prisma.client.findUnique({ where: { id } })
         if (existing && existing.type === 'lead') {

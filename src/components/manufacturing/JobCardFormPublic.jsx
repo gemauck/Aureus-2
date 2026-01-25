@@ -2509,9 +2509,9 @@ const JobCardFormPublic = () => {
       </header>
 
       {/* Main Content Area - Scrollable */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Scrollable Content Area */}
-        <div className="job-card-scrollable-content flex-1 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        {/* Scrollable Content Area - min-h-0 allows flex item to shrink and enable scroll */}
+        <div className="job-card-scrollable-content flex-1 min-h-0 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch">
           <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
             {stepError && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 flex items-start gap-2 text-sm">

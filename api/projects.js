@@ -1301,7 +1301,8 @@ async function handler(req, res) {
           await prisma.$executeRaw`
             ALTER TABLE "Project" 
             ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
-            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false;
+            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+            ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
           `;
         } catch (migrationError) {
           // Ignore migration errors (columns might already exist or connection issues)
@@ -1626,8 +1627,9 @@ async function handler(req, res) {
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
         ownerId: req.user?.sub || null,
-        // Automatically add monthly document collection process to all new projects
-        hasDocumentCollectionProcess: true,
+        // New projects: only Tasks tab by default; other modules added via + Module
+        hasTimeProcess: false,
+        hasDocumentCollectionProcess: false,
         documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(Array.isArray(body.documentSections) ? body.documentSections : []),
         weeklyFMSReviewSections: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections : JSON.stringify(
           body.weeklyFMSReviewSections && typeof body.weeklyFMSReviewSections === 'object'
@@ -1896,6 +1898,13 @@ async function handler(req, res) {
             console.error('❌ Error processing weeklyFMSReviewSections:', error);
             // Don't fail the entire update, but log the error
           }
+        }
+
+        // Handle hasTimeProcess separately if provided
+        if (body.hasTimeProcess !== undefined && body.hasTimeProcess !== null) {
+          updateData.hasTimeProcess = typeof body.hasTimeProcess === 'boolean'
+            ? body.hasTimeProcess
+            : Boolean(body.hasTimeProcess === true || body.hasTimeProcess === 'true' || body.hasTimeProcess === 1);
         }
 
         // Handle hasWeeklyFMSReviewProcess separately if provided

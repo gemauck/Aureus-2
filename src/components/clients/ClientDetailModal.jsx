@@ -252,6 +252,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const formDataRef = useRef(initialFormData);
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
+    const autoSaveTimeoutRef = useRef(null); // Debounce timer for auto-save
     
     // Track when user is actively typing/editing in an input field
     const isEditingRef = useRef(false);
@@ -313,6 +314,47 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         formDataRef.current = formData;
         // Removed excessive logging - only log on actual meaningful changes
     }, [formData]);
+    
+    // Debounced auto-save: save 2s after last formData change (existing client/lead only)
+    const AUTO_SAVE_DELAY_MS = 2000;
+    useEffect(() => {
+        if (autoSaveTimeoutRef.current) {
+            clearTimeout(autoSaveTimeoutRef.current);
+            autoSaveTimeoutRef.current = null;
+        }
+        if (!formData?.id || typeof onSave !== 'function') return;
+        // Only start timer after initial load for this client (avoid saving stale list data)
+        if (initialDataLoadedForClientIdRef.current !== formData.id) return;
+        autoSaveTimeoutRef.current = setTimeout(() => {
+            autoSaveTimeoutRef.current = null;
+            const latest = formDataRef.current;
+            if (!latest?.id || typeof onSave !== 'function') return;
+            if (initialDataLoadedForClientIdRef.current !== latest.id) return;
+            if (isAutoSavingRef.current) return;
+            if (justSavedRef.current && (Date.now() - saveTimestampRef.current) < 3000) return;
+            let unchanged = false;
+            try {
+                unchanged = lastSavedDataRef.current != null &&
+                    JSON.stringify(latest) === JSON.stringify(lastSavedDataRef.current);
+            } catch (_) { /* skip compare on circular/special values */ }
+            if (unchanged) return;
+            isAutoSavingRef.current = true;
+            onSave(latest, true).then(() => {
+                lastSavedDataRef.current = latest;
+                saveTimestampRef.current = Date.now();
+                justSavedRef.current = true;
+                setTimeout(() => { justSavedRef.current = false; }, 3000);
+            }).catch(() => {}).finally(() => {
+                isAutoSavingRef.current = false;
+            });
+        }, AUTO_SAVE_DELAY_MS);
+        return () => {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+                autoSaveTimeoutRef.current = null;
+            }
+        };
+    }, [formData, onSave]);
     
     // Track last processed client data to detect changes
     const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, id: null });
@@ -768,6 +810,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
                 
+                // Refetch full client/lead from API so KYC and other server fields are never stale after refresh
+                let clientToUse = client;
+                if (clientId) {
+                    try {
+                        const getOne = isLead
+                            ? (window.DatabaseAPI?.getLead || window.api?.getLead)
+                            : (window.DatabaseAPI?.getClient || window.api?.getClient);
+                        if (typeof getOne === 'function') {
+                            const res = await getOne(clientId);
+                            const fromApi = isLead
+                                ? (res?.data?.lead ?? res?.lead ?? res?.data ?? res)
+                                : (res?.data?.client ?? res?.client ?? res?.data ?? res);
+                            if (fromApi && fromApi.id === clientId) clientToUse = fromApi;
+                        }
+                    } catch (_) {
+                        // keep clientToUse = client from list
+                    }
+                }
+                
                 // Load contacts, sites, and opportunities sequentially to prevent rate limiting
                 // Sequential loading allows the rate limiter to properly throttle requests
                 const contactsResponse = await window.api.getContacts(clientId).catch(() => ({ data: { contacts: [] } }));
@@ -785,33 +846,38 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const opportunitiesResponse = await window.api.getOpportunitiesByClient(clientId).catch(() => ({ data: { opportunities: [] } }));
                 const opportunities = opportunitiesResponse?.data?.opportunities || [];
                 
-                // Parse client data (handle JSON strings)
+                // Parse client data (handle JSON strings); use clientToUse so KYC comes from API after refresh
                 const parsedClient = {
-                    ...client,
-                    contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
-                    sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
-                    opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-                    followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
-                    projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
-                    comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
-                    contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
-                    activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
-                    services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
+                    ...clientToUse,
+                    contacts: typeof clientToUse.contacts === 'string' ? JSON.parse(clientToUse.contacts || '[]') : (clientToUse.contacts || []),
+                    sites: typeof clientToUse.sites === 'string' ? JSON.parse(clientToUse.sites || '[]') : (clientToUse.sites || []),
+                    opportunities: typeof clientToUse.opportunities === 'string' ? JSON.parse(clientToUse.opportunities || '[]') : (clientToUse.opportunities || []),
+                    followUps: typeof clientToUse.followUps === 'string' ? JSON.parse(clientToUse.followUps || '[]') : (clientToUse.followUps || []),
+                    projectIds: typeof clientToUse.projectIds === 'string' ? JSON.parse(clientToUse.projectIds || '[]') : (clientToUse.projectIds || []),
+                    comments: typeof clientToUse.comments === 'string' ? JSON.parse(clientToUse.comments || '[]') : (clientToUse.comments || []),
+                    contracts: typeof clientToUse.contracts === 'string' ? JSON.parse(clientToUse.contracts || '[]') : (clientToUse.contracts || []),
+                    activityLog: typeof clientToUse.activityLog === 'string' ? JSON.parse(clientToUse.activityLog || '[]') : (clientToUse.activityLog || []),
+                    services: typeof clientToUse.services === 'string' ? JSON.parse(clientToUse.services || '[]') : (clientToUse.services || []),
                     // CRITICAL: Map stage to aidaStatus for leads - database uses 'stage' but formData uses 'aidaStatus'
-                    aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
-                    billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                    aidaStatus: clientToUse.aidaStatus || clientToUse.stage || (isLead ? 'Awareness' : undefined),
+                    billingTerms: typeof clientToUse.billingTerms === 'string' ? JSON.parse(clientToUse.billingTerms || '{}') : (clientToUse.billingTerms || {
                         paymentTerms: 'Net 30',
                         billingFrequency: 'Monthly',
                         currency: 'ZAR',
                         retainerAmount: 0,
                         taxExempt: false,
                         notes: ''
-                    })
+                    }),
+                    kyc: (() => {
+                        if (clientToUse.kyc != null && typeof clientToUse.kyc === 'object') return clientToUse.kyc;
+                        if (typeof clientToUse.kyc === 'string' && clientToUse.kyc.trim()) { try { return JSON.parse(clientToUse.kyc); } catch (_) {} }
+                        if (clientToUse.kycJsonb != null && typeof clientToUse.kycJsonb === 'object') return clientToUse.kycJsonb;
+                        return {};
+                    })()
                 };
+                if (!parsedClient.kyc || typeof parsedClient.kyc !== 'object') parsedClient.kyc = {};
                 
                 // CRITICAL: Always use API data when available (it's the most up-to-date)
-                // Only fallback to existing formData if API returned empty and we have existing data
-                // This ensures tabs always show the latest data immediately
                 const currentFormData = formDataRef.current || {};
                 const existingContacts = currentFormData.contacts || [];
                 const existingSites = currentFormData.sites || [];
@@ -835,10 +901,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // No conditional checks - just update immediately
                 setFormData(mergedData);
                 formDataRef.current = mergedData;
+                lastSavedDataRef.current = mergedData; // so auto-save doesn't run right after load
                 
                 // Mark as loaded
                 initialDataLoadedForClientIdRef.current = clientId;
-                lastProcessedClientRef.current = client;
+                lastProcessedClientRef.current = clientToUse;
                 
             } catch (error) {
                 console.error('❌ Error loading client data:', error);
@@ -3270,8 +3337,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const handleSubmit = async (e) => {
         e.preventDefault();
         hasUserEditedForm.current = false; // Reset after save
+        // Use formDataRef so we always send the latest (e.g. KYC tab edits) even if state hasn't flushed
+        const latest = formDataRef.current || formData;
         const clientData = {
-            ...formData,
+            ...latest,
             lastContact: new Date().toISOString().split('T')[0]
         };
         
@@ -3544,6 +3613,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         })().map(tab => (
                             <button
                                 key={tab}
+                                type="button"
                                 onClick={() => handleTabChange(tab)}
                                 className={`${isFullPage ? 'py-4 px-2' : 'py-3'} text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
                                     activeTab === tab
@@ -6233,12 +6303,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         {/* KYC Tab */}
                         {activeTab === 'kyc' && (
                             <div className="space-y-6">
-                                <div className="text-center border-b border-gray-200 pb-3">
-                                    <h2 className="text-lg font-semibold text-gray-900">ABCOTRONICS</h2>
-                                    <p className="text-sm font-medium text-gray-700 mt-0.5">Know Your Customer (KYC) Information Requirements</p>
-                                    <div className="border-t border-gray-300 w-16 mx-auto mt-2" style={{ borderBottomWidth: 0 }} aria-hidden></div>
-                                </div>
-
                                 {(() => {
                                     const k = formData.kyc || {};
                                     const le = k.legalEntity || {};
@@ -6258,17 +6322,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         });
                                     };
                                     const clientTypes = ['Individual', 'Company', 'Close Corporation', 'Trust', 'Government / State-Owned Entity'];
-                                    const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent';
-                                    const labelCls = 'block text-sm font-medium text-gray-700 mb-1';
+                                    const inputCls = `w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' : 'border border-gray-300'}`;
+                                    const labelCls = `block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                    const sectionCls = `rounded-lg p-4 ${isDark ? 'bg-gray-700/50 border border-gray-600' : 'bg-gray-50 border border-gray-200'}`;
+                                    const headingCls = `text-sm font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`;
+                                    const subheadingCls = `text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                    const helperCls = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+                                    const helperClsAlt = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`;
                                     return (
                                         <>
                                             {/* SECTION 1 – CLIENT TYPE */}
-                                            <section>
-                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 1 – CLIENT TYPE</h3>
-                                                <div className="border-b border-gray-200 mb-2" style={{ height: 1 }}></div>
-                                                <div className="flex flex-wrap gap-x-6 gap-y-1">
+                                            <section className={sectionCls}>
+                                                <h3 className={headingCls}>SECTION 1 – CLIENT TYPE</h3>
+                                                <div className={`border-b mb-3 ${isDark ? 'border-gray-600' : 'border-gray-200'}`}></div>
+                                                <div className="flex flex-wrap gap-x-8 gap-y-4">
                                                     {clientTypes.map(opt => (
-                                                        <label key={opt} className="inline-flex items-center gap-2 cursor-pointer">
+                                                        <label key={opt} className={`inline-flex items-center gap-2 cursor-pointer ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                             <input
                                                                 type="radio"
                                                                 name="kyc_clientType"
@@ -6276,17 +6345,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 onChange={() => updateKyc('clientType', opt)}
                                                                 className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                                                             />
-                                                            <span className="text-sm text-gray-700">{opt}</span>
+                                                            <span className="text-sm">{opt}</span>
                                                         </label>
                                                     ))}
                                                 </div>
                                             </section>
 
                                             {/* SECTION 2 – CLIENT IDENTIFICATION */}
-                                            <section>
-                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 2 – CLIENT IDENTIFICATION</h3>
-                                                <div className="border-b border-gray-200 mb-3" style={{ height: 1 }}></div>
-                                                <h4 className="text-sm font-medium text-gray-700 mb-2">2.1 Legal Entity Details</h4>
+                                            <section className={sectionCls}>
+                                                <h3 className={headingCls}>SECTION 2 – CLIENT IDENTIFICATION</h3>
+                                                <div className={`border-b mb-3 ${isDark ? 'border-gray-600' : 'border-gray-200'}`}></div>
+                                                <h4 className={subheadingCls}>2.1 Legal Entity Details</h4>
                                                 <div className={`grid gap-3 ${isFullPage ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
                                                     {[
                                                         { key: 'registeredLegalName', label: 'Registered Legal Name' },
@@ -6304,24 +6373,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         </div>
                                                     ))}
                                                 </div>
-                                                <p className="text-xs text-gray-500 mt-2">2.2 Directors / Members / Trustees (attach schedule if more than 3)</p>
-                                                <p className="text-xs text-gray-600 mb-2">For each: Full name, ID/Passport number, Nationality, Position/capacity, % Interest, Certified copy of ID/Passport, Proof of residential address (not older than 3 months)</p>
+                                                <p className={`mt-3 ${helperCls}`}>2.2 Directors / Members / Trustees (attach schedule if more than 3)</p>
+                                                <p className={`mb-2 ${helperClsAlt}`}>For each: Full name, ID/Passport number, Nationality, Position/capacity, % Interest, Certified copy of ID/Passport, Proof of residential address (not older than 3 months)</p>
                                                 <textarea className={inputCls} rows={3} placeholder="List or describe directors/members/trustees…" value={k.directorsNotes || ''} onChange={e => setFormData(prev => { const n = { ...prev, kyc: { ...(prev.kyc || {}), directorsNotes: e.target.value } }; formDataRef.current = n; return n; })} />
                                             </section>
 
                                             {/* SECTION 3 – BENEFICIAL OWNERSHIP */}
-                                            <section>
-                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 3 – BENEFICIAL OWNERSHIP</h3>
-                                                <div className="border-b border-gray-200 mb-2" style={{ height: 1 }}></div>
-                                                <p className="text-xs text-gray-600 mb-2">3.1 Ultimate Beneficial Owner(s) (UBOs) – Any natural person owning or controlling 25% or more, or exercising effective control. For each: Full name, ID/Passport number, Country of residence, Nature of control, % Ownership or control, Certified copy of ID/Passport, Proof of residential address (not older than 3 months)</p>
+                                            <section className={sectionCls}>
+                                                <h3 className={headingCls}>SECTION 3 – BENEFICIAL OWNERSHIP</h3>
+                                                <div className={`border-b mb-3 ${isDark ? 'border-gray-600' : 'border-gray-200'}`}></div>
+                                                <p className={`mb-2 ${helperClsAlt}`}>3.1 Ultimate Beneficial Owner(s) (UBOs) – Any natural person owning or controlling 25% or more, or exercising effective control. For each: Full name, ID/Passport number, Country of residence, Nature of control, % Ownership or control, Certified copy of ID/Passport, Proof of residential address (not older than 3 months)</p>
                                                 <textarea className={inputCls} rows={3} placeholder="List UBOs…" value={k.ubosNotes || ''} onChange={e => setFormData(prev => { const n = { ...prev, kyc: { ...(prev.kyc || {}), ubosNotes: e.target.value } }; formDataRef.current = n; return n; })} />
                                             </section>
 
                                             {/* SECTION 4 – BUSINESS PROFILE */}
-                                            <section>
-                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 4 – BUSINESS PROFILE</h3>
-                                                <div className="border-b border-gray-200 mb-3" style={{ height: 1 }}></div>
-                                                <h4 className="text-sm font-medium text-gray-700 mb-2">4.1 Nature of Business</h4>
+                                            <section className={sectionCls}>
+                                                <h3 className={headingCls}>SECTION 4 – BUSINESS PROFILE</h3>
+                                                <div className={`border-b mb-3 ${isDark ? 'border-gray-600' : 'border-gray-200'}`}></div>
+                                                <h4 className={subheadingCls}>4.1 Nature of Business</h4>
                                                 <div className={`grid gap-3 ${isFullPage ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
                                                     <div>
                                                         <label className={labelCls}>Industry sector (e.g. Mining, Forestry, Agriculture, Logistics, Other)</label>
@@ -6343,10 +6412,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </section>
 
                                             {/* SECTION 5 – BANKING DETAILS */}
-                                            <section>
-                                                <h3 className="text-sm font-semibold text-gray-800 mb-2">SECTION 5 – BANKING DETAILS</h3>
-                                                <div className="border-b border-gray-200 mb-3" style={{ height: 1 }}></div>
-                                                <h4 className="text-sm font-medium text-gray-700 mb-2">5.1 Banking Details</h4>
+                                            <section className={sectionCls}>
+                                                <h3 className={headingCls}>SECTION 5 – BANKING DETAILS</h3>
+                                                <div className={`border-b mb-3 ${isDark ? 'border-gray-600' : 'border-gray-200'}`}></div>
+                                                <h4 className={subheadingCls}>5.1 Banking Details</h4>
                                                 <div className={`grid gap-3 ${isFullPage ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
                                                     {[
                                                         { key: 'bankName', label: 'Bank name' },

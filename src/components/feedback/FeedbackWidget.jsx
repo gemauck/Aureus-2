@@ -226,7 +226,7 @@ const FeedbackWidget = () => {
             {!open ? (
                 <button
                     onClick={() => setOpen(true)}
-                    className="bg-primary-600 text-white px-3 py-2 rounded-full shadow-lg text-xs font-medium hover:bg-primary-700"
+                    className={`px-3 py-2 rounded-full shadow-lg text-xs font-medium transition-colors ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-white text-primary-600 border border-gray-200 hover:bg-gray-50 hover:border-primary-300'}`}
                     title="Send feedback"
                 >
                     <i className="fas fa-comment-dots mr-1"></i>

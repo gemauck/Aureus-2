@@ -182,7 +182,8 @@ const ClientsDatabaseFirst = () => {
                     retainerAmount: 0,
                     taxExempt: false,
                     notes: ''
-                }
+                },
+                kyc: (clientFormData.kyc && typeof clientFormData.kyc === 'object') ? clientFormData.kyc : {}
             };
 
             // Save to database

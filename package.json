@@ -26,6 +26,7 @@
     "test:safety": "node tests/deployment-safety-test.js",
     "test:all": "npm run test:safety && npm run test:deploy",
     "test:manufacturing": "node tests/manufacturing-browser-test.js",
+    "test:prod:manufacturing": "node scripts/test-production-manufacturing.js",
     "test:crm": "node tests/crm/run-all-crm-tests.js",
     "test:crm:break": "node tests/crm/crm-break-tests.js",
     "test:crm:persistence": "node tests/crm/crm-persistence-tests.js",
@@ -95,6 +96,7 @@
     "chokidar": "^5.0.0",
     "concurrently": "^9.2.1",
     "jest": "^29.7.0",
+    "playwright": "^1.58.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "vite": "^7.2.2"

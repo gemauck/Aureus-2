@@ -162,7 +162,8 @@ const Clients = React.memo(() => {
                     retainerAmount: 0,
                     taxExempt: false,
                     notes: ''
-                }
+                },
+                kyc: (clientFormData.kyc && typeof clientFormData.kyc === 'object') ? clientFormData.kyc : {}
             };
 
             // OPTIMISTIC UPDATE - UI updates immediately
@@ -196,7 +197,8 @@ const Clients = React.memo(() => {
                         sites: comprehensiveClient.sites,
                         contracts: comprehensiveClient.contracts,
                         activityLog: comprehensiveClient.activityLog,
-                        billingTerms: comprehensiveClient.billingTerms
+                        billingTerms: comprehensiveClient.billingTerms,
+                        kyc: comprehensiveClient.kyc
                     };
                     
                     if (selectedClient) {

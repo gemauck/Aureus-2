@@ -1047,9 +1047,15 @@ async function handler(req, res) {
         }
         
         // Phase 2: Prepare other JSON fields with dual-write (String + JSONB)
-        // Only activityLog remains as JSON (log data, not normalized)
         const jsonFieldsData = prepareJsonFieldsForDualWrite(body)
         Object.assign(updateData, jsonFieldsData)
+        // Explicitly persist KYC so it is never dropped (in case body.kyc was missed by prepareJsonFieldsForDualWrite)
+        if (body.kyc !== undefined && body.kyc !== null) {
+          const kycStr = typeof body.kyc === 'string' ? body.kyc : JSON.stringify(body.kyc)
+          const kycObj = typeof body.kyc === 'object' ? body.kyc : (() => { try { return JSON.parse(kycStr || '{}'); } catch (_) { return {}; } })()
+          updateData.kyc = kycStr
+          updateData.kycJsonb = kycObj
+        }
         
         // Handle externalAgentId separately
         if (body.externalAgentId !== undefined) {

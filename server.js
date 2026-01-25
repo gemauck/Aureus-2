@@ -358,6 +358,25 @@ app.get('/version', (req, res) => {
   })
 })
 
+// Database health check (no auth) – use for diagnostics when /api/clients returns 500
+app.get('/api/db-health', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'db-health.js'))
+    const out = handler(req, res)
+    if (out && typeof out.then === 'function') await out
+  } catch (e) {
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Database or server error',
+        message: e.message,
+        code: e.code,
+        hint: 'Check DATABASE_URL and that PostgreSQL is running.',
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+})
+
 // Instruct search engines not to index the site
 app.use((req, res, next) => {
   res.set('X-Robots-Tag', 'noindex, nofollow')

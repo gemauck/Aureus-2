@@ -46,25 +46,31 @@ async function handler(req, res) {
     // Create Time Entry (POST /api/time-entries)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'time-entries') {
       const body = await parseJsonBody(req)
+      if (!body || typeof body !== 'object') return badRequest(res, 'JSON body required')
       if (!body.date) return badRequest(res, 'date required')
-      if (!body.hours) return badRequest(res, 'hours required')
+      const hoursNum = body.hours != null && body.hours !== '' ? parseFloat(body.hours) : NaN
+      if (!Number.isFinite(hoursNum) || hoursNum < 0) return badRequest(res, 'hours required (non-negative number)')
+      const dateObj = new Date(body.date)
+      if (Number.isNaN(dateObj.getTime())) return badRequest(res, 'invalid date')
 
-      const timeEntryData = {
-        date: new Date(body.date),
-        hours: parseFloat(body.hours) || 0,
+      // Prisma TimeEntryUncheckedCreateInput: only scalar fields (projectId, never "project" relation)
+      const data = {
         projectId: body.projectId || null,
-        projectName: body.projectName ?? (body.project || ''),
-        task: body.task || '',
-        description: body.description || '',
-        employee: body.employee || req.user?.name || 'Unknown',
-        billable: body.billable !== undefined ? body.billable : true,
+        date: dateObj,
+        hours: hoursNum,
+        projectName: String(body.projectName ?? (body.project || '')).slice(0, 500),
+        task: String(body.task || '').slice(0, 500),
+        description: String(body.description || '').slice(0, 2000),
+        employee: String(body.employee || req.user?.name || 'Unknown').slice(0, 200),
+        billable: body.billable !== undefined ? !!body.billable : true,
         rate: parseFloat(body.rate) || 0,
         ownerId: req.user?.sub || null
       }
+      delete data.project // ensure relation field never passed as string
 
       try {
         const timeEntry = await prisma.timeEntry.create({
-          data: timeEntryData
+          data
         })
         return created(res, timeEntry)
       } catch (dbError) {

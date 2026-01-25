@@ -406,6 +406,7 @@ model Project {
   assignedTo                   String                   @default("")
   tasksList                    String                   @default("[]") // Legacy - deprecated, use Task table
   notes                        String                   @default("")
+  hasTimeProcess               Boolean                  @default(false)
   hasDocumentCollectionProcess Boolean                  @default(false)
   documentSections             String                   @default("[]") // Legacy - deprecated, use DocumentSection table
   weeklyFMSReviewSections      String                   @default("[]") // Legacy - deprecated, use WeeklyFMSReviewSection table

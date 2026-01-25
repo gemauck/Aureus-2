@@ -1034,30 +1034,34 @@ const JobCardFormsSection = ({ jobCard }) => {
             </div>
           </div>
 
-          <div className={`relative overflow-hidden rounded-xl border ${isDark ? 'border-gray-800' : 'border-gray-100'} bg-gradient-to-br from-primary-600 via-primary-500 to-blue-500 text-white shadow-sm`}>
-            <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute -bottom-24 -left-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+          <div className={`relative overflow-hidden rounded-xl border shadow-sm ${isDark ? 'border-gray-800 bg-gradient-to-br from-primary-600 via-primary-500 to-blue-500 text-white' : 'border-primary-200 bg-gradient-to-br from-primary-50 via-white to-blue-50/80 text-gray-900'}`}>
+            {isDark ? (
+              <>
+                <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute -bottom-24 -left-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+              </>
+            ) : null}
             <div className="relative p-5 sm:p-6">
-              <p className="text-xs uppercase tracking-wide text-white/80">
+              <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-white/80' : 'text-primary-600'}`}>
                 Mobile View
               </p>
-              <h2 className="text-xl font-semibold mt-1">
+              <h2 className={`text-xl font-semibold mt-1 ${isDark ? '' : 'text-gray-900'}`}>
                 Field Tech Form
               </h2>
-              <p className="text-sm text-white/80 mt-2">
+              <p className={`text-sm mt-2 ${isDark ? 'text-white/80' : 'text-gray-600'}`}>
                 Tap-friendly wizard with photo uploads, smart checklists, customer sign-off, and offline save. Perfect for technicians on site.
               </p>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white/80">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/15">
+              <div className={`mt-4 flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-white/80' : 'text-gray-600'}`}>
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-white/15' : 'bg-primary-100/80 text-primary-700'}`}>
                   <i className="fa-solid fa-mobile-screen text-[11px]" />
                   Optimised for touch
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/15">
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-white/15' : 'bg-primary-100/80 text-primary-700'}`}>
                   <i className="fa-solid fa-pen-nib text-[11px]" />
                   Signature capture
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/15">
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-white/15' : 'bg-primary-100/80 text-primary-700'}`}>
                   <i className="fa-solid fa-wifi-slash text-[11px]" />
                   Works offline
                 </span>
@@ -1066,7 +1070,7 @@ const JobCardFormsSection = ({ jobCard }) => {
               <div className="mt-5 flex flex-col sm:flex-row gap-3">
                 <a
                   href="/job-card"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-primary-600 bg-white hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-400 focus-visible:ring-offset-primary-600 transition-all"
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all ${isDark ? 'text-primary-600 bg-white hover:bg-white/90 focus-visible:ring-primary-400 focus-visible:ring-offset-primary-600' : 'text-white bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-400 focus-visible:ring-offset-white'}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -1076,7 +1080,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-white/10 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 transition-all"
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all ${isDark ? 'bg-white/10 hover:bg-white/20 focus-visible:ring-white/60' : 'bg-primary-100 text-primary-700 hover:bg-primary-200 focus-visible:ring-primary-300'}`}
                 >
                   <i className="fa-regular fa-copy text-xs" />
                   {copyStatus}
