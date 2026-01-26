@@ -1388,7 +1388,8 @@ async function handler(req, res) {
               // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
               hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
               hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
-              // hasMonthlyFMSReviewProcess: true, // Temporarily commented - column may not exist yet
+              hasTimeProcess: true, // Include so Time tab persists after refresh when opening from list
+              hasMonthlyFMSReviewProcess: true, // Include so Monthly FMS tab persists after refresh when opening from list
               ...(includeTaskCount ? {
                 _count: {
                   select: {
@@ -1412,7 +1413,7 @@ async function handler(req, res) {
         } catch (queryError) {
           // If query fails due to missing column, retry without problematic fields
           if (queryError.message?.includes('does not exist') || queryError.message?.includes('Unknown column')) {
-            console.log('⚠️ Retrying project query without hasMonthlyFMSReviewProcess (column may not exist yet)');
+            console.log('⚠️ Retrying project query without optional columns (may not exist yet)');
             projects = await prisma.project.findMany({ 
               where: whereClause,
               select: {
@@ -1430,6 +1431,8 @@ async function handler(req, res) {
                 monthlyProgress: true,
                 hasDocumentCollectionProcess: true,
                 hasWeeklyFMSReviewProcess: true,
+                hasTimeProcess: true,
+                hasMonthlyFMSReviewProcess: true,
                 ...(includeTaskCount ? {
                   _count: {
                     select: {

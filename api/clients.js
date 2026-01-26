@@ -835,6 +835,8 @@ async function handler(req, res) {
             activityLogJsonb: clientData.activityLogJsonb || [],
             billingTerms: clientData.billingTerms || JSON.stringify(DEFAULT_BILLING_TERMS),
             billingTermsJsonb: clientData.billingTermsJsonb || DEFAULT_BILLING_TERMS,
+            kyc: clientData.kyc !== undefined ? clientData.kyc : '{}',
+            kycJsonb: clientData.kycJsonb !== undefined ? clientData.kycJsonb : {},
             ...(ownerId ? { ownerId } : {})
           }
         })

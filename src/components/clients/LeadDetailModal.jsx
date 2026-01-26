@@ -1582,6 +1582,13 @@ const LeadDetailModal = ({
         }
     }, [activeTab, commentsLength]); // Use state value instead of formData directly
     
+    useEffect(() => {
+        if (activeTab !== 'notes' || !formData?.id || !window.DatabaseAPI?.makeRequest) return;
+        window.DatabaseAPI.makeRequest(`/comment-subscriptions?threadType=lead&threadId=${encodeURIComponent(formData.id)}`)
+            .then((r) => { if (r && r.isSubscribed) setIsCommentSubscribed(true); })
+            .catch(() => {});
+    }, [activeTab, formData?.id]);
+    
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
     
@@ -1599,7 +1606,9 @@ const LeadDetailModal = ({
         notes: '',
         latitude: '',
         longitude: '',
-        gpsCoordinates: ''
+        gpsCoordinates: '',
+        stage: 'Potential',
+        aidaStatus: 'Awareness'
     });
     
     
@@ -1622,6 +1631,7 @@ const LeadDetailModal = ({
     });
     
     const [newComment, setNewComment] = useState('');
+    const [isCommentSubscribed, setIsCommentSubscribed] = useState(false);
     // Notes helpers for tags and attachments
     const [newNoteTagsInput, setNewNoteTagsInput] = useState('');
     const [newNoteTags, setNewNoteTags] = useState([]);
@@ -2177,20 +2187,37 @@ const LeadDetailModal = ({
             alert('Site name is required');
             return;
         }
-        
+        const leadId = formData?.id;
+        if (!leadId) {
+            alert('Save the lead first before adding sites.');
+            return;
+        }
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
                 alert('❌ Please log in to save sites to the database');
                 return;
             }
-            
-            if (!window.api?.createSite) {
+            const sitePayload = {
+                name: newSite.name ?? '',
+                address: newSite.address ?? '',
+                contactPerson: newSite.contactPerson ?? '',
+                contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
+                contactEmail: newSite.contactEmail ?? newSite.email ?? '',
+                notes: newSite.notes ?? '',
+                siteLead: newSite.siteLead ?? '',
+                stage: newSite.stage ?? 'Potential',
+                aidaStatus: newSite.aidaStatus ?? 'Awareness'
+            };
+            let response;
+            if (window.api?.createSite) {
+                response = await window.api.createSite(leadId, sitePayload);
+            } else if (window.DatabaseAPI?.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}`, { method: 'POST', body: JSON.stringify(sitePayload) });
+            } else {
                 alert('❌ Site API not available. Please refresh the page.');
                 return;
             }
-            
-            const response = await window.api.createSite(formData.id, newSite);
             const savedSite = response?.data?.site || response?.site || response;
             
             if (savedSite && savedSite.id) {
@@ -2251,18 +2278,12 @@ const LeadDetailModal = ({
                     sites: [...(formData.sites || []), savedSite],
                     activityLog: updatedActivityLog
                 };
-                
-                // Save site changes immediately
-                (async () => {
-                    try {
-                        await onSave(updatedFormData, true);
-                    } catch (error) {
-                        console.error('❌ Error saving site:', error);
-                        alert('Failed to save site. Please try again.');
-                    }
-                })();
-                
-                // Switch to sites tab
+                try {
+                    await onSave(updatedFormData, true);
+                } catch (error) {
+                    console.error('❌ Error saving site:', error);
+                    alert('Failed to save site. Please try again.');
+                }
                 handleTabChange('sites');
                 
                 // Close form and reset
@@ -2275,7 +2296,9 @@ const LeadDetailModal = ({
                     notes: '',
                     latitude: '',
                     longitude: '',
-                    gpsCoordinates: ''
+                    gpsCoordinates: '',
+                    stage: 'Potential',
+                    aidaStatus: 'Awareness'
                 });
                 setShowSiteForm(false);
             } else {
@@ -2283,153 +2306,138 @@ const LeadDetailModal = ({
             }
         } catch (error) {
             console.error('❌ Error creating site:', error);
-            alert('❌ Error saving site to database: ' + error.message);
+            const errorMessage = error?.message || 'Unknown error';
+            const details = (error && typeof error.details === 'string') ? error.details : '';
+            const fullMessage = details ? (errorMessage + ' — ' + details) : errorMessage;
+            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error') || errorMessage.includes('Failed to add site') || errorMessage.includes('Sites table not initialized');
+            if (isServerError) {
+                alert('❌ ' + (fullMessage || 'Unable to save site. This may be due to a database issue. Please contact support if this persists.'));
+            } else {
+                alert('❌ Error saving site to database: ' + fullMessage);
+            }
         }
     };
 
     const handleEditSite = (site) => {
         setEditingSite(site);
-        setNewSite(site);
+        setNewSite({
+            ...site,
+            phone: site.phone ?? site.contactPhone ?? '',
+            email: site.email ?? site.contactEmail ?? '',
+            siteLead: site.siteLead ?? '',
+            stage: site.stage ?? 'Potential',
+            aidaStatus: site.aidaStatus ?? 'Awareness'
+        });
         setShowSiteForm(true);
     };
 
-    const handleUpdateSite = () => {
+    const handleUpdateSite = async () => {
+        const siteId = editingSite?.id;
+        const leadId = formData?.id;
+        const sitePayload = {
+            ...newSite,
+            id: siteId,
+            contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
+            contactEmail: newSite.contactEmail ?? newSite.email ?? '',
+            stage: newSite.stage ?? 'Potential',
+            aidaStatus: newSite.aidaStatus ?? 'Awareness'
+        };
+        const sites = Array.isArray(formData.sites) ? formData.sites : [];
+        const updatedSites = sites.map(s => (s.id === siteId ? sitePayload : s));
+        const updatedFormData = {
+            ...formData,
+            sites: updatedSites,
+            activityLog: [
+                ...(Array.isArray(formData.activityLog) ? formData.activityLog : []),
+                {
+                    id: Date.now(),
+                    type: 'Site Updated',
+                    description: `Updated site: ${newSite.name}`,
+                    timestamp: new Date().toISOString(),
+                    user: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).name || 'System',
+                    userId: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).id || 'system',
+                    userEmail: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).email || 'system',
+                    relatedId: siteId
+                }
+            ]
+        };
+        setFormData(updatedFormData);
+        isAutoSavingRef.current = true;
+        setEditingSite(null);
+        setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', stage: 'Potential', aidaStatus: 'Awareness' });
+        setShowSiteForm(false);
+        setTimeout(() => handleTabChange('sites'), 100);
+
         try {
-            // Get current user info for activity log
-            let currentUser = { name: 'System', email: 'system', id: 'system' };
-            if (window.storage) {
-                if (typeof window.storage.getUserInfo === 'function') {
-                    currentUser = window.storage.getUserInfo() || currentUser;
-                } else if (typeof window.storage.getUser === 'function') {
-                    const user = window.storage.getUser();
-                    if (user) {
-                        currentUser = {
-                            name: user.name || 'System',
-                            email: user.email || 'system',
-                            id: user.id || 'system'
-                        };
-                    }
+            if (leadId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
+                const payload = {
+                    name: sitePayload.name ?? '',
+                    address: sitePayload.address ?? '',
+                    contactPerson: sitePayload.contactPerson ?? '',
+                    contactPhone: sitePayload.contactPhone ?? '',
+                    contactEmail: sitePayload.contactEmail ?? '',
+                    notes: sitePayload.notes ?? '',
+                    siteLead: sitePayload.siteLead ?? '',
+                    stage: (sitePayload.stage != null && String(sitePayload.stage).trim() !== '') ? String(sitePayload.stage) : 'Potential',
+                    aidaStatus: (sitePayload.aidaStatus != null && String(sitePayload.aidaStatus).trim() !== '') ? String(sitePayload.aidaStatus) : 'Awareness'
+                };
+                if (window.api?.updateSite) {
+                    await window.api.updateSite(leadId, siteId, payload);
+                } else {
+                    await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}/${siteId}`, { method: 'PATCH', body: JSON.stringify(payload) });
                 }
             }
-            
-            const sites = Array.isArray(formData.sites) ? formData.sites : [];
-            const updatedSites = sites.map(s => 
-                s.id === editingSite.id ? {...newSite, id: s.id} : s
-            );
-            
-            // Create activity log entry
-            const activity = {
-                id: Date.now(),
-                type: 'Site Updated',
-                description: `Updated site: ${newSite.name}`,
-                timestamp: new Date().toISOString(),
-                user: currentUser.name,
-                userId: currentUser.id,
-                userEmail: currentUser.email,
-                relatedId: editingSite.id
-            };
-            
-            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
-            const updatedFormData = {
-                ...formData,
-                sites: updatedSites,
-                activityLog: updatedActivityLog
-            };
-            
-            setFormData(updatedFormData);
-            
-            // Save site changes immediately
-            (async () => {
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving site update:', error);
-                    alert('Failed to save site update. Please try again.');
-                }
-            })();
-            
-            setEditingSite(null);
-            setNewSite({
-                name: '',
-                address: '',
-                contactPerson: '',
-                phone: '',
-                email: '',
-                notes: '',
-                latitude: '',
-                longitude: '',
-                gpsCoordinates: ''
-            });
-            setShowSiteForm(false);
-            // Stay in sites tab
-            setTimeout(() => {
-                handleTabChange('sites');
-            }, 100);
+            await onSave(updatedFormData, true);
         } catch (error) {
-            console.error('❌ Error updating site:', error);
-            alert('Failed to update site: ' + error.message);
+            console.error('❌ Error saving site update:', error);
+            alert('Failed to save site update. Please try again.');
+        } finally {
+            setTimeout(() => { isAutoSavingRef.current = false; }, 800);
         }
     };
 
-    const handleDeleteSite = (siteId) => {
+    const handleDeleteSite = async (siteId) => {
         const site = formData.sites?.find(s => s.id === siteId);
-        if (confirm('Delete this site?')) {
-            try {
-                // Get current user info for activity log
-                let currentUser = { name: 'System', email: 'system', id: 'system' };
-                if (window.storage) {
-                    if (typeof window.storage.getUserInfo === 'function') {
-                        currentUser = window.storage.getUserInfo() || currentUser;
-                    } else if (typeof window.storage.getUser === 'function') {
-                        const user = window.storage.getUser();
-                        if (user) {
-                            currentUser = {
-                                name: user.name || 'System',
-                                email: user.email || 'system',
-                                id: user.id || 'system'
-                            };
-                        }
-                    }
-                }
-                
-                const sites = Array.isArray(formData.sites) ? formData.sites : [];
-                const updatedSites = sites.filter(s => s.id !== siteId);
-                
-                // Create activity log entry
-                const activity = {
+        if (!confirm('Delete this site?')) return;
+        const leadId = formData?.id;
+        const prevFormData = formData;
+        const updatedSites = (formData.sites || []).filter(s => s.id !== siteId);
+        const updatedFormData = {
+            ...formData,
+            sites: updatedSites,
+            activityLog: [
+                ...(Array.isArray(formData.activityLog) ? formData.activityLog : []),
+                {
                     id: Date.now(),
                     type: 'Site Deleted',
                     description: `Deleted site: ${site?.name || 'Unknown'}`,
                     timestamp: new Date().toISOString(),
-                    user: currentUser.name,
-                    userId: currentUser.id,
-                    userEmail: currentUser.email,
+                    user: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).name || 'System',
+                    userId: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).id || 'system',
+                    userEmail: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).email || 'system',
                     relatedId: siteId
-                };
-                
-                const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
-                const updatedFormData = {
-                    ...formData,
-                    sites: updatedSites,
-                    activityLog: updatedActivityLog
-                };
-                
-                setFormData(updatedFormData);
-                
-                // Save site deletion immediately
-                (async () => {
-                    try {
-                        await onSave(updatedFormData, true);
-                    } catch (error) {
-                        console.error('❌ Error saving site deletion:', error);
-                    }
-                })();
-                
-                handleTabChange('sites');
-            } catch (error) {
-                console.error('❌ Error deleting site:', error);
-                alert('Failed to delete site: ' + error.message);
+                }
+            ]
+        };
+        setFormData(updatedFormData);
+        isAutoSavingRef.current = true;
+        handleTabChange('sites');
+
+        try {
+            if (leadId && siteId && (window.api?.deleteSite || window.DatabaseAPI?.makeRequest)) {
+                if (window.api?.deleteSite) {
+                    await window.api.deleteSite(leadId, siteId);
+                } else {
+                    await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}/${siteId}`, { method: 'DELETE' });
+                }
             }
+            await onSave(updatedFormData, true);
+        } catch (error) {
+            console.error('❌ Error saving site deletion:', error);
+            alert('Failed to delete site. Please try again.');
+            setFormData(prevFormData);
+        } finally {
+            setTimeout(() => { isAutoSavingRef.current = false; }, 800);
         }
     };
 
@@ -2526,7 +2534,6 @@ const LeadDetailModal = ({
     const handleAddComment = async () => {
         if (!newComment.trim()) return;
         
-        // Get current user info
         const user = window.storage?.getUser?.() || {};
         const currentUser = {
             name: user?.name || 'System',
@@ -2534,30 +2541,75 @@ const LeadDetailModal = ({
             id: user?.id || 'system'
         };
         
-        // Process @mentions if MentionHelper is available
-        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
+        let allUsers = [];
+        try {
+            if (window.DatabaseAPI?.getUsers) {
+                const usersResponse = await window.DatabaseAPI.getUsers();
+                allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
+            }
+        } catch (_) {}
+        
+        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment) && allUsers.length) {
             try {
-                // Fetch all users for mention matching
-                const token = window.storage?.getToken?.();
-                if (token && window.DatabaseAPI?.getUsers) {
-                    const usersResponse = await window.DatabaseAPI.getUsers();
-                    const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
-                    
-                    const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
-                    const contextLink = `#/leads/${formData.id}`;
-                    
-                    // Process mentions
-                    await window.MentionHelper.processMentions(
-                        newComment,
-                        contextTitle,
-                        contextLink,
-                        currentUser.name || currentUser.email || 'Unknown',
-                        allUsers
-                    );
-                }
+                const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
+                const contextLink = `#/leads/${formData.id}`;
+                await window.MentionHelper.processMentions(
+                    newComment,
+                    contextTitle,
+                    contextLink,
+                    currentUser.name || currentUser.email || 'Unknown',
+                    allUsers
+                );
             } catch (error) {
                 console.error('❌ Error processing @mentions:', error);
-                // Don't fail the comment if mention processing fails
+            }
+        }
+        
+        const threadType = 'lead';
+        const threadId = formData.id;
+        if (threadId && window.DatabaseAPI?.makeRequest) {
+            try {
+                const mentionedEntries = (window.MentionHelper && window.MentionHelper.getMentionedUsernames(newComment)) || [];
+                const mentionedIds = mentionedEntries
+                    .map(({ normalized }) => {
+                        const u = allUsers.find(a =>
+                            (window.MentionHelper.normalizeIdentifier(a.name || '') === normalized) ||
+                            (window.MentionHelper.normalizeIdentifier((a.email || '').split('@')[0]) === normalized)
+                        );
+                        return u?.id;
+                    })
+                    .filter(Boolean);
+                const priorIds = (formData.comments || []).map(c => c.createdById || c.userId).filter(Boolean);
+                const subscriberIds = [...new Set([currentUser.id, ...mentionedIds, ...priorIds])].filter(Boolean);
+                await window.DatabaseAPI.makeRequest('/comment-subscriptions', {
+                    method: 'POST',
+                    body: JSON.stringify({ threadType, threadId, userIds: subscriberIds })
+                });
+                setIsCommentSubscribed(true);
+                const contextLink = `#/leads/${formData.id}?tab=notes`;
+                const toNotify = subscriberIds.filter(id => id !== currentUser.id && !mentionedIds.includes(id));
+                for (const uid of toNotify) {
+                    try {
+                        await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: uid,
+                                type: 'comment',
+                                title: `New comment on lead: ${formData.name || formData.companyName || 'Unknown'}`,
+                                message: `${currentUser.name} commented: "${newComment.substring(0, 80)}${newComment.length > 80 ? '...' : ''}"`,
+                                link: contextLink,
+                                metadata: {
+                                    leadId: formData.id,
+                                    commentAuthor: currentUser.name,
+                                    commentText: newComment,
+                                    tab: 'notes'
+                                }
+                            })
+                        });
+                    } catch (_) {}
+                }
+            } catch (err) {
+                console.warn('Comment subscription/notify failed:', err?.message);
             }
         }
         
@@ -2626,6 +2678,17 @@ const LeadDetailModal = ({
         setNewNoteTagsInput('');
         setNewNoteAttachments([]);
         
+    };
+
+    const handleUnsubscribeFromComments = async () => {
+        const threadId = formData?.id;
+        if (!threadId || !window.DatabaseAPI?.makeRequest) return;
+        try {
+            await window.DatabaseAPI.makeRequest(`/comment-subscriptions?threadType=lead&threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' });
+            setIsCommentSubscribed(false);
+        } catch (e) {
+            console.warn('Unsubscribe failed:', e?.message);
+        }
     };
 
     const logActivity = (type, description, relatedId = null, autoSave = true, formDataToUpdate = null) => {
@@ -2768,6 +2831,7 @@ const LeadDetailModal = ({
 
     const getStageColor = (stage) => {
         switch(stage) {
+            case 'No Engagement': return 'bg-slate-100 text-slate-800';
             case 'Awareness': return 'bg-blue-100 text-blue-800';
             case 'Interest': return 'bg-purple-100 text-purple-800';
             case 'Desire': return 'bg-yellow-100 text-yellow-800';
@@ -3326,6 +3390,7 @@ const LeadDetailModal = ({
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
+                                            <option value="No Engagement">No Engagement - No response yet</option>
                                             <option value="Awareness">Awareness - Lead knows about us</option>
                                             <option value="Interest">Interest - Lead shows engagement</option>
                                             <option value="Desire">Desire - Lead wants our solution</option>
@@ -3861,9 +3926,24 @@ const LeadDetailModal = ({
 
                                 {showSiteForm && (
                                     <div className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} rounded-lg p-4 border`}>
-                                        <h4 className={`font-medium mb-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                            {editingSite ? 'Edit Site' : 'New Site'}
-                                        </h4>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowSiteForm(false);
+                                                    setEditingSite(null);
+                                                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', stage: 'Potential', aidaStatus: 'Awareness' });
+                                                }}
+                                                className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                                            >
+                                                <i className="fas fa-arrow-left"></i>
+                                                Back to list
+                                            </button>
+                                            <h4 className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                {editingSite ? 'Edit Site' : 'New Site'}
+                                            </h4>
+                                            <span className="w-20" aria-hidden="true" />
+                                        </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Name *</label>
@@ -4016,6 +4096,36 @@ const LeadDetailModal = ({
                                                     placeholder="Equipment deployed, special instructions, etc."
                                                 ></textarea>
                                             </div>
+                                            <div>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Stage</label>
+                                                <select
+                                                    value={newSite.stage ?? 'Potential'}
+                                                    onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
+                                                >
+                                                    <option value="Potential">Potential</option>
+                                                    <option value="Active">Active</option>
+                                                    <option value="Inactive">Inactive</option>
+                                                    <option value="On Hold">On Hold</option>
+                                                    <option value="Disinterested">Disinterested</option>
+                                                    <option value="Proposal">Proposal</option>
+                                                    <option value="Tender">Tender</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>AIDA Status</label>
+                                                <select
+                                                    value={newSite.aidaStatus ?? 'Awareness'}
+                                                    onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
+                                                >
+                                                    <option value="No Engagement">No Engagement</option>
+                                                    <option value="Awareness">Awareness</option>
+                                                    <option value="Interest">Interest</option>
+                                                    <option value="Desire">Desire</option>
+                                                    <option value="Action">Action</option>
+                                                </select>
+                                            </div>
                                         </div>
                                         <div className="flex justify-end gap-2 mt-3">
                                             <button
@@ -4032,7 +4142,9 @@ const LeadDetailModal = ({
                                                         notes: '',
                                                         latitude: '',
                                                         longitude: '',
-                                                        gpsCoordinates: ''
+                                                        gpsCoordinates: '',
+                                                        stage: 'Potential',
+                                                        aidaStatus: 'Awareness'
                                                     });
                                                 }}
                                                 className={`px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'border-gray-500 hover:bg-gray-600 text-gray-100' : 'border-gray-300 hover:bg-gray-50'}`}
@@ -4050,171 +4162,71 @@ const LeadDetailModal = ({
                                     </div>
                                 )}
 
-                                <div className="space-y-2">
+                                {!showSiteForm && (
+                                <div className={`overflow-x-auto rounded-lg border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
                                     {(() => {
-                                        // Merge formData sites with optimistic sites
                                         const formSites = formData.sites || [];
                                         const optimistic = optimisticSites || [];
-                                        
-                                        // Merge and deduplicate by ID
                                         const siteMap = new Map();
-                                        
-                                        // Add formData sites first
-                                        formSites.forEach(site => {
-                                            if (site?.id) siteMap.set(site.id, site);
-                                        });
-                                        
-                                        // Add optimistic sites (will overwrite if duplicate ID)
-                                        optimistic.forEach(site => {
-                                            if (site?.id) siteMap.set(site.id, site);
-                                        });
-                                        
+                                        formSites.forEach(site => { if (site?.id) siteMap.set(site.id, site); });
+                                        optimistic.forEach(site => { if (site?.id) siteMap.set(site.id, site); });
                                         const allSites = Array.from(siteMap.values());
-                                        
-                                        return allSites.length === 0 ? (
-                                            <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
-                                                <p>No sites added yet</p>
-                                            </div>
-                                        ) : (
-                                            allSites.map(site => (
-                                                <div key={site.id} className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md`}>
-                                                    <div className="flex justify-between items-start mb-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <i className="fas fa-map-marker-alt text-primary-600 text-lg"></i>
-                                                            <h4 className={`font-semibold text-base ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name}</h4>
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleEditSite(site)}
-                                                                className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors"
-                                                                title="Edit Site"
-                                                            >
-                                                                <i className="fas fa-edit"></i>
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleDeleteSite(site.id)}
-                                                                className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title="Delete Site"
-                                                            >
-                                                                <i className="fas fa-trash"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Enhanced Site Information Grid */}
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        {/* Left Column - Contact & Location Info */}
-                                                        <div className="space-y-3">
-                                                            {site.address && (
-                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-map-marker-alt text-primary-600 mt-0.5 w-4"></i>
-                                                                    <div>
-                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
-                                                                        <div className="text-sm">{site.address}</div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            
-                                                            {site.contactPerson && (
-                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
-                                                                    <div>
-                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Person</div>
-                                                                        <div className="text-sm">{site.contactPerson}</div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {(site.latitude && site.longitude) && (
-                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-crosshairs text-green-600 mt-0.5 w-4"></i>
-                                                                    <div>
-                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">GPS Coordinates</div>
-                                                                        <div className="text-sm font-mono">{site.latitude}, {site.longitude}</div>
-                                                                        <a 
-                                                                            href={`https://www.openstreetmap.org/?mlat=${site.latitude}&mlon=${site.longitude}&zoom=15`}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline mt-1"
-                                                                            title="Open in OpenStreetMap"
-                                                                        >
-                                                                            <i className="fas fa-external-link-alt"></i>
-                                                                            View on Map
-                                                                        </a>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Right Column - Contact Details */}
-                                                        <div className="space-y-3">
-                                                            {site.phone && (
-                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-phone text-green-600 mt-0.5 w-4"></i>
-                                                                    <div>
-                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</div>
-                                                                        <a href={`tel:${site.phone}`} className="text-sm text-primary-600 hover:underline">
-                                                                            {site.phone}
-                                                                        </a>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            
-                                                            {site.email && (
-                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-envelope text-purple-600 mt-0.5 w-4"></i>
-                                                                    <div>
-                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
-                                                                        <a href={`mailto:${site.email}`} className="text-sm text-primary-600 hover:underline">
-                                                                            {site.email}
-                                                                        </a>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Notes Section */}
-                                                    {site.notes && (
-                                                        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                                                            <div className="flex items-start gap-2">
-                                                                <i className="fas fa-sticky-note text-yellow-600 mt-0.5 w-4"></i>
-                                                                <div className="flex-1">
-                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Notes</div>
-                                                                    <div className={`text-sm ${isDark ? 'text-gray-300 bg-gray-600' : 'text-gray-700 bg-gray-50'} p-3 rounded-lg`}>
-                                                                        {site.notes}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Mini Map Preview */}
-                                                    {(site.latitude && site.longitude) && (
-                                                        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <i className="fas fa-map text-primary-600 w-4"></i>
-                                                                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location Preview</div>
-                                                            </div>
-                                                            <div className="h-32 rounded-lg overflow-hidden border border-gray-200">
-                                                                <iframe
-                                                                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${site.longitude-0.01},${site.latitude-0.01},${site.longitude+0.01},${site.latitude+0.01}&layer=mapnik&marker=${site.latitude},${site.longitude}`}
-                                                                    width="100%"
-                                                                    height="100%"
-                                                                    style={{ border: 0 }}
-                                                                    title={`Map of ${site.name}`}
-                                                                ></iframe>
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                        if (allSites.length === 0) {
+                                            return (
+                                                <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
+                                                    <p>No sites added yet</p>
                                                 </div>
-                                            ))
+                                            );
+                                        }
+                                        return (
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                                <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
+                                                    <tr>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Name</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Address</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>AIDA Status</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-right text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className={`divide-y ${isDark ? 'divide-gray-600' : 'divide-gray-200'}`}>
+                                                    {allSites.map(site => (
+                                                        <tr
+                                                            key={site.id}
+                                                            onClick={() => handleEditSite(site)}
+                                                            className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-600/50' : 'hover:bg-primary-50/50'}`}
+                                                        >
+                                                            <td className={`px-4 py-3 text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name || '—'}</td>
+                                                            <td className={`px-4 py-3 text-sm max-w-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={site.address}>{site.address || '—'}</td>
+                                                            <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
+                                                            <td className="px-4 py-3">
+                                                                {site.aidaStatus ? (
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                                        site.aidaStatus === 'Action' ? 'bg-green-100 text-green-800' :
+                                                                        site.aidaStatus === 'Desire' ? 'bg-amber-100 text-amber-800' :
+                                                                        site.aidaStatus === 'Interest' ? 'bg-yellow-100 text-yellow-800' :
+                                                                        site.aidaStatus === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
+                                                                        'bg-blue-100 text-blue-800'
+                                                                    }`}>{site.aidaStatus}</span>
+                                                                ) : (
+                                                                    <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                                                                <div className="flex justify-end gap-1">
+                                                                    <button type="button" onClick={() => handleEditSite(site)} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>
+                                                                    <button type="button" onClick={() => handleDeleteSite(site.id)} className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors" title="Delete Site"><i className="fas fa-trash"></i></button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         );
                                     })()}
                                 </div>
+                                )}
                             </div>
                         )}
 
@@ -4375,8 +4387,18 @@ const LeadDetailModal = ({
                         {/* Notes/Comments Tab */}
                         {activeTab === 'notes' && (
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center">
+                                <div className="flex justify-between items-center flex-wrap gap-2">
                                     <h3 className="text-lg font-semibold text-gray-900">Notes & Comments</h3>
+                                    {isCommentSubscribed && (
+                                        <button
+                                            type="button"
+                                            onClick={handleUnsubscribeFromComments}
+                                            className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
+                                            title="Stop receiving notifications for new comments"
+                                        >
+                                            Unsubscribe from notifications
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -6235,6 +6257,7 @@ const LeadDetailModal = ({
                                             },
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
                                         },
+                                            React.createElement('option', { value: 'No Engagement' }, 'No Engagement - No response yet'),
                                             React.createElement('option', { value: 'Awareness' }, 'Awareness - Lead knows about us'),
                                             React.createElement('option', { value: 'Interest' }, 'Interest - Lead is interested'),
                                             React.createElement('option', { value: 'Desire' }, 'Desire - Lead wants our solution'),

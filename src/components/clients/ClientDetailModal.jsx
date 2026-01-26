@@ -9,6 +9,11 @@ const { useState, useEffect, useRef, useCallback } = React;
 // This persists even if the component remounts
 const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
 
+// Tab preservation: after adding/updating contacts, sites, or calendar entries we keep the
+// current tab and ignore initialTab/client-id effects for this many ms so the UI doesn't
+// jump back to Overview. Must be long enough for parent re-renders and effect runs to settle.
+const TAB_PRESERVE_AFTER_INLINE_SAVE_MS = 3500;
+
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
@@ -252,6 +257,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     })();
     const formDataRef = useRef(initialFormData);
     const isAutoSavingRef = useRef(false);
+    const lastInlineSaveAtRef = useRef(0); // Timestamp when we last set isAutoSavingRef for add/update/delete (tab-preserve window)
+    const activeTabRef = useRef(initialTab); // Mirror of activeTab so effects can see "current tab" without depending on state
     const lastSavedDataRef = useRef(null); // Track last saved state
     const autoSaveTimeoutRef = useRef(null); // Debounce timer for auto-save
     
@@ -284,6 +291,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [isInitialLoading, setIsInitialLoading] = useState(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
+    const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
     
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
@@ -412,6 +420,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             if (client.kycJsonb != null && typeof client.kycJsonb === 'object') return client.kycJsonb;
             return {};
         })();
+        const hasMeaningfulKyc = (k) => {
+            if (!k || typeof k !== 'object') return false;
+            if (typeof k.clientType === 'string' && k.clientType.trim()) return true;
+            const le = k.legalEntity;
+            if (le && typeof le === 'object' && typeof le.registeredLegalName === 'string' && le.registeredLegalName.trim()) return true;
+            return false;
+        };
         
         // CRITICAL: Compare with CURRENT formData, not just last processed data
         // This prevents overwriting data that's already in formData
@@ -448,13 +463,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // Only update if:
         // 1. Client prop data is different from last processed data (to avoid duplicate updates)
         // 2. AND client prop data is different from current formData (to avoid overwriting with same data)
-        if ((followUpsChanged && followUpsDifferent) || (notesChanged && notesDifferent) || (commentsChanged && commentsDifferent) || (kycChanged && kycDifferent)) {
+        // 3. For KYC: never overwrite formData.kyc with empty client.kyc when form already has meaningful KYC
+        //    (e.g. after loadAllData loaded from GET /api/clients/:id, client prop from list has no kyc)
+        const kycOkToOverwrite = !(kycChanged && kycDifferent) || hasMeaningfulKyc(clientKyc) || !hasMeaningfulKyc(currentFormKyc);
+        const shouldUpdateKyc = kycChanged && kycDifferent && kycOkToOverwrite;
+        if ((followUpsChanged && followUpsDifferent) || (notesChanged && notesDifferent) || (commentsChanged && commentsDifferent) || shouldUpdateKyc) {
             console.log('🔄 Updating formData from client prop (followUps/notes/comments/kyc):', {
                 clientId: client.id,
                 followUpsChanged: followUpsChanged && followUpsDifferent,
                 notesChanged: notesChanged && notesDifferent,
                 commentsChanged: commentsChanged && commentsDifferent,
-                kycChanged: kycChanged && kycDifferent,
+                kycChanged: shouldUpdateKyc,
                 followUpsCount: clientFollowUps.length,
                 notesLength: clientNotes.length,
                 commentsCount: clientComments.length,
@@ -478,7 +497,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     ...(followUpsChanged && followUpsDifferent ? { followUps: clientFollowUps } : {}),
                     ...(notesChanged && notesDifferent ? { notes: clientNotes } : {}),
                     ...(commentsChanged && commentsDifferent ? { comments: clientComments } : {}),
-                    ...(kycChanged && kycDifferent ? { kyc: clientKyc } : {})
+                    ...(shouldUpdateKyc ? { kyc: clientKyc } : {})
                 };
                 formDataRef.current = updated;
                 return updated;
@@ -546,11 +565,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, []);
     
     // Update tab when initialTab prop changes
-    // CRITICAL: Don't reset the active tab while we're auto-saving (e.g. adding comments/notes)
-    // Otherwise, saving a note can cause the UI to jump back to the Overview tab.
+    // BULLETPROOF: Never overwrite the active tab while we're inline-saving or when we're on a content tab and parent sends overview.
     useEffect(() => {
-        // If we're auto-saving, preserve the current tab and skip updates from initialTab
         if (isAutoSavingRef.current) {
+            return;
+        }
+        if (initialTab === 'overview' && (Date.now() - lastInlineSaveAtRef.current) < TAB_PRESERVE_AFTER_INLINE_SAVE_MS) {
+            return;
+        }
+        // Never revert to overview when we're on contacts/sites/calendar/notes (user or add-flow put us here).
+        const contentTabs = ['contacts', 'sites', 'calendar', 'notes'];
+        if (initialTab === 'overview' && contentTabs.includes(activeTabRef.current)) {
             return;
         }
         
@@ -841,7 +866,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             ? (window.DatabaseAPI?.getLead || window.api?.getLead)
                             : (window.DatabaseAPI?.getClient || window.api?.getClient);
                         if (typeof getOne === 'function') {
-                            const res = await getOne(clientId);
+                            // Force fresh fetch for clients so KYC and other server state are correct after reload
+                            const res = isLead ? await getOne(clientId) : await getOne(clientId, { forceRefresh: true });
                             const fromApi = isLead
                                 ? (res?.data?.lead ?? res?.lead ?? res?.data ?? res)
                                 : (res?.data?.client ?? res?.client ?? res?.data ?? res);
@@ -909,19 +935,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Prioritize API data - it's always more up-to-date
                 // Only use existing data if API returned empty and we have existing data
                 const finalContacts = contacts.length > 0 ? contacts : (existingContacts.length > 0 ? existingContacts : (parsedClient.contacts || []));
-                const finalSites = sites.length > 0 ? sites : (existingSites.length > 0 ? existingSites : (parsedClient.sites || []));
+                // CRITICAL: Never overwrite sites with stale API data when user just updated a site (Stage/AIDA).
+                // loadAllData can finish after handleUpdateSite; keep the in-memory sites until save has settled.
+                const finalSites = (isAutoSavingRef.current && existingSites.length > 0)
+                    ? existingSites
+                    : (sites.length > 0 ? sites : (existingSites.length > 0 ? existingSites : (parsedClient.sites || [])));
                 const finalOpportunities = opportunities.length > 0 ? opportunities : (existingOpportunities.length > 0 ? existingOpportunities : (parsedClient.opportunities || []));
                 
-                // CRITICAL: Preserve in-memory KYC so user edits are not overwritten when API response arrives late
+                // When we refetched from API (clientToUse !== client), use API KYC as source of truth so
+                // persisted KYC is shown after reload. Otherwise merge so in-memory edits are not lost.
                 const apiKyc = parsedClient.kyc || {};
                 const formKyc = currentFormData.kyc || {};
-                const mergedKyc = {
-                    ...apiKyc,
-                    ...formKyc,
-                    legalEntity: { ...(apiKyc.legalEntity || {}), ...(formKyc.legalEntity || {}) },
-                    businessProfile: { ...(apiKyc.businessProfile || {}), ...(formKyc.businessProfile || {}) },
-                    bankingDetails: { ...(apiKyc.bankingDetails || {}), ...(formKyc.bankingDetails || {}) }
-                };
+                const usedFreshApiData = clientToUse != null && clientToUse !== client;
+                const mergedKyc = usedFreshApiData
+                    ? (parsedClient.kyc || {})
+                    : {
+                        ...apiKyc,
+                        ...formKyc,
+                        legalEntity: { ...(apiKyc.legalEntity || {}), ...(formKyc.legalEntity || {}) },
+                        businessProfile: { ...(apiKyc.businessProfile || {}), ...(formKyc.businessProfile || {}) },
+                        bankingDetails: { ...(apiKyc.bankingDetails || {}), ...(formKyc.bankingDetails || {}) }
+                    };
                 
                 const mergedData = {
                     ...parsedClient,
@@ -995,7 +1029,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, [client?.id]);
     
     // Handle tab change and notify parent
-    const handleTabChange = (tab) => {
+    const handleTabChange = async (tab) => {
         // Prevent non-admins from accessing contracts tab
         if (tab === 'contracts' && !canViewContracts) {
             return;
@@ -1004,16 +1038,69 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (tab === 'service' || tab === 'maintenance') {
             tab = 'service-maintenance';
         }
-        // CRITICAL: When leaving KYC tab, flush save immediately so KYC persists on navigation or hard refresh
-        if (activeTab === 'kyc' && tab !== 'kyc' && formData?.id && typeof onSave === 'function') {
-            const latest = formDataRef.current || formData;
-            if (latest && initialDataLoadedForClientIdRef.current === latest.id) {
-                onSave(latest, true).catch(() => {});
+        // Keep ref in sync so "revert to overview" guards can see we're on a content tab
+        activeTabRef.current = tab;
+        // CRITICAL: When leaving KYC tab, persist KYC via dedicated API first, then full onSave.
+        // Dedicated PATCH /api/clients/:id/kyc ensures KYC is in DB before refresh regardless of full-save path.
+        if (activeTab === 'kyc' && tab !== 'kyc') {
+            const clientId = formData?.id || client?.id;
+            const raw = formDataRef.current || formData;
+            const kycFromRaw = (raw?.kyc != null && typeof raw.kyc === 'object') ? raw.kyc : (typeof raw?.kyc === 'string' && raw.kyc ? (() => { try { return JSON.parse(raw.kyc); } catch (_) { return {}; } })() : {});
+            const kycFromForm = (raw?.kyc != null && typeof raw.kyc === 'object') ? raw.kyc : (typeof raw?.kyc === 'string' && raw.kyc ? (() => { try { return JSON.parse(raw.kyc); } catch (_) { return {}; } })() : {});
+            const kycToSend = {
+                ...kycFromRaw,
+                ...kycFromForm,
+                legalEntity: { ...(kycFromRaw.legalEntity || {}), ...(kycFromForm.legalEntity || {}) },
+                businessProfile: { ...(kycFromRaw.businessProfile || {}), ...(kycFromForm.businessProfile || {}) },
+                bankingDetails: { ...(kycFromRaw.bankingDetails || {}), ...(kycFromForm.bankingDetails || {}) }
+            };
+            const latest = raw ? { ...raw, kyc: kycToSend } : null;
+            const saveKyc = (window.DatabaseAPI?.saveClientKyc || window.api?.saveClientKyc);
+            if (clientId && typeof saveKyc === 'function') {
+                try {
+                    await saveKyc(clientId, kycToSend);
+                } catch (_) {
+                    // Non-blocking; full onSave below may still persist via main PATCH
+                }
+            }
+            if (latest && typeof onSave === 'function') {
+                try {
+                    await onSave(latest, true);
+                } catch (_) {}
             }
         }
         setActiveTab(tab);
         if (onTabChange) {
             onTabChange(tab);
+        }
+        // When switching TO KYC tab: if form has no meaningful KYC but we have a client id,
+        // refetch the client so persisted KYC from DB is shown (e.g. after refresh or slow initial load).
+        if (tab === 'kyc' && !isLead) {
+            const clientId = formData?.id || client?.id;
+            const k = (formDataRef.current || formData)?.kyc || {};
+            const hasKyc = (k.clientType && String(k.clientType).trim()) || (k.legalEntity?.registeredLegalName && String(k.legalEntity.registeredLegalName).trim());
+            if (clientId && !hasKyc) {
+                const getOne = window.DatabaseAPI?.getClient || window.api?.getClient;
+                if (typeof getOne === 'function') {
+                    getOne(clientId, { forceRefresh: true })
+                        .then((res) => {
+                            const fromApi = res?.data?.client ?? res?.client ?? res?.data ?? res;
+                            if (fromApi && fromApi.id === clientId) {
+                                const apiKyc = (fromApi.kyc != null && typeof fromApi.kyc === 'object') ? fromApi.kyc
+                                    : (typeof fromApi.kyc === 'string' && fromApi.kyc.trim()) ? (() => { try { return JSON.parse(fromApi.kyc); } catch (_) { return {}; } })()
+                                    : (fromApi.kycJsonb != null && typeof fromApi.kycJsonb === 'object') ? fromApi.kycJsonb : {};
+                                if ((apiKyc.clientType && String(apiKyc.clientType).trim()) || (apiKyc.legalEntity?.registeredLegalName && String(apiKyc.legalEntity.registeredLegalName).trim())) {
+                                    setFormData(prev => {
+                                        const next = { ...prev, kyc: { ...(prev.kyc || {}), ...apiKyc, legalEntity: { ...(prev.kyc?.legalEntity || {}), ...(apiKyc.legalEntity || {}) }, businessProfile: { ...(prev.kyc?.businessProfile || {}), ...(apiKyc.businessProfile || {}) }, bankingDetails: { ...(prev.kyc?.bankingDetails || {}), ...(apiKyc.bankingDetails || {}) } } };
+                                        formDataRef.current = next;
+                                        return next;
+                                    });
+                                }
+                            }
+                        })
+                        .catch(() => {});
+                }
+            }
         }
         // Persist tab selection to localStorage (per client)
         if (client?.id) {
@@ -1026,12 +1113,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
     
-    // Close handler: when on KYC tab, save first so KYC persists on navigation/hard refresh
+    // Close handler: when on KYC tab, persist via dedicated KYC API then onSave, then close.
     const handleClose = () => {
-        if (activeTab === 'kyc' && formData?.id && typeof onSave === 'function') {
-            const latest = formDataRef.current || formData;
-            if (latest && initialDataLoadedForClientIdRef.current === latest.id) {
-                onSave(latest, true).finally(() => { if (onClose) onClose(); });
+        if (activeTab === 'kyc') {
+            const clientId = formData?.id || client?.id;
+            const raw = formDataRef.current || formData;
+            const kycFromRaw = (raw?.kyc != null && typeof raw.kyc === 'object') ? raw.kyc : (typeof raw?.kyc === 'string' && raw.kyc ? (() => { try { return JSON.parse(raw.kyc); } catch (_) { return {}; } })() : {});
+            const kycFromForm = (raw?.kyc != null && typeof raw.kyc === 'object') ? raw.kyc : (typeof raw?.kyc === 'string' && raw.kyc ? (() => { try { return JSON.parse(raw.kyc); } catch (_) { return {}; } })() : {});
+            const kycToSend = {
+                ...kycFromRaw,
+                ...kycFromForm,
+                legalEntity: { ...(kycFromRaw.legalEntity || {}), ...(kycFromForm.legalEntity || {}) },
+                businessProfile: { ...(kycFromRaw.businessProfile || {}), ...(kycFromForm.businessProfile || {}) },
+                bankingDetails: { ...(kycFromRaw.bankingDetails || {}), ...(kycFromForm.bankingDetails || {}) }
+            };
+            const latest = raw ? { ...raw, kyc: kycToSend } : null;
+            const saveKyc = (window.DatabaseAPI?.saveClientKyc || window.api?.saveClientKyc);
+            const doClose = () => { if (onClose) onClose(); };
+            if (clientId && typeof saveKyc === 'function') {
+                saveKyc(clientId, kycToSend).catch(() => {}).then(() => {
+                    if (latest && typeof onSave === 'function') {
+                        onSave(latest, true).catch(() => {}).finally(doClose);
+                    } else {
+                        doClose();
+                    }
+                });
+                return;
+            }
+            if (latest && typeof onSave === 'function') {
+                onSave(latest, true).finally(doClose);
                 return;
             }
         }
@@ -1239,18 +1349,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Clients and leads should always default to 'overview' when opened, not restore the last tab
     // Tab selection is still saved to localStorage for other purposes, but not auto-restored on open
     
-    // CRITICAL: Always reset to 'overview' when client/lead ID changes
-    // This ensures that opening a different client/lead always starts on Overview tab
-    // previousClientIdRef already declared above at line 618
+    // Reset to 'overview' when client/lead ID changes (opening a different entity).
+    // BULLETPROOF: Skip entirely while inline-saving or in the preserve window so we never revert to Overview mid-save.
     useEffect(() => {
-        const currentClientId = client?.id;
-        const previousClientId = previousClientIdRef.current;
-        
-        // CRITICAL: Don't reset tab if we're auto-saving (e.g. adding comments/notes)
-        // This prevents the tab from jumping to Overview when saving a comment
         if (isAutoSavingRef.current) {
             return;
         }
+        if ((Date.now() - lastInlineSaveAtRef.current) < TAB_PRESERVE_AFTER_INLINE_SAVE_MS) {
+            return;
+        }
+        const currentClientId = client?.id;
+        const previousClientId = previousClientIdRef.current;
         
         // Only reset if we're switching to a different client/lead
         if (currentClientId && currentClientId !== previousClientId) {
@@ -1262,13 +1371,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             if (shouldUseInitialTab) {
                 // URL explicitly requested a tab - respect it
-                setActiveTab(initialTab);
+                const tab = initialTab;
+                setActiveTab(tab);
+                activeTabRef.current = tab;
                 if (onTabChange) {
-                    onTabChange(initialTab);
+                    onTabChange(tab);
                 }
             } else {
                 // Default to 'overview' when opening a new client/lead
                 setActiveTab('overview');
+                activeTabRef.current = 'overview';
                 if (onTabChange) {
                     onTabChange('overview');
                 }
@@ -1280,6 +1392,71 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             previousClientIdRef.current = currentClientId;
         }
     }, [client?.id, initialTab, onTabChange]); // Run when client ID or initialTab changes
+    
+    // When KYC tab is visible, always fetch client from API once per client so persisted KYC shows after refresh.
+    useEffect(() => {
+        if (activeTab !== 'kyc' || isLead || !client?.id) return;
+        const clientId = String(client.id);
+        if (kycRefetchDoneForClientIdRef.current === clientId) return;
+        kycRefetchDoneForClientIdRef.current = clientId;
+
+        const applyKycFromApi = (fromApi) => {
+            if (!fromApi || String(fromApi.id) !== clientId) return;
+            const apiKyc = (fromApi.kyc != null && typeof fromApi.kyc === 'object') ? fromApi.kyc
+                : (typeof fromApi.kyc === 'string' && fromApi.kyc.trim()) ? (() => { try { return JSON.parse(fromApi.kyc); } catch (_) { return {}; } })()
+                : (fromApi.kycJsonb != null && typeof fromApi.kycJsonb === 'object') ? fromApi.kycJsonb : {};
+            const hasApiKyc = (apiKyc.clientType && String(apiKyc.clientType).trim()) || (apiKyc.legalEntity?.registeredLegalName && String(apiKyc.legalEntity.registeredLegalName || '').trim());
+            if (!hasApiKyc) return;
+            setFormData(prev => {
+                const next = {
+                    ...prev,
+                    kyc: {
+                        ...(prev.kyc || {}),
+                        ...apiKyc,
+                        legalEntity: { ...(prev.kyc?.legalEntity || {}), ...(apiKyc.legalEntity || {}) },
+                        businessProfile: { ...(prev.kyc?.businessProfile || {}), ...(apiKyc.businessProfile || {}) },
+                        bankingDetails: { ...(prev.kyc?.bankingDetails || {}), ...(apiKyc.bankingDetails || {}) }
+                    }
+                };
+                formDataRef.current = next;
+                return next;
+            });
+        };
+
+        const doFetch = () => {
+            const apiBase = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && window.storage?.getToken) ? window.storage.getToken() : null;
+            return fetch(`${apiBase}/api/clients/${clientId}`, {
+                method: 'GET',
+                headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+                credentials: 'include'
+            })
+                .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+                .then((json) => {
+                    const fromApi = json?.data?.client ?? json?.client ?? json?.data ?? json;
+                    applyKycFromApi(fromApi);
+                });
+        };
+        const getOne = window.DatabaseAPI?.getClient || window.api?.getClient;
+        if (typeof getOne === 'function') {
+            getOne(clientId, { forceRefresh: true })
+                .then((res) => {
+                    const fromApi = res?.data?.client ?? res?.client ?? res?.data ?? res;
+                    applyKycFromApi(fromApi);
+                })
+                .catch(() => {
+                    kycRefetchDoneForClientIdRef.current = null;
+                    doFetch().catch(() => { kycRefetchDoneForClientIdRef.current = null; });
+                });
+        } else {
+            doFetch().catch(() => { kycRefetchDoneForClientIdRef.current = null; });
+        }
+    }, [activeTab, client?.id, isLead]);
+    
+    // Reset kycRefetchDone when client changes so we can refetch for the new client
+    useEffect(() => {
+        if (!client?.id) kycRefetchDoneForClientIdRef.current = null;
+    }, [client?.id]);
     
     // Auto-scroll to last comment when notes tab is opened
     useEffect(() => {
@@ -1303,6 +1480,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }, 150);
         }
     }, [activeTab, formData]); // Use formData directly - it's already initialized at this point
+    
+    // Fetch comment subscription status when on notes tab
+    useEffect(() => {
+        if (activeTab !== 'notes' || !formData?.id || !window.DatabaseAPI?.makeRequest) return;
+        const threadType = isLead ? 'lead' : 'client';
+        window.DatabaseAPI.makeRequest(`/comment-subscriptions?threadType=${encodeURIComponent(threadType)}&threadId=${encodeURIComponent(formData.id)}`)
+            .then((r) => { if (r && r.isSubscribed) setIsCommentSubscribed(true); })
+            .catch(() => {});
+    }, [activeTab, formData?.id, isLead]);
     
     // Get theme with safe fallback - don't check system preference, only localStorage
     let isDark = false;
@@ -1407,6 +1593,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (!token) {
             console.log('⏭️ Skipping loadSitesFromDatabase - no token');
             return Promise.resolve([]);
+        }
+        
+        // Never overwrite sites while user just saved (Stage/AIDA) – avoids "changes briefly then disappear"
+        if (isAutoSavingRef.current) {
+            return Promise.resolve(formDataRef.current?.sites || []);
         }
         
         // Prevent duplicate requests with local ref check
@@ -1525,6 +1716,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     });
     
     const [newComment, setNewComment] = useState('');
+    const [isCommentSubscribed, setIsCommentSubscribed] = useState(false);
     const [showSiteForm, setShowSiteForm] = useState(false);
     const [editingSite, setEditingSite] = useState(null);
     const [newSite, setNewSite] = useState({
@@ -1536,7 +1728,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         notes: '',
         latitude: '',
         longitude: '',
-        gpsCoordinates: ''
+        gpsCoordinates: '',
+        siteLead: '',
+        stage: 'Potential',
+        aidaStatus: 'Awareness'
     });
     const [showOpportunityForm, setShowOpportunityForm] = useState(false);
     const [editingOpportunity, setEditingOpportunity] = useState(null);
@@ -2432,14 +2627,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
+        // Prevent tab from reverting to overview while adding (same as notes/sites/calendar flow)
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        handleTabChange('contacts');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
+                isAutoSavingRef.current = false;
                 alert('❌ Please log in to save contacts to the database');
                 return;
             }
             
             if (!window.api?.createContact) {
+                isAutoSavingRef.current = false;
                 alert('❌ Contact API not available. Please refresh the page.');
                 return;
             }
@@ -2517,10 +2718,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     alert('✅ Contact saved to database successfully!');
                 }, 100);
                 
+                // Clear auto-save flag after tab and UI have settled so tab-sync effects don't revert to overview
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+                
             } else {
                 throw new Error('No contact ID returned from API');
             }
         } catch (error) {
+            isAutoSavingRef.current = false;
             console.error('❌ Error creating contact:', error);
             alert('❌ Error saving contact to database: ' + error.message);
         }
@@ -2543,8 +2750,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // Log activity and get updated formData with activity log, then save everything
         const finalFormData = logActivity('Contact Updated', `Updated contact: ${newContact.name}`, null, false, updatedFormData);
         
-        // Save contact changes and activity log immediately - stay in edit mode
-        onSave(finalFormData, true);
+        // Prevent tab from reverting to overview while saving (same as add contact flow)
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        Promise.resolve().then(() => onSave(finalFormData, true)).finally(() => {
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+            }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        });
         
         setEditingContact(null);
         setNewContact({
@@ -2578,8 +2791,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Log activity and get updated formData with activity log, then save everything
             const finalFormData = logActivity('Contact Deleted', `Deleted contact: ${contact?.name || 'Unknown'}`, null, false, updatedFormData);
             
-            // Save contact deletion and activity log immediately - stay in edit mode
-            onSave(finalFormData, true);
+            // Prevent tab from reverting to overview while saving (same as add contact flow)
+            isAutoSavingRef.current = true;
+            lastInlineSaveAtRef.current = Date.now();
+            Promise.resolve().then(() => onSave(finalFormData, true)).finally(() => {
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+            });
             // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
             setTimeout(() => {
                 handleTabChange('contacts');
@@ -2627,16 +2846,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         });
         
         isAutoSavingRef.current = true;
-        onSave(dataToSave, true).then(() => {
-            // After a successful save, ensure we remain on the calendar tab
-            setTimeout(() => {
-                handleTabChange('calendar');
-            }, 0);
+        lastInlineSaveAtRef.current = Date.now();
+        Promise.resolve().then(() => onSave(dataToSave, true)).then(() => {
+            setTimeout(() => { handleTabChange('calendar'); }, 0);
         }).finally(() => {
-            // Clear the flag after a delay to allow API response to propagate
-            setTimeout(() => {
-                isAutoSavingRef.current = false;
-            }, 3000);
+            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
         });
         
         setNewFollowUp({
@@ -2670,16 +2884,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             };
             
             isAutoSavingRef.current = true;
-            onSave(dataToSave, true).then(() => {
-                // After a successful save, ensure we remain on the calendar tab
-                setTimeout(() => {
-                    handleTabChange('calendar');
-                }, 0);
+            lastInlineSaveAtRef.current = Date.now();
+            Promise.resolve().then(() => onSave(dataToSave, true)).then(() => {
+                setTimeout(() => { handleTabChange('calendar'); }, 0);
             }).finally(() => {
-                // Clear the flag after a delay to allow API response to propagate
-                setTimeout(() => {
-                    isAutoSavingRef.current = false;
-                }, 3000);
+                setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
             });
         } else {
             // Just save the follow-up toggle (no activity log needed for uncompleting)
@@ -2690,16 +2899,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             };
             
             isAutoSavingRef.current = true;
-            onSave(dataToSave, true).then(() => {
-                // After a successful save, ensure we remain on the calendar tab
-                setTimeout(() => {
-                    handleTabChange('calendar');
-                }, 0);
+            Promise.resolve().then(() => onSave(dataToSave, true)).then(() => {
+                setTimeout(() => { handleTabChange('calendar'); }, 0);
             }).finally(() => {
-                // Clear the flag after a delay to allow API response to propagate
-                setTimeout(() => {
-                    isAutoSavingRef.current = false;
-                }, 3000);
+                setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
             });
         }
     };
@@ -2724,16 +2927,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             };
             
             isAutoSavingRef.current = true;
-            onSave(dataToSave, true).then(() => {
-                // After a successful save, ensure we remain on the calendar tab
-                setTimeout(() => {
-                    handleTabChange('calendar');
-                }, 0);
+            lastInlineSaveAtRef.current = Date.now();
+            Promise.resolve().then(() => onSave(dataToSave, true)).then(() => {
+                setTimeout(() => { handleTabChange('calendar'); }, 0);
             }).finally(() => {
-                // Clear the flag after a delay to allow API response to propagate
-                setTimeout(() => {
-                    isAutoSavingRef.current = false;
-                }, 3000);
+                setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
             });
         }
     };
@@ -2790,30 +2988,79 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             id: user?.id || 'system'
         };
         
+        let allUsers = [];
+        try {
+            if (window.DatabaseAPI?.getUsers) {
+                const usersResponse = await window.DatabaseAPI.getUsers();
+                allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
+            }
+        } catch (_) {}
+        
         // Process @mentions if MentionHelper is available
-        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
+        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment) && allUsers.length) {
             try {
-                // Fetch all users for mention matching
-                const token = window.storage?.getToken?.();
-                if (token && window.DatabaseAPI?.getUsers) {
-                    const usersResponse = await window.DatabaseAPI.getUsers();
-                    const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
-                    
-                    const contextTitle = `Client: ${formData.name || 'Unknown Client'}`;
-                    const contextLink = `#/clients/${formData.id}`;
-                    
-                    // Process mentions
-                    await window.MentionHelper.processMentions(
-                        newComment,
-                        contextTitle,
-                        contextLink,
-                        currentUser.name || currentUser.email || 'Unknown',
-                        allUsers
-                    );
-                }
+                const contextTitle = `${entityLabel}: ${formData.name || 'Unknown'}`;
+                const contextLink = isLead ? `#/leads/${formData.id}` : `#/clients/${formData.id}`;
+                await window.MentionHelper.processMentions(
+                    newComment,
+                    contextTitle,
+                    contextLink,
+                    currentUser.name || currentUser.email || 'Unknown',
+                    allUsers
+                );
             } catch (error) {
                 console.error('❌ Error processing @mentions:', error);
-                // Don't fail the comment if mention processing fails
+            }
+        }
+        
+        // Subscribe everyone involved (author, mentioned, prior comment authors) and notify subscribers
+        const threadType = isLead ? 'lead' : 'client';
+        const threadId = formData.id;
+        if (threadId && window.DatabaseAPI?.makeRequest) {
+            try {
+                const mentionedEntries = (window.MentionHelper && window.MentionHelper.getMentionedUsernames(newComment)) || [];
+                const mentionedIds = mentionedEntries
+                    .map(({ normalized }) => {
+                        const u = allUsers.find(a => 
+                            (window.MentionHelper.normalizeIdentifier(a.name || '') === normalized) ||
+                            (window.MentionHelper.normalizeIdentifier((a.email || '').split('@')[0]) === normalized)
+                        );
+                        return u?.id;
+                    })
+                    .filter(Boolean);
+                const priorIds = (formData.comments || []).map(c => c.createdById || c.userId).filter(Boolean);
+                const subscriberIds = [...new Set([currentUser.id, ...mentionedIds, ...priorIds])].filter(Boolean);
+                await window.DatabaseAPI.makeRequest('/comment-subscriptions', {
+                    method: 'POST',
+                    body: JSON.stringify({ threadType, threadId, userIds: subscriberIds })
+                });
+                setIsCommentSubscribed(true);
+                const contextTitle = `${entityLabel}: ${formData.name || 'Unknown'}`;
+                const contextLink = (isLead ? `#/leads/${formData.id}` : `#/clients/${formData.id}`) + '?tab=notes';
+                const toNotify = subscriberIds.filter(id => id !== currentUser.id && !mentionedIds.includes(id));
+                for (const uid of toNotify) {
+                    try {
+                        await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: uid,
+                                type: 'comment',
+                                title: `New comment on ${entityLabelLower}: ${formData.name || 'Unknown'}`,
+                                message: `${currentUser.name} commented: "${newComment.substring(0, 80)}${newComment.length > 80 ? '...' : ''}"`,
+                                link: contextLink,
+                                metadata: {
+                                    clientId: isLead ? null : formData.id,
+                                    leadId: isLead ? formData.id : null,
+                                    commentAuthor: currentUser.name,
+                                    commentText: newComment,
+                                    tab: 'notes'
+                                }
+                            })
+                        });
+                    } catch (_) {}
+                }
+            } catch (err) {
+                console.warn('Comment subscription/notify failed:', err?.message);
             }
         }
         
@@ -2872,6 +3119,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // Save comment changes and activity log immediately - stay in edit mode
         // CRITICAL: Ensure comments are explicitly included in the save
         isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
         try {
             // CRITICAL: Explicitly ensure comments are in the data being saved
             const dataToSave = {
@@ -2908,7 +3156,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // This delay ensures any effects that check isAutoSavingRef won't reset the tab
             setTimeout(() => {
                 isAutoSavingRef.current = false;
-            }, 3000);
+            }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
         }
         
         // Clear form fields only after successful save (handled in try block)
@@ -2929,18 +3177,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Save comment deletion immediately - stay in edit mode
             isAutoSavingRef.current = true;
-            onSave(updatedFormData, true).then(() => {
-                // After a successful save, ensure we remain on the notes tab
-                setTimeout(() => {
-                    handleTabChange('notes');
-                }, 0);
+            lastInlineSaveAtRef.current = Date.now();
+            Promise.resolve().then(() => onSave(updatedFormData, true)).then(() => {
+                setTimeout(() => { handleTabChange('notes'); }, 0);
             }).finally(() => {
-                // Clear the flag after a delay to allow API response to propagate
-                setTimeout(() => {
-                    isAutoSavingRef.current = false;
-                }, 3000);
+                setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
             });
             
+        }
+    };
+
+    const handleUnsubscribeFromComments = async () => {
+        const threadType = isLead ? 'lead' : 'client';
+        const threadId = formData?.id;
+        if (!threadId || !window.DatabaseAPI?.makeRequest) return;
+        try {
+            await window.DatabaseAPI.makeRequest(`/comment-subscriptions?threadType=${encodeURIComponent(threadType)}&threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' });
+            setIsCommentSubscribed(false);
+        } catch (e) {
+            console.warn('Unsubscribe failed:', e?.message);
         }
     };
 
@@ -2949,21 +3204,52 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             alert('Site name is required');
             return;
         }
+        const clientId = formData?.id;
+        if (!clientId) {
+            alert('Save the client first before adding sites.');
+            return;
+        }
         
+        // Prevent tab from reverting to overview while adding a site (same as notes/comment flow)
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        handleTabChange('sites');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
+                isAutoSavingRef.current = false;
                 alert('❌ Please log in to save sites to the database');
                 return;
             }
             
-            if (!window.api?.createSite) {
+            const payload = {
+                name: newSite.name,
+                address: newSite.address || '',
+                contactPerson: newSite.contactPerson || '',
+                contactPhone: newSite.phone || newSite.contactPhone || '',
+                contactEmail: newSite.email || newSite.contactEmail || '',
+                notes: newSite.notes || '',
+                siteLead: newSite.siteLead ?? '',
+                stage: newSite.stage ?? 'Potential',
+                aidaStatus: newSite.aidaStatus ?? 'Awareness'
+            };
+            let response;
+            if (window.api?.createSite) {
+                response = await window.api.createSite(clientId, payload);
+            } else if (window.DatabaseAPI?.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest(`/sites/client/${clientId}`, { method: 'POST', body: JSON.stringify(payload) });
+            } else {
+                isAutoSavingRef.current = false;
                 alert('❌ Site API not available. Please refresh the page.');
                 return;
             }
-            
-            const response = await window.api.createSite(formData.id, newSite);
-            const savedSite = response?.data?.site || response?.site || response;
+            const rawSaved = response?.data?.site || response?.site || response;
+            const savedSite = rawSaved && rawSaved.id ? {
+                ...rawSaved,
+                siteLead: rawSaved.siteLead ?? payload.siteLead ?? '',
+                stage: rawSaved.stage ?? payload.stage ?? 'Potential',
+                aidaStatus: rawSaved.aidaStatus ?? payload.aidaStatus ?? 'Awareness'
+            } : rawSaved;
             
             if (savedSite && savedSite.id) {
                 // Mark form as edited to prevent useEffect from resetting formData
@@ -3026,7 +3312,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     notes: '',
                     latitude: '',
                     longitude: '',
-                    gpsCoordinates: ''
+                    gpsCoordinates: '',
+                    siteLead: '',
+                    stage: 'Potential',
+                    aidaStatus: 'Awareness'
                 });
                 setShowSiteForm(false);
                 
@@ -3035,40 +3324,107 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     alert('✅ Site saved to database successfully!');
                 }, 100);
                 
+                // Clear auto-save flag after tab and UI have settled so tab-sync effects don't revert to overview
+                setTimeout(() => {
+                    isAutoSavingRef.current = false;
+                }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+                
             } else {
                 throw new Error('No site ID returned from API');
             }
         } catch (error) {
+            isAutoSavingRef.current = false;
             console.error('❌ Error creating site:', error);
             const errorMessage = error?.message || 'Unknown error';
-            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error') || errorMessage.includes('Failed to add site');
-            
+            const details = (error && typeof error.details === 'string') ? error.details : '';
+            const fullMessage = details ? (errorMessage + ' — ' + details) : errorMessage;
+            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error') || errorMessage.includes('Failed to add site') || errorMessage.includes('Sites table not initialized');
             if (isServerError) {
-                alert('❌ Server error: Unable to save site. This may be due to a database issue with this client. Please contact support if this persists.');
+                alert('❌ ' + (fullMessage || 'Unable to save site. This may be due to a database issue with this client. Please contact support if this persists.'));
             } else {
-                alert('❌ Error saving site to database: ' + errorMessage);
+                alert('❌ Error saving site to database: ' + fullMessage);
             }
         }
     };
 
     const handleEditSite = (site) => {
         setEditingSite(site);
-        setNewSite(site);
+        setNewSite({
+            ...site,
+            phone: site.phone ?? site.contactPhone ?? '',
+            email: site.email ?? site.contactEmail ?? '',
+            siteLead: site.siteLead ?? '',
+            stage: site.stage ?? 'Potential',
+            aidaStatus: site.aidaStatus ?? 'Awareness'
+        });
         setShowSiteForm(true);
     };
 
     const handleUpdateSite = () => {
-        const updatedSites = formData.sites.map(s => 
-            s.id === editingSite.id ? {...newSite, id: s.id} : s
+        // Build site payload with API-expected fields
+        const sitePayload = {
+            ...newSite,
+            id: editingSite.id,
+            contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
+            contactEmail: newSite.contactEmail ?? newSite.email ?? '',
+            stage: newSite.stage ?? 'Potential',
+            aidaStatus: newSite.aidaStatus ?? 'Awareness'
+        };
+        const updatedSites = (formData.sites || []).map(s =>
+            s.id === editingSite.id ? sitePayload : s
         );
         const updatedFormData = {...formData, sites: updatedSites};
         setFormData(updatedFormData);
+        formDataRef.current = updatedFormData; // keep ref in sync so in-flight loadAllData doesn't overwrite with stale sites
         
-        // Log activity and get updated formData with activity log, then save everything
+        // Log activity and get updated formData with activity log
         const finalFormData = logActivity('Site Updated', `Updated site: ${newSite.name}`, null, false, updatedFormData);
         
-        // Save site changes and activity log immediately - stay in edit mode
-        onSave(finalFormData, true);
+        // Prevent tab from reverting to overview while saving (same as add site flow)
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+
+        // For leads: persist site via direct site API first (same as clients use for add).
+        // This guarantees DB write even if the lead PATCH path doesn't process body.sites.
+        const runSave = async () => {
+            if (isLead && formData.id && editingSite.id && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
+                const payload = {
+                    name: sitePayload.name ?? '',
+                    address: sitePayload.address ?? '',
+                    contactPerson: sitePayload.contactPerson ?? '',
+                    contactPhone: sitePayload.contactPhone ?? '',
+                    contactEmail: sitePayload.contactEmail ?? '',
+                    notes: sitePayload.notes ?? '',
+                    siteLead: sitePayload.siteLead ?? '',
+                    stage: sitePayload.stage ?? '',
+                    aidaStatus: sitePayload.aidaStatus ?? ''
+                };
+                try {
+                    if (window.api?.updateSite) {
+                        await window.api.updateSite(formData.id, editingSite.id, payload);
+                    } else if (window.DatabaseAPI?.makeRequest) {
+                        await window.DatabaseAPI.makeRequest(`/sites/client/${formData.id}/${editingSite.id}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify(payload)
+                        });
+                    }
+                } catch (err) {
+                    console.error('❌ Lead site update (direct API) failed:', err);
+                    alert('Site could not be saved to the database. Please try again.');
+                    return;
+                }
+            }
+            try {
+                await onSave(finalFormData, true);
+            } catch (e) {
+                console.error('❌ Error in onSave after site update:', e);
+            }
+        };
+        Promise.resolve().then(runSave).finally(() => {
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+            }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        });
         
         setEditingSite(null);
             setNewSite({
@@ -3080,7 +3436,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 notes: '',
                 latitude: '',
                 longitude: '',
-                gpsCoordinates: ''
+                gpsCoordinates: '',
+                siteLead: '',
+                stage: 'Potential',
+                aidaStatus: 'Awareness'
             });
         setShowSiteForm(false);
         // Stay in sites tab (use setTimeout to ensure it happens after re-render)
@@ -3091,22 +3450,45 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     };
 
     const handleDeleteSite = (siteId) => {
-        const site = formData.sites.find(s => s.id === siteId);
-        if (confirm('Delete this site?')) {
-            const updatedFormData = {
-                ...formData,
-                sites: formData.sites.filter(s => s.id !== siteId)
-            };
-            setFormData(updatedFormData);
-            
-            // Log activity and get updated formData with activity log, then save everything
-            const finalFormData = logActivity('Site Deleted', `Deleted site: ${site?.name}`, null, false, updatedFormData);
-            
-            // Save site deletion and activity log immediately - stay in edit mode
-            onSave(finalFormData, true);
-            handleTabChange('sites'); // Stay in sites tab
-            
-        }
+        const site = (formData.sites || []).find(s => s.id === siteId);
+        if (!confirm('Delete this site?')) return;
+        const prevFormData = formData;
+        const updatedFormData = {
+            ...formData,
+            sites: (formData.sites || []).filter(s => s.id !== siteId)
+        };
+        setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
+        const finalFormData = logActivity('Site Deleted', `Deleted site: ${site?.name || 'Unknown'}`, null, false, updatedFormData);
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        handleTabChange('sites');
+
+        const runDelete = async () => {
+            if (isLead && formData.id && siteId && (window.api?.deleteSite || window.DatabaseAPI?.makeRequest)) {
+                try {
+                    if (window.api?.deleteSite) {
+                        await window.api.deleteSite(formData.id, siteId);
+                    } else {
+                        await window.DatabaseAPI.makeRequest(`/sites/client/${formData.id}/${siteId}`, { method: 'DELETE' });
+                    }
+                } catch (err) {
+                    console.error('❌ Lead site delete (direct API) failed:', err);
+                    alert('Site could not be deleted from the database. Please try again.');
+                    setFormData(prevFormData);
+                    formDataRef.current = prevFormData;
+                    return;
+                }
+            }
+            try {
+                await onSave(finalFormData, true);
+            } catch (e) {
+                console.error('❌ Error in onSave after site delete:', e);
+            }
+        };
+        Promise.resolve().then(runDelete).finally(() => {
+            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        });
     };
 
     const handleAddOpportunity = async () => {
@@ -3892,7 +4274,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 setTimeout(() => {
                                                                     isAutoSavingRef.current = false;
                                                                     if (onEditingChange) onEditingChange(false, false);
-                                                                }, 3000);
+                                                                }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving status:', error);
                                                                 isAutoSavingRef.current = false;
@@ -3938,68 +4320,34 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         isEditingRef.current = false;
                                                     }, 5000);
                                                     
-                                                    // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
-                                                    // This prevents LiveDataSync from overwriting during the delay
                                                     isAutoSavingRef.current = true;
                                                     if (onEditingChange) onEditingChange(false, true);
                                                     
                                                     setFormData(prev => {
                                                         const updated = {...prev, status: newStatus};
                                                         formDataRef.current = updated;
-                                                        
-                                                        // Auto-save immediately with the updated data
-                                                        // CRITICAL: Only auto-save for existing entities, NOT for new ones that haven't been saved yet
                                                         if (client && client.id && onSave) {
-                                                            console.log('💾 Auto-saving lead stage change:', {
-                                                                entityId: client.id,
-                                                                entityType: entityType,
-                                                                oldStatus: formDataRef.current?.status,
-                                                                newStatus: newStatus
-                                                            });
-                                                            
-                                                            // Use setTimeout to ensure state is updated
                                                             setTimeout(async () => {
                                                                 try {
-                                                                    // Get the latest formData from ref (updated by useEffect)
                                                                     const latest = {...formDataRef.current, status: newStatus};
-                                                                    
-                                                                    // Explicitly ensure status is included
                                                                     latest.status = newStatus;
-                                                                    
-                                                                    // For leads, also ensure stage is mapped from aidaStatus if needed
                                                                     if (isLead && latest.aidaStatus && !latest.stage) {
                                                                         latest.stage = latest.aidaStatus;
                                                                     }
-                                                                    
-                                                                    console.log('💾 Sending lead stage to onSave:', {
-                                                                        entityId: latest.id,
-                                                                        status: latest.status,
-                                                                        stage: latest.stage,
-                                                                        aidaStatus: latest.aidaStatus
-                                                                    });
-                                                                    
-                                                                    // Save this as the last saved state
                                                                     lastSavedDataRef.current = latest;
-                                                                    
-                                                                    // Save to API - ensure it's awaited
                                                                     await onSave(latest, true);
-                                                                    
-                                                                    console.log('✅ Lead stage auto-save completed');
-                                                                    
-                                                                    // Clear the flag and notify parent after save completes
                                                                     setTimeout(() => {
                                                                         isAutoSavingRef.current = false;
                                                                         if (onEditingChange) onEditingChange(false, false);
-                                                                    }, 3000);
+                                                                    }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
                                                                 } catch (error) {
                                                                     console.error('❌ Error saving lead stage:', error);
                                                                     isAutoSavingRef.current = false;
                                                                     if (onEditingChange) onEditingChange(false, false);
                                                                     alert('Failed to save stage change. Please try again.');
                                                                 }
-                                                            }, 100); // Small delay to ensure state update is processed
+                                                            }, 100);
                                                         }
-                                                        
                                                         return updated;
                                                     });
                                                 }}
@@ -4092,7 +4440,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     setTimeout(() => {
                                                                         isAutoSavingRef.current = false;
                                                                         if (onEditingChange) onEditingChange(false, false);
-                                                                    }, 3000);
+                                                                    }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
                                                                 } catch (error) {
                                                                     console.error('❌ Error saving AIDA Status:', error);
                                                                     isAutoSavingRef.current = false;
@@ -4112,6 +4460,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 }}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             >
+                                                <option value="No Engagement">No Engagement</option>
                                                 <option value="Awareness">Awareness</option>
                                                 <option value="Interest">Interest</option>
                                                 <option value="Desire">Desire</option>
@@ -4970,7 +5319,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         {activeTab === 'sites' && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Sites & Locations</h3>
+                                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Sites & Locations</h3>
                                     {!showSiteForm && (
                                         <button
                                             type="button"
@@ -4984,10 +5333,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 </div>
 
                                 {showSiteForm && (
-                                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                        <h4 className="font-medium text-gray-900 mb-3 text-sm">
-                                            {editingSite ? 'Edit Site' : 'New Site'}
-                                        </h4>
+                                    <div className={`rounded-lg p-4 border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowSiteForm(false); setEditingSite(null); setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', stage: 'Potential', aidaStatus: 'Awareness' }); }}
+                                                className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                                            >
+                                                <i className="fas fa-arrow-left"></i>
+                                                Back to list
+                                            </button>
+                                            <h4 className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                {editingSite ? 'Edit Site' : 'New Site'}
+                                            </h4>
+                                            <span className="w-20" aria-hidden="true" />
+                                        </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Site Name *</label>
@@ -5138,6 +5498,40 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     placeholder="Equipment deployed, special instructions, etc."
                                                 ></textarea>
                                             </div>
+                                            {isLead && (
+                                                <>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Stage</label>
+                                                        <select
+                                                            value={newSite.stage ?? 'Potential'}
+                                                            onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
+                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                        >
+                                                            <option value="Potential">Potential</option>
+                                                            <option value="Active">Active</option>
+                                                            <option value="Inactive">Inactive</option>
+                                                            <option value="On Hold">On Hold</option>
+                                                            <option value="Disinterested">Disinterested</option>
+                                                            <option value="Proposal">Proposal</option>
+                                                            <option value="Tender">Tender</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
+                                                        <select
+                                                            value={newSite.aidaStatus ?? 'Awareness'}
+                                                            onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
+                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                        >
+                                                            <option value="No Engagement">No Engagement</option>
+                                                            <option value="Awareness">Awareness</option>
+                                                            <option value="Interest">Interest</option>
+                                                            <option value="Desire">Desire</option>
+                                                            <option value="Action">Action</option>
+                                                        </select>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                         <div className="flex justify-end gap-2 mt-3">
                                             <button
@@ -5154,7 +5548,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 notes: '',
                 latitude: '',
                 longitude: '',
-                gpsCoordinates: ''
+                gpsCoordinates: '',
+                siteLead: '',
+                stage: 'Potential',
+                aidaStatus: 'Awareness'
             });
                                                 }}
                                                 className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -5172,171 +5569,71 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     </div>
                                 )}
 
-                                <div className="space-y-2">
+                                {!showSiteForm && (
+                                <div className={`overflow-x-auto rounded-lg border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
                                     {(() => {
-                                        // Merge formData sites with optimistic sites
                                         const formSites = formData.sites || [];
                                         const optimistic = optimisticSites || [];
-                                        
-                                        // Merge and deduplicate by ID
                                         const siteMap = new Map();
-                                        
-                                        // Add formData sites first
-                                        formSites.forEach(site => {
-                                            if (site?.id) siteMap.set(site.id, site);
-                                        });
-                                        
-                                        // Add optimistic sites (will overwrite if duplicate ID)
-                                        optimistic.forEach(site => {
-                                            if (site?.id) siteMap.set(site.id, site);
-                                        });
-                                        
+                                        formSites.forEach(site => { if (site?.id) siteMap.set(site.id, site); });
+                                        optimistic.forEach(site => { if (site?.id) siteMap.set(site.id, site); });
                                         const allSites = Array.from(siteMap.values());
-                                        
-                                        return allSites.length === 0 ? (
-                                            <div className="text-center py-8 text-gray-500 text-sm">
-                                                <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
-                                                <p>No sites added yet</p>
-                                            </div>
-                                        ) : (
-                                            allSites.map(site => (
-                                            <div key={site.id} className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md`}>
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <i className="fas fa-map-marker-alt text-primary-600 text-lg"></i>
-                                                        <h4 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} text-base`}>{site.name}</h4>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            type="button"
+                                        if (allSites.length === 0) {
+                                            return (
+                                                <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
+                                                    <p>No sites added yet</p>
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                                <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
+                                                    <tr>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Name</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Address</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>AIDA Status</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-right text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className={`divide-y ${isDark ? 'divide-gray-600' : 'divide-gray-200'}`}>
+                                                    {allSites.map(site => (
+                                                        <tr
+                                                            key={site.id}
                                                             onClick={() => handleEditSite(site)}
-                                                            className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors"
-                                                            title="Edit Site"
+                                                            className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-600/50' : 'hover:bg-primary-50/50'}`}
                                                         >
-                                                            <i className="fas fa-edit"></i>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDeleteSite(site.id)}
-                                                            className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                                            title="Delete Site"
-                                                        >
-                                                            <i className="fas fa-trash"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Enhanced Site Information Grid */}
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    {/* Left Column - Contact & Location Info */}
-                                                    <div className="space-y-3">
-                                                        {site.address && (
-                                                            <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                <i className="fas fa-map-marker-alt text-primary-600 mt-0.5 w-4"></i>
-                                                                <div>
-                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
-                                                                    <div className="text-sm">{site.address}</div>
+                                                            <td className={`px-4 py-3 text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name || '—'}</td>
+                                                            <td className={`px-4 py-3 text-sm max-w-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={site.address}>{site.address || '—'}</td>
+                                                            <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
+                                                            <td className="px-4 py-3">
+                                                                {site.aidaStatus ? (
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                                        site.aidaStatus === 'Action' ? 'bg-green-100 text-green-800' :
+                                                                        site.aidaStatus === 'Desire' ? 'bg-amber-100 text-amber-800' :
+                                                                        site.aidaStatus === 'Interest' ? 'bg-yellow-100 text-yellow-800' :
+                                                                        site.aidaStatus === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
+                                                                        'bg-blue-100 text-blue-800'
+                                                                    }`}>{site.aidaStatus}</span>
+                                                                ) : (
+                                                                    <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                                                                <div className="flex justify-end gap-1">
+                                                                    <button type="button" onClick={() => handleEditSite(site)} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>
+                                                                    <button type="button" onClick={() => handleDeleteSite(site.id)} className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors" title="Delete Site"><i className="fas fa-trash"></i></button>
                                                                 </div>
-                                                            </div>
-                                                        )}
-                                                        
-                                                        {site.contactPerson && (
-                                                            <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
-                                                                <div>
-                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Person</div>
-                                                                    <div className="text-sm">{site.contactPerson}</div>
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {(site.latitude && site.longitude) && (
-                                                            <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                <i className="fas fa-crosshairs text-green-600 mt-0.5 w-4"></i>
-                                                                <div>
-                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">GPS Coordinates</div>
-                                                                    <div className="text-sm font-mono">{site.latitude}, {site.longitude}</div>
-                                                                    <a 
-                                                                        href={`https://www.openstreetmap.org/?mlat=${site.latitude}&mlon=${site.longitude}&zoom=15`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline mt-1"
-                                                                        title="Open in OpenStreetMap"
-                                                                    >
-                                                                        <i className="fas fa-external-link-alt"></i>
-                                                                        View on Map
-                                                                    </a>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Right Column - Contact Details */}
-                                                    <div className="space-y-3">
-                                                        {site.phone && (
-                                                            <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                <i className="fas fa-phone text-green-600 mt-0.5 w-4"></i>
-                                                                <div>
-                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</div>
-                                                                    <a href={`tel:${site.phone}`} className="text-sm text-primary-600 hover:underline">
-                                                                        {site.phone}
-                                                                    </a>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        
-                                                        {site.email && (
-                                                            <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                <i className="fas fa-envelope text-purple-600 mt-0.5 w-4"></i>
-                                                                <div>
-                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
-                                                                    <a href={`mailto:${site.email}`} className="text-sm text-primary-600 hover:underline">
-                                                                        {site.email}
-                                                                    </a>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Notes Section */}
-                                                {site.notes && (
-                                                    <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                                                        <div className="flex items-start gap-2">
-                                                            <i className="fas fa-sticky-note text-yellow-600 mt-0.5 w-4"></i>
-                                                            <div className="flex-1">
-                                                                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Notes</div>
-                                                                <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'} ${isDark ? 'bg-gray-600' : 'bg-gray-50'} p-3 rounded-lg`}>
-                                                                    {site.notes}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Mini Map Preview */}
-                                                {(site.latitude && site.longitude) && (
-                                                    <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <i className="fas fa-map text-primary-600 w-4"></i>
-                                                            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location Preview</div>
-                                                        </div>
-                                                        <div className="h-32 rounded-lg overflow-hidden border border-gray-200">
-                                                            <iframe
-                                                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${site.longitude-0.01},${site.latitude-0.01},${site.longitude+0.01},${site.latitude+0.01}&layer=mapnik&marker=${site.latitude},${site.longitude}`}
-                                                                width="100%"
-                                                                height="100%"
-                                                                style={{ border: 0 }}
-                                                                title={`Map of ${site.name}`}
-                                                            ></iframe>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            ))
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         );
                                     })()}
                                 </div>
+                                )}
                             </div>
                         )}
 
@@ -6193,8 +6490,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         {/* Notes/Comments Tab */}
                         {activeTab === 'notes' && (
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center">
+                                <div className="flex justify-between items-center flex-wrap gap-2">
                                     <h3 className="text-lg font-semibold text-gray-900">Notes & Comments</h3>
+                                    {isCommentSubscribed && (
+                                        <button
+                                            type="button"
+                                            onClick={handleUnsubscribeFromComments}
+                                            className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
+                                            title="Stop receiving notifications for new comments"
+                                        >
+                                            Unsubscribe from notifications
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -6407,17 +6714,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             <section className={sectionCls}>
                                                 <h3 className={headingCls}>SECTION 1 – CLIENT TYPE</h3>
                                                 <div className={`border-b mb-3 ${isDark ? 'border-gray-600' : 'border-gray-200'}`}></div>
-                                                <div className="flex flex-wrap gap-x-8 gap-y-4">
+                                                <div className="flex flex-wrap gap-x-12 gap-y-4">
                                                     {clientTypes.map(opt => (
-                                                        <label key={opt} className={`inline-flex items-center gap-2 cursor-pointer ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                        <label key={opt} className={`inline-flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                             <input
                                                                 type="radio"
                                                                 name="kyc_clientType"
                                                                 checked={(k.clientType || '') === opt}
                                                                 onChange={() => updateKyc('clientType', opt)}
-                                                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 shrink-0"
                                                             />
-                                                            <span className="text-sm">{opt}</span>
+                                                            <span className="text-sm whitespace-nowrap">{opt}</span>
                                                         </label>
                                                     ))}
                                                 </div>

@@ -162,9 +162,10 @@ async function handler(req, res) {
                 `
                 lead.clientComments = commentsResult || []
                 
-                // Phase 6: Fetch normalized tables
+                // Phase 6: Fetch normalized tables (include siteLead, stage, aidaStatus for per-site lead tracking)
                 const sitesResult = await prisma.$queryRaw`
-                  SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "createdAt"
+                  SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
+                         "siteLead", "stage", "aidaStatus", "createdAt", "updatedAt"
                   FROM "ClientSite"
                   WHERE "clientId" = ${id}
                   ORDER BY "createdAt" ASC
@@ -642,6 +643,7 @@ async function handler(req, res) {
               sitesArray = []
             }
           }
+          console.log(`📝 [LEADS ID] Syncing ${sitesArray.length} site(s) for lead ${id}`)
           
           try {
             const existingSites = await prisma.clientSite.findMany({
@@ -652,14 +654,20 @@ async function handler(req, res) {
             const sitesToKeep = new Set()
             
             for (const site of sitesArray) {
+              // Use defaults for stage/aidaStatus so we never overwrite with empty (persistence after refresh)
+              const stageVal = site.stage != null && String(site.stage).trim() !== '' ? String(site.stage).trim() : 'Potential'
+              const aidaVal = site.aidaStatus != null && String(site.aidaStatus).trim() !== '' ? String(site.aidaStatus).trim() : 'Awareness'
               const siteData = {
                 clientId: id,
                 name: site.name || '',
                 address: site.address || '',
                 contactPerson: site.contactPerson || '',
-                contactPhone: site.contactPhone || '',
-                contactEmail: site.contactEmail || '',
-                notes: site.notes || ''
+                contactPhone: site.contactPhone ?? site.phone ?? '',
+                contactEmail: site.contactEmail ?? site.email ?? '',
+                notes: site.notes || '',
+                siteLead: site.siteLead ?? '',
+                stage: stageVal,
+                aidaStatus: aidaVal
               }
               
               if (site.id && existingSiteIds.has(site.id)) {
@@ -698,8 +706,10 @@ async function handler(req, res) {
               }
             })
           } catch (siteSyncError) {
-            console.warn('⚠️ Failed to sync sites to normalized table:', siteSyncError.message)
+            console.warn('⚠️ Failed to sync sites to normalized table:', siteSyncError.message, siteSyncError.stack)
           }
+        } else {
+          console.log(`📝 [LEADS ID] body.sites not provided for lead ${id}, skipping site sync`)
         }
         
         // Contracts

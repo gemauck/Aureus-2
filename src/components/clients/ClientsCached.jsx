@@ -434,7 +434,7 @@ const Clients = React.memo(() => {
         return matchesSearch && matchesIndustry && matchesStatus;
     });
 
-    const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
+    const pipelineStages = ['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'];
 
     const handleOpenClient = (client) => {
         setSelectedClient(client);
@@ -662,6 +662,7 @@ const Clients = React.memo(() => {
                         const isDraggedOver = draggedItem && draggedItem.stage !== stage;
                         
                         const stageIcons = {
+                            'No Engagement': 'fa-minus-circle',
                             'Awareness': 'fa-eye',
                             'Interest': 'fa-search',
                             'Desire': 'fa-heart',
@@ -669,6 +670,7 @@ const Clients = React.memo(() => {
                         };
 
                         const stageColors = {
+                            'No Engagement': 'from-slate-500 to-slate-600',
                             'Awareness': 'from-gray-500 to-gray-600',
                             'Interest': 'from-blue-500 to-blue-600',
                             'Desire': 'from-yellow-500 to-yellow-600',
@@ -925,6 +927,7 @@ const Clients = React.memo(() => {
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                            lead.stage === 'No Engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
                                             lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
                                             lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
                                             lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :

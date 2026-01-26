@@ -82,6 +82,7 @@ model User {
   monthlyFMSComments         MonthlyFMSReviewItemComment[] @relation("MonthlyFMSCommentAuthor")
   clientComments            ClientComment[]              @relation("ClientCommentAuthor")
   clientFollowUps           ClientFollowUp[]             @relation("ClientFollowUpAssignee")
+  commentThreadSubscriptions CommentThreadSubscription[] @relation("CommentThreadSubscriber")
 
   @@index([createdAt])
   @@index([role])
@@ -275,6 +276,10 @@ model ClientSite {
   contactPhone  String?  @default("")
   contactEmail  String?  @default("")
   notes         String   @default("")
+  // Per-site lead tracking (for leads: each site can have its own stage/AIDA)
+  siteLead      String?  @default("")
+  stage         String?  @default("")
+  aidaStatus    String?  @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1497,6 +1502,20 @@ model Notification {
   @@index([read])
   @@index([createdAt])
   @@index([type])
+}
+
+// Subscriptions to comment threads (clients, leads, document items, etc.). Tasks use task.subscribers.
+model CommentThreadSubscription {
+  id         String   @id @default(cuid())
+  threadType String   // 'client' | 'lead' | 'document_item' | 'weekly_fms' | 'monthly_fms'
+  threadId   String   // clientId, leadId, or "itemId:year:month" for document/FMS
+  userId     String
+  createdAt  DateTime @default(now())
+  user       User     @relation("CommentThreadSubscriber", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadType, threadId, userId])
+  @@index([threadType, threadId])
+  @@index([userId])
 }
 
 model NotificationSetting {

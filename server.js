@@ -359,7 +359,7 @@ app.get('/version', (req, res) => {
 })
 
 // Database health check (no auth) – use for diagnostics when /api/clients returns 500
-app.get('/api/db-health', async (req, res) => {
+const dbHealthHandler = async (req, res) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'db-health.js'))
     const out = handler(req, res)
@@ -375,7 +375,10 @@ app.get('/api/db-health', async (req, res) => {
       })
     }
   }
-})
+}
+app.get('/api/db-health', dbHealthHandler)
+// Alias for troubleshooting doc (browser snippet uses this URL)
+app.get('/api/test-db-connection', dbHealthHandler)
 
 // Instruct search engines not to index the site
 app.use((req, res, next) => {
@@ -740,18 +743,29 @@ app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
 // Explicit mapping for sites endpoints
 app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   try {
+    // Ensure req.params is set for the handler (clientId is required for add site)
+    if (!req.params) req.params = {}
+    if (!req.params.clientId && req.url) {
+      const pathSegments = req.url.split('?')[0].split('/').filter(Boolean)
+      const clientIdx = pathSegments.indexOf('client')
+      if (clientIdx >= 0 && pathSegments[clientIdx + 1]) req.params.clientId = pathSegments[clientIdx + 1]
+      if (clientIdx >= 0 && pathSegments[clientIdx + 2]) req.params.siteId = pathSegments[clientIdx + 2]
+    }
     const handler = await loadHandler(path.join(apiDir, 'sites.js'))
     if (!handler) {
       console.error('❌ Sites handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') await result
+    return result
   } catch (e) {
     console.error('❌ Error in sites handler:', e)
     if (!res.headersSent) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Internal server error',
         message: e.message,
+        details: process.env.NODE_ENV === 'development' ? e.stack : undefined,
         timestamp: new Date().toISOString()
       })
     }
@@ -1301,6 +1315,24 @@ app.all('/api/clients/:id/rss-subscription', async (req, res, next) => {
         message: e.message,
         timestamp: new Date().toISOString()
       })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for client KYC (PATCH /api/clients/:id/kyc) – dedicated save so KYC persists on tab switch/refresh
+app.all('/api/clients/:id/kyc', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'kyc.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    req.params = { ...req.params, id: req.params.id }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') await result
+    return result
+  } catch (e) {
+    console.error('❌ KYC API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error', message: e.message })
     }
     return next(e)
   }

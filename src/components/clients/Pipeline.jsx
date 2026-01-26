@@ -199,6 +199,14 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     // AIDA Pipeline Stages
     const pipelineStages = [
         { 
+            id: 'no-engagement', 
+            name: 'No Engagement', 
+            icon: 'fa-minus-circle',
+            color: 'slate',
+            description: 'No response or engagement yet',
+            avgDuration: '-'
+        },
+        { 
             id: 'awareness', 
             name: 'Awareness', 
             icon: 'fa-eye',
@@ -334,8 +342,8 @@ function normalizeStageToAida(rawStage) {
     }
 
     // AIDA stages
-    const aidaStages = ['Awareness', 'Interest', 'Desire', 'Action'];
-    const aidaStageIds = ['awareness', 'interest', 'desire', 'action'];
+    const aidaStages = ['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'];
+    const aidaStageIds = ['no engagement', 'awareness', 'interest', 'desire', 'action'];
     
     // Check if it matches a stage name exactly
     const exactMatch = aidaStages.find(stage => stage.toLowerCase() === lower);
@@ -981,7 +989,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     return (a, b) => directionMultiplier * normalizeLifecycleStage(a.status).localeCompare(normalizeLifecycleStage(b.status));
                 case 'stage':
                     return (a, b) => {
-                        const stageOrder = { 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
+                        const stageOrder = { 'No Engagement': 0, 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
                         const stageA = stageOrder[a.stage] || 0;
                         const stageB = stageOrder[b.stage] || 0;
                         return directionMultiplier * (stageA - stageB);
@@ -2293,6 +2301,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             )}
                                                             {groupBy === 'status' && (
                                                                 <span className={`px-2 py-0.5 text-[10px] rounded-full ${
+                                                                    itemStage === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
                                                                     itemStage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
                                                                     itemStage === 'Interest' ? 'bg-blue-100 text-blue-800' :
                                                                     itemStage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
@@ -2538,6 +2547,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
+                                                        item.stage === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
                                                         item.stage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
                                                         item.stage === 'Interest' ? 'bg-blue-100 text-blue-800' :
                                                         item.stage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
@@ -2661,6 +2671,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
                         >
                             <option value="All">All Stages</option>
+                            <option value="No Engagement">No Engagement</option>
                             <option value="Awareness">Awareness</option>
                             <option value="Interest">Interest</option>
                             <option value="Desire">Desire</option>

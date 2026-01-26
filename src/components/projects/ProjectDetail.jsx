@@ -1742,6 +1742,11 @@ function initializeProjectDetail() {
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
     const previousProjectIdRef = useRef(project?.id);
+    const needPersistTimeFromUrlRef = useRef(false);
+    const needPersistMonthlyFMSFromUrlRef = useRef(false);
+    const hasMonthlyFMSReviewProcessChangedRef = useRef(false); // declared early so URL-sync effect can set it
+    const setHasMonthlyFMSReviewProcessRef = useRef(() => {}); // set later so URL-sync/switchTab can invoke it
+    const [pendingModuleFromUrl, setPendingModuleFromUrl] = useState(null); // 'monthlyFMSReview' when URL asked for Monthly FMS before monthly state existed
     useEffect(() => {
         if (project?.id !== previousProjectIdRef.current) {
             previousProjectIdRef.current = project?.id;
@@ -2194,7 +2199,8 @@ function initializeProjectDetail() {
         switchSection('overview');
     }, [switchSection]);
     
-    // Sync activeSection from URL on mount (ensures Time tab etc. persist after hard refresh)
+    // Sync activeSection from URL on mount (ensures Time tab etc. persist after hard refresh).
+    // When URL has ?tab=time but project.hasTimeProcess is false, enable locally and flag for persist (done in effect after persistProjectData).
     useEffect(() => {
         if (!project?.id) return;
         const hash = window.location.hash || '';
@@ -2208,15 +2214,37 @@ function initializeProjectDetail() {
         const tabFromUrl = params?.get('tab');
         const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'];
         if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+            if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
+                hasTimeProcessChangedRef.current = true;
+                setHasTimeProcess(true);
+                needPersistTimeFromUrlRef.current = true;
+            }
+            const projectHasMonthly = project.hasMonthlyFMSReviewProcess === true || project.hasMonthlyFMSReviewProcess === 'true' || project.hasMonthlyFMSReviewProcess === 1 || (typeof project.hasMonthlyFMSReviewProcess === 'string' && String(project.hasMonthlyFMSReviewProcess).toLowerCase() === 'true');
+            if (tabFromUrl === 'monthlyFMSReview' && !projectHasMonthly) {
+                needPersistMonthlyFMSFromUrlRef.current = true;
+                setPendingModuleFromUrl('monthlyFMSReview'); // triggers effect below to set monthly state + persist
+            }
             setActiveSection(tabFromUrl);
         }
-    }, [project?.id]);
+    }, [project?.id, project?.hasTimeProcess, project?.hasMonthlyFMSReviewProcess]);
 
-    // Listen for switchProjectTab event to handle programmatic tab switching
+    // Listen for switchProjectTab event to handle programmatic tab switching.
+    // When tab is 'time' but project doesn't have hasTimeProcess, enable locally and flag for persist (done in effect after persistProjectData).
     useEffect(() => {
         const handleSwitchTab = (event) => {
             if (!event.detail) return;
             const { tab, section, commentId, focusInput } = event.detail;
+            if (tab === 'time' && !normalizeHasTimeProcess(project?.hasTimeProcess)) {
+                hasTimeProcessChangedRef.current = true;
+                setHasTimeProcess(true);
+                needPersistTimeFromUrlRef.current = true;
+            }
+            const projectHasMonthly = project?.hasMonthlyFMSReviewProcess === true || project?.hasMonthlyFMSReviewProcess === 'true' || project?.hasMonthlyFMSReviewProcess === 1 || (typeof project?.hasMonthlyFMSReviewProcess === 'string' && String(project?.hasMonthlyFMSReviewProcess).toLowerCase() === 'true');
+            if (tab === 'monthlyFMSReview' && !projectHasMonthly) {
+                hasMonthlyFMSReviewProcessChangedRef.current = true;
+                if (typeof setHasMonthlyFMSReviewProcessRef.current === 'function') setHasMonthlyFMSReviewProcessRef.current(true);
+                needPersistMonthlyFMSFromUrlRef.current = true;
+            }
             if (tab) {
                 switchSection(tab, { section, commentId, focusInput });
             }
@@ -2224,7 +2252,7 @@ function initializeProjectDetail() {
         
         window.addEventListener('switchProjectTab', handleSwitchTab);
         return () => window.removeEventListener('switchProjectTab', handleSwitchTab);
-    }, [switchSection]);
+    }, [switchSection, project]);
     
     // Listen for switchProjectSection event
     useEffect(() => {
@@ -2355,11 +2383,22 @@ function initializeProjectDetail() {
         const normalized = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
         return normalized;
     });
-    
+    useEffect(() => {
+        setHasMonthlyFMSReviewProcessRef.current = setHasMonthlyFMSReviewProcess;
+        return () => { setHasMonthlyFMSReviewProcessRef.current = () => {}; };
+    }, [setHasMonthlyFMSReviewProcess]);
+
+    // When URL wanted ?tab=monthlyFMSReview before monthly state existed, apply it now and flag persist
+    useEffect(() => {
+        if (pendingModuleFromUrl !== 'monthlyFMSReview') return;
+        setPendingModuleFromUrl(null);
+        hasMonthlyFMSReviewProcessChangedRef.current = true;
+        setHasMonthlyFMSReviewProcess(true);
+        // needPersistMonthlyFMSFromUrlRef was already set by URL-sync; persist effect will run when hasMonthlyFMSReviewProcess changes
+    }, [pendingModuleFromUrl]);
+
     // Sync hasMonthlyFMSReviewProcess when project prop changes (e.g., after reloading from database)
     // But only if it hasn't been explicitly changed by the user recently
-    const hasMonthlyFMSReviewProcessChangedRef = useRef(false);
-    
     useEffect(() => {
         const normalizedValue = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
         
@@ -3306,6 +3345,32 @@ function initializeProjectDetail() {
         }
     }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasTimeProcess, hasDocumentCollectionProcess, hasWeeklyFMSReviewProcess, hasMonthlyFMSReviewProcess]);
     
+    // When URL or switchProjectTab enabled Time but we couldn't call persist yet (TDZ), persist here.
+    useEffect(() => {
+        if (!needPersistTimeFromUrlRef.current || !project?.id) return;
+        needPersistTimeFromUrlRef.current = false;
+        persistProjectData({ nextHasTimeProcess: true })
+            .then(() => {
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasTimeProcess: true });
+                }
+            })
+            .finally(() => { hasTimeProcessChangedRef.current = false; });
+    }, [hasTimeProcess, project?.id, persistProjectData]);
+
+    // When URL or switchProjectTab enabled Monthly FMS but we couldn't call persist yet, persist here (same as Time).
+    useEffect(() => {
+        if (!needPersistMonthlyFMSFromUrlRef.current || !project?.id) return;
+        needPersistMonthlyFMSFromUrlRef.current = false;
+        persistProjectData({ nextHasMonthlyFMSReviewProcess: true })
+            .then(() => {
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: true });
+                }
+            })
+            .finally(() => { hasMonthlyFMSReviewProcessChangedRef.current = false; });
+    }, [hasMonthlyFMSReviewProcess, project?.id, persistProjectData]);
+
     // Save hasTimeProcess back to project whenever it changes
     useEffect(() => {
         if (skipNextSaveRef.current) return;
@@ -5744,6 +5809,14 @@ function initializeProjectDetail() {
         switchSection('time');
         setShowDocumentProcessDropdown(false);
         try {
+            // Persist hasTimeProcess immediately so it survives hard refresh. Send a minimal PUT first to guarantee the backend gets it.
+            if (window.DatabaseAPI?.updateProject && project?.id) {
+                try {
+                    await window.DatabaseAPI.updateProject(project.id, { hasTimeProcess: true });
+                } catch (directErr) {
+                    console.warn('Time tab: direct hasTimeProcess update failed, trying full persist:', directErr?.message);
+                }
+            }
             await persistProjectData({ nextHasTimeProcess: true });
             if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
                 window.updateViewingProject({ ...project, hasTimeProcess: true });

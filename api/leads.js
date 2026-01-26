@@ -1025,6 +1025,8 @@ async function handler(req, res) {
           // Sync sites if provided
           if (sitesToSync && Array.isArray(sitesToSync) && sitesToSync.length > 0) {
             for (const site of sitesToSync) {
+              const stageVal = (site.stage != null && String(site.stage).trim() !== '') ? String(site.stage).trim() : 'Potential'
+              const aidaVal = (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus).trim() : 'Awareness'
               const siteData = {
                 clientId: lead.id,
                 name: site.name || '',
@@ -1032,7 +1034,10 @@ async function handler(req, res) {
                 contactPerson: site.contactPerson || '',
                 contactPhone: site.contactPhone || '',
                 contactEmail: site.contactEmail || '',
-                notes: site.notes || ''
+                notes: site.notes || '',
+                siteLead: site.siteLead ?? '',
+                stage: stageVal,
+                aidaStatus: aidaVal
               }
               
               if (site.id) {

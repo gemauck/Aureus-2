@@ -36,7 +36,7 @@ async function handler(req, res) {
                    "lastContact", address, website, notes, contacts, "followUps", 
                    "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
                    proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
-                   thumbnail, "rssSubscribed", kyc
+                   thumbnail, "rssSubscribed", kyc, "kycJsonb"
             FROM "Client"
             WHERE id = ${id}
           `
@@ -77,7 +77,8 @@ async function handler(req, res) {
                 updatedAt: true,
                 thumbnail: true,
                 rssSubscribed: true,
-                kyc: true
+                kyc: true,
+                kycJsonb: true
               }
             })
           } catch (prismaError) {
@@ -118,9 +119,10 @@ async function handler(req, res) {
           `
           normalizedComments = commentsResult || []
           
-          // Phase 6: Fetch sites from normalized table
+          // Phase 6: Fetch sites from normalized table (include siteLead, stage, aidaStatus for per-site lead tracking)
           const sitesResult = await prisma.$queryRaw`
-            SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "createdAt"
+            SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
+                   "siteLead", "stage", "aidaStatus", "createdAt", "updatedAt"
             FROM "ClientSite"
             WHERE "clientId" = ${id}
             ORDER BY "createdAt" ASC
@@ -206,6 +208,9 @@ async function handler(req, res) {
           contactPhone: s.contactPhone,
           contactEmail: s.contactEmail,
           notes: s.notes,
+          siteLead: s.siteLead ?? '',
+          stage: s.stage ?? '',
+          aidaStatus: s.aidaStatus ?? '',
           createdAt: s.createdAt
         }))
         clientBasic.clientContracts = normalizedContracts.map(c => ({
@@ -412,6 +417,18 @@ async function handler(req, res) {
         
         oldName = existing.name
         oldWebsite = existing.website
+        
+        // Persist KYC immediately when present so it is never lost (e.g. if later steps fail or timeout)
+        if (body.kyc !== undefined && body.kyc !== null) {
+          const kycStr = typeof body.kyc === 'string' ? body.kyc : JSON.stringify(body.kyc)
+          const kycObj = typeof body.kyc === 'object' ? body.kyc : (() => { try { return JSON.parse(kycStr || '{}'); } catch (_) { return {}; } })()
+          await prisma.client.update({
+            where: { id },
+            data: { kyc: kycStr, kycJsonb: kycObj }
+          }).catch((err) => {
+            console.warn('⚠️ Early KYC write failed (will retry in main update):', err?.message)
+          })
+        }
         
         // Phase 5: Prepare update data with normalized table sync support
         const updateData = {
@@ -675,7 +692,10 @@ async function handler(req, res) {
                 contactPerson: site.contactPerson || '',
                 contactPhone: site.contactPhone || '',
                 contactEmail: site.contactEmail || '',
-                notes: site.notes || ''
+                notes: site.notes || '',
+                siteLead: site.siteLead ?? '',
+                stage: site.stage ?? '',
+                aidaStatus: site.aidaStatus ?? ''
               }
               
               if (site.id && existingSiteIds.has(site.id)) {

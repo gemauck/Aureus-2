@@ -57,7 +57,8 @@
     "launch:local": "bash launch-local.sh",
     "copy:prod-data": "bash scripts/copy-production-data.sh",
     "seed:dummy": "node scripts/create-dummy-data.js",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "db:test": "node test-db-connection-script.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
