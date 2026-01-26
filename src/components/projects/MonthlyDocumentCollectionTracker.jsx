@@ -126,11 +126,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Year selection with persistence
     const YEAR_STORAGE_PREFIX = 'documentCollectionSelectedYear_';
     const getInitialSelectedYear = () => {
-        if (typeof window !== 'undefined' && project?.id) {
-            const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
-            const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
-            if (!Number.isNaN(parsedYear)) {
-                return parsedYear;
+        if (typeof window !== 'undefined') {
+            // Deep link: prefer docYear from URL so the comment opens on the correct year
+            const hash = window.location.hash || '';
+            const search = window.location.search || '';
+            let urlYear = null;
+            if (hash.includes('?')) {
+                const parts = hash.split('?');
+                if (parts.length > 1) {
+                    const p = new URLSearchParams(parts[1]);
+                    urlYear = p.get('docYear') || p.get('year');
+                }
+            }
+            if (!urlYear && search) {
+                const p = new URLSearchParams(search);
+                urlYear = p.get('docYear') || p.get('year');
+            }
+            if (urlYear) {
+                const y = parseInt(String(urlYear).trim(), 10);
+                if (!Number.isNaN(y)) return y;
+            }
+            if (project?.id) {
+                const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
+                const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
+                if (!Number.isNaN(parsedYear)) {
+                    return parsedYear;
+                }
             }
         }
         return currentYear;
@@ -1956,10 +1977,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     });
                     setHoverCommentCell(cellKey);
                     
-                    // Position the popup
+                    // Position the popup and scroll cell into view
                     setTimeout(() => {
                         const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                         if (commentButton) {
+                            try {
+                                commentButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                            } catch (_) {
+                                commentButton.scrollIntoView(true);
+                            }
                             const buttonRect = commentButton.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
                             const viewportHeight = window.innerHeight;
@@ -2287,6 +2313,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const positionPopup = () => {
                     const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
+                        // Scroll the cell into view when opening from deep link so the user sees context
+                        try {
+                            commentButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                        } catch (_) {
+                            commentButton.scrollIntoView(true);
+                        }
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
                         const viewportHeight = window.innerHeight;
