@@ -6,7 +6,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
-import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
+import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } from '../_lib/clientJsonFields.js'
 
 async function handler(req, res) {
   try {
@@ -36,7 +36,7 @@ async function handler(req, res) {
                    "lastContact", address, website, notes, contacts, "followUps", 
                    "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
                    proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
-                   thumbnail, "rssSubscribed"
+                   thumbnail, "rssSubscribed", kyc, "kycJsonb"
             FROM "Client"
             WHERE id = ${id}
           `
@@ -76,7 +76,9 @@ async function handler(req, res) {
                 createdAt: true,
                 updatedAt: true,
                 thumbnail: true,
-                rssSubscribed: true
+                rssSubscribed: true,
+                kyc: true,
+                kycJsonb: true
               }
             })
           } catch (prismaError) {
@@ -117,9 +119,10 @@ async function handler(req, res) {
           `
           normalizedComments = commentsResult || []
           
-          // Phase 6: Fetch sites from normalized table
+          // Phase 6: Fetch sites from normalized table (include siteLead, stage, aidaStatus for per-site lead tracking)
           const sitesResult = await prisma.$queryRaw`
-            SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "createdAt"
+            SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
+                   "siteLead", "stage", "aidaStatus", "createdAt", "updatedAt"
             FROM "ClientSite"
             WHERE "clientId" = ${id}
             ORDER BY "createdAt" ASC
@@ -205,6 +208,9 @@ async function handler(req, res) {
           contactPhone: s.contactPhone,
           contactEmail: s.contactEmail,
           notes: s.notes,
+          siteLead: s.siteLead ?? '',
+          stage: s.stage ?? '',
+          aidaStatus: s.aidaStatus ?? '',
           createdAt: s.createdAt
         }))
         clientBasic.clientContracts = normalizedContracts.map(c => ({
@@ -328,7 +334,7 @@ async function handler(req, res) {
         const parsedClient = parseClientJsonFields(client)
         
         // Legacy parsing for other fields (if parseClientJsonFields didn't handle them)
-        const jsonFields = ['followUps', 'projectIds', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+        const jsonFields = ['followUps', 'projectIds', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services', 'kyc']
         for (const field of jsonFields) {
           try {
             const value = parsedClient[field]
@@ -338,16 +344,16 @@ async function handler(req, res) {
               } catch (parseError) {
                 // Set safe defaults on parse error
                 console.warn(`⚠️ Failed to parse JSON field "${field}" for client ${id}:`, parseError.message)
-                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : field === 'kyc' ? DEFAULT_KYC : []
               }
             } else if (!value) {
               // Set defaults for missing/null fields
-              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : field === 'kyc' ? DEFAULT_KYC : []
             }
           } catch (fieldError) {
             console.warn(`⚠️ Error processing field "${field}" for client ${id}:`, fieldError.message)
             // Set safe default
-            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : field === 'kyc' ? DEFAULT_KYC : []
           }
         }
         
@@ -411,6 +417,18 @@ async function handler(req, res) {
         
         oldName = existing.name
         oldWebsite = existing.website
+        
+        // Persist KYC immediately when present so it is never lost (e.g. if later steps fail or timeout)
+        if (body.kyc !== undefined && body.kyc !== null) {
+          const kycStr = typeof body.kyc === 'string' ? body.kyc : JSON.stringify(body.kyc)
+          const kycObj = typeof body.kyc === 'object' ? body.kyc : (() => { try { return JSON.parse(kycStr || '{}'); } catch (_) { return {}; } })()
+          await prisma.client.update({
+            where: { id },
+            data: { kyc: kycStr, kycJsonb: kycObj }
+          }).catch((err) => {
+            console.warn('⚠️ Early KYC write failed (will retry in main update):', err?.message)
+          })
+        }
         
         // Phase 5: Prepare update data with normalized table sync support
         const updateData = {
@@ -674,7 +692,10 @@ async function handler(req, res) {
                 contactPerson: site.contactPerson || '',
                 contactPhone: site.contactPhone || '',
                 contactEmail: site.contactEmail || '',
-                notes: site.notes || ''
+                notes: site.notes || '',
+                siteLead: site.siteLead ?? '',
+                stage: site.stage ?? '',
+                aidaStatus: site.aidaStatus ?? ''
               }
               
               if (site.id && existingSiteIds.has(site.id)) {
@@ -1046,9 +1067,15 @@ async function handler(req, res) {
         }
         
         // Phase 2: Prepare other JSON fields with dual-write (String + JSONB)
-        // Only activityLog remains as JSON (log data, not normalized)
         const jsonFieldsData = prepareJsonFieldsForDualWrite(body)
         Object.assign(updateData, jsonFieldsData)
+        // Explicitly persist KYC so it is never dropped (in case body.kyc was missed by prepareJsonFieldsForDualWrite)
+        if (body.kyc !== undefined && body.kyc !== null) {
+          const kycStr = typeof body.kyc === 'string' ? body.kyc : JSON.stringify(body.kyc)
+          const kycObj = typeof body.kyc === 'object' ? body.kyc : (() => { try { return JSON.parse(kycStr || '{}'); } catch (_) { return {}; } })()
+          updateData.kyc = kycStr
+          updateData.kycJsonb = kycObj
+        }
         
         // Handle externalAgentId separately
         if (body.externalAgentId !== undefined) {

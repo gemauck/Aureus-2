@@ -410,6 +410,26 @@ async function handler(req, res) {
                                 }
                             }
                             
+                            // Client/lead comment (no project) – use link as commentLink and fetch client/lead for subject
+                            const metaClientId = metadataObj?.clientId;
+                            const metaLeadId = metadataObj?.leadId;
+                            if ((metaClientId || metaLeadId) && !projectId) {
+                                commentLink = link || (metaClientId ? `#/clients/${metaClientId}?tab=notes` : `#/leads/${metaLeadId}?tab=notes`);
+                                try {
+                                    const entityId = metaClientId || metaLeadId;
+                                    const entity = await prisma.client.findUnique({
+                                        where: { id: entityId },
+                                        select: { name: true, notes: true }
+                                    });
+                                    if (entity) {
+                                        clientName = entity.name || null;
+                                        clientDescription = entity.notes || null;
+                                    }
+                                } catch (clientFetchErr) {
+                                    console.warn('⚠️ Could not fetch client/lead for comment email:', clientFetchErr.message);
+                                }
+                            }
+
                             if (projectId) {
                                 // Fetch project with client information
                                 const project = await prisma.project.findUnique({

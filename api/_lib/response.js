@@ -1,3 +1,10 @@
+// Replacer for JSON.stringify: Dates → ISO string, BigInt → number/string (PostgreSQL can return BigInt)
+function safeJsonReplacer(key, value) {
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'bigint') return Number(value) <= Number.MAX_SAFE_INTEGER && Number(value) >= Number.MIN_SAFE_INTEGER ? Number(value) : String(value)
+  return value
+}
+
 export function ok(res, data) {
   // Prevent sending response if already sent
   if (res.headersSent || res.writableEnded) {
@@ -5,13 +12,7 @@ export function ok(res, data) {
     return
   }
   
-  // Serialize Dates to ISO strings and handle undefined values
-  const serialized = JSON.stringify({ data }, (key, value) => {
-    if (value instanceof Date) {
-      return value.toISOString()
-    }
-    return value
-  })
+  const serialized = JSON.stringify({ data }, safeJsonReplacer)
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 200
@@ -27,13 +28,7 @@ export function created(res, data) {
     return
   }
   
-  // Serialize Dates to ISO strings and handle undefined values
-  const serialized = JSON.stringify({ data }, (key, value) => {
-    if (value instanceof Date) {
-      return value.toISOString()
-    }
-    return value
-  })
+  const serialized = JSON.stringify({ data }, safeJsonReplacer)
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 201
@@ -146,12 +141,12 @@ export function serverError(res, message = 'Server error', details) {
     }
   }
   
-  // Include full error details in development
+  // Include full error details in development (use safe replacer in case details contain BigInt or other non-JSON values)
   if (isDevelopment && details) {
     response.error.fullDetails = details
   }
   
-  const serialized = JSON.stringify(response)
+  const serialized = JSON.stringify(response, safeJsonReplacer)
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 500

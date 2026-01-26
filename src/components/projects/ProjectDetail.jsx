@@ -174,6 +174,352 @@ function initializeProjectDetail() {
     const KanbanView = window.KanbanView;
     const DocumentCollectionModal = window.DocumentCollectionModal;
 
+    // Time tracking section: stable component so inputs/buttons stay interactive (not recreated on parent render)
+    const TimeTrackingSection = ({ project: timeProject }) => {
+        const [entries, setEntries] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [timerRunning, setTimerRunning] = useState(false);
+        const [timerStartedAt, setTimerStartedAt] = useState(null);
+        const [timerDescription, setTimerDescription] = useState('');
+        const [manualDate, setManualDate] = useState(() => new Date().toISOString().slice(0, 10));
+        const [manualStartTime, setManualStartTime] = useState('09:00');
+        const [manualEndTime, setManualEndTime] = useState('17:00');
+        const [manualDescription, setManualDescription] = useState('');
+        const [elapsed, setElapsed] = useState(0);
+        const [lastRecordedStart, setLastRecordedStart] = useState(null);
+        const [lastRecordedStop, setLastRecordedStop] = useState(null);
+        const timerTickRef = useRef(null);
+
+        const getTimeApiBase = () => (window.DatabaseAPI && window.DatabaseAPI.API_BASE) || window.location.origin;
+        const getTimeAuthHeaders = () => {
+            const token = window.storage?.getToken?.();
+            if (!token) return null;
+            return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+        };
+
+        const loadEntries = useCallback(async () => {
+            if (!timeProject?.id) return;
+            setLoading(true);
+            try {
+                let list = [];
+                const headers = getTimeAuthHeaders();
+                if (!headers) {
+                    setEntries([]);
+                    return;
+                }
+                const base = getTimeApiBase();
+                const r = await fetch(`${base}/api/time-entries?projectId=${encodeURIComponent(timeProject.id)}`, {
+                    method: 'GET',
+                    headers,
+                    credentials: 'include'
+                });
+                if (r.ok) {
+                    const j = await r.json();
+                    list = Array.isArray(j.data) ? j.data : (Array.isArray(j) ? j : []);
+                }
+                setEntries(list);
+            } catch (e) {
+                console.warn('Time entries load failed:', e);
+                setEntries([]);
+            } finally {
+                setLoading(false);
+            }
+        }, [timeProject?.id]);
+
+        useEffect(() => {
+            loadEntries();
+        }, [loadEntries]);
+
+        useEffect(() => {
+            if (!timerRunning || !timerStartedAt) {
+                if (timerTickRef.current) clearInterval(timerTickRef.current);
+                return;
+            }
+            const tick = () => setElapsed(Math.floor((Date.now() - timerStartedAt) / 1000));
+            tick();
+            timerTickRef.current = setInterval(tick, 1000);
+            return () => { if (timerTickRef.current) clearInterval(timerTickRef.current); };
+        }, [timerRunning, timerStartedAt]);
+
+        const formatElapsed = (sec) => {
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const s = sec % 60;
+            return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+        };
+
+        const handleStartTimer = () => {
+            setLastRecordedStart(null);
+            setLastRecordedStop(null);
+            setTimerStartedAt(Date.now());
+            setTimerRunning(true);
+        };
+
+        const createTimeEntryFetch = async (payload) => {
+            const headers = getTimeAuthHeaders();
+            if (!headers) throw new Error('Not logged in');
+            const base = getTimeApiBase();
+            const r = await fetch(`${base}/api/time-entries`, {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify(payload)
+            });
+            const text = await r.text();
+            if (!r.ok) {
+                let msg = 'Request failed';
+                try {
+                    const err = text ? JSON.parse(text) : {};
+                    msg = (err.error && err.error.message) || err.message || err.error || msg;
+                } catch (_) { msg = text.slice(0, 100) || msg; }
+                throw new Error(String(msg) + (r.status ? ' (' + r.status + ')' : ''));
+            }
+            const j = text ? JSON.parse(text) : {};
+            return (j && j.data) || j;
+        };
+
+        const handleStopTimer = async () => {
+            if (!timerRunning || !timerStartedAt || !timeProject?.id) return;
+            const stoppedAt = Date.now();
+            const sec = Math.floor((stoppedAt - timerStartedAt) / 1000);
+            const hours = Math.round((sec / 3600) * 100) / 100;
+            setLastRecordedStart(timerStartedAt);
+            setLastRecordedStop(stoppedAt);
+            setTimerRunning(false);
+            setTimerStartedAt(null);
+            setElapsed(0);
+            const payload = {
+                date: new Date(timerStartedAt).toISOString(),
+                hours,
+                projectId: timeProject.id,
+                projectName: (timeProject.name || '').toString(),
+                description: (timerDescription || 'Timer entry').toString()
+            };
+            try {
+                const newEntry = await createTimeEntryFetch(payload);
+                if (newEntry && (newEntry.id || newEntry.hours != null)) {
+                    setEntries(prev => [newEntry, ...prev]);
+                } else {
+                    await loadEntries();
+                }
+                setTimerDescription('');
+            } catch (e) {
+                console.warn('Save timer entry failed:', e);
+                alert('Could not save time entry: ' + (e?.message || 'Please try again.'));
+            }
+        };
+
+        const handleAddManual = async () => {
+            const dateStr = manualDate || new Date().toISOString().slice(0, 10);
+            const startDt = new Date(dateStr + 'T' + (manualStartTime || '00:00') + ':00');
+            const endDt = new Date(dateStr + 'T' + (manualEndTime || '00:00') + ':00');
+            if (Number.isNaN(startDt.getTime()) || Number.isNaN(endDt.getTime())) {
+                alert('Please enter valid date and times.');
+                return;
+            }
+            const hours = Math.round(((endDt - startDt) / 3600000) * 100) / 100;
+            if (hours <= 0 || !timeProject?.id) {
+                alert('End time must be after start time.');
+                return;
+            }
+            const payload = {
+                date: startDt.toISOString(),
+                hours,
+                projectId: timeProject.id,
+                projectName: (timeProject.name || '').toString(),
+                description: (manualDescription || '').toString()
+            };
+            try {
+                const newEntry = await createTimeEntryFetch(payload);
+                if (newEntry && (newEntry.id || newEntry.hours != null)) {
+                    setEntries(prev => [newEntry, ...prev]);
+                    setManualDescription('');
+                } else {
+                    await loadEntries();
+                }
+            } catch (e) {
+                console.warn('Add manual entry failed:', e);
+                alert('Could not add time entry: ' + (e?.message || 'Please try again.'));
+            }
+        };
+
+        const handleDeleteEntry = async (id) => {
+            if (!id || !confirm('Delete this time entry?')) return;
+            const headers = getTimeAuthHeaders();
+            if (!headers) {
+                alert('Not logged in.');
+                return;
+            }
+            try {
+                const base = getTimeApiBase();
+                const r = await fetch(`${base}/api/time-entries/${encodeURIComponent(id)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': headers['Authorization'] },
+                    credentials: 'include'
+                });
+                if (!r.ok) throw new Error('Delete failed (' + r.status + ')');
+                setEntries(prev => prev.filter(e => e.id !== id));
+            } catch (e) {
+                console.warn('Delete entry failed:', e);
+                alert('Could not delete entry: ' + (e?.message || ''));
+            }
+        };
+
+        if (!timeProject?.id) return null;
+
+        const totalHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
+
+        const formatTime = (ms) => ms != null ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+
+        return (
+            <div className="space-y-4" style={{ position: 'relative', zIndex: 1 }}>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 mb-2">Record time</h2>
+                    <p className="text-xs text-gray-500 mb-3">Use the timer to record time as you work. Start and stop to capture the exact span.</p>
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="text-2xl font-mono tabular-nums text-gray-900 min-w-[6rem]">
+                                {timerRunning ? formatElapsed(elapsed) : '00:00:00'}
+                            </div>
+                            {timerRunning && (
+                                <span className="text-sm text-gray-600">
+                                    Start: {formatTime(timerStartedAt)} · Stop: —
+                                </span>
+                            )}
+                            {!timerRunning && lastRecordedStart != null && (
+                                <span className="text-sm text-gray-600">
+                                    Last run — Start: {formatTime(lastRecordedStart)} · Stop: {formatTime(lastRecordedStop)}
+                                </span>
+                            )}
+                            {!timerRunning ? (
+                                <button
+                                    type="button"
+                                    onClick={handleStartTimer}
+                                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-1.5"
+                                >
+                                    <i className="fas fa-play"></i> Start
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleStopTimer}
+                                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center gap-1.5"
+                                >
+                                    <i className="fas fa-stop"></i> Stop
+                                </button>
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                            <textarea
+                                placeholder="What are you working on? Add details, tasks, or notes…"
+                                value={timerDescription}
+                                onChange={e => setTimerDescription(e.target.value)}
+                                rows={3}
+                                className="w-full max-w-xl px-2 py-1.5 border border-gray-300 rounded text-sm resize-y min-h-[4.5rem]"
+                                autoComplete="off"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 mb-2">Manually capture time</h2>
+                    <p className="text-xs text-gray-500 mb-3">Enter date and start/end times for work already done. Hours are computed from the span.</p>
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-end gap-2">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+                                <input
+                                    type="date"
+                                    value={manualDate}
+                                    onChange={e => setManualDate(e.target.value)}
+                                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Start time</label>
+                                <input
+                                    type="time"
+                                    value={manualStartTime}
+                                    onChange={e => setManualStartTime(e.target.value)}
+                                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">End time</label>
+                                <input
+                                    type="time"
+                                    value={manualEndTime}
+                                    onChange={e => setManualEndTime(e.target.value)}
+                                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                            </div>
+                            <div className="text-sm text-gray-500 self-end pb-1.5">
+                                = {(() => {
+                                    const d = manualDate || new Date().toISOString().slice(0, 10);
+                                    const s = new Date(d + 'T' + (manualStartTime || '00:00') + ':00');
+                                    const e = new Date(d + 'T' + (manualEndTime || '00:00') + ':00');
+                                    const h = (e - s) / 3600000;
+                                    return Number.isFinite(h) && h > 0 ? h.toFixed(2) + ' h' : '—';
+                                })()}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleAddManual}
+                                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium flex items-center gap-1.5 self-end"
+                            >
+                                <i className="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                            <textarea
+                                placeholder="Describe what you did, tasks completed, or other notes…"
+                                value={manualDescription}
+                                onChange={e => setManualDescription(e.target.value)}
+                                rows={3}
+                                className="w-full max-w-xl px-2 py-1.5 border border-gray-300 rounded text-sm resize-y min-h-[4.5rem]"
+                                autoComplete="off"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-sm font-semibold text-gray-900">Time entries</h2>
+                        <span className="text-xs text-gray-600">Total: {totalHours.toFixed(2)} h</span>
+                    </div>
+                    {loading ? (
+                        <p className="text-sm text-gray-500">Loading…</p>
+                    ) : entries.length === 0 ? (
+                        <p className="text-sm text-gray-500">No time logged yet. Start the timer or add a manual entry.</p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {entries.map(e => (
+                                <li key={e.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                                    <div>
+                                        <span className="text-sm text-gray-900">{e.description || '—'}</span>
+                                        <span className="text-xs text-gray-500 ml-2">
+                                            {e.date ? new Date(e.date).toLocaleDateString() : ''} · {(e.hours || 0).toFixed(2)} h
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteEntry(e.id)}
+                                        className="text-red-600 hover:text-red-800 p-1"
+                                        title="Delete"
+                                    >
+                                        <i className="fas fa-trash text-xs"></i>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     // Extract DocumentCollectionProcessSection outside ProjectDetail to prevent recreation on every render
     // This ensures the component reference is stable and doesn't cause MonthlyDocumentCollectionTracker to remount
     const DocumentCollectionProcessSection = (() => {
@@ -1147,7 +1493,7 @@ function initializeProjectDetail() {
             if (params) {
                 tabFromUrl = params.get('tab');
                 // Validate tab value
-                if (tabFromUrl && !['overview', 'tasks', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
+                if (tabFromUrl && !['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
                     tabFromUrl = null;
                 }
             }
@@ -1396,6 +1742,11 @@ function initializeProjectDetail() {
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
     const previousProjectIdRef = useRef(project?.id);
+    const needPersistTimeFromUrlRef = useRef(false);
+    const needPersistMonthlyFMSFromUrlRef = useRef(false);
+    const hasMonthlyFMSReviewProcessChangedRef = useRef(false); // declared early so URL-sync effect can set it
+    const setHasMonthlyFMSReviewProcessRef = useRef(() => {}); // set later so URL-sync/switchTab can invoke it
+    const [pendingModuleFromUrl, setPendingModuleFromUrl] = useState(null); // 'monthlyFMSReview' when URL asked for Monthly FMS before monthly state existed
     useEffect(() => {
         if (project?.id !== previousProjectIdRef.current) {
             previousProjectIdRef.current = project?.id;
@@ -1848,11 +2199,52 @@ function initializeProjectDetail() {
         switchSection('overview');
     }, [switchSection]);
     
-    // Listen for switchProjectTab event to handle programmatic tab switching
+    // Sync activeSection from URL on mount (ensures Time tab etc. persist after hard refresh).
+    // When URL has ?tab=time but project.hasTimeProcess is false, enable locally and flag for persist (done in effect after persistProjectData).
+    useEffect(() => {
+        if (!project?.id) return;
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        let params = null;
+        if (hash.includes('?')) {
+            const parts = hash.split('?');
+            if (parts.length > 1) params = new URLSearchParams(parts[1]);
+        }
+        if (!params && search) params = new URLSearchParams(search);
+        const tabFromUrl = params?.get('tab');
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'];
+        if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+            if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
+                hasTimeProcessChangedRef.current = true;
+                setHasTimeProcess(true);
+                needPersistTimeFromUrlRef.current = true;
+            }
+            const projectHasMonthly = project.hasMonthlyFMSReviewProcess === true || project.hasMonthlyFMSReviewProcess === 'true' || project.hasMonthlyFMSReviewProcess === 1 || (typeof project.hasMonthlyFMSReviewProcess === 'string' && String(project.hasMonthlyFMSReviewProcess).toLowerCase() === 'true');
+            if (tabFromUrl === 'monthlyFMSReview' && !projectHasMonthly) {
+                needPersistMonthlyFMSFromUrlRef.current = true;
+                setPendingModuleFromUrl('monthlyFMSReview'); // triggers effect below to set monthly state + persist
+            }
+            setActiveSection(tabFromUrl);
+        }
+    }, [project?.id, project?.hasTimeProcess, project?.hasMonthlyFMSReviewProcess]);
+
+    // Listen for switchProjectTab event to handle programmatic tab switching.
+    // When tab is 'time' but project doesn't have hasTimeProcess, enable locally and flag for persist (done in effect after persistProjectData).
     useEffect(() => {
         const handleSwitchTab = (event) => {
             if (!event.detail) return;
             const { tab, section, commentId, focusInput } = event.detail;
+            if (tab === 'time' && !normalizeHasTimeProcess(project?.hasTimeProcess)) {
+                hasTimeProcessChangedRef.current = true;
+                setHasTimeProcess(true);
+                needPersistTimeFromUrlRef.current = true;
+            }
+            const projectHasMonthly = project?.hasMonthlyFMSReviewProcess === true || project?.hasMonthlyFMSReviewProcess === 'true' || project?.hasMonthlyFMSReviewProcess === 1 || (typeof project?.hasMonthlyFMSReviewProcess === 'string' && String(project?.hasMonthlyFMSReviewProcess).toLowerCase() === 'true');
+            if (tab === 'monthlyFMSReview' && !projectHasMonthly) {
+                hasMonthlyFMSReviewProcessChangedRef.current = true;
+                if (typeof setHasMonthlyFMSReviewProcessRef.current === 'function') setHasMonthlyFMSReviewProcessRef.current(true);
+                needPersistMonthlyFMSFromUrlRef.current = true;
+            }
             if (tab) {
                 switchSection(tab, { section, commentId, focusInput });
             }
@@ -1860,7 +2252,7 @@ function initializeProjectDetail() {
         
         window.addEventListener('switchProjectTab', handleSwitchTab);
         return () => window.removeEventListener('switchProjectTab', handleSwitchTab);
-    }, [switchSection]);
+    }, [switchSection, project]);
     
     // Listen for switchProjectSection event
     useEffect(() => {
@@ -1962,33 +2354,20 @@ function initializeProjectDetail() {
     
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        
-        // Sync when value changes from prop (e.g., after database refresh)
-        // Only skip sync if ref is set AND we're not switching projects
-        // This ensures that when navigating back, we always sync from the database
+        // Don't overwrite when user explicitly changed it (e.g. via Hide Weekly FMS)
+        if (hasWeeklyFMSReviewProcessChangedRef.current) return;
         if (normalizedValue !== hasWeeklyFMSReviewProcess) {
-            // Always sync - the ref is reset when project.id changes anyway
             setHasWeeklyFMSReviewProcess(normalizedValue);
-            // Reset the ref after syncing from prop to allow future syncs
             hasWeeklyFMSReviewProcessChangedRef.current = false;
         }
     }, [project.hasWeeklyFMSReviewProcess, project.id, hasWeeklyFMSReviewProcess]);
     
-    // Also sync on mount to ensure we have the latest value
+    // Also sync on mount / project change
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess on project.id change', {
-            projectId: project?.id,
-            propValue: project.hasWeeklyFMSReviewProcess,
-            normalizedValue,
-            currentState: hasWeeklyFMSReviewProcess,
-            willSync: normalizedValue !== hasWeeklyFMSReviewProcess
-        });
-        // Only set if different to avoid unnecessary updates
         if (normalizedValue !== hasWeeklyFMSReviewProcess) {
             setHasWeeklyFMSReviewProcess(normalizedValue);
         }
-        // Reset the changed ref when project changes to allow sync from database
         hasWeeklyFMSReviewProcessChangedRef.current = false;
     }, [project.id]); // Re-sync whenever we switch to a different project
 
@@ -2004,11 +2383,22 @@ function initializeProjectDetail() {
         const normalized = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
         return normalized;
     });
-    
+    useEffect(() => {
+        setHasMonthlyFMSReviewProcessRef.current = setHasMonthlyFMSReviewProcess;
+        return () => { setHasMonthlyFMSReviewProcessRef.current = () => {}; };
+    }, [setHasMonthlyFMSReviewProcess]);
+
+    // When URL wanted ?tab=monthlyFMSReview before monthly state existed, apply it now and flag persist
+    useEffect(() => {
+        if (pendingModuleFromUrl !== 'monthlyFMSReview') return;
+        setPendingModuleFromUrl(null);
+        hasMonthlyFMSReviewProcessChangedRef.current = true;
+        setHasMonthlyFMSReviewProcess(true);
+        // needPersistMonthlyFMSFromUrlRef was already set by URL-sync; persist effect will run when hasMonthlyFMSReviewProcess changes
+    }, [pendingModuleFromUrl]);
+
     // Sync hasMonthlyFMSReviewProcess when project prop changes (e.g., after reloading from database)
     // But only if it hasn't been explicitly changed by the user recently
-    const hasMonthlyFMSReviewProcessChangedRef = useRef(false);
-    
     useEffect(() => {
         const normalizedValue = normalizeHasMonthlyFMSReviewProcess(project.hasMonthlyFMSReviewProcess);
         
@@ -2040,6 +2430,24 @@ function initializeProjectDetail() {
         // Reset the changed ref when project changes to allow sync from database
         hasMonthlyFMSReviewProcessChangedRef.current = false;
     }, [project.id]); // Re-sync whenever we switch to a different project
+
+    // Track if Time module is enabled (new projects: false; add via + Module)
+    const normalizeHasTimeProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    const [hasTimeProcess, setHasTimeProcess] = useState(() => normalizeHasTimeProcess(project.hasTimeProcess));
+    const hasTimeProcessChangedRef = useRef(false);
+    useEffect(() => {
+        const v = normalizeHasTimeProcess(project.hasTimeProcess);
+        if (v !== hasTimeProcess && !hasTimeProcessChangedRef.current) setHasTimeProcess(v);
+    }, [project.hasTimeProcess, project.id, hasTimeProcess]);
+    useEffect(() => {
+        const v = normalizeHasTimeProcess(project.hasTimeProcess);
+        if (v !== hasTimeProcess) setHasTimeProcess(v);
+        hasTimeProcessChangedRef.current = false;
+    }, [project.id]);
 
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
@@ -2800,9 +3208,11 @@ function initializeProjectDetail() {
         nextTaskLists,
         nextCustomFieldDefinitions,
         nextDocuments,
+        nextHasTimeProcess,
         nextHasDocumentCollectionProcess,
         nextHasWeeklyFMSReviewProcess,
         nextHasMonthlyFMSReviewProcess,
+        excludeHasTimeProcess = false,
         excludeHasDocumentCollectionProcess = false,
         excludeHasWeeklyFMSReviewProcess = false,
         excludeHasMonthlyFMSReviewProcess = false,
@@ -2815,6 +3225,7 @@ function initializeProjectDetail() {
         const taskListsToSave = nextTaskLists !== undefined ? nextTaskLists : taskLists;
         const customFieldDefinitionsToSave = nextCustomFieldDefinitions !== undefined ? nextCustomFieldDefinitions : customFieldDefinitions;
         const documentsToSave = nextDocuments !== undefined ? nextDocuments : documents;
+        const hasTimeProcessToSave = nextHasTimeProcess !== undefined ? nextHasTimeProcess : hasTimeProcess;
         const hasDocumentCollectionProcessToSave = nextHasDocumentCollectionProcess !== undefined ? nextHasDocumentCollectionProcess : hasDocumentCollectionProcess;
         const hasWeeklyFMSReviewProcessToSave = nextHasWeeklyFMSReviewProcess !== undefined ? nextHasWeeklyFMSReviewProcess : hasWeeklyFMSReviewProcess;
         const hasMonthlyFMSReviewProcessToSave = nextHasMonthlyFMSReviewProcess !== undefined ? nextHasMonthlyFMSReviewProcess : hasMonthlyFMSReviewProcess;
@@ -2839,6 +3250,10 @@ function initializeProjectDetail() {
             } else {
             }
             
+            // Only include hasTimeProcess if not excluded
+            if (!excludeHasTimeProcess) {
+                updatePayload.hasTimeProcess = hasTimeProcessToSave;
+            }
             // Only include hasDocumentCollectionProcess if not excluded
             // This prevents overwriting the database value when we don't want to save it
             if (!excludeHasDocumentCollectionProcess) {
@@ -2901,6 +3316,7 @@ function initializeProjectDetail() {
                             taskLists: taskListsToSave, 
                             customFieldDefinitions: customFieldDefinitionsToSave, 
                             documents: documentsToSave, 
+                            hasTimeProcess: hasTimeProcessToSave,
                             hasDocumentCollectionProcess: hasDocumentCollectionProcessToSave,
                             hasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcessToSave,
                             hasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcessToSave,
@@ -2927,8 +3343,50 @@ function initializeProjectDetail() {
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
-    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, hasWeeklyFMSReviewProcess]);
+    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasTimeProcess, hasDocumentCollectionProcess, hasWeeklyFMSReviewProcess, hasMonthlyFMSReviewProcess]);
     
+    // When URL or switchProjectTab enabled Time but we couldn't call persist yet (TDZ), persist here.
+    useEffect(() => {
+        if (!needPersistTimeFromUrlRef.current || !project?.id) return;
+        needPersistTimeFromUrlRef.current = false;
+        persistProjectData({ nextHasTimeProcess: true })
+            .then(() => {
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasTimeProcess: true });
+                }
+            })
+            .finally(() => { hasTimeProcessChangedRef.current = false; });
+    }, [hasTimeProcess, project?.id, persistProjectData]);
+
+    // When URL or switchProjectTab enabled Monthly FMS but we couldn't call persist yet, persist here (same as Time).
+    useEffect(() => {
+        if (!needPersistMonthlyFMSFromUrlRef.current || !project?.id) return;
+        needPersistMonthlyFMSFromUrlRef.current = false;
+        persistProjectData({ nextHasMonthlyFMSReviewProcess: true })
+            .then(() => {
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: true });
+                }
+            })
+            .finally(() => { hasMonthlyFMSReviewProcessChangedRef.current = false; });
+    }, [hasMonthlyFMSReviewProcess, project?.id, persistProjectData]);
+
+    // Save hasTimeProcess back to project whenever it changes
+    useEffect(() => {
+        if (skipNextSaveRef.current) return;
+        const projectHas = project.hasTimeProcess === true || project.hasTimeProcess === 'true' || project.hasTimeProcess === 1 || (typeof project.hasTimeProcess === 'string' && project.hasTimeProcess.toLowerCase() === 'true');
+        const shouldInclude = hasTimeProcessChangedRef.current || (hasTimeProcess !== projectHas);
+        if (!shouldInclude) return;
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+            if (hasTimeProcessChangedRef.current) {
+                persistProjectData({ nextHasTimeProcess: hasTimeProcess }).catch(() => {});
+                hasTimeProcessChangedRef.current = false;
+            }
+        }, 500);
+        return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+    }, [hasTimeProcess, project.hasTimeProcess, project.id, persistProjectData]);
+
     // Save back to project whenever they change
     // NOTE: tasks is NOT in dependencies - tasks are managed via Task API, not project JSON
     useEffect(() => {
@@ -4312,12 +4770,19 @@ function initializeProjectDetail() {
         setCreatingTaskWithStatus(null);
         setShowTaskDetailModal(false);
         
-        // CRITICAL: Navigate to clean project URL (without task parameter)
+        // CRITICAL: Navigate to clean project URL (without task parameter but keep tab/section)
         // This ensures the URL reflects that we're viewing the project, not a task
         // Use RouteState.navigate as PRIMARY method to ensure routing system recognizes the change
         const projectId = String(project?.id);
         if (projectId) {
-            const cleanProjectUrl = `${window.location.origin}/projects/${projectId}`;
+            const searchPreservingTab = (() => {
+                const q = new URLSearchParams(window.location.search || (window.location.hash && window.location.hash.includes('?') ? (window.location.hash.split('?')[1] || '') : ''));
+                q.delete('task');
+                q.delete('commentId');
+                q.delete('focusInput');
+                return q.toString() ? '?' + q.toString() : '';
+            })();
+            const cleanProjectUrl = `${window.location.origin}/projects/${projectId}${searchPreservingTab}`;
             
             // Method 1: RouteState.navigate (PRIMARY - ensures routing system recognizes navigation)
             // Do this FIRST to ensure the routing system knows we've navigated away from the task
@@ -4326,7 +4791,7 @@ function initializeProjectDetail() {
                     window.RouteState.navigate({
                         page: 'projects',
                         segments: [projectId],
-                        search: '', // Explicitly empty - no task parameter
+                        search: searchPreservingTab,
                         preserveSearch: false,
                         preserveHash: false,
                         replace: true // Use replace to avoid adding to history
@@ -4347,21 +4812,28 @@ function initializeProjectDetail() {
             
             // Method 3: Dispatch a route change event to notify other systems
             // This ensures all routing listeners know we've navigated away from the task
-            try {
-                window.dispatchEvent(new CustomEvent('route:change', {
-                    detail: {
-                        page: 'projects',
-                        segments: [projectId],
-                        search: ''
-                    }
-                }));
-                console.log('✅ ProjectDetail: Dispatched route:change event');
+                try {
+                    window.dispatchEvent(new CustomEvent('route:change', {
+                        detail: {
+                            page: 'projects',
+                            segments: [projectId],
+                            search: searchPreservingTab
+                        }
+                    }));
+                    console.log('✅ ProjectDetail: Dispatched route:change event');
             } catch (e) {
                 console.warn('⚠️ Failed to dispatch route change event:', e);
             }
             
-            // Method 4: Also update via updateUrl function (for consistency with other handlers)
-            updateUrl({ clearTask: true });
+            // Method 4: Also update via updateProjectUrl so tab is preserved when clearing task
+            if (window.updateProjectUrl) {
+                window.updateProjectUrl({
+                    tab: activeSection && activeSection !== 'overview' ? activeSection : undefined,
+                    task: null,
+                    commentId: null,
+                    focusInput: null
+                });
+            }
             
             // Method 5: Set up a persistent monitor to prevent the closed task from being restored to URL
             // This runs indefinitely to catch any delayed handlers or effects that try to restore the task
@@ -4387,7 +4859,7 @@ function initializeProjectDetail() {
                             window.RouteState.navigate({
                                 page: 'projects',
                                 segments: [projectId],
-                                search: '',
+                                search: searchPreservingTab,
                                 preserveSearch: false,
                                 preserveHash: false,
                                 replace: true
@@ -4424,7 +4896,7 @@ function initializeProjectDetail() {
                                 window.RouteState.navigate({
                                     page: 'projects',
                                     segments: [projectId],
-                                    search: '',
+                                    search: searchPreservingTab,
                                     preserveSearch: false,
                                     preserveHash: false,
                                     replace: true
@@ -4464,14 +4936,14 @@ function initializeProjectDetail() {
                     
                     if (isClosedTask) {
                         console.warn('⚠️ ProjectDetail: URL has closed task parameter, forcing clean URL and keeping flags');
-                        // Force clean the URL
-                        const cleanUrl = `${window.location.origin}/projects/${projectId}`;
+                        // Force clean the URL (preserve tab)
+                        const cleanUrl = `${window.location.origin}/projects/${projectId}${searchPreservingTab}`;
                         window.history.replaceState({}, '', cleanUrl);
                         if (window.RouteState) {
                             window.RouteState.navigate({
                                 page: 'projects',
                                 segments: [projectId],
-                                search: '',
+                                search: searchPreservingTab,
                                 preserveSearch: false,
                                 preserveHash: false,
                                 replace: true
@@ -5331,6 +5803,78 @@ function initializeProjectDetail() {
         setShowDocumentModal(true);
     };
 
+    const handleAddTimeProcess = async () => {
+        hasTimeProcessChangedRef.current = true;
+        setHasTimeProcess(true);
+        switchSection('time');
+        setShowDocumentProcessDropdown(false);
+        try {
+            // Persist hasTimeProcess immediately so it survives hard refresh. Send a minimal PUT first to guarantee the backend gets it.
+            if (window.DatabaseAPI?.updateProject && project?.id) {
+                try {
+                    await window.DatabaseAPI.updateProject(project.id, { hasTimeProcess: true });
+                } catch (directErr) {
+                    console.warn('Time tab: direct hasTimeProcess update failed, trying full persist:', directErr?.message);
+                }
+            }
+            await persistProjectData({ nextHasTimeProcess: true });
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasTimeProcess: true });
+            }
+        } finally {
+            hasTimeProcessChangedRef.current = false;
+        }
+    };
+
+    const handleRemoveModule = async (moduleKey) => {
+        if (activeSection === moduleKey) switchSection('tasks');
+        if (moduleKey === 'time') {
+            hasTimeProcessChangedRef.current = true;
+            setHasTimeProcess(false);
+            try {
+                await persistProjectData({ nextHasTimeProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasTimeProcess: false });
+                }
+            } finally {
+                hasTimeProcessChangedRef.current = false;
+            }
+        } else if (moduleKey === 'documentCollection') {
+            hasDocumentCollectionProcessChangedRef.current = true;
+            setHasDocumentCollectionProcess(false);
+            try {
+                await persistProjectData({ nextHasDocumentCollectionProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasDocumentCollectionProcess: false });
+                }
+            } finally {
+                hasDocumentCollectionProcessChangedRef.current = false;
+            }
+        } else if (moduleKey === 'weeklyFMSReview') {
+            hasWeeklyFMSReviewProcessChangedRef.current = true;
+            setHasWeeklyFMSReviewProcess(false);
+            try {
+                await persistProjectData({ nextHasWeeklyFMSReviewProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasWeeklyFMSReviewProcess: false });
+                }
+            } finally {
+                hasWeeklyFMSReviewProcessChangedRef.current = false;
+            }
+        } else if (moduleKey === 'monthlyFMSReview') {
+            hasMonthlyFMSReviewProcessChangedRef.current = true;
+            setHasMonthlyFMSReviewProcess(false);
+            try {
+                await persistProjectData({ nextHasMonthlyFMSReviewProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: false });
+                }
+            } finally {
+                hasMonthlyFMSReviewProcessChangedRef.current = false;
+            }
+        }
+    };
+
     const handleAddDocumentCollectionProcess = async () => {
         
         try {
@@ -5529,6 +6073,11 @@ function initializeProjectDetail() {
             }
             
             console.log('✅ API update successful:', apiResponse);
+            
+            // Update parent immediately so the Monthly FMS Review tab persists on navigation/refresh
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: true });
+            }
             
             // Clear cache for this project to ensure fresh data
             if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
@@ -6576,51 +7125,108 @@ function initializeProjectDetail() {
                         <i className="fas fa-tasks mr-1.5"></i>
                         Tasks
                     </button>
+                    {hasTimeProcess && (
+                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
+                            <button
+                                onClick={() => switchSection('time')}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
+                                    activeSection === 'time'
+                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                        : 'text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="fas fa-clock mr-1.5"></i>
+                                Time
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('time'); }}
+                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
+                                title="Hide Time module"
+                            >
+                                <i className="fas fa-times text-[10px]"></i>
+                            </button>
+                        </div>
+                    )}
                     {hasDocumentCollectionProcess && (
-                        <button
-                            onClick={() => switchSection('documentCollection')}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'documentCollection'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-folder-open mr-1.5"></i>
-                            Document Collection
-                        </button>
+                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
+                            <button
+                                type="button"
+                                onClick={() => switchSection('documentCollection')}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
+                                    activeSection === 'documentCollection'
+                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                        : 'text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="fas fa-folder-open mr-1.5"></i>
+                                Document Collection
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('documentCollection'); }}
+                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
+                                title="Hide Document Collection module"
+                            >
+                                <i className="fas fa-times text-[10px]"></i>
+                            </button>
+                        </div>
                     )}
                     {hasWeeklyFMSReviewProcess && (
-                        <button
-                            onClick={() => switchSection('weeklyFMSReview')}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'weeklyFMSReview'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-calendar-week mr-1.5"></i>
-                            Weekly FMS Review
-                        </button>
+                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
+                            <button
+                                type="button"
+                                onClick={() => switchSection('weeklyFMSReview')}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
+                                    activeSection === 'weeklyFMSReview'
+                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                        : 'text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="fas fa-calendar-week mr-1.5"></i>
+                                Weekly FMS Review
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('weeklyFMSReview'); }}
+                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
+                                title="Hide Weekly FMS Review module"
+                            >
+                                <i className="fas fa-times text-[10px]"></i>
+                            </button>
+                        </div>
                     )}
-                    {/* Always show Monthly FMS Review tab for all projects */}
-                    <button
-                        onClick={() => switchSection('monthlyFMSReview')}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            activeSection === 'monthlyFMSReview'
-                                ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                    >
-                        <i className="fas fa-calendar-alt mr-1.5"></i>
-                        Monthly FMS Review
-                    </button>
+                    {hasMonthlyFMSReviewProcess && (
+                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
+                            <button
+                                type="button"
+                                onClick={() => switchSection('monthlyFMSReview')}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
+                                    activeSection === 'monthlyFMSReview'
+                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                        : 'text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="fas fa-calendar-alt mr-1.5"></i>
+                                Monthly FMS Review
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('monthlyFMSReview'); }}
+                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
+                                title="Hide Monthly FMS Review module"
+                            >
+                                <i className="fas fa-times text-[10px]"></i>
+                            </button>
+                        </div>
+                    )}
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
                             className="px-2 py-0.5 bg-primary-600 text-white text-xs font-medium rounded hover:bg-primary-700 transition-colors flex items-center gap-1 whitespace-nowrap"
                         >
                             <i className="fas fa-plus text-[10px]"></i>
-                            <span>Add a Process</span>
+                            <span>Module</span>
                             <i className="fas fa-chevron-down text-[10px]"></i>
                         </button>
                         
@@ -6635,8 +7241,22 @@ function initializeProjectDetail() {
                                 
                                 {/* Dropdown */}
                                 <div className="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                                    {!hasTimeProcess && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddTimeProcess}
+                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-clock text-primary-600 w-4"></i>
+                                            <div>
+                                                <div className="font-medium">Time</div>
+                                                <div className="text-[10px] text-gray-500">Time tracking and entries</div>
+                                            </div>
+                                        </button>
+                                    )}
                                     {!hasDocumentCollectionProcess && (
                                         <button
+                                            type="button"
                                             onClick={handleAddDocumentCollectionProcess}
                                             className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                                         >
@@ -6669,28 +7289,19 @@ function initializeProjectDetail() {
                                             </div>
                                         </button>
                                     )}
-                                    {(() => {
-                                        // Debug: Log the condition
-                                        const shouldShow = !hasMonthlyFMSReviewProcess;
-                                        console.log('🔍 Monthly FMS Review dropdown condition:', {
-                                            hasMonthlyFMSReviewProcess,
-                                            shouldShow,
-                                            projectHasProcess: project.hasMonthlyFMSReviewProcess,
-                                            projectId: project.id
-                                        });
-                                        return shouldShow ? (
+                                    {!hasMonthlyFMSReviewProcess && (
                                             <button
+                                                type="button"
                                                 onClick={handleAddMonthlyFMSReviewProcess}
                                                 className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                                             >
                                                 <i className="fas fa-calendar-alt text-primary-600 w-4"></i>
                                                 <div>
                                                     <div className="font-medium">Monthly FMS Review</div>
-                                                    <div className="text-[10px] text-gray-500">Monthly FMS review checklist</div>
-                                                </div>
-                                            </button>
-                                        ) : null;
-                                    })()}
+                                                <div className="text-[10px] text-gray-500">Monthly FMS review checklist</div>
+                                            </div>
+                                        </button>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -6704,6 +7315,8 @@ function initializeProjectDetail() {
             })()}
             
             {activeSection === 'overview' && <OverviewSection />}
+
+            {activeSection === 'time' && <TimeTrackingSection project={project} />}
             
             {activeSection === 'tasks' && (
                 <>

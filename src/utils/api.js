@@ -467,10 +467,10 @@ async function request(path, options = {}) {
           }
         }
       }
-      // Extract error details if available
+      // Extract error details if available (support both { error: { message, details } } and flat { message, details })
       const errorCode = data?.error?.code;
-      const errorMessage = data?.error?.message || data?.message;
-      const errorDetails = data?.error?.details;
+      const errorMessage = (typeof data?.error === 'object' && data?.error?.message) ? data.error.message : (data?.message || data?.error);
+      const errorDetails = (typeof data?.error === 'object' && data?.error?.details) ? data.error.details : data?.details;
       
       // Handle database connection errors with user-friendly messages
       if (errorCode === 'DATABASE_CONNECTION_ERROR' || errorMessage?.includes('Database connection failed') || errorMessage?.includes('unreachable')) {
@@ -483,7 +483,9 @@ async function request(path, options = {}) {
       if (res.status === 500) {
         // Include "500" in the error message so catch block can recognize it as server error
         const serverErrorMessage = errorMessage || 'Server error 500: The server encountered an error processing your request.';
-        throw new Error(serverErrorMessage);
+        const err = new Error(serverErrorMessage);
+        if (errorDetails && typeof errorDetails === 'string') err.details = errorDetails;
+        throw err;
       }
       
       // Handle 502/503/504 gateway errors gracefully

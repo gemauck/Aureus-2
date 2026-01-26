@@ -3,7 +3,7 @@ import 'dotenv/config'
 // Load .env.local for local development (overrides .env)
 import dotenv from 'dotenv'
 import { existsSync, readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { dirname, join } from 'path'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -188,7 +188,7 @@ async function loadHandler(handlerPath) {
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const module = await import(`file://${handlerPath}`)
+      const module = await import(pathToFileURL(handlerPath).href)
       
       if (!module.default) {
         console.error(`❌ Handler ${handlerPath} does not have a default export`)
@@ -357,6 +357,28 @@ app.get('/version', (req, res) => {
     buildTime: APP_BUILD_TIME,
   })
 })
+
+// Database health check (no auth) – use for diagnostics when /api/clients returns 500
+const dbHealthHandler = async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'db-health.js'))
+    const out = handler(req, res)
+    if (out && typeof out.then === 'function') await out
+  } catch (e) {
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Database or server error',
+        message: e.message,
+        code: e.code,
+        hint: 'Check DATABASE_URL and that PostgreSQL is running.',
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+}
+app.get('/api/db-health', dbHealthHandler)
+// Alias for troubleshooting doc (browser snippet uses this URL)
+app.get('/api/test-db-connection', dbHealthHandler)
 
 // Instruct search engines not to index the site
 app.use((req, res, next) => {
@@ -721,18 +743,29 @@ app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
 // Explicit mapping for sites endpoints
 app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   try {
+    // Ensure req.params is set for the handler (clientId is required for add site)
+    if (!req.params) req.params = {}
+    if (!req.params.clientId && req.url) {
+      const pathSegments = req.url.split('?')[0].split('/').filter(Boolean)
+      const clientIdx = pathSegments.indexOf('client')
+      if (clientIdx >= 0 && pathSegments[clientIdx + 1]) req.params.clientId = pathSegments[clientIdx + 1]
+      if (clientIdx >= 0 && pathSegments[clientIdx + 2]) req.params.siteId = pathSegments[clientIdx + 2]
+    }
     const handler = await loadHandler(path.join(apiDir, 'sites.js'))
     if (!handler) {
       console.error('❌ Sites handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') await result
+    return result
   } catch (e) {
     console.error('❌ Error in sites handler:', e)
     if (!res.headersSent) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Internal server error',
         message: e.message,
+        details: process.env.NODE_ENV === 'development' ? e.stack : undefined,
         timestamp: new Date().toISOString()
       })
     }
@@ -1287,6 +1320,24 @@ app.all('/api/clients/:id/rss-subscription', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for client KYC (PATCH /api/clients/:id/kyc) – dedicated save so KYC persists on tab switch/refresh
+app.all('/api/clients/:id/kyc', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'kyc.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    req.params = { ...req.params, id: req.params.id }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') await result
+    return result
+  } catch (e) {
+    console.error('❌ KYC API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error', message: e.message })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for tags endpoints with ID (GET, PATCH, DELETE /api/tags/:id)
 app.all('/api/tags/:id', async (req, res, next) => {
   try {
@@ -1472,6 +1523,47 @@ app.all('/api/projects/:id', async (req, res, next) => {
     // Ensure JSON is returned even on error
     if (!res.headersSent) {
       return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for time-entries (GET list / POST create, and GET/PUT/DELETE by id) – connected to DB
+app.all('/api/time-entries', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'time-entries.js'))
+    if (!handler) {
+      console.error('❌ Time-entries handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in time-entries handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+app.all('/api/time-entries/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'time-entries.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in time-entries handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
         error: 'Internal server error',
         message: e.message,
         timestamp: new Date().toISOString()
@@ -1855,6 +1947,32 @@ app.all('/api/users', async (req, res, next) => {
 
 // Explicit mapping for individual opportunity operations (GET, PUT, DELETE /api/opportunities/[id])
 // This route is handled by the dynamic route resolution below
+
+// POA Review: explicit routes so handlers load reliably (avoids dynamic path resolution issues)
+app.post('/api/poa-review/process-excel', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-excel.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ POA Review process-excel handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
+app.post('/api/poa-review/process-batch', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-batch.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ POA Review process-batch handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {

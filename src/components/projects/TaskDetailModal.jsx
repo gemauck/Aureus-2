@@ -1144,12 +1144,19 @@ const TaskDetailModal = ({
                 mentions: mentionedUsers // Store mentioned users
             };
             
-            // Update subscribers list - add mentioned users and comment author
+            // Update subscribers: author, mentioned, assignee, and everyone who has ever commented (involved)
+            const existingCommentAuthorIds = (comments || []).map(c => c.authorId || c.authorUser?.id).filter(Boolean);
+            const assigneeVal = editedTask.assigneeId || editedTask.assignee || task?.assigneeId || task?.assignee;
+            const assigneeUserForSub = !assigneeVal ? null : users.find(u =>
+                u.id === assigneeVal || (u.email || '').toLowerCase() === String(assigneeVal).toLowerCase() || (u.name || '').toLowerCase() === String(assigneeVal).toLowerCase()
+            );
             const newSubscribers = [...new Set([
                 ...(editedTask.subscribers || []),
-                currentUser.id, // Comment author is always subscribed
-                ...mentionedUsers.map(u => u.id) // Add all mentioned users
-            ])];
+                currentUser.id,
+                ...mentionedUsers.map(u => u.id),
+                ...existingCommentAuthorIds,
+                ...(assigneeUserForSub?.id ? [assigneeUserForSub.id] : [])
+            ])].filter(Boolean);
             
             setEditedTask({
                 ...editedTask,
@@ -1231,8 +1238,15 @@ const TaskDetailModal = ({
                         commentId: savedComment.id
                     });
                     
-                    // tasksList JSON write removed - comments are now stored in TaskComment table
-                    // Task update no longer needed as comments are persisted via TaskComment API
+                    // Persist subscribers so everyone involved gets notifications on future comments
+                    try {
+                        await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskToAutoSave.id)}`, {
+                            method: 'PUT',
+                            body: JSON.stringify({ subscribers: newSubscribers })
+                        });
+                    } catch (subErr) {
+                        console.warn('⚠️ TaskDetailModal: Failed to persist task subscribers:', subErr?.message);
+                    }
                 } else {
                     throw new Error('Comment save response missing comment data');
                 }
@@ -1381,6 +1395,24 @@ const TaskDetailModal = ({
             } catch (error) {
                 console.error('❌ Failed to send comment notifications:', error);
             }
+        }
+    };
+
+    const handleUnsubscribeFromComments = async () => {
+        const me = window.storage?.getUserInfo?.() || {};
+        const myId = me.id || me.sub;
+        if (!myId) return;
+        const subs = Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [];
+        if (!subs.includes(myId)) return;
+        const next = subs.filter(id => id !== myId);
+        try {
+            await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(editedTask.id || task?.id)}`, {
+                method: 'PUT',
+                body: JSON.stringify({ subscribers: next })
+            });
+            setEditedTask(prev => ({ ...prev, subscribers: next }));
+        } catch (e) {
+            console.warn('Unsubscribe failed:', e?.message);
         }
     };
 
@@ -2289,12 +2321,22 @@ const TaskDetailModal = ({
                                     )}
                                     
                                     <div className="mt-1.5 flex justify-between items-center">
-                                        <div className="text-[10px] text-gray-500">
+                                        <div className="text-[10px] text-gray-500 flex items-center gap-2">
                                             {editedTask.subscribers && editedTask.subscribers.length > 0 && (
                                                 <span>
                                                     <i className="fas fa-bell mr-1"></i>
                                                     {editedTask.subscribers.length} subscriber{editedTask.subscribers.length !== 1 ? 's' : ''}
                                                 </span>
+                                            )}
+                                            {editedTask.subscribers && editedTask.subscribers.includes((window.storage?.getUserInfo?.() || {}).id || (window.storage?.getUserInfo?.() || {}).sub) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleUnsubscribeFromComments}
+                                                    className="text-primary-600 hover:text-primary-700 hover:underline"
+                                                    title="Stop receiving notifications for new comments on this task"
+                                                >
+                                                    Unsubscribe
+                                                </button>
                                             )}
                                         </div>
                                         <button

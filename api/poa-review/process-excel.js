@@ -87,6 +87,13 @@ async function handler(req, res) {
         const outputDir = path.join(rootDir, 'uploads', 'poa-review-outputs');
         const scriptsDir = path.join(rootDir, 'scripts', 'poa-review');
 
+        // Resolve Python: use venv if present, otherwise system python3
+        const venvPythonPath = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
+        const venvPython = fs.existsSync(venvPythonPath) ? venvPythonPath : 'python3';
+        if (venvPython === 'python3') {
+            console.log('POA Review Excel API - venv-poareview not found, using system python3');
+        }
+
         // Ensure directories exist
         [inputDir, outputDir, scriptsDir].forEach(dir => {
             if (!fs.existsSync(dir)) {
@@ -178,8 +185,9 @@ except Exception as e:
         
         // Execute conversion script
         console.log('POA Review Excel API - Converting Excel to CSV...');
-        const venvPython = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
-        const convertCommand = `"${venvPython}" "${convertScript}" 2>&1`;
+        const convertCommand = venvPython === 'python3'
+            ? `python3 "${convertScript}" 2>&1`
+            : `"${venvPython}" "${convertScript}" 2>&1`;
         
         try {
             const convertResult = await execAsync(convertCommand, {
@@ -189,9 +197,15 @@ except Exception as e:
             });
             console.log('POA Review Excel API - Conversion output:', convertResult.stdout.substring(0, 500));
         } catch (convertError) {
-            const errorMsg = convertError.stdout || convertError.stderr || convertError.message;
-            console.error('POA Review Excel API - Conversion error:', errorMsg.substring(0, 1000));
-            throw new Error(`Failed to convert Excel to CSV: ${errorMsg.substring(0, 1000)}`);
+            const errorMsg = convertError.stdout || convertError.stderr || convertError.message || '';
+            const errStr = String(errorMsg).substring(0, 1000);
+            console.error('POA Review Excel API - Conversion error:', errStr);
+            const noSuchFile = /no such file or directory|not found|ENOENT/i.test(errStr);
+            if (noSuchFile && venvPython === 'python3') {
+                const setup = 'From the project root run: ./scripts/poa-review/setup-venv.sh  (or: python3 -m venv venv-poareview && ./venv-poareview/bin/pip install pandas openpyxl)';
+                return serverError(res, `POA Review requires Python with pandas. Virtual env not found. ${setup}`);
+            }
+            throw new Error(`Failed to convert Excel to CSV: ${errStr}`);
         }
         
         // Clean up conversion script
@@ -205,8 +219,7 @@ except Exception as e:
         
         // Use the same Python processing script as process-batch.js (reads CSV directly)
         const tempProcessScript = path.join(scriptsDir, `process_excel_csv_${timestamp}.py`);
-            
-            const pythonScript = `
+        const pythonScript = `
 import sys
 import os
 sys.path.insert(0, '${scriptsDir.replace(/\\/g, '/')}')
@@ -264,8 +277,8 @@ for expected_col, possible_names in required_columns.items():
 
 if missing_columns:
     available_cols = ", ".join([f"'{col}'" for col in data.columns])
-    error_msg = f"Missing required columns: {', '.join(missing_columns)}.\\n"
-    error_msg += f"Available columns: {available_cols}\\n"
+    error_msg = f"Missing required columns: {', '.join(missing_columns)}\n"
+    error_msg += f"Available columns: {available_cols}\n"
     raise ValueError(error_msg)
 
 if column_mapping:
@@ -289,55 +302,13 @@ print(f"Success! Output saved to: {output_file}")
 sys.exit(0)
 `;
 
-            fs.writeFileSync(tempProcessScript, pythonScript);
-            
-            const pythonCommand = `"${venvPython}" "${tempProcessScript}" 2>&1`;
-            
-            let stdout, stderr, exitCode;
-            try {
-                const result = await execAsync(pythonCommand, {
-                    cwd: scriptsDir,
-                    maxBuffer: 10 * 1024 * 1024,
-                    timeout: 600000 // 10 minutes
-                });
-                stdout = result.stdout || '';
-                stderr = result.stderr || '';
-                exitCode = 0;
-            } catch (execError) {
-                stdout = execError.stdout || '';
-                stderr = execError.stderr || '';
-                exitCode = execError.code || 1;
-                throw new Error(`Python script failed: ${(stdout || stderr).substring(0, 2000)}`);
-            }
-            
-            if (exitCode !== 0) {
-                throw new Error(`Python script exited with code ${exitCode}`);
-            }
-            
-            // Clean up
-            try {
-                if (fs.existsSync(inputFilePath)) fs.unlinkSync(inputFilePath);
-                if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
-                if (fs.existsSync(tempProcessScript)) fs.unlinkSync(tempProcessScript);
-            } catch (cleanupError) {
-                console.warn('POA Review Excel API - Cleanup error:', cleanupError);
-            }
-            
-            batchStore.delete(batchId);
-            
-            return ok(res, {
-                success: true,
-                downloadUrl: `/uploads/poa-review-outputs/${outputFileName}`,
-                fileName: outputFileName
-            });
-        }
-
         fs.writeFileSync(tempProcessScript, pythonScript);
 
-        // Execute Python script
+        // Execute Python script (venvPython already set above for conversion step)
         console.log('POA Review Excel API - Executing Python script...');
-        const venvPython = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
-        const pythonCommand = `"${venvPython}" "${tempProcessScript}" 2>&1`;
+        const pythonCommand = venvPython === 'python3'
+            ? `python3 "${tempProcessScript}" 2>&1`
+            : `"${venvPython}" "${tempProcessScript}" 2>&1`;
         
         let stdout, stderr, exitCode;
         try {
@@ -380,6 +351,7 @@ sys.exit(0)
         // Clean up temp files
         try {
             if (fs.existsSync(inputFilePath)) fs.unlinkSync(inputFilePath);
+            if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
             if (fs.existsSync(tempProcessScript)) fs.unlinkSync(tempProcessScript);
         } catch (cleanupError) {
             console.warn('POA Review Excel API - Cleanup error:', cleanupError);
@@ -396,7 +368,17 @@ sys.exit(0)
 
     } catch (error) {
         console.error('POA Review Excel API - Error:', error);
-        return serverError(res, `Failed to process Excel file: ${error.message}`);
+        // Return a clear, specific message so it is not mistaken for a DB error.
+        const msg = `Failed to process Excel file: ${error.message || error}`;
+        if (!res.headersSent && !res.writableEnded) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+                error: { code: 'POA_PROCESS_ERROR', message: msg, details: error.message || String(error) }
+            }));
+            return;
+        }
+        return serverError(res, msg);
     }
 }
 

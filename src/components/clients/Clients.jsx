@@ -149,8 +149,9 @@ const API_CALL_INTERVAL = 30000; // Only call API every 30 seconds max (increase
 const FORCE_REFRESH_MIN_INTERVAL = 5000; // Minimum 5 seconds between force refresh calls (increased)
 const LIVE_SYNC_THROTTLE = 5000; // Skip LiveDataSync updates if data hasn't changed in 5 seconds (increased)
 
-const PIPELINE_STAGES = ['Awareness', 'Interest', 'Desire', 'Action'];
+const PIPELINE_STAGES = ['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'];
 const PIPELINE_STAGE_ALIASES = {
+    'no engagement': 'No Engagement',
     awareness: 'Awareness',
     interest: 'Interest',
     desire: 'Desire',
@@ -513,7 +514,9 @@ function processClientData(rawClients, cacheKey) {
         groupMemberships: normalizeGroupMemberships(
             c.groupMemberships,
             c.companyGroup || c.company_group || c.groups || c.group
-        )
+        ),
+        // Preserve KYC so it survives list load and hard refresh
+        kyc: (c.kyc != null && typeof c.kyc === 'object') ? c.kyc : (typeof c.kyc === 'string' && c.kyc.trim() ? (() => { try { return JSON.parse(c.kyc); } catch (_) { return {}; } })() : (c.kycJsonb != null && typeof c.kycJsonb === 'object' ? c.kycJsonb : {}))
         };
     });
     
@@ -937,6 +940,7 @@ const Clients = React.memo(() => {
     // Just store IDs - modals fetch their own data
     const [editingClientId, setEditingClientId] = useState(null);
     const [editingLeadId, setEditingLeadId] = useState(null);
+    const [fullClientForDetail, setFullClientForDetail] = useState(null); // Fetched client with KYC for modal
     const [selectedOpportunityId, setSelectedOpportunityId] = useState(null);
     const [selectedOpportunityClient, setSelectedOpportunityClient] = useState(null);
     const [currentTab, setCurrentTab] = useState('overview');
@@ -1344,14 +1348,28 @@ const Clients = React.memo(() => {
     // Handle opening client/lead - moved here to fix temporal dead zone issue
     const handleOpenClient = useCallback((client) => {
         stopSync();
-        setEditingClientId(client.id);
+        const clientId = client?.id;
+        setEditingClientId(clientId);
         setEditingLeadId(null);
         selectedClientRef.current = client;
         selectedLeadRef.current = null;
         isFormOpenRef.current = true;
         setCurrentTab('overview'); // Always default to Overview tab when opening a client
         setViewMode('client-detail');
-        
+
+        // Prefetch full client (including KYC) immediately so modal shows persisted KYC after refresh
+        if (clientId) {
+            const getOne = window.DatabaseAPI?.getClient || window.api?.getClient;
+            if (typeof getOne === 'function') {
+                getOne(clientId, { forceRefresh: true })
+                    .then((res) => {
+                        const data = res?.data?.client ?? res?.client ?? res?.data ?? res;
+                        if (data && data.id === clientId) setFullClientForDetail(data);
+                    })
+                    .catch(() => {});
+            }
+        }
+
         // CRITICAL: Don't update URL with client ID - this can cause RouteState to misinterpret it as a project ID
         // The client modal is rendered via viewMode='client-detail', not via URL routing
         // Only update URL if explicitly needed, and use a prefix to avoid conflicts
@@ -1499,6 +1517,25 @@ const Clients = React.memo(() => {
         return () => window.removeEventListener('resetClientsView', handleResetView);
     }, []);
     
+    // Prefetch full client (including KYC) when opening client detail so the modal shows persisted KYC
+    useEffect(() => {
+        if (viewMode !== 'client-detail' || !editingClientId) {
+            setFullClientForDetail(null);
+            return;
+        }
+        const getOne = window.DatabaseAPI?.getClient || window.api?.getClient;
+        if (typeof getOne !== 'function') return;
+        let cancelled = false;
+        getOne(editingClientId, { forceRefresh: true })
+            .then((res) => {
+                if (cancelled) return;
+                const data = res?.data?.client ?? res?.client ?? res?.data ?? res;
+                if (data && data.id === editingClientId) setFullClientForDetail(data);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [viewMode, editingClientId]);
+    
     // Listen for route changes to reset view mode when navigating to base clients page
     useEffect(() => {
         if (!window.RouteState) return;
@@ -1595,13 +1632,19 @@ const Clients = React.memo(() => {
             }
             
             if (entity && entityType) {
-                // CRITICAL: Set tab to 'overview' BEFORE opening entity to ensure it defaults correctly
-                // This ensures the modal initializes with the correct tab, even when opened via URL routing
+                // When opening an entity: set tab to overview only if we're not already viewing this entity.
+                // If we're already on this lead/client (e.g. we added a contact and leads refetched), leave
+                // the current tab so we don't revert from Contacts/Sites/Calendar back to Overview.
+                const alreadyViewingThisLead = entityType === 'lead' && viewMode === 'lead-detail' &&
+                    (String(editingLeadId) === String(entity.id) || String(selectedLeadRef.current?.id) === String(entity.id));
+                const alreadyViewingThisClient = entityType === 'client' && viewMode === 'client-detail' &&
+                    (String(editingClientId) === String(entity.id) || String(selectedClientRef.current?.id) === String(entity.id));
+
                 if (entityType === 'client') {
-                    setCurrentTab('overview'); // Set tab before opening
+                    if (!alreadyViewingThisClient) setCurrentTab('overview');
                     handleOpenClient(entity);
                 } else if (entityType === 'lead') {
-                    setCurrentLeadTab('overview'); // Set tab before opening
+                    if (!alreadyViewingThisLead) setCurrentLeadTab('overview');
                     handleOpenLead(entity);
                 }
                 
@@ -1644,7 +1687,7 @@ const Clients = React.memo(() => {
                 unsubscribe();
             }
         };
-    }, [viewMode, clients, leads, handleOpenClient, handleOpenLead]);
+    }, [viewMode, clients, leads, handleOpenClient, handleOpenLead, editingLeadId, editingClientId]);
 
     // Modal callbacks no longer needed - modals own their state
     
@@ -2601,15 +2644,23 @@ const Clients = React.memo(() => {
         if (!onList || externalAgents.length > 0) return;
         const token = window.storage?.getToken?.();
         if (!token) return;
+        if (window.RateLimitManager?.isRateLimited?.()) return;
         let cancelled = false;
         setIsLoadingExternalAgents(true);
         fetch('/api/external-agents', {
             headers: { 'Authorization': `Bearer ${token}` },
             credentials: 'include'
         })
-            .then(res => res.ok ? res.json() : Promise.reject(new Error(res.statusText)))
+            .then(res => {
+                if (res.status === 429) {
+                    const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10);
+                    window.RateLimitManager?.setRateLimit?.(retryAfter);
+                    return Promise.reject(Object.assign(new Error('Too many requests'), { status: 429 }));
+                }
+                return res.ok ? res.json() : Promise.reject(new Error(res.statusText));
+            })
             .then(data => {
-                if (cancelled) return;
+                if (cancelled || !data) return;
                 const list = data?.data?.externalAgents ?? data?.externalAgents ?? [];
                 setExternalAgents(Array.isArray(list) ? list : []);
             })
@@ -2625,11 +2676,15 @@ const Clients = React.memo(() => {
             if (window.DatabaseAPI?.clearCache) {
                 window.DatabaseAPI.clearCache('/leads');
             }
-            setTimeout(async () => {
-                await loadLeads(true); // Force refresh so list includes groupMemberships
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(() => {});
-                }
+            setTimeout(() => {
+                (async () => {
+                    try {
+                        await loadLeads(true); // Force refresh so list includes groupMemberships
+                        if (window.LiveDataSync?.forceSync) {
+                            await window.LiveDataSync.forceSync();
+                        }
+                    } catch (_) { /* avoid unhandled rejection when rate-limited or network fails */ }
+                })();
             }, 100);
         }
     }, [viewMode]);
@@ -2650,13 +2705,15 @@ const Clients = React.memo(() => {
             if (window.DatabaseAPI?.clearCache) {
                 window.DatabaseAPI.clearCache('/clients');
             }
-            setTimeout(async () => {
-                await loadClients(true); // Force refresh so list includes groupMemberships
-                
-                // Trigger background sync for fresh data
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(() => {});
-                }
+            setTimeout(() => {
+                (async () => {
+                    try {
+                        await loadClients(true); // Force refresh so list includes groupMemberships
+                        if (window.LiveDataSync?.forceSync) {
+                            await window.LiveDataSync.forceSync();
+                        }
+                    } catch (_) { /* avoid unhandled rejection when rate-limited or network fails */ }
+                })();
             }, 100);
         }
     }, [viewMode]); // Removed clients.length to prevent infinite loops
@@ -3872,6 +3929,7 @@ const Clients = React.memo(() => {
         try {
             setViewMode('clients');
             setEditingClientId(null);
+            setFullClientForDetail(null);
             selectedClientRef.current = null;
             isFormOpenRef.current = false;
             setCurrentTab('overview');
@@ -4036,7 +4094,8 @@ const Clients = React.memo(() => {
                     retainerAmount: 0,
                     taxExempt: false,
                     notes: ''
-                }
+                },
+                kyc: clientFormData.kyc != null && typeof clientFormData.kyc === 'object' ? clientFormData.kyc : (typeof clientFormData.kyc === 'string' && clientFormData.kyc ? (() => { try { return JSON.parse(clientFormData.kyc); } catch (_) { return {}; } })() : {})
             };
             
             
@@ -4088,10 +4147,18 @@ const Clients = React.memo(() => {
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             services: comprehensiveClient.services,
-                            billingTerms: comprehensiveClient.billingTerms
+                            billingTerms: comprehensiveClient.billingTerms,
+                            kyc: comprehensiveClient.kyc ?? {} // always send kyc so it persists on reload
                         };
                         
                         try {
+                            // Persist KYC via dedicated endpoint first so it survives refresh even if full PATCH is large/slow
+                            const kycToPersist = comprehensiveClient.kyc != null && typeof comprehensiveClient.kyc === 'object' ? comprehensiveClient.kyc : {};
+                            const hasMeaningfulKyc = (k) => (k && (typeof k.clientType === 'string' && k.clientType.trim()) || (k.legalEntity && typeof k.legalEntity.registeredLegalName === 'string' && k.legalEntity.registeredLegalName.trim()));
+                            const saveKyc = (window.api?.saveClientKyc || window.DatabaseAPI?.saveClientKyc);
+                            if (saveKyc && typeof saveKyc === 'function' && hasMeaningfulKyc(kycToPersist)) {
+                                await saveKyc(selectedClient.id, kycToPersist).catch(() => {});
+                            }
                             apiResponse = await window.api.updateClient(selectedClient.id, apiUpdateData);
                             
                             // Clear caches in background (non-blocking)
@@ -4106,8 +4173,18 @@ const Clients = React.memo(() => {
                             throw apiCallError; // Re-throw to be caught by outer catch
                         }
                     } else {
-                        // For new clients, send ALL comprehensive data to API
-                        // FIXED: Default to 'active' instead of 'inactive' for new clients
+                        // NEW CLIENT: optimistic update – add to list and close modal immediately, then persist in background
+                        const tempId = 'new-' + Date.now();
+                        const optimisticClient = { ...comprehensiveClient, id: tempId };
+                        const newClientsOptimistic = [...clients, optimisticClient];
+                        setClients(newClientsOptimistic);
+                        safeStorage.setClients(newClientsOptimistic);
+                        handlePauseSync(false);
+                        if (window.LiveDataSync?.start) {
+                            window.LiveDataSync.start();
+                        }
+                        handleClientModalClose(true); // close modal and show new client in list immediately
+                        
                         const apiCreateData = {
                             name: comprehensiveClient.name,
                             type: comprehensiveClient.type || 'client',
@@ -4123,85 +4200,77 @@ const Clients = React.memo(() => {
                             projectIds: comprehensiveClient.projectIds,
                             comments: comprehensiveClient.comments,
                             sites: comprehensiveClient.sites,
-                            // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             services: comprehensiveClient.services,
-                            billingTerms: comprehensiveClient.billingTerms
+                            billingTerms: comprehensiveClient.billingTerms,
+                            kyc: comprehensiveClient.kyc
                         };
                         
-                        apiResponse = await window.api.createClient(apiCreateData);
-                        
-                        // Update comprehensive client with API response
-                        if (apiResponse?.data?.client?.id) {
-                            comprehensiveClient.id = apiResponse.data.client.id;
+                        try {
+                            apiResponse = await window.api.createClient(apiCreateData);
+                        } catch (createErr) {
+                            // Rollback optimistic update on API failure
+                            setClients(prev => prev.filter(c => c.id !== tempId));
+                            safeStorage.setClients(clients); // restore previous list
+                            const msg = createErr?.message || 'Unknown error';
+                            if (msg.includes('name required') || msg.includes('name is required')) {
+                                alert('Error: Client name is required.');
+                            } else if (msg.toLowerCase().includes('duplicate') || msg.toLowerCase().includes('already exists')) {
+                                alert(`Error: ${msg}\n\nA client with this name may already exist.`);
+                            } else {
+                                alert('Failed to add client: ' + msg);
+                            }
+                            return null;
                         }
                         
-                        // Trigger immediate LiveDataSync to ensure all users see the new client
-                        // Also immediately refresh clients list to show new client without waiting for sync
+                        const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
+                        if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
+                            savedClient.notes = comprehensiveClient.notes;
+                        }
+                        const finalClient = { ...savedClient, ...comprehensiveClient };
+                        if (apiResponse?.data?.client?.id) {
+                            finalClient.id = apiResponse.data.client.id;
+                        }
                         
-                        // Batch cache clearing operations (non-blocking, don't wait)
+                        // Replace optimistic row with real client from API
+                        setClients(prev => {
+                            const next = prev.map(c => c.id === tempId ? finalClient : c);
+                            safeStorage.setClients(next);
+                            return next;
+                        });
+                        
                         Promise.all([
                             window.ClientCache?.clearCache?.(),
                             window.DatabaseAPI?.clearCache?.('/clients'),
                             window.DatabaseAPI?.clearCache?.('/leads'),
                             window.dataManager?.invalidate?.('clients')
-                        ]).catch(() => {}); // Ignore errors, these are non-critical
-                        
-                        // Trigger background refresh and sync (non-blocking)
-                        // requestIdleCallback polyfills on some browsers throw if the options object
-                        // is not an actual IdleRequestOptions instance, so guard aggressively
+                        ]).catch(() => {});
                         const scheduleRefresh = (cb) => {
                             if (typeof window.requestIdleCallback === 'function') {
-                                try {
-                                    window.requestIdleCallback(cb);
-                                    return;
-                                } catch (idleErr) {
-                                    // Fallback to setTimeout if requestIdleCallback fails
-                                }
+                                try { window.requestIdleCallback(cb); return; } catch (_) {}
                             }
                             setTimeout(cb, 0);
                         };
-                        
-                        // CRITICAL: Don't call loadClients immediately - it overwrites the optimistic update
-                        // Instead, just trigger a background sync after a delay to ensure other users see the update
-                        // The optimistic update above (setClients) already shows the new client in the UI
-                        scheduleRefresh(async () => {
-                            // Only sync in background - don't reload clients as it would overwrite optimistic update
-                            window.LiveDataSync?.forceSync?.().catch(() => {}); // Background sync for other users
-                        });
+                        scheduleRefresh(() => window.LiveDataSync?.forceSync?.().catch(() => {}));
+                        return finalClient;
                     }
                     
-                    // Prepare saved client with merged data from API response and comprehensiveClient
-                    // CRITICAL: Always merge notes from comprehensiveClient to ensure latest typed notes are preserved
+                    // Prepare saved client with merged data from API response and comprehensiveClient (update path only)
                     const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
                     if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
                         savedClient.notes = comprehensiveClient.notes;
                     }
-                    // Merge all comprehensiveClient data to ensure nothing is lost
                     const finalClient = { ...savedClient, ...comprehensiveClient };
                     
-                    // Batch all state updates together to prevent multiple renders
                     if (selectedClient) {
                         const updated = clients.map(c => c.id === selectedClient.id ? finalClient : c);
                         if (updated.length !== clients.length) {
-                            // Data integrity check failed - skip update
                             return;
                         }
-                        // Single batched update - React 18+ will batch these automatically
                         setClients(updated);
                         safeStorage.setClients(updated);
-                        selectedClientRef.current = finalClient; // Update ref immediately (no delay needed)
-                    } else {
-                        const newClients = [...clients, finalClient];
-                        if (newClients.length !== clients.length + 1) {
-                            // Data integrity check failed - skip update
-                            return;
-                        }
-                        // Single batched update
-                        setClients(newClients);
-                        safeStorage.setClients(newClients);
-                        selectedClientRef.current = finalClient; // Update ref immediately
+                        selectedClientRef.current = finalClient;
                     }
                     
                 } catch (apiError) {
@@ -4309,8 +4378,9 @@ const Clients = React.memo(() => {
             return;
         }
         
-        // Get selectedLead from editingLeadId
-        const selectedLead = editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null;
+        // Get selectedLead: prefer list, fallback to ref (full-page lead view may use ref)
+        const selectedLead = (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null)
+            || (editingLeadId && selectedLeadRef.current?.id === editingLeadId ? selectedLeadRef.current : null);
         
         try {
             const token = window.storage?.getToken?.();
@@ -4338,7 +4408,9 @@ const Clients = React.memo(() => {
                     proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : (selectedLead.proposals || []),
                     services: Array.isArray(leadFormData.services) ? leadFormData.services : (selectedLead.services || []),
                     // Explicitly include externalAgentId to ensure it's saved (even if null)
-                    externalAgentId: leadFormData.externalAgentId !== undefined ? (leadFormData.externalAgentId || null) : (selectedLead.externalAgentId || null)
+                    externalAgentId: leadFormData.externalAgentId !== undefined ? (leadFormData.externalAgentId || null) : (selectedLead.externalAgentId || null),
+                    // Explicitly include KYC so it always persists when editing leads
+                    kyc: (leadFormData.kyc != null && typeof leadFormData.kyc === 'object') ? leadFormData.kyc : (selectedLead.kyc && typeof selectedLead.kyc === 'object' ? selectedLead.kyc : {})
                 };
                 
                 
@@ -4354,16 +4426,23 @@ const Clients = React.memo(() => {
                         
                         const leadDataToSend = {
                             ...updatedLead,
-                            notes: notesToSave // Ensure notes is always a string, never undefined
+                            notes: notesToSave, // Ensure notes is always a string, never undefined
+                            kyc: updatedLead.kyc, // Ensure KYC is explicitly sent so it persists locally and in API
+                            // Ensure sites are always sent when present (critical for lead site form persistence)
+                            sites: Array.isArray(leadFormData.sites) ? leadFormData.sites : (updatedLead.sites || [])
                         };
                         
-                        // CRITICAL: Log what we're sending to verify comments and followUps are included
+                        // CRITICAL: Log what we're sending (including sites for persistence debugging)
+                        const sites = Array.isArray(leadDataToSend.sites) ? leadDataToSend.sites : [];
                         console.log('💾 [handleSaveLead] Sending lead data:', {
                             leadId: leadDataToSend.id,
                             commentsCount: Array.isArray(leadDataToSend.comments) ? leadDataToSend.comments.length : 0,
                             followUpsCount: Array.isArray(leadDataToSend.followUps) ? leadDataToSend.followUps.length : 0,
+                            sitesCount: sites.length,
+                            sitesSample: sites.slice(0, 3).map(s => ({ id: s.id, name: s.name, stage: s.stage, aidaStatus: s.aidaStatus })),
                             hasComments: leadDataToSend.comments !== undefined,
-                            hasFollowUps: leadDataToSend.followUps !== undefined
+                            hasFollowUps: leadDataToSend.followUps !== undefined,
+                            hasSites: leadDataToSend.sites !== undefined
                         });
                         
                         const apiResponse = await window.api.updateLead(leadDataToSend.id, leadDataToSend);
@@ -4427,8 +4506,8 @@ const Clients = React.memo(() => {
                         
                         // FINAL MERGE (mirror client behaviour):
                         // Always prefer the latest form data for fields the user just edited,
-                        // especially comments and notes. This makes leads behave like clients:
-                        // the UI is the source of truth immediately after a save.
+                        // especially comments, notes, and sites (Stage/AIDA per site). This makes
+                        // leads behave like clients: the UI is the source of truth immediately after a save.
                         const finalSavedLead = {
                             ...parsedApiLead,
                             // Prefer comments from the form data if present; fall back to parsed API comments.
@@ -4436,7 +4515,11 @@ const Clients = React.memo(() => {
                                 ? leadFormData.comments
                                 : (parsedApiLead.comments || []),
                             // Prefer notes from the form data if present (already normalised above)
-                            notes: parsedApiLead.notes
+                            notes: parsedApiLead.notes,
+                            // Prefer sites from form data so per-site Stage/AIDA persist in UI after save
+                            sites: Array.isArray(leadFormData.sites)
+                                ? leadFormData.sites
+                                : (parsedApiLead.sites || [])
                         };
                         
                         // CRITICAL: Use the merged lead (API + form data) to update state.
@@ -4509,7 +4592,9 @@ const Clients = React.memo(() => {
                                                 contacts: parseField(freshLead.contacts, []),
                                                 comments: parseField(freshLead.comments, []),
                                                 proposals: parseField(freshLead.proposals, []),
-                                                services: parseField(freshLead.services, [])
+                                                services: parseField(freshLead.services, []),
+                                                // Preserve sites (including per-site stage/aidaStatus) from refreshed lead
+                                                sites: parseField(freshLead.sites, [])
                                             };
                                             
                                             console.log('🔄 Refreshed lead after save:', {
@@ -4693,16 +4778,19 @@ const Clients = React.memo(() => {
                         
                         // Trigger immediate LiveDataSync to ensure all users see the new lead
                         // Also immediately refresh leads list to show new lead without waiting for sync
-                        setTimeout(async () => {
-                            // First, force refresh leads immediately
-                            await loadLeads(true); // Force refresh bypasses cache
-                            
-                            // Then trigger sync for other users
-                            if (window.LiveDataSync?.forceSync) {
-                                window.LiveDataSync.forceSync().catch(err => {
-                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
-                                });
-                            }
+                        setTimeout(() => {
+                            (async () => {
+                                try {
+                                    await loadLeads(true); // Force refresh bypasses cache
+                                    if (window.LiveDataSync?.forceSync) {
+                                        await window.LiveDataSync.forceSync();
+                                    }
+                                } catch (err) {
+                                    if (window.LiveDataSync?.forceSync) {
+                                        window.LiveDataSync.forceSync().catch(() => {});
+                                    }
+                                }
+                            })();
                         }, 300); // 300ms delay to ensure DB commit
                         
                         // Use the saved lead from database (with proper ID)
@@ -5138,9 +5226,9 @@ const Clients = React.memo(() => {
                 bValue = new Date(bValue || 0);
             }
             
-            // Handle stage sorting (Awareness < Interest < Desire < Action)
+            // Handle stage sorting (No Engagement < Awareness < Interest < Desire < Action)
             if (leadSortField === 'stage') {
-                const stageOrder = { 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
+                const stageOrder = { 'No Engagement': 0, 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
                 aValue = stageOrder[aValue] || 0;
                 bValue = stageOrder[bValue] || 0;
             }
@@ -6415,7 +6503,7 @@ const Clients = React.memo(() => {
                 // Convert common stage values to AIDA stages
                 if (mappedStage === 'prospect' || mappedStage === 'new') {
                     mappedStage = 'Awareness';
-                } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
+                } else if (!['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
                     // If stage doesn't match AIDA stages, default to Awareness
                     mappedStage = 'Awareness';
                 }
@@ -7736,26 +7824,22 @@ const Clients = React.memo(() => {
                                                                     }
                                                                     
                                                                     if (sites.length > 0) {
-                                                                        // Handle both string sites and object sites
-                                                                        const siteNames = sites
+                                                                        // Show each site with Stage and/or AIDA when present (per-site lead tracking)
+                                                                        const siteLabels = sites
                                                                             .filter(site => site)
+                                                                            .slice(0, 4)
                                                                             .map(site => {
-                                                                                if (typeof site === 'string') {
-                                                                                    return site;
-                                                                                }
-                                                                                if (site && typeof site === 'object' && site.name) {
-                                                                                    return site.name;
-                                                                                }
-                                                                                if (site && typeof site === 'object') {
-                                                                                    return site.name || site.location || site.address || JSON.stringify(site);
-                                                                                }
-                                                                                return null;
+                                                                                const name = typeof site === 'string'
+                                                                                    ? site
+                                                                                    : (site?.name || site?.location || site?.address || '');
+                                                                                const stage = site && typeof site === 'object' ? (site.stage || '') : '';
+                                                                                const aida = site && typeof site === 'object' ? (site.aidaStatus || '') : '';
+                                                                                const label = [stage, aida].filter(Boolean).join(' · ');
+                                                                                return label ? `${name} (${label})` : name;
                                                                             })
-                                                                            .filter(name => name)
-                                                                            .slice(0, 2); // Limit to 2 sites for leads
-                                                                        
-                                                                        if (siteNames.length > 0) {
-                                                                            parts.push(`Sites: ${siteNames.join(', ')}${sites.length > 2 ? '...' : ''}`);
+                                                                            .filter(Boolean);
+                                                                        if (siteLabels.length > 0) {
+                                                                            parts.push(`Sites: ${siteLabels.join(', ')}${sites.length > 4 ? '…' : ''}`);
                                                                         }
                                                                     }
                                                                     
@@ -8110,12 +8194,14 @@ const Clients = React.memo(() => {
 
         const getStageBadgeClasses = (stage) => {
             const lightMap = {
+                'No Engagement': 'bg-slate-100 text-slate-800',
                 Awareness: 'bg-gray-100 text-gray-800',
                 Interest: 'bg-blue-100 text-blue-800',
                 Desire: 'bg-yellow-100 text-yellow-800',
                 Action: 'bg-green-100 text-green-800'
             };
             const darkMap = {
+                'No Engagement': 'bg-slate-700 text-slate-200',
                 Awareness: 'bg-gray-700 text-gray-200',
                 Interest: 'bg-blue-900 text-blue-200',
                 Desire: 'bg-yellow-900 text-yellow-200',
@@ -8457,15 +8543,17 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                         <select
-                                            value={['Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.stage || 'awareness').toLowerCase())) || 'Awareness'}
+                                            value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.stage || 'awareness').toLowerCase())) || 'Awareness'}
                                             onChange={e => handleUpdateLeadStage(lead.id, e.target.value)}
                                             className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                (lead.stage || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
                                                 (lead.stage || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
                                                 (lead.stage || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
                                                 (lead.stage || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
                                                 (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                             }`}
                                         >
+                                            <option value="No Engagement">No Engagement</option>
                                             <option value="Awareness">Awareness</option>
                                             <option value="Interest">Interest</option>
                                             <option value="Desire">Desire</option>
@@ -8540,6 +8628,10 @@ const Clients = React.memo(() => {
         // Prioritize selectedClientRef.current (set immediately on click), then try to find in clients array
         const selectedClient = selectedClientRef.current || 
             (editingClientId ? clients.find(c => c.id === editingClientId) : null);
+        // Use fullClientForDetail when available so modal gets KYC and other server fields without waiting for its own fetch
+        const clientForModal = fullClientForDetail && fullClientForDetail.id === editingClientId
+            ? fullClientForDetail
+            : selectedClient;
         
         return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -8571,7 +8663,7 @@ const Clients = React.memo(() => {
                 {ClientDetailModalComponent ? (
                     <ClientDetailModalComponent
                         key={editingClientId || 'new-client'}
-                        client={selectedClient}
+                        client={clientForModal}
                         onSave={handleSaveClient}
                         onClose={handleClientModalClose}
                         onDelete={handleDeleteClient}

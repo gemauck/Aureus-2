@@ -96,6 +96,56 @@ async function main() {
       address: '654 Shopping Mall, Pretoria, 0001',
       website: 'https://retailgroup.co.za',
       notes: 'Retail chain. Multiple store locations.'
+    },
+    {
+      name: 'Solar Energy Africa',
+      type: 'client',
+      industry: 'Energy',
+      status: 'active',
+      revenue: 275000,
+      address: '100 Green Park, Stellenbosch, 7600',
+      website: 'https://solarenergyafrica.co.za',
+      notes: 'Solar installation and maintenance. Fleet fuel tracking integration.'
+    },
+    {
+      name: 'MediCare Holdings',
+      type: 'client',
+      industry: 'Healthcare',
+      status: 'active',
+      revenue: 190000,
+      address: '55 Hospital Drive, Bloemfontein, 9301',
+      website: 'https://medicareholdings.co.za',
+      notes: 'Healthcare group. Diesel backup generators and fuel management.'
+    },
+    {
+      name: 'AgriPro Farms',
+      type: 'client',
+      industry: 'Agriculture',
+      status: 'active',
+      revenue: 165000,
+      address: '22 Farm Road, Nelspruit, 1200',
+      website: 'https://agriprofarms.co.za',
+      notes: 'Agricultural operations. Bulk fuel and equipment tracking.'
+    },
+    {
+      name: 'BuildRight Construction',
+      type: 'client',
+      industry: 'Construction',
+      status: 'active',
+      revenue: 310000,
+      address: '88 Site Avenue, Centurion, 0157',
+      website: 'https://buildright.co.za',
+      notes: 'Construction company. Multiple site fuel and vehicle fleet.'
+    },
+    {
+      name: 'SecureFlow Courier',
+      type: 'client',
+      industry: 'Logistics',
+      status: 'active',
+      revenue: 145000,
+      address: '12 Depot Street, East London, 5201',
+      website: 'https://secureflow.co.za',
+      notes: 'Courier and last-mile delivery. Fleet fuel optimisation.'
     }
   ]
 

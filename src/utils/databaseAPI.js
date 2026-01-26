@@ -252,8 +252,8 @@ const DatabaseAPI = {
             throw error;
         }
         
-        // Check cache first (only for GET requests)
-        if (method === 'GET') {
+        // Check cache first (only for GET requests); skip when forceRefresh
+        if (method === 'GET' && !options.forceRefresh) {
             const cached = this._responseCache.get(cacheKey);
             if (cached) {
                 // Use endpoint-specific TTL if available, otherwise use default
@@ -294,8 +294,8 @@ const DatabaseAPI = {
         try {
             const result = await requestPromise;
             
-            // Cache successful GET responses
-            if (method === 'GET') {
+            // Cache successful GET responses (unless forceRefresh)
+            if (method === 'GET' && !options.forceRefresh) {
                 this._responseCache.set(cacheKey, {
                     data: result,
                     timestamp: Date.now()
@@ -1071,8 +1071,8 @@ const DatabaseAPI = {
         return response;
     },
 
-    async getClient(id) {
-        const response = await this.makeRequest(`/clients/${id}`);
+    async getClient(id, options = {}) {
+        const response = await this.makeRequest(`/clients/${id}`, options);
         return response;
     },
 
@@ -1089,6 +1089,22 @@ const DatabaseAPI = {
             method: 'PATCH',
             body: JSON.stringify(clientData)
         });
+        // Clear cache for this client so next getClient(id) returns fresh data (e.g. KYC)
+        try {
+            this.clearEndpointCache(`/clients/${id}`, 'GET');
+        } catch (_) {}
+        return response;
+    },
+
+    /** Persist only KYC for a client. Use when leaving KYC tab so data survives refresh. */
+    async saveClientKyc(id, kyc) {
+        const response = await this.makeRequest(`/clients/${id}/kyc`, {
+            method: 'PATCH',
+            body: JSON.stringify({ kyc: kyc ?? {} })
+        });
+        try {
+            this.clearEndpointCache(`/clients/${id}`, 'GET');
+        } catch (_) {}
         return response;
     },
 
@@ -1391,8 +1407,11 @@ const DatabaseAPI = {
     },
 
     // TIME TRACKING OPERATIONS
-    async getTimeEntries() {
-        const response = await this.makeRequest('/time-entries');
+    async getTimeEntries(projectId) {
+        const path = projectId
+            ? `/time-entries?projectId=${encodeURIComponent(projectId)}`
+            : '/time-entries';
+        const response = await this.makeRequest(path);
         return response;
     },
 
@@ -2464,8 +2483,10 @@ if (window.__CLEAR_DATABASE_CACHE_ON_LOAD__) {
 if (window.api) {
     // Replace existing API methods with database-first versions
     window.api.getClients = DatabaseAPI.getClients.bind(DatabaseAPI);
+    window.api.getClient = DatabaseAPI.getClient.bind(DatabaseAPI);
     window.api.createClient = DatabaseAPI.createClient.bind(DatabaseAPI);
     window.api.updateClient = DatabaseAPI.updateClient.bind(DatabaseAPI);
+    window.api.saveClientKyc = DatabaseAPI.saveClientKyc.bind(DatabaseAPI);
     window.api.deleteClient = DatabaseAPI.deleteClient.bind(DatabaseAPI);
     
     window.api.getLeads = DatabaseAPI.getLeads.bind(DatabaseAPI);

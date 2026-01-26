@@ -11,6 +11,7 @@ const ReactGlobal =
 const { useState, useEffect, useMemo } = ReactGlobal;
 
 const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
+  const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
   if (!useState || !useEffect || !useMemo) {
     return (
       <div className="mt-6 flex items-center justify-center">
@@ -459,19 +460,19 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   }, [handleNewJobCard]);
 
   return (
-    <div className="relative mt-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={`relative mt-6 rounded-2xl shadow-sm overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+      <div className={`px-4 py-4 sm:px-6 sm:py-5 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
         <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
             Job Cards
           </h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             Recent job cards captured from the field and classic workflows.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <select
-            className="rounded-lg border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            className={`rounded-lg px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -482,7 +483,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <option value="cancelled">Cancelled</option>
           </select>
           <select
-            className="rounded-lg border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            className={`rounded-lg px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
           >
@@ -505,7 +506,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         </div>
       ) : error ? (
         <div className="px-4 py-4 sm:px-6 sm:py-5">
-          <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          <div className={`rounded-md border px-3 py-2 text-xs ${isDark ? 'border-amber-600 bg-amber-900/20 text-amber-200' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex-1">
                 <div className="font-semibold mb-1">Failed to load job cards</div>
@@ -518,7 +519,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   reloadJobCards();
                 }}
                 disabled={loading}
-                className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`inline-flex items-center gap-1 rounded-full border border-amber-400 px-3 py-1.5 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${isDark ? 'bg-slate-800 text-amber-200 hover:bg-slate-700' : 'bg-white text-amber-700 hover:bg-amber-100'}`}
               >
                 <i className="fa-solid fa-arrow-rotate-right text-[10px]" />
                 Retry
@@ -527,13 +528,13 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </div>
         </div>
       ) : filteredJobCards.length === 0 ? (
-        <div className="px-4 py-6 sm:px-6 sm:py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <div className={`px-4 py-6 sm:px-6 sm:py-8 text-center text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           No job cards found for the selected filters.
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-300">
+          <table className={`min-w-full divide-y text-xs ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+            <thead className={`text-xs ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-50 text-slate-500'}`}>
               <tr>
                 <th className="px-4 py-2 text-left">
                   <button
@@ -587,7 +588,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+            <tbody className={`divide-y ${isDark ? 'divide-slate-800 bg-slate-900' : 'divide-slate-100 bg-white'}`}>
               {sortedJobCards.map((jc) => {
                 const technicianName =
                   jc.agentName ||
@@ -609,21 +610,21 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 return (
                   <tr
                     key={jc.id}
-                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                    className={`cursor-pointer ${isDark ? 'hover:bg-slate-800/80' : 'hover:bg-slate-50'}`}
                     onClick={() => handleRowClick(jc)}
                   >
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-800 dark:text-slate-100">
+                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
                       <div className="font-semibold">
                         {jc.jobCardNumber || '–'}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {jc.reasonForVisit || jc.diagnosis || 'No summary'}
                       </div>
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {jc.clientName || '–'}
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {technicianName || '–'}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
@@ -634,7 +635,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {status.charAt(0).toUpperCase() + status.slice(1)}
                       </span>
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       <div className="text-[11px]">
                         {formatDate(jc.createdAt)}
                       </div>
@@ -645,7 +646,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             </tbody>
           </table>
           {pagination && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+            <div className={`flex items-center justify-between px-4 py-3 border-t text-[11px] ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
               <div>
                 <span>
                   Page {page} of {pagination.totalPages || 1}
@@ -664,8 +665,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   disabled={loading || page <= 1}
                   className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${
                     page <= 1 || loading
-                      ? 'border-slate-200 text-slate-300 dark:border-slate-700 dark:text-slate-600 cursor-not-allowed'
-                      : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800'
+                      ? isDark ? 'border-slate-700 text-slate-600 cursor-not-allowed' : 'border-slate-200 text-slate-300 cursor-not-allowed'
+                      : isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   <i className="fa-solid fa-chevron-left text-[9px]" />
@@ -683,8 +684,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     loading ||
                     !pagination ||
                     page >= (pagination.totalPages || 1)
-                      ? 'border-slate-200 text-slate-300 dark:border-slate-700 dark:text-slate-600 cursor-not-allowed'
-                      : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800'
+                      ? isDark ? 'border-slate-700 text-slate-600 cursor-not-allowed' : 'border-slate-200 text-slate-300 cursor-not-allowed'
+                      : isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   <span>Next</span>

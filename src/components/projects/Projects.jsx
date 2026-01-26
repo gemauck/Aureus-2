@@ -408,6 +408,23 @@ const Projects = () => {
                     // Update URL with project ID and any options
                     updateProjectUrl(entityId, options);
                     
+                    // Refresh from API so hasTimeProcess and other module flags are correct (list cache can be stale)
+                    if (window.DatabaseAPI?.getProject) {
+                        window.DatabaseAPI.getProject(entityId)
+                            .then(response => {
+                                const projectData = response?.data?.project || response?.project || response?.data;
+                                if (projectData) {
+                                    const full = { ...projectData, client: projectData.clientName || projectData.client || '' };
+                                    setSelectedProject(full);
+                                    setViewingProject(full);
+                                    if (!projects.find(p => String(p.id) === String(entityId))) {
+                                        setProjects(prev => [...prev, full]);
+                                    }
+                                }
+                            })
+                            .catch(() => {});
+                    }
+                    
                     // Handle task opening if specified
                     if (options?.task) {
                         console.log('📋 Projects: Task specified in openEntityDetail event, will open task:', options.task);
@@ -485,6 +502,20 @@ const Projects = () => {
                         setSelectedProject(project);
                         setViewingProject(project);
                         setShowModal(false);
+                        
+                        // Refresh from API so hasTimeProcess and other module flags are correct
+                        if (window.DatabaseAPI?.getProject) {
+                            window.DatabaseAPI.getProject(projectId)
+                                .then(response => {
+                                    const projectData = response?.data?.project || response?.project || response?.data;
+                                    if (projectData) {
+                                        const full = { ...projectData, client: projectData.clientName || projectData.client || '' };
+                                        setSelectedProject(full);
+                                        setViewingProject(full);
+                                    }
+                                })
+                                .catch(() => {});
+                        }
                         
                         // Dispatch event for ProjectDetail to handle task selection
                         setTimeout(() => {
@@ -591,6 +622,9 @@ const Projects = () => {
                     const projectId = route.segments[0];
                     const taskId = route.search?.get('task');
                     const focusInput = route.search?.get('focusInput');
+                    const tab = route.search?.get('tab');
+                    const section = route.search?.get('section');
+                    const commentId = route.search?.get('commentId');
                     
                     // CRITICAL: Verify actual URL matches route before opening project
                     // This prevents opening project when URL was just changed to /projects
@@ -618,10 +652,6 @@ const Projects = () => {
                         // Check if we're already viewing this project
                         if (viewingProject && String(viewingProject.id) === String(projectId)) {
                             // Already viewing this project, but check if we need to handle tab/section/task
-                            const tab = route.search?.get('tab');
-                            const section = route.search?.get('section');
-                            const commentId = route.search?.get('commentId');
-                            
                             if (taskId) {
                                 console.log('📋 Projects: Will open task with retry logic:', taskId);
                                 // Use retry logic to ensure ProjectDetail catches the event
@@ -666,38 +696,70 @@ const Projects = () => {
                             return; // Already viewing this project
                         }
                         
-                        // Find project in cache or fetch it
+                        // Find project in cache or fetch it. When opening from URL, always refresh from API
+                        // so hasTimeProcess and other module flags persist after hard refresh (list cache can be stale).
                         const cachedProject = projects.find(p => String(p.id) === String(projectId));
+                        const openFromApi = async () => {
+                            try {
+                                if (window.DatabaseAPI?.getProject) {
+                                    const response = await window.DatabaseAPI.getProject(projectId);
+                                    const projectData = response?.data?.project || response?.project || response?.data;
+                                    if (projectData) {
+                                        const full = { ...projectData, client: projectData.clientName || projectData.client || '' };
+                                        setSelectedProject(full);
+                                        setViewingProject(full);
+                                        setShowModal(false);
+                                        if (!projects.find(p => String(p.id) === String(projectId))) {
+                                            setProjects(prev => [...prev, full]);
+                                        }
+                                        if (taskId) {
+                                            const dispatchOpenTask = (attempt = 1) => {
+                                                window.dispatchEvent(new CustomEvent('openTask', {
+                                                    detail: { taskId, tab: 'details', focusInput: focusInput || null }
+                                                }));
+                                                if (attempt < 5) setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                            };
+                                            setTimeout(() => dispatchOpenTask(1), 1000);
+                                        } else if (tab) {
+                                            setTimeout(() => {
+                                                window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                                    detail: { tab, section, commentId, focusInput: focusInput || null }
+                                                }));
+                                            }, 150);
+                                        }
+                                        return;
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Projects: getProject failed, using cache if any:', e?.message);
+                            }
+                            if (cachedProject) {
+                                setSelectedProject(cachedProject);
+                                setViewingProject(cachedProject);
+                                setShowModal(false);
+                                if (taskId) {
+                                    const dispatchOpenTask = (attempt = 1) => {
+                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                            detail: { taskId, tab: 'details', focusInput: focusInput || null }
+                                        }));
+                                        if (attempt < 5) setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                    };
+                                    setTimeout(() => dispatchOpenTask(1), 1000);
+                                } else if (tab) {
+                                    setTimeout(() => {
+                                        window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                            detail: { tab, section, commentId, focusInput: focusInput || null }
+                                        }));
+                                    }, 150);
+                                }
+                            }
+                        };
                         if (cachedProject) {
-                            console.log('✅ Projects: Found project in cache, opening:', cachedProject.name);
-                            // Directly set state to open the project - more reliable than using ref
+                            console.log('✅ Projects: Found project in cache, refreshing from API for module flags:', cachedProject.name);
                             setSelectedProject(cachedProject);
                             setViewingProject(cachedProject);
                             setShowModal(false);
-                            
-                            // Check if there's a task parameter in the URL to open
-                            if (taskId) {
-                                console.log('📋 Projects: Task parameter found, will open task with retry logic:', taskId);
-                                // Use retry logic to ensure ProjectDetail catches the event
-                                const dispatchOpenTask = (attempt = 1) => {
-                                    console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
-                                    window.dispatchEvent(new CustomEvent('openTask', {
-                                        detail: { 
-                                            taskId: taskId,
-                                            tab: 'details',
-                                            focusInput: focusInput || null
-                                        }
-                                    }));
-                                    
-                                    // Retry up to 5 times with increasing delays
-                                    if (attempt < 5) {
-                                        setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
-                                    }
-                                };
-                                
-                                // Start after 1 second, then retry at 2s, 3s, 4s, 5s
-                                setTimeout(() => dispatchOpenTask(1), 1000);
-                            }
+                            openFromApi();
                         } else {
                             console.log('⚠️ Projects: Project not in cache, fetching from API:', projectId);
                             // Project not in cache, try to fetch it
@@ -739,6 +801,13 @@ const Projects = () => {
                                             
                                             // Start after 1 second, then retry at 2s, 3s, 4s, 5s
                                             setTimeout(() => dispatchOpenTask(1), 1000);
+                                        } else if (tab) {
+                                            // Persist tab from URL on load (e.g. Time tab after hard refresh)
+                                            setTimeout(() => {
+                                                window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                                    detail: { tab, section, commentId, focusInput: focusInput || null }
+                                                }));
+                                            }, 150);
                                         }
                                     } else {
                                         console.warn('⚠️ Projects: API did not return project data for:', projectId);
@@ -1659,6 +1728,7 @@ const Projects = () => {
                     if (existingProject) {
                         routeCheckInProgressRef.current = true;
                         lastProcessedProjectIdRef.current = projectId;
+                        // Show list data immediately, then refresh from API so hasTimeProcess and other module flags persist
                         setViewingProject(existingProject);
                         setShowModal(false);
                         setTimeout(() => { routeCheckInProgressRef.current = false; }, 100);
@@ -1670,6 +1740,19 @@ const Projects = () => {
                         
                         if (taskId) {
                             dispatchOpenTaskWithRetry(taskId);
+                        }
+                        // Always refresh from API so Time/Monthly/Weekly/DocCollection tabs persist when navigating back
+                        if (window.DatabaseAPI?.getProject) {
+                            window.DatabaseAPI.getProject(projectId)
+                                .then(response => {
+                                    const projectData = response?.data?.project || response?.project || response?.data;
+                                    if (projectData) {
+                                        const full = { ...projectData, client: projectData.clientName || projectData.client || '' };
+                                        setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? full : p));
+                                        setViewingProject(prev => prev && String(prev.id) === String(projectId) ? full : prev);
+                                    }
+                                })
+                                .catch(() => {});
                         }
                         return;
                     }
@@ -1753,11 +1836,6 @@ const Projects = () => {
                                 routeCheckInProgressRef.current = true;
                                 lastProcessedProjectIdRef.current = projectId;
                                 
-                                // OPTIMIZATION: Check if project data is fresh (loaded within last 5 seconds)
-                                const lastLoadTime = projectLoadTimestampsRef.current.get(projectId);
-                                const now = Date.now();
-                                const isDataFresh = lastLoadTime && (now - lastLoadTime) < 5000;
-                                
                                 // Open project immediately with cached data for fast UI response
                                 const normalizedProject = {
                                     ...projectToOpen,
@@ -1776,8 +1854,8 @@ const Projects = () => {
                                     }, 500); // Reduced delay
                                 }
                                 
-                                // Only refresh if data is stale - refresh in background
-                                if (window.DatabaseAPI?.getProject && !isDataFresh) {
+                                // Always refresh from API so hasTimeProcess and other module flags persist
+                                if (window.DatabaseAPI?.getProject) {
                                     window.DatabaseAPI.getProject(projectId)
                                         .then(response => {
                                             const freshProjectData = response?.data?.project || response?.project || response?.data;
@@ -1786,13 +1864,8 @@ const Projects = () => {
                                                     ...freshProjectData,
                                                     client: freshProjectData.clientName || freshProjectData.client || ''
                                                 };
-                                                
-                                                // Update timestamp
                                                 projectLoadTimestampsRef.current.set(projectId, Date.now());
-                                                
                                                 setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? updatedProject : p));
-                                                
-                                                // Only update viewingProject if user is still viewing this project
                                                 setViewingProject(prev => {
                                                     if (prev && String(prev.id) === String(projectId)) {
                                                         return updatedProject;
@@ -1801,11 +1874,7 @@ const Projects = () => {
                                                 });
                                             }
                                         })
-                                        .catch(() => {
-                                            // Silently fail - keep using cached data
-                                        });
-                                } else if (isDataFresh) {
-                                    console.log('⚡ Projects: Using cached project data (fresh)');
+                                        .catch(() => {});
                                 }
                             }
                         }
@@ -1926,17 +1995,6 @@ const Projects = () => {
         if (projectToOpen) {
             console.log('✅ Projects: Found project, opening from URL:', projectToOpen.name);
             
-            // OPTIMIZATION: Check if project data is fresh (loaded within last 5 seconds)
-            // This avoids unnecessary API calls when opening projects quickly
-            const lastLoadTime = projectLoadTimestampsRef.current.get(projectId);
-            const now = Date.now();
-            const isDataFresh = lastLoadTime && (now - lastLoadTime) < 5000; // 5 seconds
-            
-            // Check if project has critical fields (some projects might be missing data)
-            const hasCriticalFields = projectToOpen.hasWeeklyFMSReviewProcess !== undefined || 
-                                     projectToOpen.hasDocumentCollectionProcess !== undefined ||
-                                     projectToOpen.tasks !== undefined;
-            
             // Open project immediately with cached data for fast UI response
             const normalizedProject = {
                 ...projectToOpen,
@@ -1960,10 +2018,10 @@ const Projects = () => {
                 }, 500); // Reduced delay since we're not waiting for refresh
             }
             
-            // Only refresh if data is stale or missing critical fields
-            // Refresh in background without blocking UI
-            if (window.DatabaseAPI?.getProject && (!isDataFresh || !hasCriticalFields)) {
-                console.log(`🔄 Projects: ${isDataFresh ? 'Data missing fields' : 'Data is stale'}, refreshing from database in background...`);
+            // Always refresh from API when opening from URL/sessionStorage so hasTimeProcess and other
+            // module flags persist after hard refresh (list cache can be stale).
+            if (window.DatabaseAPI?.getProject) {
+                console.log('🔄 Projects: Refreshing project from API so module flags (e.g. Time tab) are correct...');
                 
                 // Refresh in background - don't block UI
                 window.DatabaseAPI.getProject(projectId)
@@ -2002,8 +2060,6 @@ const Projects = () => {
                         console.warn('⚠️ Projects: Background refresh failed (non-critical):', error);
                         // Don't update UI on error - keep using cached data
                     });
-            } else if (isDataFresh) {
-                console.log('⚡ Projects: Using cached project data (fresh, loaded', Math.round((now - lastLoadTime) / 1000), 'seconds ago)');
             }
         } else {
             console.log('⚠️ Projects: Project not found in loaded projects and API fetch failed, route:', projectId, 'Available project IDs:', projects.map(p => p.id));
@@ -2662,6 +2718,18 @@ const Projects = () => {
                     if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                     return false;
                 })(),
+                hasTimeProcess: (() => {
+                    const value = fullProject.hasTimeProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
+                hasMonthlyFMSReviewProcess: (() => {
+                    const value = fullProject.hasMonthlyFMSReviewProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
                 weeklyFMSReviewSections: Array.isArray(fullProject.weeklyFMSReviewSections) ? fullProject.weeklyFMSReviewSections : []
             };
             
@@ -2699,6 +2767,18 @@ const Projects = () => {
                         if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                         return false;
                     })(),
+                    hasTimeProcess: (() => {
+                        const value = updatedProject.hasTimeProcess;
+                        if (value === true || value === 'true' || value === 1) return true;
+                        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                        return false;
+                    })(),
+                    hasMonthlyFMSReviewProcess: (() => {
+                        const value = updatedProject.hasMonthlyFMSReviewProcess;
+                        if (value === true || value === 'true' || value === 1) return true;
+                        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                        return false;
+                    })(),
                     weeklyFMSReviewSections: Array.isArray(updatedProject.weeklyFMSReviewSections) ? updatedProject.weeklyFMSReviewSections : []
                 };
                 
@@ -2707,8 +2787,8 @@ const Projects = () => {
                     if (!prev || prev.id !== normalized.id) {
                         return normalized;
                     }
-                    // Compare important fields to see if anything actually changed
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
+                    // Compare important fields to see if anything actually changed (include module flags so tabs persist on navigation)
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = normalized[field];
@@ -2777,8 +2857,8 @@ const Projects = () => {
                 setViewingProject(prev => {
                     // If it's the same project ID, check if data actually changed
                     if (prev && prev.id === normalizedProject.id) {
-                        // Compare important fields to see if anything actually changed
-                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents'];
+                        // Compare important fields (include module flags so Time/Monthly tabs persist when re-opening)
+                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents'];
                         const hasChanges = importantFields.some(field => {
                             const prevValue = prev[field];
                             const newValue = normalizedProject[field];

@@ -120,7 +120,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
         if (typeof window !== 'undefined' && window.location) {
             const urlParams = new URLSearchParams(window.location.search);
             const tabFromUrl = urlParams.get('tab');
-            if (tabFromUrl && ['overview', 'tasks', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
+            if (tabFromUrl && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
                 console.log('🔵 Setting activeSection from URL:', tabFromUrl);
                 setActiveSection(tabFromUrl);
             }
@@ -811,6 +811,165 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             case 'Pending': return 'bg-gray-100 text-gray-800';
             default: return 'bg-gray-100 text-gray-800';
         }
+    };
+
+    // Time tracking section – uses fetch to /api/time-entries so it works regardless of bundle
+    const TimeTrackingSection = ({ project: timeProject }) => {
+        const [entries, setEntries] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [timerRunning, setTimerRunning] = useState(false);
+        const [timerStartedAt, setTimerStartedAt] = useState(null);
+        const [timerDescription, setTimerDescription] = useState('');
+        const [manualDate, setManualDate] = useState(() => new Date().toISOString().slice(0, 10));
+        const [manualHours, setManualHours] = useState('');
+        const [manualDescription, setManualDescription] = useState('');
+        const [elapsed, setElapsed] = useState(0);
+        const timerTickRef = useRef(null);
+        const getTimeApiBase = () => (window.DatabaseAPI && window.DatabaseAPI.API_BASE) || window.location.origin;
+        const getTimeAuthHeaders = () => {
+            const token = window.storage?.getToken?.();
+            if (!token) return null;
+            return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+        };
+        const loadEntries = useCallback(async () => {
+            if (!timeProject?.id) return;
+            setLoading(true);
+            try {
+                let list = [];
+                const headers = getTimeAuthHeaders();
+                if (!headers) { setEntries([]); return; }
+                const base = getTimeApiBase();
+                const r = await fetch(`${base}/api/time-entries?projectId=${encodeURIComponent(timeProject.id)}`, { method: 'GET', headers, credentials: 'include' });
+                if (r.ok) {
+                    const j = await r.json();
+                    list = Array.isArray(j.data) ? j.data : (Array.isArray(j) ? j : []);
+                }
+                setEntries(list);
+            } catch (e) {
+                console.warn('Time entries load failed:', e);
+                setEntries([]);
+            } finally {
+                setLoading(false);
+            }
+        }, [timeProject?.id]);
+        useEffect(() => { loadEntries(); }, [loadEntries]);
+        useEffect(() => {
+            if (!timerRunning || !timerStartedAt) {
+                if (timerTickRef.current) clearInterval(timerTickRef.current);
+                return;
+            }
+            const tick = () => setElapsed(Math.floor((Date.now() - timerStartedAt) / 1000));
+            tick();
+            timerTickRef.current = setInterval(tick, 1000);
+            return () => { if (timerTickRef.current) clearInterval(timerTickRef.current); };
+        }, [timerRunning, timerStartedAt]);
+        const formatElapsed = (sec) => {
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+            return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+        };
+        const handleStartTimer = () => { setTimerStartedAt(Date.now()); setTimerRunning(true); };
+        const createTimeEntryFetch = async (payload) => {
+            const headers = getTimeAuthHeaders();
+            if (!headers) throw new Error('Not logged in');
+            const base = getTimeApiBase();
+            const r = await fetch(`${base}/api/time-entries`, { method: 'POST', headers, credentials: 'include', body: JSON.stringify(payload) });
+            const text = await r.text();
+            if (!r.ok) {
+                let msg = 'Request failed';
+                try { const err = text ? JSON.parse(text) : {}; msg = (err.error && err.error.message) || err.message || err.error || msg; } catch (_) { msg = text.slice(0, 100) || msg; }
+                throw new Error(String(msg) + (r.status ? ' (' + r.status + ')' : ''));
+            }
+            const j = text ? JSON.parse(text) : {};
+            return (j && j.data) || j;
+        };
+        const handleStopTimer = async () => {
+            if (!timerRunning || !timerStartedAt || !timeProject?.id) return;
+            const sec = Math.floor((Date.now() - timerStartedAt) / 1000), hours = Math.round((sec / 3600) * 100) / 100;
+            setTimerRunning(false); setTimerStartedAt(null); setElapsed(0);
+            const payload = { date: new Date().toISOString(), hours, projectId: timeProject.id, projectName: (timeProject.name || '').toString(), description: (timerDescription || 'Timer entry').toString() };
+            try {
+                const newEntry = await createTimeEntryFetch(payload);
+                if (newEntry && (newEntry.id || newEntry.hours != null)) setEntries(prev => [newEntry, ...prev]);
+                else await loadEntries();
+                setTimerDescription('');
+            } catch (e) {
+                console.warn('Save timer entry failed:', e);
+                alert('Could not save time entry: ' + (e?.message || 'Please try again.'));
+            }
+        };
+        const handleAddManual = async () => {
+            const hours = parseFloat(manualHours);
+            if (!Number.isFinite(hours) || hours <= 0 || !timeProject?.id) { alert('Please enter a valid number of hours.'); return; }
+            const payload = { date: (manualDate || new Date().toISOString().slice(0, 10)) + 'T12:00:00.000Z', hours, projectId: timeProject.id, projectName: (timeProject.name || '').toString(), description: (manualDescription || '').toString() };
+            try {
+                const newEntry = await createTimeEntryFetch(payload);
+                if (newEntry && (newEntry.id || newEntry.hours != null)) { setEntries(prev => [newEntry, ...prev]); setManualHours(''); setManualDescription(''); }
+                else await loadEntries();
+            } catch (e) {
+                console.warn('Add manual entry failed:', e);
+                alert('Could not add time entry: ' + (e?.message || 'Please try again.'));
+            }
+        };
+        const handleDeleteEntry = async (id) => {
+            if (!id || !confirm('Delete this time entry?')) return;
+            const headers = getTimeAuthHeaders();
+            if (!headers) { alert('Not logged in.'); return; }
+            try {
+                const base = getTimeApiBase();
+                const r = await fetch(`${base}/api/time-entries/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'Authorization': headers['Authorization'] }, credentials: 'include' });
+                if (!r.ok) throw new Error('Delete failed (' + r.status + ')');
+                setEntries(prev => prev.filter(e => e.id !== id));
+            } catch (e) {
+                console.warn('Delete entry failed:', e);
+                alert('Could not delete entry: ' + (e?.message || ''));
+            }
+        };
+        if (!timeProject?.id) return null;
+        const totalHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
+        return (
+            <div className="space-y-4" style={{ position: 'relative', zIndex: 1 }}>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Track time</h2>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="flex items-center gap-2">
+                            <div className="text-2xl font-mono tabular-nums text-gray-900 min-w-[6rem]">{timerRunning ? formatElapsed(elapsed) : '00:00:00'}</div>
+                            <input type="text" placeholder="What are you working on?" value={timerDescription} onChange={e => setTimerDescription(e.target.value)} className="px-2 py-1.5 border border-gray-300 rounded text-sm w-48" autoComplete="off" />
+                            {!timerRunning ? (
+                                <button type="button" onClick={handleStartTimer} className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-1.5"><i className="fas fa-play"></i> Start</button>
+                            ) : (
+                                <button type="button" onClick={handleStopTimer} className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center gap-1.5"><i className="fas fa-stop"></i> Stop</button>
+                            )}
+                        </div>
+                        <span className="text-gray-400">or</span>
+                        <div className="flex flex-wrap items-end gap-2">
+                            <input type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} className="px-2 py-1.5 border border-gray-300 rounded text-sm" />
+                            <input type="number" step="0.25" min="0.25" placeholder="Hours" value={manualHours} onChange={e => setManualHours(e.target.value)} className="px-2 py-1.5 border border-gray-300 rounded text-sm w-20" />
+                            <input type="text" placeholder="Description" value={manualDescription} onChange={e => setManualDescription(e.target.value)} className="px-2 py-1.5 border border-gray-300 rounded text-sm w-40" autoComplete="off" />
+                            <button type="button" onClick={handleAddManual} className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium flex items-center gap-1.5"><i className="fas fa-plus"></i> Add</button>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-sm font-semibold text-gray-900">Time entries</h2>
+                        <span className="text-xs text-gray-600">Total: {totalHours.toFixed(2)} h</span>
+                    </div>
+                    {loading ? <p className="text-sm text-gray-500">Loading…</p> : entries.length === 0 ? <p className="text-sm text-gray-500">No time logged yet. Start the timer or add a manual entry.</p> : (
+                        <ul className="space-y-2">
+                            {entries.map(e => (
+                                <li key={e.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                                    <div>
+                                        <span className="text-sm text-gray-900">{e.description || '—'}</span>
+                                        <span className="text-xs text-gray-500 ml-2">{e.date ? new Date(e.date).toLocaleDateString() : ''} · {(e.hours || 0).toFixed(2)} h</span>
+                                    </div>
+                                    <button type="button" onClick={() => handleDeleteEntry(e.id)} className="text-red-600 hover:text-red-800 p-1" title="Delete"><i className="fas fa-trash text-xs"></i></button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </div>
+        );
     };
 
     // Overview Section
@@ -3157,6 +3316,17 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                         <i className="fas fa-tasks mr-1.5"></i>
                         Tasks
                     </button>
+                    <button
+                        onClick={() => switchSection('time')}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeSection === 'time'
+                                ? 'bg-primary-600 text-white'
+                                : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-clock mr-1.5"></i>
+                        Time
+                    </button>
                     {hasDocumentCollectionProcess && (
                         <button
                             onClick={() => switchSection('documentCollection')}
@@ -3228,6 +3398,8 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             })()}
             
             {activeSection === 'overview' && <OverviewSection />}
+
+            {activeSection === 'time' && <TimeTrackingSection project={project} />}
             
             {(() => {
                 console.log('🔴🔴🔴 ACTIVE SECTION CHECK:', {

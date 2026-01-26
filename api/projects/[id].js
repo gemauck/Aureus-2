@@ -276,7 +276,8 @@ async function handler(req, res) {
           await prisma.$executeRaw`
             ALTER TABLE "Project" 
             ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
-            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false;
+            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+            ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
           `;
         } catch (migrationError) {
           // Ignore migration errors (columns might already exist or connection issues)
@@ -831,7 +832,12 @@ async function handler(req, res) {
         delete transformedProject.documentSectionsTable;
         delete transformedProject.weeklyFMSReviewSectionsTable;
         delete transformedProject.monthlyFMSReviewSectionsTable;
-        
+        // Ensure module flags are always present so Time/Monthly/Weekly/DocCollection tabs persist after refresh
+        if (transformedProject.hasTimeProcess === undefined) transformedProject.hasTimeProcess = false;
+        if (transformedProject.hasDocumentCollectionProcess === undefined) transformedProject.hasDocumentCollectionProcess = false;
+        if (transformedProject.hasWeeklyFMSReviewProcess === undefined) transformedProject.hasWeeklyFMSReviewProcess = false;
+        if (transformedProject.hasMonthlyFMSReviewProcess === undefined) transformedProject.hasMonthlyFMSReviewProcess = false;
+
         return ok(res, { project: transformedProject })
       } catch (dbError) {
         console.error('❌ Database error getting project:', {
@@ -1017,6 +1023,13 @@ async function handler(req, res) {
           console.error('❌ Error processing weeklyFMSReviewSections:', error);
           // Don't fail the entire update, but log the error
         }
+      }
+      
+      // Handle hasTimeProcess separately if provided - normalize to boolean (persists Time tab after refresh)
+      if (body.hasTimeProcess !== undefined && body.hasTimeProcess !== null) {
+        updateData.hasTimeProcess = typeof body.hasTimeProcess === 'boolean'
+          ? body.hasTimeProcess
+          : Boolean(body.hasTimeProcess === true || body.hasTimeProcess === 'true' || body.hasTimeProcess === 1);
       }
       
       // Handle hasWeeklyFMSReviewProcess separately if provided - normalize to boolean

@@ -9,18 +9,22 @@ import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    
-    // Parse the URL path (already has /api/ stripped by server)
-    // Strip query parameters before splitting
-    const urlPath = req.url.split('?')[0].split('#')[0]
-    const pathSegments = urlPath.split('/').filter(Boolean)
-    const id = pathSegments[pathSegments.length - 1]
+    // Parse the URL path: strip /api prefix so we work with both catch-all and explicit /api/time-entries route
+    const urlPath = (req.url || '').split('?')[0].split('#')[0]
+    const pathSegments = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+    const id = pathSegments.length >= 2 ? pathSegments[pathSegments.length - 1] : null
 
-    // List Time Entries (GET /api/time-entries)
+    // List Time Entries (GET /api/time-entries or GET /api/time-entries?projectId=xxx)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'time-entries') {
       try {
-        const timeEntries = await prisma.timeEntry.findMany({ 
-          orderBy: { createdAt: 'desc' } 
+        const q = (req.url || '').indexOf('?')
+        const queryString = q >= 0 ? req.url.slice(q) : ''
+        const searchParams = new URLSearchParams(queryString)
+        const projectId = searchParams.get('projectId') || null
+        const where = projectId ? { projectId } : {}
+        const timeEntries = await prisma.timeEntry.findMany({
+          where,
+          orderBy: { createdAt: 'desc' }
         })
         return ok(res, timeEntries)
       } catch (dbError) {
@@ -42,26 +46,33 @@ async function handler(req, res) {
     // Create Time Entry (POST /api/time-entries)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'time-entries') {
       const body = await parseJsonBody(req)
+      if (!body || typeof body !== 'object') return badRequest(res, 'JSON body required')
       if (!body.date) return badRequest(res, 'date required')
-      if (!body.hours) return badRequest(res, 'hours required')
+      const hoursNum = body.hours != null && body.hours !== '' ? parseFloat(body.hours) : NaN
+      if (!Number.isFinite(hoursNum) || hoursNum < 0) return badRequest(res, 'hours required (non-negative number)')
+      const dateObj = new Date(body.date)
+      if (Number.isNaN(dateObj.getTime())) return badRequest(res, 'invalid date')
 
-      const timeEntryData = {
-        date: new Date(body.date),
-        hours: parseFloat(body.hours) || 0,
-        project: body.project || '',
-        task: body.task || '',
-        description: body.description || '',
-        employee: body.employee || req.user?.name || 'Unknown',
-        billable: body.billable !== undefined ? body.billable : true,
+      // Prisma TimeEntryUncheckedCreateInput: only scalar fields (projectId, never "project" relation)
+      const data = {
+        projectId: body.projectId || null,
+        date: dateObj,
+        hours: hoursNum,
+        projectName: String(body.projectName ?? (body.project || '')).slice(0, 500),
+        task: String(body.task || '').slice(0, 500),
+        description: String(body.description || '').slice(0, 2000),
+        employee: String(body.employee || req.user?.name || 'Unknown').slice(0, 200),
+        billable: body.billable !== undefined ? !!body.billable : true,
         rate: parseFloat(body.rate) || 0,
         ownerId: req.user?.sub || null
       }
+      delete data.project // ensure relation field never passed as string
 
       try {
         const timeEntry = await prisma.timeEntry.create({
-          data: timeEntryData
+          data
         })
-        return created(res, { timeEntry })
+        return created(res, timeEntry)
       } catch (dbError) {
         console.error('❌ Database error creating time entry:', dbError)
         return serverError(res, 'Failed to create time entry', dbError.message)
@@ -85,7 +96,8 @@ async function handler(req, res) {
         const updateData = {
           date: body.date ? new Date(body.date) : undefined,
           hours: body.hours,
-          project: body.project,
+          projectId: body.projectId,
+          projectName: body.projectName ?? body.project,
           task: body.task,
           description: body.description,
           employee: body.employee,
@@ -99,11 +111,11 @@ async function handler(req, res) {
         })
         
         try {
-          const timeEntry = await prisma.timeEntry.update({ 
-            where: { id }, 
-            data: updateData 
+          const timeEntry = await prisma.timeEntry.update({
+            where: { id },
+            data: updateData
           })
-          return ok(res, { timeEntry })
+          return ok(res, timeEntry)
         } catch (dbError) {
           console.error('❌ Database error updating time entry:', dbError)
           return serverError(res, 'Failed to update time entry', dbError.message)

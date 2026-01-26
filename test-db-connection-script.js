@@ -1,8 +1,15 @@
 // Quick database connection test script
-// Run with: node test-db-connection-script.js
+// Run with: node test-db-connection-script.js  (or npm run db:test)
+// Loads .env from the project root (script directory) so it works when run from any cwd.
 
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 import { PrismaClient } from '@prisma/client'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: join(__dirname, '.env') })
+dotenv.config({ path: join(__dirname, '.env.local'), override: true })
 
 const prisma = new PrismaClient({
   log: ['error', 'warn', 'info'],

@@ -1301,7 +1301,8 @@ async function handler(req, res) {
           await prisma.$executeRaw`
             ALTER TABLE "Project" 
             ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
-            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false;
+            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+            ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
           `;
         } catch (migrationError) {
           // Ignore migration errors (columns might already exist or connection issues)
@@ -1387,7 +1388,8 @@ async function handler(req, res) {
               // NOTE: tasksList JSON field removed from select - tasks are now only in Task table
               hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
               hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
-              // hasMonthlyFMSReviewProcess: true, // Temporarily commented - column may not exist yet
+              hasTimeProcess: true, // Include so Time tab persists after refresh when opening from list
+              hasMonthlyFMSReviewProcess: true, // Include so Monthly FMS tab persists after refresh when opening from list
               ...(includeTaskCount ? {
                 _count: {
                   select: {
@@ -1411,7 +1413,7 @@ async function handler(req, res) {
         } catch (queryError) {
           // If query fails due to missing column, retry without problematic fields
           if (queryError.message?.includes('does not exist') || queryError.message?.includes('Unknown column')) {
-            console.log('⚠️ Retrying project query without hasMonthlyFMSReviewProcess (column may not exist yet)');
+            console.log('⚠️ Retrying project query without optional columns (may not exist yet)');
             projects = await prisma.project.findMany({ 
               where: whereClause,
               select: {
@@ -1429,6 +1431,8 @@ async function handler(req, res) {
                 monthlyProgress: true,
                 hasDocumentCollectionProcess: true,
                 hasWeeklyFMSReviewProcess: true,
+                hasTimeProcess: true,
+                hasMonthlyFMSReviewProcess: true,
                 ...(includeTaskCount ? {
                   _count: {
                     select: {
@@ -1626,8 +1630,9 @@ async function handler(req, res) {
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
         ownerId: req.user?.sub || null,
-        // Automatically add monthly document collection process to all new projects
-        hasDocumentCollectionProcess: true,
+        // New projects: only Tasks tab by default; other modules added via + Module
+        hasTimeProcess: false,
+        hasDocumentCollectionProcess: false,
         documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(Array.isArray(body.documentSections) ? body.documentSections : []),
         weeklyFMSReviewSections: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections : JSON.stringify(
           body.weeklyFMSReviewSections && typeof body.weeklyFMSReviewSections === 'object'
@@ -1896,6 +1901,13 @@ async function handler(req, res) {
             console.error('❌ Error processing weeklyFMSReviewSections:', error);
             // Don't fail the entire update, but log the error
           }
+        }
+
+        // Handle hasTimeProcess separately if provided
+        if (body.hasTimeProcess !== undefined && body.hasTimeProcess !== null) {
+          updateData.hasTimeProcess = typeof body.hasTimeProcess === 'boolean'
+            ? body.hasTimeProcess
+            : Boolean(body.hasTimeProcess === true || body.hasTimeProcess === 'true' || body.hasTimeProcess === 1);
         }
 
         // Handle hasWeeklyFMSReviewProcess separately if provided

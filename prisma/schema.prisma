@@ -82,6 +82,7 @@ model User {
   monthlyFMSComments         MonthlyFMSReviewItemComment[] @relation("MonthlyFMSCommentAuthor")
   clientComments            ClientComment[]              @relation("ClientCommentAuthor")
   clientFollowUps           ClientFollowUp[]             @relation("ClientFollowUpAssignee")
+  commentThreadSubscriptions CommentThreadSubscription[] @relation("CommentThreadSubscriber")
 
   @@index([createdAt])
   @@index([role])
@@ -162,6 +163,7 @@ model Client {
   thumbnail       String   @default("")
   services        String   @default("[]")
   rssSubscribed   Boolean  @default(true)
+  kyc             String   @default("{}")
 
   // JSONB columns for improved performance (Phase 1 Migration)
   // These columns are populated from String columns above
@@ -174,6 +176,7 @@ model Client {
   billingTermsJsonb Json?           @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
   proposalsJsonb    Json?           @default("[]")
   servicesJsonb     Json?           @default("[]")
+  kycJsonb          Json?           @default("{}")
   owner             User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   externalAgent     ExternalAgent?  @relation(fields: [externalAgentId], references: [id])
   newsArticles      ClientNews[]
@@ -273,6 +276,10 @@ model ClientSite {
   contactPhone  String?  @default("")
   contactEmail  String?  @default("")
   notes         String   @default("")
+  // Per-site lead tracking (for leads: each site can have its own stage/AIDA)
+  siteLead      String?  @default("")
+  stage         String?  @default("")
+  aidaStatus    String?  @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -404,6 +411,7 @@ model Project {
   assignedTo                   String                   @default("")
   tasksList                    String                   @default("[]") // Legacy - deprecated, use Task table
   notes                        String                   @default("")
+  hasTimeProcess               Boolean                  @default(false)
   hasDocumentCollectionProcess Boolean                  @default(false)
   documentSections             String                   @default("[]") // Legacy - deprecated, use DocumentSection table
   weeklyFMSReviewSections      String                   @default("[]") // Legacy - deprecated, use WeeklyFMSReviewSection table
@@ -1494,6 +1502,20 @@ model Notification {
   @@index([read])
   @@index([createdAt])
   @@index([type])
+}
+
+// Subscriptions to comment threads (clients, leads, document items, etc.). Tasks use task.subscribers.
+model CommentThreadSubscription {
+  id         String   @id @default(cuid())
+  threadType String   // 'client' | 'lead' | 'document_item' | 'weekly_fms' | 'monthly_fms'
+  threadId   String   // clientId, leadId, or "itemId:year:month" for document/FMS
+  userId     String
+  createdAt  DateTime @default(now())
+  user       User     @relation("CommentThreadSubscriber", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadType, threadId, userId])
+  @@index([threadType, threadId])
+  @@index([userId])
 }
 
 model NotificationSetting {

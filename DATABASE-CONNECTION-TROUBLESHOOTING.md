@@ -3,6 +3,32 @@
 ## Current Status
 All API endpoints returning 500 errors - **Database connection failure**
 
+## Quick Start (Do This First)
+
+From the project root, test the database connection directly (no server or browser needed):
+
+```bash
+npm run db:test
+```
+
+Or:
+
+```bash
+node test-db-connection-script.js
+```
+
+The script reports whether `DATABASE_URL` is set and whether it can reach PostgreSQL. It also suggests fixes for common Prisma codes (`P1001`, `P1002`, `ECONNREFUSED`, etc.).
+
+**If you need to run the app without a database** (e.g. UI-only work):
+
+```bash
+DEV_LOCAL_NO_DB=true npm run dev:backend
+```
+
+API calls will still fail, but the frontend can load.
+
+---
+
 ## Immediate Actions Required
 
 ### Step 1: Check Server Logs
@@ -29,31 +55,31 @@ pm2 logs --lines 100
 Check the terminal where you ran `node server.js` or `npm start`
 
 ### Step 2: Test Database Connection
-Run this in your browser console to test the diagnostic endpoint:
+Run this in your browser console while the app is open (no auth required):
 
 ```javascript
-fetch('/api/test-db-connection', {
-  headers: {
-    'Authorization': `Bearer ${window.storage.getToken()}`
-  }
-})
-.then(r => r.json())
-.then(data => {
-  console.log('Database Test Result:', data);
-  if (data.error) {
-    console.error('Error:', data.error);
-  }
-})
-.catch(err => console.error('Request failed:', err));
+fetch('/api/test-db-connection')
+  .then(r => r.json())
+  .then(data => {
+    console.log('Database Test Result:', data);
+    if (data.error) console.error('Error:', data.error);
+  })
+  .catch(err => console.error('Request failed:', err));
 ```
+
+Same logic is available at `/api/db-health`. Both return `{ status: 'healthy', ... }` when the DB is reachable, or error details when it is not.
 
 ### Step 3: Verify Environment Variables
 
+**Quick check**: Run `npm run db:test` from the project root; it will say if `DATABASE_URL` is missing.
+
 #### Check DATABASE_URL is set:
-The connection string should look like:
+Ensure `.env` or `.env.local` (in the project root) contains:
 ```
-postgresql://user:password@host:port/database?sslmode=require
+DATABASE_URL="postgresql://user:password@host:port/database?sslmode=require"
 ```
+
+The server loads `.env` first, then overrides with `.env.local` in development.
 
 #### Common Issues:
 1. **Missing DATABASE_URL** - Variable not set in environment
@@ -65,13 +91,25 @@ postgresql://user:password@host:port/database?sslmode=require
 
 ### Step 4: Quick Database Connection Test
 
-If you have SSH access to your server:
+**From your machine** (project root, with `DATABASE_URL` in `.env`):
 
 ```bash
-# Test if PostgreSQL is accessible
-psql $DATABASE_URL -c "SELECT 1;"
+npm run db:test
+```
 
-# Or test connection manually
+**With psql** (if installed and `DATABASE_URL` is set):
+
+```bash
+# Load .env and test PostgreSQL
+source .env 2>/dev/null || export $(grep -v '^#' .env | xargs)
+psql "$DATABASE_URL" -c "SELECT 1;"
+```
+
+**If you have SSH access to the server**:
+
+```bash
+psql $DATABASE_URL -c "SELECT 1;"
+# Or with explicit params:
 psql -h YOUR_HOST -U YOUR_USER -d YOUR_DATABASE -c "SELECT version();"
 ```
 
@@ -130,7 +168,17 @@ brew services list | grep postgres
 3. Check that API endpoints start working
 4. Monitor logs to ensure no new errors
 
+## Related Scripts and Endpoints
+
+| Script or endpoint | Purpose |
+|--------------------|---------|
+| `npm run db:test` | Test DB from terminal (uses `.env` in project root even if run from another directory) |
+| `GET /api/test-db-connection` | Same as `/api/db-health`; no auth. Use in browser console or curl to test DB. |
+| `GET /api/db-health` | Returns `{ status: 'healthy', ... }` or error details when DB is unreachable. |
+| `npm run db:studio` | Open Prisma Studio (requires working `DATABASE_URL`) |
+| `ensure-client-site-stage-aida.sql` | Add `siteLead`/`stage`/`aidaStatus` to `ClientSite` if missing; run with `psql "$DATABASE_URL" -f ensure-client-site-stage-aida.sql` |
+
 ## Need More Help?
 
-Share the server log error message and I can help diagnose the specific issue.
+Share the output of `npm run db:test` or the server log error message to diagnose the specific issue.
 

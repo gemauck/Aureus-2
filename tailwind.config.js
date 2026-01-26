@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class', // follow app theme (html.dark / html.light) instead of system preference
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
