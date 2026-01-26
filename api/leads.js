@@ -170,10 +170,10 @@ async function handler(req, res) {
                   isPrimary: true,
                   notes: true
                 },
-                orderBy: {
-                  isPrimary: 'desc',
-                  createdAt: 'asc'
-                }
+                orderBy: [
+                  { isPrimary: 'desc' },
+                  { createdAt: 'asc' }
+                ]
               },
               clientComments: {
                 select: {
@@ -184,9 +184,7 @@ async function handler(req, res) {
                   userName: true,
                   createdAt: true
                 },
-                orderBy: {
-                  createdAt: 'desc'
-                }
+                orderBy: [{ createdAt: 'desc' }]
               },
               // Phase 6: Include normalized tables
               clientSites: true,
@@ -258,10 +256,10 @@ async function handler(req, res) {
                         isPrimary: true,
                         notes: true
                       },
-                      orderBy: {
-                        isPrimary: 'desc',
-                        createdAt: 'asc'
-                      }
+                      orderBy: [
+                        { isPrimary: 'desc' },
+                        { createdAt: 'asc' }
+                      ]
                     },
                     clientComments: {
                       select: {
@@ -272,9 +270,7 @@ async function handler(req, res) {
                         userName: true,
                         createdAt: true
                       },
-                      orderBy: {
-                        createdAt: 'desc'
-                      }
+                      orderBy: [{ createdAt: 'desc' }]
                     },
                     // Phase 4: Include projects relation to derive projectIds
                     projects: {
@@ -1267,10 +1263,10 @@ async function handler(req, res) {
                   isPrimary: true,
                   notes: true
                 },
-                orderBy: {
-                  isPrimary: 'desc',
-                  createdAt: 'asc'
-                }
+                orderBy: [
+                  { isPrimary: 'desc' },
+                  { createdAt: 'asc' }
+                ]
               },
               clientComments: {
                 select: {
@@ -1281,9 +1277,7 @@ async function handler(req, res) {
                   userName: true,
                   createdAt: true
                 },
-                orderBy: {
-                  createdAt: 'desc'
-                }
+                orderBy: [{ createdAt: 'desc' }]
               },
               projects: {
                 select: {

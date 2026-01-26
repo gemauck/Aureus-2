@@ -288,10 +288,10 @@ async function handler(req, res) {
                       isPrimary: true,
                       notes: true
                     },
-                    orderBy: {
-                      isPrimary: 'desc',
-                      createdAt: 'asc'
-                    }
+                    orderBy: [
+                      { isPrimary: 'desc' },
+                      { createdAt: 'asc' }
+                    ]
                   },
                   clientComments: {
                     select: {
@@ -302,9 +302,7 @@ async function handler(req, res) {
                       userName: true,
                       createdAt: true
                     },
-                    orderBy: {
-                      createdAt: 'desc'
-                    }
+                    orderBy: [{ createdAt: 'desc' }]
                   },
                   // Phase 6: Include normalized tables
                   clientSites: true,
