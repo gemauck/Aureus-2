@@ -3318,7 +3318,7 @@ const Projects = () => {
         return () => clearTimeout(timer);
     }, [searchTerm]);
 
-    // Filter projects by selected client, search term, status and sort alphabetically by client name - memoized
+    // Filter projects by selected client, search term, status and sort alphabetically by project name - memoized
     const filteredProjects = useMemo(() => {
         const lowerSearchTerm = debouncedSearchTerm.toLowerCase();
         return projects.filter(p => {
@@ -3331,9 +3331,9 @@ const Projects = () => {
             const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
             return matchesClient && matchesSearch && matchesStatus;
         }).sort((a, b) => {
-            const aClient = a.client || '';
-            const bClient = b.client || '';
-            return aClient.localeCompare(bClient);
+            const aName = (a.name || '').toLowerCase();
+            const bName = (b.name || '').toLowerCase();
+            return aName.localeCompare(bName);
         });
     }, [projects, selectedClient, debouncedSearchTerm, filterStatus]);
 

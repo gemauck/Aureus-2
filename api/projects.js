@@ -66,13 +66,25 @@ async function documentSectionsToJson(projectId, options = {}) {
               if (!comments[key]) {
                 comments[key] = []
               }
+              let attachments = []
+              if (comment.attachments) {
+                try {
+                  attachments = typeof comment.attachments === 'string'
+                    ? JSON.parse(comment.attachments || '[]')
+                    : (Array.isArray(comment.attachments) ? comment.attachments : [])
+                } catch (_) {
+                  attachments = []
+                }
+              }
               comments[key].push({
                 id: comment.id,
                 text: comment.text,
                 author: comment.author,
                 authorId: comment.authorId,
                 authorName: comment.author,
-                createdAt: comment.createdAt
+                createdAt: comment.createdAt,
+                date: comment.createdAt,
+                attachments
               })
             }
           }
@@ -184,6 +196,16 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
               if (!comments[key]) {
                 comments[key] = []
               }
+              let attachments = []
+              if (comment.attachments) {
+                try {
+                  attachments = typeof comment.attachments === 'string'
+                    ? JSON.parse(comment.attachments || '[]')
+                    : (Array.isArray(comment.attachments) ? comment.attachments : [])
+                } catch (_) {
+                  attachments = []
+                }
+              }
               comments[key].push({
                 id: comment.id,
                 text: comment.text,
@@ -191,7 +213,8 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
                 authorId: comment.authorId,
                 authorName: comment.author,
                 date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
-                createdAt: comment.createdAt
+                createdAt: comment.createdAt,
+                attachments
               })
             }
           }
@@ -320,6 +343,16 @@ async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
               if (!comments[key]) {
                 comments[key] = []
               }
+              let attachments = []
+              if (comment.attachments) {
+                try {
+                  attachments = typeof comment.attachments === 'string'
+                    ? JSON.parse(comment.attachments || '[]')
+                    : (Array.isArray(comment.attachments) ? comment.attachments : [])
+                } catch (_) {
+                  attachments = []
+                }
+              }
               comments[key].push({
                 id: comment.id,
                 text: comment.text,
@@ -327,7 +360,8 @@ async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
                 authorId: comment.authorId,
                 authorName: comment.author,
                 date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
-                createdAt: comment.createdAt
+                createdAt: comment.createdAt,
+                attachments
               })
             }
           }
@@ -489,12 +523,14 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                             const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                             for (const comment of commentList) {
                               if (comment && (comment.text || comment)) {
+                                const atts = Array.isArray(comment.attachments) ? comment.attachments : []
                                 comments.push({
                                   year,
                                   month,
                                   text: comment.text || String(comment),
                                   author: comment.author || comment.authorName || '',
-                                  authorId: comment.authorId || null
+                                  authorId: comment.authorId || null,
+                                  attachments: JSON.stringify(atts)
                                 })
                               }
                             }
@@ -575,12 +611,14 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
+                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
                               comments.push({
                                 year,
                                 month,
                                 text: comment.text || String(comment),
                                 author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null
+                                authorId: comment.authorId || null,
+                                attachments: JSON.stringify(atts)
                               })
                             }
                           }
@@ -778,12 +816,14 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
+                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
                               comments.push({
                                 year,
                                 month,
                                 text: comment.text || String(comment),
                                 author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null
+                                authorId: comment.authorId || null,
+                                attachments: JSON.stringify(atts)
                               })
                             }
                           }
@@ -894,12 +934,14 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
+                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
                               comments.push({
                                 year,
                                 month,
                                 text: comment.text || String(comment),
                                 author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null
+                                authorId: comment.authorId || null,
+                                attachments: JSON.stringify(atts)
                               })
                             }
                           }
@@ -1115,12 +1157,14 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                             const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                             for (const comment of commentList) {
                               if (comment && (comment.text || comment)) {
+                                const atts = Array.isArray(comment.attachments) ? comment.attachments : []
                                 comments.push({
                                   year,
                                   month,
                                   text: comment.text || String(comment),
                                   author: comment.author || comment.authorName || '',
-                                  authorId: comment.authorId || null
+                                  authorId: comment.authorId || null,
+                                  attachments: JSON.stringify(atts)
                                 })
                               }
                             }
@@ -1220,12 +1264,14 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
+                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
                               comments.push({
                                 year,
                                 month,
                                 text: comment.text || String(comment),
                                 author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null
+                                authorId: comment.authorId || null,
+                                attachments: JSON.stringify(atts)
                               })
                             }
                           }
@@ -1406,7 +1452,7 @@ async function handler(req, res) {
               // - activityLog → ProjectActivityLog table
               // - team → ProjectTeamMember table
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { name: 'asc' },
             take: limit,
             skip: skip
           });
@@ -1441,7 +1487,7 @@ async function handler(req, res) {
                   }
                 } : {})
               },
-              orderBy: { createdAt: 'desc' },
+              orderBy: { name: 'asc' },
               take: limit,
               skip: skip
             });
