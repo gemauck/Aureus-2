@@ -135,6 +135,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
     const [listSortColumn, setListSortColumn] = useState('name'); // Default to alphabetical by name
     const [listSortDirection, setListSortDirection] = useState('asc');
     const [usingCachedOpportunities, setUsingCachedOpportunities] = useState(false);
+    const [listPage, setListPage] = useState(1);
+    const [listPageSize, setListPageSize] = useState(() => {
+        try {
+            const saved = parseInt(localStorage.getItem('pipelineListPageSize'), 10);
+            return [25, 50, 100].includes(saved) ? saved : 25;
+        } catch (e) {
+            return 25;
+        }
+    });
     
     const schedulePipelineRefresh = useCallback(() => {
         setTimeout(() => setRefreshKey((k) => k + 1), 0);
@@ -157,6 +166,20 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             console.warn('⚠️ Pipeline: Failed to save view mode preference:', error);
         }
     }, [viewMode]);
+
+    // Persist list page size to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('pipelineListPageSize', String(listPageSize));
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Failed to save list page size:', error);
+        }
+    }, [listPageSize]);
+
+    // Reset to page 1 when filters or sort change
+    useEffect(() => {
+        setListPage(1);
+    }, [filters.search, filters.industry, filters.status, filters.stage, filters.source, showStarredOnly, listSortColumn, listSortDirection]);
 
     const normalizeLifecycleStage = useCallback(normalizeLifecycleStageValue, []);
 
@@ -2712,7 +2735,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     // Combined Deals List View (sites nested under their lead)
     const ListView = () => {
-        const rows = getNestedListRows();
+        const allRows = getNestedListRows();
+        const totalRows = allRows.length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / listPageSize));
+        const currentPage = Math.min(listPage, totalPages);
+        const start = (currentPage - 1) * listPageSize;
+        const rows = allRows.slice(start, start + listPageSize);
+        useEffect(() => {
+            if (totalPages > 0 && listPage > totalPages) {
+                setListPage(totalPages);
+            }
+        }, [totalPages, listPage]);
 
         useEffect(() => {
             if (viewMode !== 'list') {
@@ -2893,6 +2926,72 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             </tbody>
                         </table>
                     </div>
+                    {/* Pagination */}
+                    {totalRows > 0 && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm text-gray-600">
+                                    Showing {start + 1}&ndash;{Math.min(start + listPageSize, totalRows)} of {totalRows} deals
+                                </span>
+                                <label className="flex items-center gap-2 text-sm text-gray-600">
+                                    <span>Per page</span>
+                                    <select
+                                        value={listPageSize}
+                                        onChange={(e) => {
+                                            setListPageSize(Number(e.target.value));
+                                            setListPage(1);
+                                        }}
+                                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value={25}>25</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setListPage(1)}
+                                    disabled={currentPage <= 1}
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label="First page"
+                                >
+                                    <i className="fas fa-angle-double-left"></i>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setListPage((p) => Math.max(1, p - 1))}
+                                    disabled={currentPage <= 1}
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label="Previous page"
+                                >
+                                    <i className="fas fa-angle-left"></i>
+                                </button>
+                                <span className="px-3 py-1.5 text-sm text-gray-600 min-w-[7rem] text-center">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage >= totalPages}
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label="Next page"
+                                >
+                                    <i className="fas fa-angle-right"></i>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setListPage(totalPages)}
+                                    disabled={currentPage >= totalPages}
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label="Last page"
+                                >
+                                    <i className="fas fa-angle-double-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );
