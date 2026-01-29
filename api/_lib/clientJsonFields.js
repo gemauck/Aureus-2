@@ -145,7 +145,8 @@ export function parseClientJsonFields(client) {
         notes: site.notes || '',
         siteLead: site.siteLead ?? '',
         stage: (site.stage != null && String(site.stage).trim() !== '') ? String(site.stage) : 'Potential',
-        aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus) : 'Awareness'
+        aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus) : 'Awareness',
+        siteType: site.siteType === 'client' ? 'client' : 'lead'
       }))
     } else {
       // Fallback: Try JSONB field, then String field

@@ -96,7 +96,8 @@ async function handler(req, res) {
         
         if (!client) return notFound(res, 'Client not found')
         
-        // Phase 6: Create site in normalized ClientSite table (persist stage/aidaStatus for leads)
+        // Phase 6: Create site in normalized ClientSite table (persist stage/aidaStatus/siteType for leads)
+        const siteTypeVal = body.siteType === 'client' ? 'client' : 'lead'
         const createData = {
           clientId: rawClientId,
           name: siteName,
@@ -107,13 +108,15 @@ async function handler(req, res) {
           notes: typeof body.notes === 'string' ? body.notes : '',
           siteLead: body.siteLead != null ? String(body.siteLead) : '',
           stage: body.stage != null ? String(body.stage) : 'Potential',
-          aidaStatus: body.aidaStatus != null ? String(body.aidaStatus) : 'Awareness'
+          aidaStatus: body.aidaStatus != null ? String(body.aidaStatus) : 'Awareness',
+          siteType: siteTypeVal
         }
         const enrich = (row) => ({
           ...row,
           siteLead: row.siteLead ?? createData.siteLead,
           stage: row.stage ?? createData.stage,
-          aidaStatus: row.aidaStatus ?? createData.aidaStatus
+          aidaStatus: row.aidaStatus ?? createData.aidaStatus,
+          siteType: row.siteType ?? createData.siteType
         })
         let newSite
         try {
@@ -189,9 +192,10 @@ async function handler(req, res) {
         
         if (!existingSite) return notFound(res, 'Site not found')
         
-        // Use defaults for stage/aidaStatus when empty so they persist after refresh
+        // Use defaults for stage/aidaStatus/siteType when empty so they persist after refresh
         const stageVal = body.stage !== undefined ? (body.stage != null && String(body.stage).trim() !== '' ? String(body.stage).trim() : 'Potential') : undefined
         const aidaVal = body.aidaStatus !== undefined ? (body.aidaStatus != null && String(body.aidaStatus).trim() !== '' ? String(body.aidaStatus).trim() : 'Awareness') : undefined
+        const siteTypeVal = body.siteType !== undefined ? (body.siteType === 'client' ? 'client' : 'lead') : undefined
         const baseUpdate = {
           name: body.name !== undefined ? body.name : undefined,
           address: body.address !== undefined ? body.address : undefined,
@@ -201,7 +205,8 @@ async function handler(req, res) {
           notes: body.notes !== undefined ? body.notes : undefined,
           siteLead: body.siteLead !== undefined ? String(body.siteLead) : undefined,
           stage: stageVal,
-          aidaStatus: aidaVal
+          aidaStatus: aidaVal,
+          siteType: siteTypeVal
         }
         const removeUndefined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
         const data = removeUndefined(baseUpdate)
@@ -223,7 +228,21 @@ async function handler(req, res) {
               notes: body.notes !== undefined ? body.notes : undefined
             })
             updatedSite = await prisma.clientSite.update({ where: { id: siteId }, data: dataBaseOnly })
-            updatedSite = { ...updatedSite, siteLead: body.siteLead ?? '', stage: body.stage ?? '', aidaStatus: body.aidaStatus ?? '' }
+            updatedSite = { ...updatedSite, siteLead: body.siteLead ?? '', stage: body.stage ?? '', aidaStatus: body.aidaStatus ?? '', siteType: siteTypeVal ?? 'lead' }
+          } else if (m.includes('siteType') && (m.includes('does not exist') || m.includes('column'))) {
+            const dataWithoutSiteType = removeUndefined({
+              name: body.name !== undefined ? body.name : undefined,
+              address: body.address !== undefined ? body.address : undefined,
+              contactPerson: body.contactPerson !== undefined ? body.contactPerson : undefined,
+              contactPhone: body.contactPhone !== undefined ? body.contactPhone : undefined,
+              contactEmail: body.contactEmail !== undefined ? body.contactEmail : undefined,
+              notes: body.notes !== undefined ? body.notes : undefined,
+              siteLead: body.siteLead !== undefined ? String(body.siteLead) : undefined,
+              stage: stageVal,
+              aidaStatus: aidaVal
+            })
+            updatedSite = await prisma.clientSite.update({ where: { id: siteId }, data: dataWithoutSiteType })
+            updatedSite = { ...updatedSite, siteType: siteTypeVal ?? 'lead' }
           } else {
             throw updateErr
           }

@@ -1733,6 +1733,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         longitude: '',
         gpsCoordinates: '',
         siteLead: '',
+        siteType: isLead ? 'lead' : 'client',
         stage: 'Potential',
         aidaStatus: 'Awareness'
     });
@@ -3245,6 +3246,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 contactEmail: newSite.email || newSite.contactEmail || '',
                 notes: newSite.notes || '',
                 siteLead: newSite.siteLead ?? '',
+                siteType: newSite.siteType === 'client' ? 'client' : 'lead',
                 stage: newSite.stage ?? 'Potential',
                 aidaStatus: newSite.aidaStatus ?? 'Awareness'
             };
@@ -3262,6 +3264,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const savedSite = rawSaved && rawSaved.id ? {
                 ...rawSaved,
                 siteLead: rawSaved.siteLead ?? payload.siteLead ?? '',
+                siteType: rawSaved.siteType ?? payload.siteType ?? 'lead',
                 stage: rawSaved.stage ?? payload.stage ?? 'Potential',
                 aidaStatus: rawSaved.aidaStatus ?? payload.aidaStatus ?? 'Awareness'
             } : rawSaved;
@@ -3317,7 +3320,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Switch to sites tab immediately
                 handleTabChange('sites');
                 
-                // Close form and reset
+                // Close form and reset (default siteType by context: client vs lead)
                 setNewSite({
                     name: '',
                     address: '',
@@ -3329,6 +3332,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     longitude: '',
                     gpsCoordinates: '',
                     siteLead: '',
+                    siteType: isLead ? 'lead' : 'client',
                     stage: 'Potential',
                     aidaStatus: 'Awareness'
                 });
@@ -3369,6 +3373,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             phone: site.phone ?? site.contactPhone ?? '',
             email: site.email ?? site.contactEmail ?? '',
             siteLead: site.siteLead ?? '',
+            siteType: site.siteType === 'client' ? 'client' : 'lead',
             stage: site.stage ?? 'Potential',
             aidaStatus: site.aidaStatus ?? 'Awareness'
         });
@@ -3401,6 +3406,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             id: editingSite.id,
             contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
             contactEmail: newSite.contactEmail ?? newSite.email ?? '',
+            siteType: newSite.siteType === 'client' ? 'client' : 'lead',
             stage: newSite.stage ?? 'Potential',
             aidaStatus: newSite.aidaStatus ?? 'Awareness'
         };
@@ -3430,6 +3436,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     contactEmail: sitePayload.contactEmail ?? '',
                     notes: sitePayload.notes ?? '',
                     siteLead: sitePayload.siteLead ?? '',
+                    siteType: sitePayload.siteType === 'client' ? 'client' : 'lead',
                     stage: sitePayload.stage ?? '',
                     aidaStatus: sitePayload.aidaStatus ?? ''
                 };
@@ -3472,6 +3479,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 longitude: '',
                 gpsCoordinates: '',
                 siteLead: '',
+                siteType: isLead ? 'lead' : 'client',
                 stage: 'Potential',
                 aidaStatus: 'Awareness'
             });
@@ -5357,7 +5365,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     {!showSiteForm && (
                                         <button
                                             type="button"
-                                            onClick={() => setShowSiteForm(true)}
+                                            onClick={() => {
+                                                setEditingSite(null);
+                                                setNewSite({
+                                                    name: '',
+                                                    address: '',
+                                                    contactPerson: '',
+                                                    phone: '',
+                                                    email: '',
+                                                    notes: '',
+                                                    latitude: '',
+                                                    longitude: '',
+                                                    gpsCoordinates: '',
+                                                    siteLead: '',
+                                                    siteType: isLead ? 'lead' : 'client',
+                                                    stage: 'Potential',
+                                                    aidaStatus: 'Awareness'
+                                                });
+                                                setShowSiteForm(true);
+                                            }}
                                             className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center"
                                         >
                                             <i className="fas fa-plus mr-1.5"></i>
@@ -5371,7 +5397,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <div className="flex items-center justify-between mb-3">
                                             <button
                                                 type="button"
-                                                onClick={() => { setShowSiteForm(false); setEditingSite(null); setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', stage: 'Potential', aidaStatus: 'Awareness' }); }}
+                                                onClick={() => { setShowSiteForm(false); setEditingSite(null); setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', siteType: isLead ? 'lead' : 'client', stage: 'Potential', aidaStatus: 'Awareness' }); }}
                                                 className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
                                             >
                                                 <i className="fas fa-arrow-left"></i>
@@ -5393,6 +5419,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                     placeholder="e.g., Main Mine, North Farm"
                                                 />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site type</label>
+                                                <select
+                                                    value={newSite.siteType === 'client' ? 'client' : 'lead'}
+                                                    onChange={(e) => setNewSite({...newSite, siteType: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    title="Lead = show in Pipeline; Client = do not show in Pipeline"
+                                                >
+                                                    <option value="lead">Lead (show in Pipeline)</option>
+                                                    <option value="client">Client (do not show in Pipeline)</option>
+                                                </select>
+                                                <p className="text-xs text-gray-500 mt-0.5">Lead sites appear in the Pipeline until marked as Client.</p>
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Site Contact</label>
@@ -5573,20 +5612,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 onClick={() => {
                                                     setShowSiteForm(false);
                                                     setEditingSite(null);
-            setNewSite({
-                name: '',
-                address: '',
-                contactPerson: '',
-                phone: '',
-                email: '',
-                notes: '',
-                latitude: '',
-                longitude: '',
-                gpsCoordinates: '',
-                siteLead: '',
-                stage: 'Potential',
-                aidaStatus: 'Awareness'
-            });
+                                                    setNewSite({
+                                                        name: '',
+                                                        address: '',
+                                                        contactPerson: '',
+                                                        phone: '',
+                                                        email: '',
+                                                        notes: '',
+                                                        latitude: '',
+                                                        longitude: '',
+                                                        gpsCoordinates: '',
+                                                        siteLead: '',
+                                                        siteType: isLead ? 'lead' : 'client',
+                                                        stage: 'Potential',
+                                                        aidaStatus: 'Awareness'
+                                                    });
                                                 }}
                                                 className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                                             >

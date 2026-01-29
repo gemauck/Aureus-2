@@ -162,10 +162,10 @@ async function handler(req, res) {
                 `
                 lead.clientComments = commentsResult || []
                 
-                // Phase 6: Fetch normalized tables (include siteLead, stage, aidaStatus for per-site lead tracking)
+                // Phase 6: Fetch normalized tables (include siteLead, stage, aidaStatus, siteType for per-site lead tracking)
                 const sitesResult = await prisma.$queryRaw`
                   SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
-                         "siteLead", "stage", "aidaStatus", "createdAt", "updatedAt"
+                         "siteLead", "stage", "aidaStatus", "siteType", "createdAt", "updatedAt"
                   FROM "ClientSite"
                   WHERE "clientId" = ${id}
                   ORDER BY "createdAt" ASC
@@ -678,7 +678,8 @@ async function handler(req, res) {
                 notes: site.notes || '',
                 siteLead: site.siteLead ?? '',
                 stage: stageVal,
-                aidaStatus: aidaVal
+                aidaStatus: aidaVal,
+                siteType: site.siteType ?? 'lead'
               }
               // Resolve target id: use site.id if it exists in DB, else match by index to existing site (list view often sends by index)
               let targetId = site.id && existingSiteIds.has(site.id) ? site.id : null

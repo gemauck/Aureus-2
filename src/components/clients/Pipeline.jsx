@@ -96,7 +96,7 @@ const normalizeLifecycleStageValue = (value) => {
  * - Quick actions and bulk operations
  */
 
-const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
+const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
     // State Management
     const [clients, setClients] = useState([]);
     const [leads, setLeads] = useState([]);
@@ -849,11 +849,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
         });
 
         const siteItems = [];
+        // Lead sites: only include sites marked as Lead (siteType !== 'client'); default missing siteType to 'lead' for backward compat
         leads.forEach(lead => {
             const sites = lead.clientSites || lead.sites || [];
             const siteList = Array.isArray(sites) ? sites : [];
             siteList.forEach((site, idx) => {
                 if (!site || typeof site !== 'object') return;
+                if (site.siteType === 'client') return; // Client sites do not show in Pipeline
                 const siteStage = site.stage || site.aidaStatus || lead.stage;
                 const mappedStage = normalizeStageToAida(siteStage);
                 const siteId = site.id || `site-${lead.id}-${idx}`;
@@ -877,6 +879,39 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     site,
                     siteId: site.id || null,
                     raw: { site, lead }
+                });
+            });
+        });
+        // Client sites marked as Lead: show in Pipeline until marked as Client
+        clients.forEach(client => {
+            const sites = client.clientSites || client.sites || [];
+            const siteList = Array.isArray(sites) ? sites : [];
+            siteList.forEach((site, idx) => {
+                if (!site || typeof site !== 'object') return;
+                if (site.siteType !== 'lead') return; // Only lead-type sites from clients show in Pipeline
+                const siteStage = site.stage || site.aidaStatus || 'Awareness';
+                const mappedStage = normalizeStageToAida(siteStage);
+                const siteId = site.id || `site-${client.id}-${idx}`;
+                const pipelineId = `client-${client.id}-site-${siteId}`;
+                const clientName = client.name || 'Client';
+                const siteName = site.name || 'Unnamed site';
+                siteItems.push({
+                    id: pipelineId,
+                    type: 'site',
+                    itemType: 'Site',
+                    name: `${clientName} · ${siteName}`,
+                    stage: mappedStage,
+                    status: normalizeLifecycleStage(site.stage || 'Potential'),
+                    isStarred: Boolean(client.isStarred),
+                    value: 0,
+                    createdDate: site.createdAt || client.createdDate || new Date().toISOString(),
+                    expectedCloseDate: null,
+                    industry: client.industry || 'Other',
+                    clientId: client.id,
+                    client,
+                    site,
+                    siteId: site.id || null,
+                    raw: { site, client }
                 });
             });
         });
@@ -1930,8 +1965,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
 
         if (item.type === 'site') {
-            const resolvedLeadId = item.leadId || item.lead?.id;
             const siteId = item.siteId || item.site?.id;
+            const site = item.site;
+            // Client site (from a client record): open client detail to Sites tab
+            if (item.clientId || item.client) {
+                const clientId = item.clientId || item.client?.id;
+                const clientData = item.client || { id: clientId };
+                if (clientId && typeof onOpenClient === 'function') {
+                    onOpenClient({ clientId, clientData, siteId, site, origin: 'prop' });
+                    return;
+                }
+                window.dispatchEvent(new CustomEvent('openClientDetailFromPipeline', { detail: { clientId, clientData, siteId, site, origin: 'event' } }));
+                return;
+            }
+            // Lead site: open lead detail to Sites tab
+            const resolvedLeadId = item.leadId || item.lead?.id;
             if (!resolvedLeadId) return;
             const payload = { leadId: resolvedLeadId, leadData: item.lead || { ...item, id: resolvedLeadId }, siteId: siteId || undefined };
             if (typeof onOpenLead === 'function') {

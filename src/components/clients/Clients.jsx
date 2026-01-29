@@ -5967,6 +5967,33 @@ const Clients = React.memo(() => {
         handleOpenLead(lead || null, { fromPipeline: true, leadId: resolvedLeadId });
     }, [handleOpenLead]);
 
+    const openClientFromPipeline = useCallback(async ({ clientId, clientData, siteId, site } = {}) => {
+        const resolvedClientId = clientId || clientData?.id;
+        if (!resolvedClientId) return;
+        try {
+            sessionStorage.setItem('returnToPipeline', 'true');
+        } catch (_) {}
+        let client = clientData;
+        if (!client && Array.isArray(clientsRef.current)) {
+            client = clientsRef.current.find(c => c.id === resolvedClientId) || null;
+        }
+        if (!client && window.DatabaseAPI?.getClient) {
+            try {
+                const response = await window.DatabaseAPI.getClient(resolvedClientId);
+                client = response?.data?.client ?? response?.client ?? response?.data ?? response ?? null;
+            } catch (_) {}
+        }
+        if (!client) return;
+        let resolvedSite = site;
+        if (!resolvedSite && siteId && Array.isArray(client.sites)) {
+            resolvedSite = client.sites.find(s => s.id === siteId) || null;
+        }
+        if (!resolvedSite && siteId && Array.isArray(client.clientSites)) {
+            resolvedSite = client.clientSites.find(s => s.id === siteId) || null;
+        }
+        handleOpenClientToSite(client, resolvedSite || { id: siteId });
+    }, [handleOpenClientToSite]);
+
     const openOpportunityFromPipeline = useCallback(async ({ opportunityId, clientId, clientName, opportunity } = {}) => {
         const resolvedOpportunityId = opportunityId || opportunity?.id;
         if (!resolvedOpportunityId) return;
@@ -6346,16 +6373,27 @@ const Clients = React.memo(() => {
             openOpportunityFromPipeline(detail);
         };
 
+        const handleClientEvent = (event) => {
+            const detail = event?.detail || {};
+            if (detail.origin === 'prop') {
+                return;
+            }
+            openClientFromPipeline(detail);
+        };
+
         window.addEventListener('openLeadDetailFromPipeline', handleLeadEvent);
         window.addEventListener('openOpportunityDetailFromPipeline', handleOpportunityEvent);
+        window.addEventListener('openClientDetailFromPipeline', handleClientEvent);
 
         // Expose direct callbacks for legacy modules that prefer calling functions instead of dispatching events
         window.__openLeadDetailFromPipeline = openLeadFromPipeline;
         window.__openOpportunityDetailFromPipeline = openOpportunityFromPipeline;
+        window.__openClientDetailFromPipeline = openClientFromPipeline;
 
         return () => {
             window.removeEventListener('openLeadDetailFromPipeline', handleLeadEvent);
             window.removeEventListener('openOpportunityDetailFromPipeline', handleOpportunityEvent);
+            window.removeEventListener('openClientDetailFromPipeline', handleClientEvent);
 
             if (window.__openLeadDetailFromPipeline === openLeadFromPipeline) {
                 delete window.__openLeadDetailFromPipeline;
@@ -6363,8 +6401,11 @@ const Clients = React.memo(() => {
             if (window.__openOpportunityDetailFromPipeline === openOpportunityFromPipeline) {
                 delete window.__openOpportunityDetailFromPipeline;
             }
+            if (window.__openClientDetailFromPipeline === openClientFromPipeline) {
+                delete window.__openClientDetailFromPipeline;
+            }
         };
-    }, [openLeadFromPipeline, openOpportunityFromPipeline]);
+    }, [openLeadFromPipeline, openOpportunityFromPipeline, openClientFromPipeline]);
 
     const handleNavigateToProject = (projectId) => {
         // Close client detail view
@@ -9550,7 +9591,8 @@ const Clients = React.memo(() => {
                         clients: clients,
                         leads: leads,
                         onOpenLead: openLeadFromPipeline,
-                        onOpenOpportunity: openOpportunityFromPipeline
+                        onOpenOpportunity: openOpportunityFromPipeline,
+                        onOpenClient: openClientFromPipeline
                     })
                 ) : (
                     <LegacyPipelineView />

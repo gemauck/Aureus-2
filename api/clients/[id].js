@@ -120,10 +120,10 @@ async function handler(req, res) {
           `
           normalizedComments = commentsResult || []
           
-          // Phase 6: Fetch sites from normalized table (include siteLead, stage, aidaStatus for per-site lead tracking)
+          // Phase 6: Fetch sites from normalized table (include siteLead, stage, aidaStatus, siteType for per-site lead tracking)
           const sitesResult = await prisma.$queryRaw`
             SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
-                   "siteLead", "stage", "aidaStatus", "createdAt", "updatedAt"
+                   "siteLead", "stage", "aidaStatus", "siteType", "createdAt", "updatedAt"
             FROM "ClientSite"
             WHERE "clientId" = ${id}
             ORDER BY "createdAt" ASC
@@ -212,6 +212,7 @@ async function handler(req, res) {
           siteLead: s.siteLead ?? '',
           stage: s.stage ?? '',
           aidaStatus: s.aidaStatus ?? '',
+          siteType: s.siteType ?? 'lead',
           createdAt: s.createdAt
         }))
         clientBasic.clientContracts = normalizedContracts.map(c => ({
@@ -721,7 +722,8 @@ async function handler(req, res) {
                 notes: site.notes || '',
                 siteLead: site.siteLead ?? '',
                 stage: site.stage ?? '',
-                aidaStatus: site.aidaStatus ?? ''
+                aidaStatus: site.aidaStatus ?? '',
+                siteType: site.siteType ?? 'lead'
               }
               
               if (site.id && existingSiteIds.has(site.id)) {

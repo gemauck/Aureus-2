@@ -1046,7 +1046,8 @@ async function handler(req, res) {
                 notes: site.notes || '',
                 siteLead: site.siteLead != null ? String(site.siteLead) : '',
                 stage: site.stage != null ? String(site.stage) : '',
-                aidaStatus: site.aidaStatus != null ? String(site.aidaStatus) : ''
+                aidaStatus: site.aidaStatus != null ? String(site.aidaStatus) : '',
+                siteType: site.siteType === 'client' ? 'client' : 'lead'
               }
               
               if (site.id) {
