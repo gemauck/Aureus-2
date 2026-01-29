@@ -210,6 +210,12 @@ const Projects = () => {
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
     const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, projectId: null });
     
+    // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
+    const normalizeProjectId = (id) => {
+        if (id == null) return id;
+        return String(id).split('?')[0].split('&')[0].trim();
+    };
+
     const openProgressTrackerHash = (params = {}) => {
         try {
             const basePath = '#/projects';
@@ -648,8 +654,8 @@ const Projects = () => {
                         setViewingProject(null);
                     }
                 } else {
-                    // URL contains a project ID - open that project
-                    const projectId = route.segments[0];
+                    // URL contains a project ID - open that project (strip any & or ? suffix e.g. clearCache=1)
+                    const projectId = normalizeProjectId(route.segments[0]);
                     const taskId = route.search?.get('task');
                     const focusInput = route.search?.get('focusInput');
                     const tab = route.search?.get('tab');
@@ -868,7 +874,7 @@ const Projects = () => {
             
             if (urlPath.includes('/projects/')) {
                 const pathParts = urlPath.split('/projects/')[1].split('/');
-                projectId = pathParts[0];
+                projectId = normalizeProjectId(pathParts[0]);
                 taskId = urlParams.get('task');
             }
             
@@ -1427,7 +1433,7 @@ const Projects = () => {
         let hashParams = null;
         if (urlHash.includes('/projects/')) {
             const hashParts = urlHash.split('/projects/')[1].split('/');
-            projectId = hashParts[0].split('?')[0]; // Remove query params from ID
+            projectId = normalizeProjectId(hashParts[0]); // Remove query/fragment from ID (e.g. ?tab=… or &clearCache=1)
             // Check for query params in hash
             if (urlHash.includes('?')) {
                 const hashQuery = urlHash.split('?')[1];
@@ -1441,7 +1447,7 @@ const Projects = () => {
         // Fallback to pathname if not found in hash
         if (!projectId && urlPath.includes('/projects/')) {
             const pathParts = urlPath.split('/projects/')[1].split('/');
-            projectId = pathParts[0];
+            projectId = normalizeProjectId(pathParts[0]);
             if (!taskId) {
                 taskId = urlParams.get('task');
             }

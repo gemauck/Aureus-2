@@ -530,6 +530,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             let sectionsField = null;
             if (!isMonthlyDataReview) {
                 const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+                const authHeaders = { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
                 const endpointV2 = `/api/projects/${project.id}/document-sections-v2?_=${Date.now()}`;
                 const endpointV1 = `/api/projects/${project.id}/document-sections?_=${Date.now()}`;
                 try {
@@ -537,7 +539,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         method: 'GET',
                         credentials: 'include',
                         cache: 'no-store',
-                        headers: { Accept: 'application/json' }
+                        headers: authHeaders
                     });
                     if (res.ok) {
                         const json = await res.json();
@@ -552,7 +554,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             method: 'GET',
                             credentials: 'include',
                             cache: 'no-store',
-                            headers: { Accept: 'application/json' }
+                            headers: authHeaders
                         });
                         if (res.ok) {
                             const json = await res.json();
@@ -596,9 +598,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     const reloadKey = 'docCollection_reloaded_' + project.id;
                     if (sessionStorage.getItem(reloadKey) !== '1') {
                         sessionStorage.setItem(reloadKey, '1');
-                        const q = (typeof window !== 'undefined' && window.location) ? (window.location.search ? '&' : '?') + 'v=' + Date.now() : '';
-                        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) || '';
-                        window.location.href = (window.location.pathname || '/') + q + hash;
+                        if (typeof window !== 'undefined' && window.location) {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('v', String(Date.now()));
+                            window.location.href = url.pathname + url.search + (window.location.hash || '');
+                        }
                         return;
                     }
                 }
@@ -4160,10 +4164,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                 <button
                                     onClick={() => {
                                         if (typeof window === 'undefined' || !window.location) return;
-                                        const sep = window.location.search ? '&' : '?';
-                                        const q = sep + 'clearCache=1';
-                                        const hash = window.location.hash || '';
-                                        window.location.href = (window.location.pathname || '/') + q + hash;
+                                        const url = new URL(window.location.href);
+                                        url.searchParams.set('clearCache', '1');
+                                        window.location.href = url.pathname + url.search + (window.location.hash || '');
                                     }}
                                     className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 text-sm font-medium border border-amber-300"
                                 >

@@ -41,7 +41,11 @@
         if (!normalized || normalized === '/') {
             return [];
         }
-        return normalized.replace(/^\//, '').split('/').filter(Boolean);
+        return normalized
+            .replace(/^\//, '')
+            .split('/')
+            .filter(Boolean)
+            .map((seg) => String(seg).split('?')[0].split('&')[0].trim());
     };
 
     const buildPath = (page, segments = []) => {
