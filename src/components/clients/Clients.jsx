@@ -490,7 +490,7 @@ function processClientData(rawClients, cacheKey) {
         followUps: Array.isArray(c.followUps) ? c.followUps : (typeof c.followUps === 'string' ? JSON.parse(c.followUps || '[]') : []),
         projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
         comments: Array.isArray(c.comments) ? c.comments : (typeof c.comments === 'string' ? JSON.parse(c.comments || '[]') : []),
-        sites: Array.isArray(c.sites) ? c.sites : (typeof c.sites === 'string' ? JSON.parse(c.sites || '[]') : []),
+        sites: Array.isArray(c.sites) ? c.sites : (Array.isArray(c.clientSites) ? c.clientSites : (typeof c.sites === 'string' ? JSON.parse(c.sites || '[]') : [])),
         opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
         contracts: Array.isArray(c.contracts) ? c.contracts : (typeof c.contracts === 'string' ? JSON.parse(c.contracts || '[]') : []),
         activityLog: Array.isArray(c.activityLog) ? c.activityLog : (typeof c.activityLog === 'string' ? JSON.parse(c.activityLog || '[]') : []),
@@ -1050,6 +1050,7 @@ const Clients = React.memo(() => {
                 // No token available - skip industry fetch
                 return;
             }
+            if (window.RateLimitManager?.isRateLimited?.()) return;
             
             const response = await fetch('/api/industries', {
                 method: 'GET',
@@ -1064,11 +1065,16 @@ const Clients = React.memo(() => {
                 const data = await response.json();
                 const industriesList = data?.data?.industries || data?.industries || [];
                 setIndustries(industriesList);
+            } else if (response.status === 429) {
+                const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+                window.RateLimitManager?.setRateLimit?.(retryAfter);
             } else {
                 console.error('Failed to load industries:', response.statusText);
             }
         } catch (error) {
-            console.error('Error loading industries:', error);
+            if (error?.status !== 429 && error?.code !== 'RATE_LIMIT_EXCEEDED') {
+                console.error('Error loading industries:', error);
+            }
         } finally {
             setIsLoadingIndustries(false);
         }
@@ -2354,35 +2360,9 @@ const Clients = React.memo(() => {
                     });
                 }); // End startTransition
                 
-                // If any clients are missing group memberships (e.g. ACME with group "Test" not showing), fetch from /api/clients/:id/groups
-                const clientsNeedingGroups = clientsOnly.filter(c => !c.groupMemberships || !Array.isArray(c.groupMemberships) || c.groupMemberships.length === 0);
-                if (clientsNeedingGroups.length > 0 && !groupMembershipsFetchRef.current) {
-                    groupMembershipsFetchRef.current = true;
-                    const token = window.storage?.getToken?.();
-                    if (token) {
-                        Promise.all(clientsNeedingGroups.slice(0, 15).map(async (client) => {
-                            try {
-                                const res = await fetch(`/api/clients/${client.id}/groups`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' });
-                                if (!res.ok) return null;
-                                const data = await res.json();
-                                const gs = data?.data?.groupMemberships ?? data?.groupMemberships ?? [];
-                                if (gs.length) return { clientId: client.id, groupMemberships: gs };
-                            } catch (_) {}
-                            return null;
-                        })).then(results => {
-                            const map = new Map(results.filter(Boolean).map(r => [r.clientId, r.groupMemberships]));
-                            if (map.size) {
-                                setClients(prev => prev.map(c => {
-                                    const gs = map.get(c.id);
-                                    if (!gs?.length) return c;
-                                    return { ...c, groupMemberships: gs.map(g => ({ ...g, group: g.group ? { id: g.group.id, name: g.group.name, type: g.group.type, industry: g.group.industry } : null })) };
-                                }));
-                            }
-                        }).finally(() => { groupMembershipsFetchRef.current = false; });
-                    } else {
-                        groupMembershipsFetchRef.current = false;
-                    }
-                }
+                // RATE-LIMIT FIX: Removed list-level N+1 /api/clients/:id/groups fetches.
+                // API already returns groupMemberships (incl. hydration). Per-client fetches caused
+                // 429s when combined with sites, contacts, etc. Rely on API data only for list view.
                 
                 // Only update leads if they're mixed with clients in the API response
                 // (Leads typically come from a separate getLeads() endpoint via loadLeads())
@@ -3651,35 +3631,8 @@ const Clients = React.memo(() => {
             }
                 
             setLeads(mappedLeads);
-            // If any leads have no company group from API (e.g. cache or older deploy), fetch from /api/clients/:id/groups
-            const needGroups = mappedLeads.filter(l => !l.groupMemberships?.length);
-            if (needGroups.length > 0 && !groupMembershipsFetchRef.current) {
-              groupMembershipsFetchRef.current = true;
-              const token = window.storage?.getToken?.();
-              if (token) {
-                Promise.all(needGroups.slice(0, 15).map(async (lead) => {
-                  try {
-                    const res = await fetch(`/api/clients/${lead.id}/groups`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' });
-                    if (!res.ok) return null;
-                    const data = await res.json();
-                    const gs = data?.data?.groupMemberships ?? data?.groupMemberships ?? [];
-                    if (gs.length) return { leadId: lead.id, groupMemberships: gs };
-                  } catch (_) {}
-                  return null;
-                })).then(results => {
-                  const map = new Map(results.filter(Boolean).map(r => [r.leadId, r.groupMemberships]));
-                  if (map.size) {
-                    setLeads(prev => prev.map(l => {
-                      const gs = map.get(l.id);
-                      if (!gs?.length) return l;
-                      return { ...l, groupMemberships: gs.map(g => ({ ...g, group: g.group ? { id: g.group.id, name: g.group.name, type: g.group.type, industry: g.group.industry } : null })) };
-                    }));
-                  }
-                }).finally(() => { groupMembershipsFetchRef.current = false; });
-              } else {
-                groupMembershipsFetchRef.current = false;
-              }
-            }
+            // RATE-LIMIT FIX: Removed list-level N+1 /api/clients/:id/groups for leads.
+            // Leads API returns groupMemberships. Per-lead fetches contributed to 429s.
             // leadsCount now calculated from leads.length via useMemo
             
             // Log count update for debugging
@@ -5869,38 +5822,52 @@ const Clients = React.memo(() => {
     
     const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages, paginatedGroups, totalGroupsPages, clientsStartIndex, clientsEndIndex, leadsStartIndex, leadsEndIndex, groupsStartIndex, groupsEndIndex } = paginationData;
 
-    // When "Show sites" is on, fetch sites for visible clients from GET /api/sites/client/:id so list always shows sites
+    // When "Show sites" is on, fetch sites only for visible clients that lack sites from list API.
+    // Use clientSites/parsedSites/sites from list when available to avoid N+1. Cap at 5 fetches
+    // and run sequentially with delay to prevent 429s.
     useEffect(() => {
         if (viewMode !== 'clients' || !showSitesInClientsList || !paginatedClients?.length) return;
+        if (window.RateLimitManager?.isRateLimited?.()) return;
         const token = window.storage?.getToken?.();
         if (!token) return;
+        const clientById = new Map(paginatedClients.map(c => [c.id, c]));
+        const hasSitesFromList = (id) => {
+            const c = clientById.get(id);
+            if (!c) return false;
+            const s = c.parsedSites ?? c.sites ?? c.clientSites;
+            return Array.isArray(s) && s.length > 0;
+        };
         const ids = paginatedClients.map(c => c.id).filter(Boolean);
-        const toFetch = ids.filter(id => sitesForList[id] === undefined);
+        const toFetch = ids.filter(id => sitesForList[id] === undefined && !hasSitesFromList(id));
         if (toFetch.length === 0) return;
+        const capped = toFetch.slice(0, 5);
         let cancelled = false;
-        Promise.all(
-            toFetch.slice(0, 25).map(async (clientId) => {
+        const run = async () => {
+            const results = [];
+            for (const clientId of capped) {
+                if (cancelled || window.RateLimitManager?.isRateLimited?.()) break;
                 try {
                     const res = await fetch(`/api/sites/client/${encodeURIComponent(clientId)}`, {
                         headers: { Authorization: `Bearer ${token}` },
                         credentials: 'include'
                     });
-                    if (!res.ok || cancelled) return { clientId, sites: [] };
+                    if (!res.ok || cancelled) { results.push({ clientId, sites: [] }); continue; }
                     const data = await res.json();
                     const sites = data?.data?.sites ?? data?.sites ?? [];
-                    return { clientId, sites: Array.isArray(sites) ? sites : [] };
+                    results.push({ clientId, sites: Array.isArray(sites) ? sites : [] });
                 } catch {
-                    return { clientId, sites: [] };
+                    results.push({ clientId, sites: [] });
                 }
-            })
-        ).then(results => {
+                await new Promise(r => setTimeout(r, 400));
+            }
             if (cancelled) return;
             setSitesForList(prev => {
                 const next = { ...prev };
                 results.forEach(({ clientId, sites }) => { next[clientId] = sites; });
                 return next;
             });
-        });
+        };
+        run();
         return () => { cancelled = true; };
     }, [viewMode, showSitesInClientsList, paginatedClients, clientsPage, sitesForList]);
 
