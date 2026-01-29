@@ -2300,9 +2300,14 @@ const LeadDetailModal = ({
             let savedSite = null;
 
             if (typeof updateLeadForSites === 'function') {
-                await updateLeadForSites(leadId, { id: leadId, name: (formData?.name ?? '').trim() || 'Lead', sites: sitesWithNew });
+                const patchResponse = await updateLeadForSites(leadId, { id: leadId, name: (formData?.name ?? '').trim() || 'Lead', sites: sitesWithNew });
+                const updatedLead = patchResponse?.data?.lead || patchResponse?.lead;
+                const sitesFromApi = Array.isArray(updatedLead?.clientSites) ? updatedLead.clientSites : (Array.isArray(updatedLead?.sites) ? updatedLead.sites : []);
+                const newSiteFromApi = sitesFromApi.length > 0
+                    ? sitesFromApi.find(s => (s.name || '').trim() === (siteName || '').trim()) || sitesFromApi[sitesFromApi.length - 1]
+                    : null;
+                savedSite = newSiteFromApi ? { ...sitePayload, ...newSiteFromApi, id: newSiteFromApi.id } : { id: 'temp-' + Date.now(), ...sitePayload };
                 if (typeof loadSitesFromDatabase === 'function') await loadSitesFromDatabase(leadId);
-                savedSite = { id: 'temp-' + Date.now(), ...sitePayload };
             } else {
                 let response;
                 if (window.api?.createSite) {

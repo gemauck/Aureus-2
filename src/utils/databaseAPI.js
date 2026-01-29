@@ -1128,7 +1128,9 @@ const DatabaseAPI = {
                     ? raw.data.leads
                     : Array.isArray(raw?.data)
                         ? raw.data
-                        : []
+                        : Array.isArray(raw?.leads)
+                            ? raw.leads
+                            : []
             }
         };
         if (normalized.data.leads.length === 0) {

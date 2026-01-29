@@ -947,6 +947,7 @@ const Clients = React.memo(() => {
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     const [openSiteIdForLead, setOpenSiteIdForLead] = useState(null);
+    const [openSiteIdForClient, setOpenSiteIdForClient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
@@ -974,6 +975,14 @@ const Clients = React.memo(() => {
             return true;
         }
     });
+    const [showSitesInClientsList, setShowSitesInClientsList] = useState(() => {
+        try {
+            const v = localStorage.getItem('clients.clients.showSitesInList');
+            return v !== null ? v === 'true' : true;
+        } catch {
+            return true;
+        }
+    });
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const [groupsPage, setGroupsPage] = useState(1);
@@ -984,6 +993,11 @@ const Clients = React.memo(() => {
             localStorage.setItem('clients.leads.showSitesInList', String(showSitesInLeadsList));
         } catch (_) {}
     }, [showSitesInLeadsList]);
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients.clients.showSitesInList', String(showSitesInClientsList));
+        } catch (_) {}
+    }, [showSitesInClientsList]);
 
     // Persist filterServices to localStorage whenever it changes
     useEffect(() => {
@@ -1362,7 +1376,7 @@ const Clients = React.memo(() => {
     }, []);
 
     // Handle opening client/lead - moved here to fix temporal dead zone issue
-    const handleOpenClient = useCallback((client) => {
+    const handleOpenClient = useCallback((client, options = {}) => {
         stopSync();
         const clientId = client?.id;
         setEditingClientId(clientId);
@@ -1370,7 +1384,7 @@ const Clients = React.memo(() => {
         selectedClientRef.current = client;
         selectedLeadRef.current = null;
         isFormOpenRef.current = true;
-        setCurrentTab('overview'); // Always default to Overview tab when opening a client
+        setCurrentTab(options.initialTab || 'overview');
         setViewMode('client-detail');
 
         // Prefetch full client (including KYC) immediately so modal shows persisted KYC after refresh
@@ -1397,6 +1411,12 @@ const Clients = React.memo(() => {
         //     });
         // }
     }, [stopSync]);
+
+    const handleOpenClientToSite = useCallback((client, site) => {
+        if (!client?.id) return;
+        if (site?.id) setOpenSiteIdForClient(site.id);
+        handleOpenClient(client, { initialTab: 'sites' });
+    }, [handleOpenClient]);
 
     const handleOpenLead = useCallback((lead, options = {}) => {
         const candidateLead = lead ? { ...lead } : null;
@@ -6892,75 +6912,100 @@ const Clients = React.memo(() => {
                                 </td>
                             </tr>
                         ) : (
-                            parsedClientsData.map((client) => (
-                                <tr 
-                                    key={client.id} 
-                                    onClick={() => handleOpenClient(client)}
+                            parsedClientsData.flatMap((client) => {
+                                const sites = client.parsedSites || client.sites || [];
+                                const siteRows = showSitesInClientsList ? (Array.isArray(sites) ? sites : []) : [];
+                                return [
+                                    <tr 
+                                        key={client.id} 
+                                        onClick={() => handleOpenClient(client)}
                                         className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} cursor-pointer transition`}
-                                >
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={(e) => handleToggleStar(e, client, false)}
-                                                className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
-                                                title={client.isStarred ? 'Unstar this client' : 'Star this client'}
-                                            >
-                                                <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
-                                            </button>
-                                            {client.thumbnail ? (
-                                                <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
-                                            ) : (
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                    {(client.name || '?').charAt(0).toUpperCase()}
-                                                </div>
-                                            )}
-                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
-                                        </div>
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {(() => {
-                                            const groupNames = resolveGroupNames(client);
-                                            return groupNames.length > 0
-                                                ? <span>{groupNames.join(', ')}</span>
-                                                : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
-                                        })()}
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className="flex flex-wrap gap-1.5">
+                                    >
+                                        <td className="px-6 py-2 whitespace-nowrap">
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={(e) => handleToggleStar(e, client, false)}
+                                                    className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
+                                                    title={client.isStarred ? 'Unstar this client' : 'Star this client'}
+                                                >
+                                                    <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
+                                                </button>
+                                                {client.thumbnail ? (
+                                                    <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                                ) : (
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                        {(client.name || '?').charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
+                                            </div>
+                                        </td>
+                                        <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                             {(() => {
-                                                const services = client.parsedServices || [];
-                                                const MAX = 3;
-                                                const visible = services.slice(0, MAX);
-                                                const remaining = services.length - visible.length;
-                                                
-                                                return (
-                                                    <>
-                                                        {visible.map((s, index) => (
-                                                            <span key={getServiceKey(s, index)} className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                                <i className="fas fa-tag mr-1"></i>{getServiceString(s)}
-                                                            </span>
-                                                        ))}
-                                                        {remaining > 0 && (
-                                                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
-                                                        )}
-                                                        {services.length === 0 && (
-                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
-                                                        )}
-                                                    </>
-                                                );
+                                                const groupNames = resolveGroupNames(client);
+                                                return groupNames.length > 0
+                                                    ? <span>{groupNames.join(', ')}</span>
+                                                    : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
                                             })()}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                            (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                                        }`}>
-                                            {client.status === 'active' ? 'Active' : client.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))
+                                        </td>
+                                        <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
+                                        <td className="px-6 py-2 whitespace-nowrap">
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {(() => {
+                                                    const services = client.parsedServices || [];
+                                                    const MAX = 3;
+                                                    const visible = services.slice(0, MAX);
+                                                    const remaining = services.length - visible.length;
+                                                    
+                                                    return (
+                                                        <>
+                                                            {visible.map((s, index) => (
+                                                                <span key={getServiceKey(s, index)} className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                    <i className="fas fa-tag mr-1"></i>{getServiceString(s)}
+                                                                </span>
+                                                            ))}
+                                                            {remaining > 0 && (
+                                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
+                                                            )}
+                                                            {services.length === 0 && (
+                                                                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-2 whitespace-nowrap">
+                                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {client.status === 'active' ? 'Active' : client.status}
+                                            </span>
+                                        </td>
+                                    </tr>,
+                                    ...siteRows.map((site, siteIdx) => (
+                                        <tr
+                                            key={`client-${client.id}-site-${site.id || siteIdx}`}
+                                            onClick={() => handleOpenClientToSite(client, site)}
+                                            className={`cursor-pointer ${isDark ? 'bg-gray-800/60 hover:bg-gray-800' : 'bg-gray-50/80 hover:bg-gray-100'}`}
+                                        >
+                                            <td className="px-6 py-1.5 text-sm" style={{ paddingLeft: '5.5rem' }}>
+                                                <span className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} onClick={e => e.stopPropagation()}>
+                                                    <i className="fas fa-map-marker-alt text-xs opacity-70 flex-shrink-0"></i>
+                                                    <span>
+                                                        {site.name || 'Unnamed site'}
+                                                        {site.address ? <span className="text-xs opacity-80"> — {site.address}</span> : null}
+                                                    </span>
+                                                </span>
+                                            </td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{client.industry || '—'}</td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
+                                        </tr>
+                                    ))
+                                ];
+                            })
                         )}
                     </tbody>
                 </table>
@@ -8883,6 +8928,8 @@ const Clients = React.memo(() => {
                         isFullPage={true}
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
+                        initialSiteId={openSiteIdForClient}
+                        onInitialSiteOpened={() => setOpenSiteIdForClient(null)}
                         onOpenOpportunity={(opportunityId, client) => {
                             setSelectedOpportunityId(opportunityId);
                             setSelectedOpportunityClient(client || selectedClient);
@@ -9411,6 +9458,20 @@ const Clients = React.memo(() => {
                                         type="checkbox"
                                         checked={showSitesInLeadsList}
                                         onChange={(e) => setShowSitesInLeadsList(e.target.checked)}
+                                        className={`w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600' : ''}`}
+                                    />
+                                    <span className={`text-sm whitespace-nowrap ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                        <i className="fas fa-map-marker-alt text-amber-500 mr-1"></i>
+                                        Show sites
+                                    </span>
+                                </label>
+                            )}
+                            {viewMode === 'clients' && (
+                                <label className="inline-flex items-center gap-2 cursor-pointer flex-shrink-0" title="Show or hide site rows under each client">
+                                    <input
+                                        type="checkbox"
+                                        checked={showSitesInClientsList}
+                                        onChange={(e) => setShowSitesInClientsList(e.target.checked)}
                                         className={`w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600' : ''}`}
                                     />
                                     <span className={`text-sm whitespace-nowrap ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>

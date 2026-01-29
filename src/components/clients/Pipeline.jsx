@@ -639,6 +639,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     apiClients = (clientPayload || [])
                         .map(normalizeClientForState)
                         .filter(Boolean);
+                } else {
+                    // Preserve cached clients when API fails so pipeline doesn't go empty
+                    apiClients = normalizedCachedClients;
+                    if (normalizedCachedClients.length > 0) {
+                        console.warn('⚠️ Pipeline: Failed to load clients from API, using cached clients');
+                    }
                 }
 
                 let apiLeads = [];
@@ -650,6 +656,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     apiLeads = (leadPayload || [])
                         .map(normalizeLeadForState)
                         .filter(Boolean);
+                } else {
+                    // Preserve cached leads when API fails so pipeline doesn't go empty
+                    apiLeads = normalizedCachedLeads;
+                    if (normalizedCachedLeads.length > 0) {
+                        console.warn('⚠️ Pipeline: Failed to load leads from API, using cached leads');
+                    }
                 }
 
                 let allOpportunities = [];
