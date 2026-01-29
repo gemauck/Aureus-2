@@ -44,26 +44,39 @@ async function handler(req, res) {
         }
 
         // Fallback: If no sites in normalized table, try JSON field (backward compatibility)
+        // Use quoted column names: PostgreSQL lowercases unquoted identifiers so "sitesJsonb" must be quoted
         if (sites.length === 0) {
+          let result = null
           try {
-            const result = await prisma.$queryRaw`
-              SELECT sites, sitesJsonb FROM "Client" WHERE id = ${tid}
-            `
-            if (result && result[0]) {
-              let jsonSites = []
-              if (result[0].sitesJsonb && Array.isArray(result[0].sitesJsonb) && result[0].sitesJsonb.length > 0) {
-                jsonSites = result[0].sitesJsonb
-              } else if (result[0].sites && typeof result[0].sites === 'string') {
-                try {
-                  jsonSites = JSON.parse(result[0].sites)
-                } catch (e) {
-                  jsonSites = []
-                }
+            result = await prisma.$queryRawUnsafe(
+              'SELECT "sites", "sitesJsonb" FROM "Client" WHERE id = $1 LIMIT 1',
+              tid
+            )
+          } catch (jsonbErr) {
+            const msg = String(jsonbErr?.message || '')
+            if (/column.*sitesjsonb|sitesJsonb.*does not exist/i.test(msg)) {
+              try {
+                result = await prisma.$queryRawUnsafe('SELECT "sites" FROM "Client" WHERE id = $1 LIMIT 1', tid)
+              } catch (sitesOnlyErr) {
+                console.warn('⚠️ Fallback query for sites failed:', sitesOnlyErr.message)
               }
-              return ok(res, { sites: jsonSites })
+            } else {
+              console.warn('⚠️ Fallback query for sites failed:', msg)
             }
-          } catch (fallbackError) {
-            console.warn('⚠️ Fallback query for sites failed:', fallbackError.message)
+          }
+          if (result && result[0]) {
+            const row = result[0]
+            let jsonSites = []
+            if (row.sitesJsonb && Array.isArray(row.sitesJsonb) && row.sitesJsonb.length > 0) {
+              jsonSites = row.sitesJsonb
+            } else if (row.sites != null && typeof row.sites === 'string') {
+              try {
+                jsonSites = JSON.parse(row.sites)
+              } catch (e) {
+                jsonSites = []
+              }
+            }
+            return ok(res, { sites: jsonSites })
           }
         }
 

@@ -1094,7 +1094,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             const directionMultiplier = compareWithDirection(listSortDirection);
             switch (listSortColumn) {
                 case 'name':
-                    return (a, b) => directionMultiplier * a.name.localeCompare(b.name);
+                    return (a, b) => directionMultiplier * (a.name || '').localeCompare((b.name || ''), undefined, { sensitivity: 'base' });
                 case 'company':
                     return (a, b) => {
                         const companyA = (a.type === 'lead' ? a.company || a.name : a.clientName) || '';
@@ -1128,9 +1128,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 case 'date-asc':
                     return (a, b) => new Date(a.createdDate) - new Date(b.createdDate);
                 case 'name-asc':
-                    return (a, b) => a.name.localeCompare(b.name);
+                    return (a, b) => (a.name || '').localeCompare((b.name || ''), undefined, { sensitivity: 'base' });
                 case 'name-desc':
-                    return (a, b) => b.name.localeCompare(a.name);
+                    return (a, b) => (b.name || '').localeCompare((a.name || ''), undefined, { sensitivity: 'base' });
                 default:
                     return () => 0;
             }
@@ -1152,26 +1152,41 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return items;
     };
 
-    // List view: nest sites under their lead (or client). No grey header rows; for client sites, insert a normal Client row above sites.
+    // List view: nest sites under their lead (or client). Sorted alphabetically by primary name across all types (leads, opportunities, clients).
     const getNestedListRows = () => {
         const items = getFilteredItems();
         const leads = items.filter(i => i.type === 'lead');
         const siteItems = items.filter(i => i.type === 'site');
         const opportunities = items.filter(i => i.type === 'opportunity');
-        const rows = [];
-        leads.forEach(lead => {
-            rows.push({ item: lead, isNested: false, parentName: null, parentLabel: null });
-            const leadSites = siteItems.filter(s => (s.leadId || s.lead?.id) === lead.id);
-            leadSites.forEach(site => {
-                rows.push({ item: site, isNested: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead' });
-            });
+        const nameKey = (item) => (item && item.name) ? String(item.name).toLowerCase().trim() : '';
+        const dir = listSortDirection === 'desc' ? -1 : 1;
+        const cmp = (a, b) => dir * (nameKey(a).localeCompare(nameKey(b), undefined, { sensitivity: 'base' }));
+
+        // Lead blocks: lead + its sites (sites sorted by name within block)
+        const leadBlocks = leads.slice().sort(cmp).map(lead => {
+            const leadRow = { item: lead, isNested: false, parentName: null, parentLabel: null };
+            const leadSites = siteItems
+                .filter(s => (s.leadId || s.lead?.id) === lead.id)
+                .slice()
+                .sort((a, b) => nameKey(a).localeCompare(nameKey(b), undefined, { sensitivity: 'base' }));
+            const siteRows = leadSites.map(site => ({
+                item: site,
+                isNested: true,
+                parentName: lead.name || lead.company || 'Lead',
+                parentLabel: 'Lead'
+            }));
+            return [leadRow, ...siteRows];
         });
-        opportunities.forEach(opp => {
-            rows.push({ item: opp, isNested: false, parentName: null, parentLabel: null });
-        });
+
+        // Opportunity blocks: one row each, sorted by name
+        const oppBlocks = opportunities.slice().sort(cmp).map(opp => [
+            { item: opp, isNested: false, parentName: null, parentLabel: null }
+        ]);
+
+        // Client-site blocks: client row + sites (sites sorted by name within block)
         const clientSites = siteItems.filter(s => s.clientId && !(s.leadId || s.lead?.id));
         const clientIds = [...new Set(clientSites.map(s => s.clientId).filter(Boolean))];
-        clientIds.forEach(clientId => {
+        const clientBlocks = clientIds.map(clientId => {
             const sites = clientSites.filter(s => s.clientId === clientId);
             const first = sites[0];
             const client = first?.client || first?.raw?.client || { id: clientId, name: 'Client' };
@@ -1185,12 +1200,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 isStarred: Boolean(client.isStarred),
                 client
             };
-            rows.push({ item: clientRowItem, isNested: false, parentName: null, parentLabel: null });
-            sites.forEach(site => {
-                rows.push({ item: site, isNested: true, parentName, parentLabel: 'Client' });
-            });
+            const clientRow = { item: clientRowItem, isNested: false, parentName: null, parentLabel: null };
+            const siteRows = sites
+                .slice()
+                .sort((a, b) => nameKey(a).localeCompare(nameKey(b), undefined, { sensitivity: 'base' }))
+                .map(site => ({ item: site, isNested: true, parentName, parentLabel: 'Client' }));
+            return [clientRow, ...siteRows];
         });
-        return rows;
+        clientBlocks.sort((blockA, blockB) => cmp(blockA[0].item, blockB[0].item));
+
+        // Merge all blocks and sort by primary row name (alphabetical across leads, opportunities, clients)
+        const allBlocks = [...leadBlocks, ...oppBlocks, ...clientBlocks];
+        allBlocks.sort((blockA, blockB) => cmp(blockA[0].item, blockB[0].item));
+        return allBlocks.flat();
     };
 
     // Drag and drop handlers - simplified to match TaskManagement pattern
