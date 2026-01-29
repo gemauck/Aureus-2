@@ -1180,18 +1180,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
             return [leadRow, ...siteRows];
         });
 
-        // Opportunity blocks: one row each, sorted by name
-        const oppBlocks = opportunities.slice().sort(cmp).map(opp => [
-            { item: opp, isNested: false, parentName: null, parentLabel: null }
-        ]);
-
-        // Client-site blocks: client row + sites (sites sorted by name within block)
+        // Client-site and client-opportunity: one block per client with sites (lead-type) and/or opportunities
         const clientSites = siteItems.filter(s => s.clientId && !(s.leadId || s.lead?.id));
-        const clientIds = [...new Set(clientSites.map(s => s.clientId).filter(Boolean))];
-        const clientBlocks = clientIds.map(clientId => {
+        const clientIdsFromSites = new Set(clientSites.map(s => s.clientId).filter(Boolean));
+        const clientIdsFromOpps = new Set(opportunities.map(o => o.clientId).filter(Boolean));
+        const allClientIds = [...new Set([...clientIdsFromSites, ...clientIdsFromOpps])];
+        const clientBlocks = allClientIds.map(clientId => {
             const sites = clientSites.filter(s => s.clientId === clientId);
-            const first = sites[0];
-            const client = first?.client || first?.raw?.client || { id: clientId, name: 'Client' };
+            const clientOpps = opportunities
+                .filter(o => String(o.clientId) === String(clientId))
+                .slice()
+                .sort((a, b) => nameKey(a).localeCompare(nameKey(b), undefined, { sensitivity: 'base' }));
+            const firstSite = sites[0];
+            const firstOpp = clientOpps[0];
+            const client = firstSite?.client || firstSite?.raw?.client || firstOpp?.raw?.client || (firstOpp ? { id: clientId, name: firstOpp.clientName || 'Client' } : { id: clientId, name: 'Client' });
             const parentName = client.name || 'Client';
             const clientRowItem = {
                 type: 'client',
@@ -1207,12 +1209,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 .slice()
                 .sort((a, b) => nameKey(a).localeCompare(nameKey(b), undefined, { sensitivity: 'base' }))
                 .map(site => ({ item: site, isNested: true, parentName, parentLabel: 'Client' }));
-            return [clientRow, ...siteRows];
+            const oppRows = clientOpps.map(opp => ({
+                item: opp,
+                isNested: true,
+                parentName,
+                parentLabel: 'Client'
+            }));
+            return [clientRow, ...siteRows, ...oppRows];
         });
         clientBlocks.sort((blockA, blockB) => cmp(blockA[0].item, blockB[0].item));
 
-        // Merge all blocks and sort by primary row name (alphabetical across leads, opportunities, clients)
-        const allBlocks = [...leadBlocks, ...oppBlocks, ...clientBlocks];
+        // Merge lead blocks and client blocks; sort by primary row name (alphabetical)
+        const allBlocks = [...leadBlocks, ...clientBlocks];
         allBlocks.sort((blockA, blockB) => cmp(blockA[0].item, blockB[0].item));
         return allBlocks.flat();
     };
