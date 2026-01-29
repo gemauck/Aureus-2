@@ -4116,11 +4116,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             <div className="flex flex-wrap gap-2 justify-center">
                                 <button
                                     onClick={() => {
-                                        const q = (typeof window !== 'undefined' && window.location) ? (window.location.search ? '&' : '?') + 'clearCache=1';
-                                        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) || '';
-                                        if (typeof window !== 'undefined' && window.location) {
-                                            window.location.href = (window.location.pathname || '/') + q + hash;
-                                        }
+                                        if (typeof window === 'undefined' || !window.location) return;
+                                        const sep = window.location.search ? '&' : '?';
+                                        const q = sep + 'clearCache=1';
+                                        const hash = window.location.hash || '';
+                                        window.location.href = (window.location.pathname || '/') + q + hash;
                                     }}
                                     className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 text-sm font-medium border border-amber-300"
                                 >
