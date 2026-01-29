@@ -123,7 +123,9 @@ async function handler(req, res) {
           newSite = await prisma.clientSite.create({ data: createData })
         } catch (createErr) {
           const m = String(createErr?.message || '')
-          if (m.includes('siteLead') && (m.includes('does not exist') || m.includes('column'))) {
+          const isMissingColumn = /column.*does not exist|does not exist|Unknown column/i.test(m) ||
+            m.includes('siteLead') || m.includes('stage') || m.includes('aidaStatus') || m.includes('siteType')
+          if (isMissingColumn) {
             const id = randomUUID()
             const rows = await prisma.$queryRawUnsafe(
               `INSERT INTO "ClientSite" ("id","clientId","name","address","contactPerson","contactPhone","contactEmail","notes","createdAt","updatedAt")
