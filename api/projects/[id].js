@@ -845,6 +845,8 @@ async function handler(req, res) {
         if (transformedProject.hasDocumentCollectionProcess === undefined) transformedProject.hasDocumentCollectionProcess = false;
         if (transformedProject.hasWeeklyFMSReviewProcess === undefined) transformedProject.hasWeeklyFMSReviewProcess = false;
         if (transformedProject.hasMonthlyFMSReviewProcess === undefined) transformedProject.hasMonthlyFMSReviewProcess = false;
+        if (transformedProject.hasMonthlyDataReviewProcess === undefined) transformedProject.hasMonthlyDataReviewProcess = false;
+        if (transformedProject.monthlyDataReviewChecklist === undefined) transformedProject.monthlyDataReviewChecklist = '[]';
 
         return ok(res, { project: transformedProject })
       } catch (dbError) {
@@ -1083,6 +1085,31 @@ async function handler(req, res) {
         updateData.hasMonthlyFMSReviewProcess = typeof body.hasMonthlyFMSReviewProcess === 'boolean'
           ? body.hasMonthlyFMSReviewProcess
           : Boolean(body.hasMonthlyFMSReviewProcess === true || body.hasMonthlyFMSReviewProcess === 'true' || body.hasMonthlyFMSReviewProcess === 1);
+      }
+
+      // Handle hasMonthlyDataReviewProcess separately if provided - normalize to boolean
+      if (body.hasMonthlyDataReviewProcess !== undefined && body.hasMonthlyDataReviewProcess !== null) {
+        updateData.hasMonthlyDataReviewProcess = typeof body.hasMonthlyDataReviewProcess === 'boolean'
+          ? body.hasMonthlyDataReviewProcess
+          : Boolean(body.hasMonthlyDataReviewProcess === true || body.hasMonthlyDataReviewProcess === 'true' || body.hasMonthlyDataReviewProcess === 1);
+      }
+
+      // Handle monthlyDataReviewChecklist separately if provided - JSON string
+      if (body.monthlyDataReviewChecklist !== undefined && body.monthlyDataReviewChecklist !== null) {
+        try {
+          const val = body.monthlyDataReviewChecklist;
+          if (typeof val === 'string') {
+            const trimmed = val.trim();
+            updateData.monthlyDataReviewChecklist = trimmed === '' ? '[]' : trimmed;
+          } else if (Array.isArray(val) || typeof val === 'object') {
+            updateData.monthlyDataReviewChecklist = JSON.stringify(val);
+          } else {
+            updateData.monthlyDataReviewChecklist = JSON.stringify([]);
+          }
+        } catch (e) {
+          console.warn('Invalid monthlyDataReviewChecklist:', e);
+          updateData.monthlyDataReviewChecklist = '[]';
+        }
       }
       
       // Handle monthlyProgress separately if provided - with validation for safety

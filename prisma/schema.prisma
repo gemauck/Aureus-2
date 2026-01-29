@@ -425,6 +425,8 @@ model Project {
   hasWeeklyFMSReviewProcess    Boolean                  @default(false)
   monthlyFMSReviewSections     String                   @default("[]") // Legacy - deprecated, use MonthlyFMSReviewSection table
   hasMonthlyFMSReviewProcess   Boolean                  @default(false)
+  hasMonthlyDataReviewProcess  Boolean                  @default(false)
+  monthlyDataReviewChecklist   String                   @default("[]")
   ownerId                      String?
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt

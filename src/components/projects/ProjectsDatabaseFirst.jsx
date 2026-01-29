@@ -89,6 +89,12 @@ const normalizeProject = (project) => {
     const hasWeeklyFMSReview = project.hasWeeklyFMSReviewProcess === true ||
         project.hasWeeklyFMSReviewProcess === 'true' ||
         project.hasWeeklyFMSReviewProcess === 1;
+    const hasMonthlyFMSReview = project.hasMonthlyFMSReviewProcess === true ||
+        project.hasMonthlyFMSReviewProcess === 'true' ||
+        project.hasMonthlyFMSReviewProcess === 1;
+    const hasMonthlyDataReview = project.hasMonthlyDataReviewProcess === true ||
+        project.hasMonthlyDataReviewProcess === 'true' ||
+        project.hasMonthlyDataReviewProcess === 1;
 
     return {
         id: project.id,
@@ -118,6 +124,9 @@ const normalizeProject = (project) => {
         documentSections: parsedDocumentSections,
         hasWeeklyFMSReviewProcess: hasWeeklyFMSReview,
         weeklyFMSReviewSections: parsedWeeklyFMSReviewSections,
+        hasMonthlyFMSReviewProcess: hasMonthlyFMSReview,
+        hasMonthlyDataReviewProcess: hasMonthlyDataReview,
+        monthlyDataReviewChecklist: project.monthlyDataReviewChecklist != null ? project.monthlyDataReviewChecklist : '[]',
         monthlyProgress: typeof project.monthlyProgress === 'string'
             ? project.monthlyProgress
             : JSON.stringify(project.monthlyProgress || {}),

@@ -1291,6 +1291,26 @@ const DatabaseAPI = {
         return response;
     },
 
+    async updateSite(clientId, siteId, siteData) {
+        const response = await this.makeRequest(`/sites/client/${clientId}/${siteId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(siteData)
+        });
+        this.clearCache('/leads');
+        this.clearCache('/clients');
+        return response;
+    },
+
+    async createSite(clientId, siteData) {
+        const response = await this.makeRequest(`/sites/client/${clientId}`, {
+            method: 'POST',
+            body: JSON.stringify(siteData)
+        });
+        this.clearCache('/leads');
+        this.clearCache('/clients');
+        return response;
+    },
+
     // PROJECT OPERATIONS
     async getProjects(options = {}) {
         const { limit = 100, page = 1, includeCount = false } = options;
@@ -2496,7 +2516,9 @@ if (window.api) {
     window.api.createLead = DatabaseAPI.createLead.bind(DatabaseAPI);
     window.api.updateLead = DatabaseAPI.updateLead.bind(DatabaseAPI);
     window.api.deleteLead = DatabaseAPI.deleteLead.bind(DatabaseAPI);
-    
+    window.api.updateSite = DatabaseAPI.updateSite.bind(DatabaseAPI);
+    window.api.createSite = DatabaseAPI.createSite.bind(DatabaseAPI);
+
     window.api.getProjects = DatabaseAPI.getProjects.bind(DatabaseAPI);
     window.api.getProject = DatabaseAPI.getProject.bind(DatabaseAPI);
     window.api.createProject = DatabaseAPI.createProject.bind(DatabaseAPI);

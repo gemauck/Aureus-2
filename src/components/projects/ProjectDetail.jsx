@@ -1428,7 +1428,7 @@ function initializeProjectDetail() {
         
         const tabFromUrl = params ? (() => {
             const t = params.get('tab');
-            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(t) ? t : null;
+            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview'].includes(t) ? t : null;
         })() : null;
         const hasDocWeek = params ? !!params.get('docWeek') : false;
         const hasWeeklySectionId = params ? !!params.get('weeklySectionId') : false;
@@ -2154,7 +2154,7 @@ function initializeProjectDetail() {
         }
         if (!params && search) params = new URLSearchParams(search);
         const tabFromUrl = params?.get('tab');
-        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'];
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview'];
         if (tabFromUrl && validTabs.includes(tabFromUrl)) {
             if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
                 hasTimeProcessChangedRef.current = true;
@@ -2381,6 +2381,30 @@ function initializeProjectDetail() {
         hasMonthlyFMSReviewProcessChangedRef.current = false;
     }, [project.id]); // Re-sync whenever we switch to a different project
 
+    // Track if Monthly Data Review module is enabled (add via + Module)
+    const normalizeHasMonthlyDataReviewProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    const [hasMonthlyDataReviewProcess, setHasMonthlyDataReviewProcess] = useState(() =>
+        normalizeHasMonthlyDataReviewProcess(project.hasMonthlyDataReviewProcess)
+    );
+    const hasMonthlyDataReviewProcessChangedRef = useRef(false);
+    useEffect(() => {
+        const normalizedValue = normalizeHasMonthlyDataReviewProcess(project.hasMonthlyDataReviewProcess);
+        if (normalizedValue !== hasMonthlyDataReviewProcess && !hasMonthlyDataReviewProcessChangedRef.current) {
+            setHasMonthlyDataReviewProcess(normalizedValue);
+        } else if (hasMonthlyDataReviewProcessChangedRef.current) {
+            // keep local state until persist completes
+        }
+    }, [project.hasMonthlyDataReviewProcess, project.id, hasMonthlyDataReviewProcess]);
+    useEffect(() => {
+        const normalizedValue = normalizeHasMonthlyDataReviewProcess(project.hasMonthlyDataReviewProcess);
+        setHasMonthlyDataReviewProcess(normalizedValue);
+        hasMonthlyDataReviewProcessChangedRef.current = false;
+    }, [project.id]);
+
     // Track if Time module is enabled (new projects: false; add via + Module)
     const normalizeHasTimeProcess = (value) => {
         if (value === true || value === 'true' || value === 1) return true;
@@ -2451,6 +2475,15 @@ function initializeProjectDetail() {
                 });
         }
     }, [hasDocumentCollectionProcess, forceDocumentCollectionDeepLink, project.id]);
+
+    // Preload MonthlyDataReview when project has Monthly Data Review process enabled
+    useEffect(() => {
+        if (!hasMonthlyDataReviewProcess) return;
+        if (window.MonthlyDataReview && typeof window.MonthlyDataReview === 'function') return;
+        if (window.loadComponent && typeof window.loadComponent === 'function') {
+            window.loadComponent('./src/components/projects/MonthlyDataReview.jsx').catch(() => {});
+        }
+    }, [hasMonthlyDataReviewProcess, project.id]);
 
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
@@ -3170,10 +3203,12 @@ function initializeProjectDetail() {
         nextHasDocumentCollectionProcess,
         nextHasWeeklyFMSReviewProcess,
         nextHasMonthlyFMSReviewProcess,
+        nextHasMonthlyDataReviewProcess,
         excludeHasTimeProcess = false,
         excludeHasDocumentCollectionProcess = false,
         excludeHasWeeklyFMSReviewProcess = false,
         excludeHasMonthlyFMSReviewProcess = false,
+        excludeHasMonthlyDataReviewProcess = false,
         excludeDocumentSections = true,  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
         excludeWeeklyFMSReviewSections = true,  // Default to true: don't overwrite weeklyFMSReviewSections managed by WeeklyFMSReviewTracker
         excludeMonthlyFMSReviewSections = true  // Default to true: don't overwrite monthlyFMSReviewSections managed by MonthlyFMSReviewTracker
@@ -3187,6 +3222,7 @@ function initializeProjectDetail() {
         const hasDocumentCollectionProcessToSave = nextHasDocumentCollectionProcess !== undefined ? nextHasDocumentCollectionProcess : hasDocumentCollectionProcess;
         const hasWeeklyFMSReviewProcessToSave = nextHasWeeklyFMSReviewProcess !== undefined ? nextHasWeeklyFMSReviewProcess : hasWeeklyFMSReviewProcess;
         const hasMonthlyFMSReviewProcessToSave = nextHasMonthlyFMSReviewProcess !== undefined ? nextHasMonthlyFMSReviewProcess : hasMonthlyFMSReviewProcess;
+        const hasMonthlyDataReviewProcessToSave = nextHasMonthlyDataReviewProcess !== undefined ? nextHasMonthlyDataReviewProcess : hasMonthlyDataReviewProcess;
         
         try {
             // tasksList JSON writes removed - tasks are now stored in Task table
@@ -3227,7 +3263,10 @@ function initializeProjectDetail() {
             if (!excludeHasMonthlyFMSReviewProcess) {
                 updatePayload.hasMonthlyFMSReviewProcess = hasMonthlyFMSReviewProcessToSave;
             }
-            
+            // Only include hasMonthlyDataReviewProcess if not excluded
+            if (!excludeHasMonthlyDataReviewProcess) {
+                updatePayload.hasMonthlyDataReviewProcess = hasMonthlyDataReviewProcessToSave;
+            }
             
             // tasksList JSON writes removed - tasks are now stored in Task table
             // Validation and debug logging for tasksList removed
@@ -3278,6 +3317,7 @@ function initializeProjectDetail() {
                             hasDocumentCollectionProcess: hasDocumentCollectionProcessToSave,
                             hasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcessToSave,
                             hasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcessToSave,
+                            hasMonthlyDataReviewProcess: hasMonthlyDataReviewProcessToSave,
                             documentSections: normalizedSections
                         };
                     });
@@ -3516,6 +3556,34 @@ function initializeProjectDetail() {
             }
         };
     }, [tasks, taskLists, customFieldDefinitions, documents, hasMonthlyFMSReviewProcess, project.hasMonthlyFMSReviewProcess, persistProjectData, project]);
+
+    // Save hasMonthlyDataReviewProcess back to project whenever it changes
+    useEffect(() => {
+        if (skipNextSaveRef.current) return;
+        const projectHasProcess = project.hasMonthlyDataReviewProcess === true ||
+                                  project.hasMonthlyDataReviewProcess === 'true' ||
+                                  project.hasMonthlyDataReviewProcess === 1 ||
+                                  (typeof project.hasMonthlyDataReviewProcess === 'string' && project.hasMonthlyDataReviewProcess.toLowerCase() === 'true');
+        const shouldIncludeHasProcess = hasMonthlyDataReviewProcessChangedRef.current ||
+                                       (hasMonthlyDataReviewProcess !== projectHasProcess);
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+            if (shouldIncludeHasProcess && hasMonthlyDataReviewProcessChangedRef.current) {
+                persistProjectData({ nextHasMonthlyDataReviewProcess: hasMonthlyDataReviewProcess }).catch(() => {});
+                hasMonthlyDataReviewProcessChangedRef.current = false;
+            } else if (!shouldIncludeHasProcess) {
+                persistProjectData({ excludeHasMonthlyDataReviewProcess: true }).catch(() => {});
+            } else {
+                persistProjectData({ excludeHasMonthlyDataReviewProcess: true }).catch(() => {});
+            }
+        }, 1500);
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        };
+    }, [taskLists, customFieldDefinitions, documents, hasMonthlyDataReviewProcess, project.hasMonthlyDataReviewProcess, persistProjectData, project]);
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
@@ -5829,6 +5897,17 @@ function initializeProjectDetail() {
             } finally {
                 hasMonthlyFMSReviewProcessChangedRef.current = false;
             }
+        } else if (moduleKey === 'monthlyDataReview') {
+            hasMonthlyDataReviewProcessChangedRef.current = true;
+            setHasMonthlyDataReviewProcess(false);
+            try {
+                await persistProjectData({ nextHasMonthlyDataReviewProcess: false });
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasMonthlyDataReviewProcess: false });
+                }
+            } finally {
+                hasMonthlyDataReviewProcessChangedRef.current = false;
+            }
         }
     };
 
@@ -5978,6 +6057,47 @@ function initializeProjectDetail() {
         });
         setShowDocumentModal(true);
         setShowDocumentProcessDropdown(false);
+    };
+
+    const handleAddMonthlyDataReviewProcess = async () => {
+        try {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            skipNextSaveRef.current = true;
+            hasMonthlyDataReviewProcessChangedRef.current = true;
+            setHasMonthlyDataReviewProcess(true);
+            switchSection('monthlyDataReview');
+            setShowDocumentProcessDropdown(false);
+            const updatePayload = {
+                hasMonthlyDataReviewProcess: true,
+                monthlyDataReviewChecklist: '[]'
+            };
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            if (!apiResponse) throw new Error('API returned no response');
+            if (apiResponse.error || (apiResponse.data && apiResponse.data.error)) {
+                const msg = apiResponse.error || (apiResponse.data && apiResponse.data.error) || 'Unknown error';
+                throw new Error(typeof msg === 'string' ? msg : msg.message || 'API error');
+            }
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasMonthlyDataReviewProcess: true, monthlyDataReviewChecklist: '[]' });
+            }
+            if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+                const keysToDelete = [];
+                window.DatabaseAPI._responseCache.forEach((_, key) => {
+                    if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) keysToDelete.push(key);
+                });
+                keysToDelete.forEach(k => window.DatabaseAPI._responseCache.delete(k));
+            }
+        } catch (error) {
+            console.error('Error adding Monthly Data Review process:', error);
+            alert('Failed to add Monthly Data Review: ' + (error.message || 'Unknown error'));
+            hasMonthlyDataReviewProcessChangedRef.current = false;
+            setHasMonthlyDataReviewProcess(false);
+        } finally {
+            skipNextSaveRef.current = false;
+        }
     };
     
     const handleAddMonthlyFMSReviewProcess = async () => {
@@ -7177,6 +7297,30 @@ function initializeProjectDetail() {
                             </button>
                         </div>
                     )}
+                    {hasMonthlyDataReviewProcess && (
+                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
+                            <button
+                                type="button"
+                                onClick={() => switchSection('monthlyDataReview')}
+                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
+                                    activeSection === 'monthlyDataReview'
+                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                        : 'text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="fas fa-clipboard-check mr-1.5"></i>
+                                Monthly Data Review
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('monthlyDataReview'); }}
+                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
+                                title="Hide Monthly Data Review module"
+                            >
+                                <i className="fas fa-times text-[10px]"></i>
+                            </button>
+                        </div>
+                    )}
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -7234,6 +7378,19 @@ function initializeProjectDetail() {
                                             <div className="text-[10px] text-gray-500">Recurring monthly data collection</div>
                                         </div>
                                     </button>
+                                    {!hasMonthlyDataReviewProcess && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddMonthlyDataReviewProcess}
+                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-clipboard-check text-primary-600 w-4"></i>
+                                            <div>
+                                                <div className="font-medium">Monthly Data Review</div>
+                                                <div className="text-[10px] text-gray-500">Checklist for monthly data review</div>
+                                            </div>
+                                        </button>
+                                    )}
                                     {!hasWeeklyFMSReviewProcess && (
                                         <button
                                             onClick={handleAddWeeklyFMSReviewProcess}
@@ -7430,6 +7587,26 @@ function initializeProjectDetail() {
                     onBack={handleBackToOverview}
                 />
             )}
+
+            {/* Monthly Data Review tab - checklist (same structure as Document Collection Checklist) */}
+            {activeSection === 'monthlyDataReview' && hasMonthlyDataReviewProcess && (() => {
+                const MonthlyDataReviewComponent = window.MonthlyDataReview;
+                if (MonthlyDataReviewComponent && typeof MonthlyDataReviewComponent === 'function') {
+                    return (
+                        <div key={`monthly-data-review-${project?.id || 'default'}`}>
+                            {window.React.createElement(MonthlyDataReviewComponent, {
+                                project: project,
+                                onBack: handleBackToOverview
+                            })}
+                        </div>
+                    );
+                }
+                return (
+                    <div className="flex items-center justify-center p-8 text-gray-500">
+                        <span>Loading Monthly Data Review...</span>
+                    </div>
+                );
+            })()}
 
             {/* Modals */}
             {showListModal && listModalComponent && window.React && window.React.createElement(
