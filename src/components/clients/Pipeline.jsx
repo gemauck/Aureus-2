@@ -1129,8 +1129,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return items;
     };
 
-    // List view: nest sites under their lead (or client). Inserts a parent header row before each group of site rows.
-    // Returns { item, isNested, parentName, parentLabel, isParentHeader?, parentId?, parentType? }[].
+    // List view: nest sites under their lead (or client). No grey header rows; for client sites, insert a normal Client row above sites.
     const getNestedListRows = () => {
         const items = getFilteredItems();
         const leads = items.filter(i => i.type === 'lead');
@@ -1140,12 +1139,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
         leads.forEach(lead => {
             rows.push({ item: lead, isNested: false, parentName: null, parentLabel: null });
             const leadSites = siteItems.filter(s => (s.leadId || s.lead?.id) === lead.id);
-            if (leadSites.length > 0) {
-                rows.push({ isParentHeader: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead', parentId: lead.id, parentType: 'lead', item: null });
-                leadSites.forEach(site => {
-                    rows.push({ item: site, isNested: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead' });
-                });
-            }
+            leadSites.forEach(site => {
+                rows.push({ item: site, isNested: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead' });
+            });
         });
         opportunities.forEach(opp => {
             rows.push({ item: opp, isNested: false, parentName: null, parentLabel: null });
@@ -1155,8 +1151,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
         clientIds.forEach(clientId => {
             const sites = clientSites.filter(s => s.clientId === clientId);
             const first = sites[0];
-            const parentName = first?.client?.name || first?.raw?.client?.name || 'Client';
-            rows.push({ isParentHeader: true, parentName, parentLabel: 'Client', parentId: clientId, parentType: 'client', item: null });
+            const client = first?.client || first?.raw?.client || { id: clientId, name: 'Client' };
+            const parentName = client.name || 'Client';
+            const clientRowItem = {
+                type: 'client',
+                id: clientId,
+                name: parentName,
+                stage: client.stage || 'Awareness',
+                status: client.status || 'Potential',
+                isStarred: Boolean(client.isStarred),
+                client
+            };
+            rows.push({ item: clientRowItem, isNested: false, parentName: null, parentLabel: null });
             sites.forEach(site => {
                 rows.push({ item: site, isNested: true, parentName, parentLabel: 'Client' });
             });
@@ -2128,6 +2134,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
             return;
         }
 
+        if (item.type === 'client') {
+            const clientId = item.id || item.client?.id;
+            const clientData = item.client || item;
+            if (clientId && typeof onOpenClient === 'function') {
+                onOpenClient({ clientId, clientData, origin: 'prop' });
+                return;
+            }
+            window.dispatchEvent(new CustomEvent('openClientDetailFromPipeline', { detail: { clientId, clientData, origin: 'event' } }));
+            return;
+        }
+
         if (item.type === 'lead') {
             const resolvedLeadId = item.legacyId || item.id;
             if (!resolvedLeadId) {
@@ -2779,22 +2796,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     </tr>
                                 ) : (
                                     rows.map((row, rowIndex) => {
-                                        const { item, isNested, parentName, parentLabel, isParentHeader, parentType } = row;
-                                        if (isParentHeader) {
-                                            return (
-                                                <tr key={`parent-header-${row.parentType}-${row.parentId}-${rowIndex}`} className="bg-gray-100 border-y border-gray-200">
-                                                    <td colSpan="4" className="px-6 py-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <i className={`fas ${parentType === 'client' ? 'fa-building' : 'fa-user-tie'} text-gray-500 text-sm`}></i>
-                                                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">{parentLabel}:</span>
-                                                            <span className="text-sm font-medium text-gray-900">{parentName}</span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        }
+                                        const { item, isNested, parentName, parentLabel } = row;
                                         const isLead = item.type === 'lead';
                                         const isSite = item.type === 'site';
+                                        const isClient = item.type === 'client';
 
                                         return (
                                             <tr
@@ -2834,8 +2839,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-2">
-                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : isSite ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                                                        {isLead ? 'Lead' : isSite ? 'Site' : 'Opportunity'}
+                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : isSite ? 'bg-amber-100 text-amber-700' : isClient ? 'bg-slate-100 text-slate-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {isLead ? 'Lead' : isSite ? 'Site' : isClient ? 'Client' : 'Opportunity'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-2" onClick={e => e.stopPropagation()}>
