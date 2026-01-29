@@ -2898,8 +2898,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    {!isMonthlyDataReview && (
-                        <div className="absolute top-0.5 right-0.5 z-10">
+                    <div className="absolute top-1/2 right-1 -translate-y-1/2 flex flex-row items-center gap-1.5 z-10">
+                        {!isMonthlyDataReview && (
                             <button
                                 type="button"
                                 data-email-cell={cellKey}
@@ -2908,15 +2908,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     e.stopPropagation();
                                     setEmailModalContext({ section, doc, month });
                                 }}
-                                className="text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded"
+                                className="text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
                                 title="Request documents via email"
                                 aria-label="Request documents via email"
                             >
                                 <i className="fas fa-envelope text-[10px]"></i>
                             </button>
-                        </div>
-                    )}
-                    <div className="absolute top-1/2 right-1 -translate-y-1/2 z-10">
+                        )}
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -3189,88 +3187,161 @@ Abcotronics`;
         const hasFailures = result && result.failed && result.failed.length > 0;
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">Request documents via email</h2>
-                        <button type="button" onClick={() => setEmailModalContext(null)} className="text-gray-400 hover:text-gray-600 p-1">
-                            <i className="fas fa-times text-sm"></i>
-                        </button>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-100">
+                    {/* Header with gradient */}
+                    <div className="relative bg-gradient-to-r from-[#0369a1] to-[#0ea5e9] px-5 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                                <i className="fas fa-envelope-open text-lg text-white"></i>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-base font-semibold text-white truncate">Request documents via email</h2>
+                                <p className="text-xs text-white/80 mt-0.5 truncate">
+                                    {docName} · {month} {selectedYear}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setEmailModalContext(null)}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/80 hover:bg-white/20 hover:text-white transition-colors shrink-0"
+                                aria-label="Close"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div className="p-4 overflow-y-auto space-y-4 flex-1">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Recipients</label>
+
+                    <div className="p-5 overflow-y-auto space-y-5 flex-1 bg-gray-50/50">
+                        {/* Recipients */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-3">
+                                <i className="fas fa-users text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">Recipients</label>
+                            </div>
                             <div className="flex gap-2">
                                 <input
                                     type="email"
                                     value={newContact}
                                     onChange={(e) => setNewContact(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addContact(); } }}
-                                    placeholder="email@example.com"
-                                    className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    placeholder="client@example.com"
+                                    className="flex-1 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 transition-shadow"
                                 />
-                                <button type="button" onClick={addContact} className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg">
-                                    Add
+                                <button
+                                    type="button"
+                                    onClick={addContact}
+                                    className="px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-[#0369a1] to-[#0ea5e9] rounded-xl hover:opacity-90 shadow-md hover:shadow-lg transition-all shrink-0"
+                                >
+                                    <i className="fas fa-plus mr-1.5"></i>Add
                                 </button>
                             </div>
                             {contacts.length > 0 && (
-                                <ul className="mt-2 space-y-1">
+                                <div className="mt-3 flex flex-wrap gap-2">
                                     {contacts.map((email) => (
-                                        <li key={email} className="flex items-center justify-between text-xs bg-gray-50 px-2 py-1 rounded">
-                                            <span className="truncate">{email}</span>
-                                            <button type="button" onClick={() => removeContact(email)} className="text-red-600 hover:text-red-700 ml-2">
-                                                <i className="fas fa-times"></i>
+                                        <span
+                                            key={email}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd]"
+                                        >
+                                            <i className="fas fa-envelope text-[10px] opacity-70"></i>
+                                            <span className="truncate max-w-[180px]">{email}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeContact(email)}
+                                                className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-[#0ea5e9] hover:text-white text-[#0369a1] transition-colors ml-0.5"
+                                                aria-label={`Remove ${email}`}
+                                            >
+                                                <i className="fas fa-times text-[10px]"></i>
                                             </button>
-                                        </li>
+                                        </span>
                                     ))}
-                                </ul>
+                                </div>
                             )}
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Subject</label>
+
+                        {/* Subject */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-2">
+                                <i className="fas fa-tag text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">Subject</label>
+                            </div>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                                placeholder="Subject"
+                                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 transition-shadow"
+                                placeholder="Document request subject..."
                             />
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Email body</label>
+
+                        {/* Body */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-2">
+                                <i className="fas fa-align-left text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">Email body</label>
+                            </div>
                             <textarea
                                 value={body}
                                 onChange={(e) => setBody(e.target.value)}
-                                rows={10}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono"
-                                placeholder="Draft your email..."
+                                rows={9}
+                                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 resize-y font-sans leading-relaxed"
+                                placeholder="Draft your request..."
                             />
                         </div>
+
+                        {/* Result messages */}
                         {result?.error && (
-                            <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded">{result.error}</div>
+                            <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3">
+                                <i className="fas fa-exclamation-circle text-red-500 mt-0.5 shrink-0"></i>
+                                <p className="text-sm text-red-700">{result.error}</p>
+                            </div>
                         )}
                         {hasSuccess && (
-                            <div className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded">
-                                Sent to: {result.sent.join(', ')}
+                            <div className="flex items-start gap-3 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
+                                <i className="fas fa-check-circle text-emerald-500 mt-0.5 shrink-0"></i>
+                                <div className="text-sm text-emerald-800">
+                                    <p className="font-medium">Sent successfully</p>
+                                    <p className="mt-1 text-emerald-700">{result.sent.join(', ')}</p>
+                                </div>
                             </div>
                         )}
                         {hasFailures && (
-                            <div className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded">
-                                Failed: {result.failed.map((f) => `${f.email} (${f.error})`).join('; ')}
+                            <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
+                                <i className="fas fa-exclamation-triangle text-amber-500 mt-0.5 shrink-0"></i>
+                                <div className="text-sm text-amber-800">
+                                    <p className="font-medium">Some deliveries failed</p>
+                                    <p className="mt-1 text-amber-700">{result.failed.map((f) => `${f.email}: ${f.error}`).join('; ')}</p>
+                                </div>
                             </div>
                         )}
                     </div>
-                    <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
-                        <button type="button" onClick={() => setEmailModalContext(null)} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50">
+
+                    {/* Footer */}
+                    <div className="flex justify-end gap-3 px-5 py-4 bg-white border-t border-gray-100">
+                        <button
+                            type="button"
+                            onClick={() => setEmailModalContext(null)}
+                            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
+                        >
                             Close
                         </button>
                         <button
                             type="button"
                             onClick={handleSend}
                             disabled={sending || contacts.length === 0}
-                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-[#0369a1] to-[#0ea5e9] rounded-xl shadow-md hover:shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50 transition-all"
                         >
-                            {sending ? 'Sending…' : 'Send email'}
+                            {sending ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                    Sending…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-paper-plane"></i>
+                                    Send email
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
