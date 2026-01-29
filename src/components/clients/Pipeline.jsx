@@ -2964,29 +2964,37 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     </span>
                                                 </td>
                                                 <td className={`px-6 ${rowPadding}`} onClick={e => e.stopPropagation()}>
-                                                    <select
-                                                        value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || 'awareness').toLowerCase()) || 'Awareness'}
-                                                        onChange={e => handlePipelineStageChange(item, e.target.value)}
-                                                        className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${
-                                                            (item.stage || '').toLowerCase() === 'no engagement' ? 'bg-slate-100 text-slate-800' :
-                                                            (item.stage || '').toLowerCase() === 'awareness' ? 'bg-gray-100 text-gray-800' :
-                                                            (item.stage || '').toLowerCase() === 'interest' ? 'bg-blue-100 text-blue-800' :
-                                                            (item.stage || '').toLowerCase() === 'desire' ? 'bg-yellow-100 text-yellow-800' :
-                                                            (item.stage || '').toLowerCase() === 'action' ? 'bg-green-100 text-green-800' :
-                                                            'bg-gray-100 text-gray-800'
-                                                        }`}
-                                                    >
-                                                        {STAGE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                    </select>
+                                                    {isClient ? (
+                                                        <span className="text-gray-400 text-xs">—</span>
+                                                    ) : (
+                                                        <select
+                                                            value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || 'awareness').toLowerCase()) || 'Awareness'}
+                                                            onChange={e => handlePipelineStageChange(item, e.target.value)}
+                                                            className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${
+                                                                (item.stage || '').toLowerCase() === 'no engagement' ? 'bg-slate-100 text-slate-800' :
+                                                                (item.stage || '').toLowerCase() === 'awareness' ? 'bg-gray-100 text-gray-800' :
+                                                                (item.stage || '').toLowerCase() === 'interest' ? 'bg-blue-100 text-blue-800' :
+                                                                (item.stage || '').toLowerCase() === 'desire' ? 'bg-yellow-100 text-yellow-800' :
+                                                                (item.stage || '').toLowerCase() === 'action' ? 'bg-green-100 text-green-800' :
+                                                                'bg-gray-100 text-gray-800'
+                                                            }`}
+                                                        >
+                                                            {STAGE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                        </select>
+                                                    )}
                                                 </td>
                                                 <td className={`px-6 ${rowPadding}`} onClick={e => e.stopPropagation()}>
-                                                    <select
-                                                        value={STATUS_OPTIONS.find(s => s.toLowerCase() === (item.status || 'potential').toLowerCase()) || 'Potential'}
-                                                        onChange={e => handlePipelineStatusChange(item, e.target.value)}
-                                                        className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${getLifecycleBadgeColor(item.status || 'Potential')}`}
-                                                    >
-                                                        {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                    </select>
+                                                    {isClient ? (
+                                                        <span className="text-gray-400 text-xs">—</span>
+                                                    ) : (
+                                                        <select
+                                                            value={STATUS_OPTIONS.find(s => s.toLowerCase() === (item.status || 'potential').toLowerCase()) || 'Potential'}
+                                                            onChange={e => handlePipelineStatusChange(item, e.target.value)}
+                                                            className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${getLifecycleBadgeColor(item.status || 'Potential')}`}
+                                                        >
+                                                            {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                        </select>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
