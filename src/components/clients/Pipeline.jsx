@@ -1129,6 +1129,29 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return items;
     };
 
+    // List view: nest sites under their lead (or client). Returns { item, isNested, parentName, parentLabel }[].
+    const getNestedListRows = () => {
+        const items = getFilteredItems();
+        const leads = items.filter(i => i.type === 'lead');
+        const siteItems = items.filter(i => i.type === 'site');
+        const opportunities = items.filter(i => i.type === 'opportunity');
+        const rows = [];
+        leads.forEach(lead => {
+            rows.push({ item: lead, isNested: false, parentName: null, parentLabel: null });
+            siteItems.filter(s => (s.leadId || s.lead?.id) === lead.id).forEach(site => {
+                rows.push({ item: site, isNested: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead' });
+            });
+        });
+        opportunities.forEach(opp => {
+            rows.push({ item: opp, isNested: false, parentName: null, parentLabel: null });
+        });
+        siteItems.filter(s => s.clientId && !(s.leadId || s.lead?.id)).forEach(site => {
+            const parentName = site.client?.name || site.raw?.client?.name || 'Client';
+            rows.push({ item: site, isNested: true, parentName, parentLabel: 'Client' });
+        });
+        return rows;
+    };
+
     // Drag and drop handlers - simplified to match TaskManagement pattern
     const handleDragStart = (event, item, type) => {
         if (event?.dataTransfer) {
@@ -1223,6 +1246,109 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return snapshot;
     };
+
+    const STAGE_OPTIONS = ['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'];
+    const STATUS_OPTIONS = ['Potential', 'Active', 'Inactive', 'On Hold', 'Qualified', 'Disinterested', 'Proposal', 'Tender'];
+
+    const handlePipelineStageChange = useCallback(async (item, newStage) => {
+        const token = storage?.getToken?.();
+        const normalized = STAGE_OPTIONS.find(s => s.toLowerCase() === (newStage || '').toLowerCase()) || 'Awareness';
+        try {
+            if (item.type === 'lead') {
+                if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
+                    await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { stage: normalized });
+                }
+                updateLeadStageOptimistically(item.id, normalized);
+            } else if (item.type === 'site') {
+                const clientId = item.leadId || item.lead?.id || item.clientId;
+                const siteId = item.siteId || item.site?.id;
+                if (clientId && siteId && token && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
+                    await (window.api?.updateSite
+                        ? window.api.updateSite(clientId, siteId, { aidaStatus: normalized, stage: item.status || 'Potential' })
+                        : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ aidaStatus: normalized, stage: item.status || 'Potential' }) }));
+                }
+                if (item.leadId || item.lead?.id) {
+                    setLeads(prev => prev.map(lead => {
+                        if (lead.id !== (item.leadId || item.lead?.id)) return lead;
+                        const sites = lead.clientSites || lead.sites || [];
+                        const updated = sites.map(s => (String(s.id) === String(siteId) || s.id === siteId) ? { ...s, aidaStatus: normalized } : s);
+                        return { ...lead, clientSites: updated.length ? updated : undefined, sites: updated };
+                    }));
+                } else if (item.clientId) {
+                    setClients(prev => prev.map(client => {
+                        if (client.id !== item.clientId) return client;
+                        const sites = client.clientSites || client.sites || [];
+                        const updated = sites.map(s => (String(s.id) === String(siteId) || s.id === siteId) ? { ...s, aidaStatus: normalized } : s);
+                        return { ...client, clientSites: updated.length ? updated : undefined, sites: updated };
+                    }));
+                }
+            } else if (item.type === 'opportunity') {
+                if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
+                    await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { stage: normalized });
+                }
+                updateOpportunityStageOptimistically(item.clientId, item.id, normalized);
+            }
+        } catch (err) {
+            console.error('❌ Pipeline: Failed to save stage:', err);
+            alert('Failed to save stage. Please try again.');
+        }
+    }, [storage, updateLeadStageOptimistically, updateOpportunityStageOptimistically]);
+
+    const handlePipelineStatusChange = useCallback(async (item, newStatus) => {
+        const token = storage?.getToken?.();
+        const normalized = normalizeLifecycleStage(newStatus) || 'Potential';
+        try {
+            if (item.type === 'lead') {
+                if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
+                    await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { status: normalized });
+                }
+                setLeads(prev => {
+                    const updated = prev.map(lead => lead.id === item.id ? { ...lead, status: normalized } : lead);
+                    if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
+                    return updated;
+                });
+            } else if (item.type === 'site') {
+                const clientId = item.leadId || item.lead?.id || item.clientId;
+                const siteId = item.siteId || item.site?.id;
+                if (clientId && siteId && token && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
+                    await (window.api?.updateSite
+                        ? window.api.updateSite(clientId, siteId, { stage: normalized, aidaStatus: item.stage || 'Awareness' })
+                        : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ stage: normalized, aidaStatus: item.stage || 'Awareness' }) }));
+                }
+                if (item.leadId || item.lead?.id) {
+                    setLeads(prev => prev.map(lead => {
+                        if (lead.id !== (item.leadId || item.lead?.id)) return lead;
+                        const sites = lead.clientSites || lead.sites || [];
+                        const updated = sites.map(s => (String(s.id) === String(siteId) || s.id === siteId) ? { ...s, stage: normalized } : s);
+                        return { ...lead, clientSites: updated.length ? updated : undefined, sites: updated };
+                    }));
+                } else if (item.clientId) {
+                    setClients(prev => prev.map(client => {
+                        if (client.id !== item.clientId) return client;
+                        const sites = client.clientSites || client.sites || [];
+                        const updated = sites.map(s => (String(s.id) === String(siteId) || s.id === siteId) ? { ...s, stage: normalized } : s);
+                        return { ...client, clientSites: updated.length ? updated : undefined, sites: updated };
+                    }));
+                }
+            } else if (item.type === 'opportunity') {
+                if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
+                    await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { status: normalized });
+                }
+                setClients(prev => {
+                    const updated = prev.map(client => {
+                        if (client.id !== item.clientId) return client;
+                        const opps = (client.opportunities || []).map(opp => opp.id === item.id ? { ...opp, status: normalized } : opp);
+                        return { ...client, opportunities: opps };
+                    });
+                    if (typeof storage?.setClients === 'function') storage.setClients(updated);
+                    return updated;
+                });
+            }
+        } catch (err) {
+            console.error('❌ Pipeline: Failed to save status:', err);
+            alert('Failed to save status. Please try again.');
+        }
+    }, [storage, normalizeLifecycleStage]);
 
     const handleToggleStar = async (event, item) => {
         event.preventDefault();
@@ -2349,8 +2475,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                 draggable="false"
                                                                 onDragStart={(e) => e.preventDefault()}
                                                             >
-                                                                {itemName}
+                                                                {itemType === 'site' ? (item.site?.name || item.name?.split?.(' · ')?.[1] || itemName) : itemName}
                                                             </h4>
+                                                            {itemType === 'site' && (item.lead?.name || item.client?.name || item.name?.split?.(' · ')?.[0]) && (
+                                                                <p 
+                                                                    className="text-xs text-gray-600 mt-0.5 truncate pointer-events-none"
+                                                                    draggable="false"
+                                                                    onDragStart={(e) => e.preventDefault()}
+                                                                >
+                                                                    {item.leadId ? 'Lead: ' : 'Client: '}{item.lead?.name || item.client?.name || item.name?.split?.(' · ')?.[0]}
+                                                                </p>
+                                                            )}
                                                             {itemIndustry && (
                                                                 <p 
                                                                     className="text-xs text-gray-500 mt-0.5 truncate pointer-events-none"
@@ -2526,9 +2661,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     // Kanban view removed - only List view is available
 
-    // Combined Deals List View
+    // Combined Deals List View (sites nested under their lead)
     const ListView = () => {
-        const items = getFilteredItems();
+        const rows = getNestedListRows();
 
         useEffect(() => {
             if (viewMode !== 'list') {
@@ -2568,7 +2703,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             return () => {
                 window.cancelAnimationFrame(rafId);
             };
-        }, [viewMode, items.length, listSortColumn, listSortDirection]);
+        }, [viewMode, rows.length, listSortColumn, listSortDirection]);
 
         const getAriaSort = (column) => {
             if (listSortColumn !== column) {
@@ -2622,7 +2757,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {items.length === 0 ? (
+                                {rows.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" className="px-4 py-12 text-center text-sm text-gray-500">
                                             <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
@@ -2631,37 +2766,45 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                         </td>
                                     </tr>
                                 ) : (
-                                    items.map(item => {
+                                    rows.map(({ item, isNested, parentName, parentLabel }) => {
                                         const isLead = item.type === 'lead';
                                         const isSite = item.type === 'site';
 
                                         return (
                                             <tr
                                                 key={`${item.type}-${item.id}`}
-                                                className="hover:bg-gray-50 cursor-pointer transition"
+                                                className={`hover:bg-gray-50 cursor-pointer transition ${isNested ? 'bg-gray-50/50' : ''}`}
                                                 onClick={() => openDealDetail(item)}
                                             >
-                                                <td className="px-6 py-2">
+                                                <td className={`py-2 ${isNested ? 'pl-12 pr-6 border-l-4 border-l-amber-200' : 'px-6'}`}>
                                                     <div className="flex items-center gap-3">
-                                                        <button
-                                                            type="button"
-                                                            aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
-                                                            className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full hover:bg-yellow-50 transition"
-                                                            onClick={(e) => handleToggleStar(e, item)}
-                                                            onMouseDown={(e) => {
-                                                                e.stopPropagation();
-                                                                e.preventDefault();
-                                                            }}
-                                                            onTouchStart={(e) => {
-                                                                e.stopPropagation();
-                                                                e.preventDefault();
-                                                            }}
-                                                        >
-                                                            <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-sm`}></i>
-                                                        </button>
-                                                        <span className="text-sm font-medium text-gray-900">
-                                                            {item.name}
-                                                        </span>
+                                                        {!isNested && (
+                                                            <button
+                                                                type="button"
+                                                                aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
+                                                                className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full hover:bg-yellow-50 transition"
+                                                                onClick={(e) => handleToggleStar(e, item)}
+                                                                onMouseDown={(e) => {
+                                                                    e.stopPropagation();
+                                                                    e.preventDefault();
+                                                                }}
+                                                                onTouchStart={(e) => {
+                                                                    e.stopPropagation();
+                                                                    e.preventDefault();
+                                                                }}
+                                                            >
+                                                                <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-sm`}></i>
+                                                            </button>
+                                                        )}
+                                                        {isNested && <span className="w-7 shrink-0" aria-hidden />}
+                                                        <div className="min-w-0">
+                                                            <span className="text-sm font-medium text-gray-900 block">
+                                                                {isSite && isNested ? (item.site?.name || item.name?.replace?.(`${parentName} · `, '') || item.name) : item.name}
+                                                            </span>
+                                                            {isNested && parentName && (
+                                                                <span className="text-xs text-gray-500">{parentLabel || 'Lead'}: {parentName}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-2">
@@ -2669,22 +2812,30 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         {isLead ? 'Lead' : isSite ? 'Site' : 'Opportunity'}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-2">
-                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
-                                                        item.stage === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
-                                                        item.stage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
-                                                        item.stage === 'Interest' ? 'bg-blue-100 text-blue-800' :
-                                                        item.stage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
-                                                        item.stage === 'Action' ? 'bg-green-100 text-green-800' :
-                                                        'bg-gray-100 text-gray-800'
-                                                    }`}>
-                                                        {item.stage || 'Awareness'}
-                                                    </span>
+                                                <td className="px-6 py-2" onClick={e => e.stopPropagation()}>
+                                                    <select
+                                                        value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || 'awareness').toLowerCase()) || 'Awareness'}
+                                                        onChange={e => handlePipelineStageChange(item, e.target.value)}
+                                                        className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${
+                                                            (item.stage || '').toLowerCase() === 'no engagement' ? 'bg-slate-100 text-slate-800' :
+                                                            (item.stage || '').toLowerCase() === 'awareness' ? 'bg-gray-100 text-gray-800' :
+                                                            (item.stage || '').toLowerCase() === 'interest' ? 'bg-blue-100 text-blue-800' :
+                                                            (item.stage || '').toLowerCase() === 'desire' ? 'bg-yellow-100 text-yellow-800' :
+                                                            (item.stage || '').toLowerCase() === 'action' ? 'bg-green-100 text-green-800' :
+                                                            'bg-gray-100 text-gray-800'
+                                                        }`}
+                                                    >
+                                                        {STAGE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                    </select>
                                                 </td>
-                                                <td className="px-6 py-2">
-                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}>
-                                                        {item.status || 'Potential'}
-                                                    </span>
+                                                <td className="px-6 py-2" onClick={e => e.stopPropagation()}>
+                                                    <select
+                                                        value={STATUS_OPTIONS.find(s => s.toLowerCase() === (item.status || 'potential').toLowerCase()) || 'Potential'}
+                                                        onChange={e => handlePipelineStatusChange(item, e.target.value)}
+                                                        className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${getLifecycleBadgeColor(item.status || 'Potential')}`}
+                                                    >
+                                                        {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                    </select>
                                                 </td>
                                             </tr>
                                         );

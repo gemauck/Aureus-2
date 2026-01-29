@@ -735,14 +735,17 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     };
     
     // Build base URL for comment link using getAppUrl() for proper production/development handling
-    const baseUrl = getAppUrl();
+    let baseUrl = getAppUrl();
+    // Ensure base URL has trailing slash so hash links are https://domain.com/#/... (more reliable in email clients)
+    if (baseUrl && !baseUrl.endsWith('/')) {
+        baseUrl = baseUrl + '/';
+    }
     // Handle hash-based routing links (starting with #) - they should be appended directly to base URL
     // Regular paths (starting with /) need to be appended with a slash
     let fullCommentLink = null;
     if (commentLink) {
         if (commentLink.startsWith('#')) {
-            // Hash-based routing - append directly to base URL
-            // Format: https://abcoafrica.co.za#/projects/123?params
+            // Hash-based routing - base URL already has trailing slash so link is https://domain.com/#/projects/123?params
             fullCommentLink = `${baseUrl}${commentLink}`;
         } else if (commentLink.startsWith('/')) {
             // Regular path - append with slash

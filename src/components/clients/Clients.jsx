@@ -983,6 +983,8 @@ const Clients = React.memo(() => {
             return true;
         }
     });
+    // Sites loaded via GET /api/sites/client/:id when "Show sites" is on (so list always shows sites even if list API omits them)
+    const [sitesForList, setSitesForList] = useState({});
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const [groupsPage, setGroupsPage] = useState(1);
@@ -2103,7 +2105,7 @@ const Clients = React.memo(() => {
                     // No API method available - skip API fetch
                     return;
                 }
-                const res = await apiMethod();
+                const res = await apiMethod(forceRefresh);
                 const apiEndTime = performance.now();
                 // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
                 const apiClients = res?.data?.clients || res?.clients || [];
@@ -2187,22 +2189,21 @@ const Clients = React.memo(() => {
                     if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
                         merged.opportunities = cachedClient.opportunities;
                     }
+                    // CRITICAL: Always keep sites from API so "Show sites" list works
+                    merged.sites = Array.isArray(client.sites) ? client.sites : (Array.isArray(client.clientSites) ? client.clientSites : (merged.sites || []));
                     // Ensure group data is preserved (should already be in client from processClientData)
-                    // But explicitly preserve it to be safe - ALWAYS preserve groupMemberships (even if empty array)
-                    // CRITICAL: Always preserve groupMemberships - use empty array if undefined/null
                     merged.groupMemberships = (client.groupMemberships !== undefined && client.groupMemberships !== null && Array.isArray(client.groupMemberships))
                         ? client.groupMemberships
                         : [];
-                    // This ensures tags and group data always come from the API, not stale cache
                     return merged;
                 });
                 
                 // Debug logging removed for performance
                 
-                // Show clients immediately with preserved opportunities AND group data
-                // CRITICAL: Ensure groupMemberships is ALWAYS present and properly structured
+                // Show clients immediately with preserved opportunities, sites, and group data
                 const finalClients = clientsWithCachedOpps.map(client => ({
                     ...client,
+                    sites: Array.isArray(client.sites) ? client.sites : [],
                     groupMemberships: normalizeGroupMemberships(
                         client.groupMemberships,
                         client.companyGroup || client.company_group || client.groups || client.group
@@ -2223,11 +2224,12 @@ const Clients = React.memo(() => {
                             // IDs match, but check if content changed (groups, services, etc.)
                             const needsUpdate = prevClients.some((prevClient, i) => {
                                 const newClient = finalClients[i];
-                                // Check if critical fields changed
+                                // Check if critical fields changed (include sites so "Show sites" gets fresh data)
                                 return prevClient.name !== newClient.name ||
                                     prevClient.status !== newClient.status ||
                                     JSON.stringify(prevClient.groupMemberships || []) !== JSON.stringify(newClient.groupMemberships || []) ||
-                                    JSON.stringify(prevClient.services || []) !== JSON.stringify(newClient.services || []);
+                                    JSON.stringify(prevClient.services || []) !== JSON.stringify(newClient.services || []) ||
+                                    JSON.stringify(prevClient.sites || []) !== JSON.stringify(newClient.sites || []);
                             });
                             if (!needsUpdate) {
                                 return prevClients; // No meaningful change, prevent re-render
@@ -2578,8 +2580,8 @@ const Clients = React.memo(() => {
 
     // Load clients, leads, and projects on mount (boot up)
     useEffect(() => {
-        // Load clients and projects immediately
-        loadClients();
+        // Force refresh clients on mount so list gets fresh data including sites (bypasses cache)
+        loadClients(true);
         loadProjects();
         
         // IMMEDIATELY try to load leads from localStorage first (from multiple sources)
@@ -2962,7 +2964,7 @@ const Clients = React.memo(() => {
                 followUps: parseArrayField(c.followUps, 'followUps'),
                 projectIds: parseArrayField(c.projectIds, 'projectIds'),
                 comments: parseArrayField(c.comments, 'comments'),
-                sites: parseArrayField(c.sites, 'sites'),
+                sites: parseArrayField(c.sites ?? c.clientSites, 'sites'),
                 opportunities: parseArrayField(c.opportunities, 'opportunities'),
                 contracts: parseArrayField(c.contracts, 'contracts'),
                 activityLog: parseArrayField(c.activityLog, 'activityLog'),
@@ -5867,7 +5869,40 @@ const Clients = React.memo(() => {
     
     const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages, paginatedGroups, totalGroupsPages, clientsStartIndex, clientsEndIndex, leadsStartIndex, leadsEndIndex, groupsStartIndex, groupsEndIndex } = paginationData;
 
-    // Debug pagination - commented to reduce spam
+    // When "Show sites" is on, fetch sites for visible clients from GET /api/sites/client/:id so list always shows sites
+    useEffect(() => {
+        if (viewMode !== 'clients' || !showSitesInClientsList || !paginatedClients?.length) return;
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        const ids = paginatedClients.map(c => c.id).filter(Boolean);
+        const toFetch = ids.filter(id => sitesForList[id] === undefined);
+        if (toFetch.length === 0) return;
+        let cancelled = false;
+        Promise.all(
+            toFetch.slice(0, 25).map(async (clientId) => {
+                try {
+                    const res = await fetch(`/api/sites/client/${encodeURIComponent(clientId)}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                        credentials: 'include'
+                    });
+                    if (!res.ok || cancelled) return { clientId, sites: [] };
+                    const data = await res.json();
+                    const sites = data?.data?.sites ?? data?.sites ?? [];
+                    return { clientId, sites: Array.isArray(sites) ? sites : [] };
+                } catch {
+                    return { clientId, sites: [] };
+                }
+            })
+        ).then(results => {
+            if (cancelled) return;
+            setSitesForList(prev => {
+                const next = { ...prev };
+                results.forEach(({ clientId, sites }) => { next[clientId] = sites; });
+                return next;
+            });
+        });
+        return () => { cancelled = true; };
+    }, [viewMode, showSitesInClientsList, paginatedClients, clientsPage, sitesForList]);
 
     // Extract all unique services from clients and leads for filter dropdown
     const allServices = useMemo(() => {
@@ -6840,13 +6875,14 @@ const Clients = React.memo(() => {
             );
             
             
-            // Parse sites - always return array, never undefined/null
+            // Parse sites - always return array, never undefined/null (support both .sites and .clientSites from API)
             let parsedSites = [];
-            if (Array.isArray(client.sites)) {
-                parsedSites = client.sites;
-            } else if (typeof client.sites === 'string') {
+            const sitesSource = client.sites ?? client.clientSites;
+            if (Array.isArray(sitesSource)) {
+                parsedSites = sitesSource;
+            } else if (typeof sitesSource === 'string') {
                 try {
-                    const parsed = JSON.parse(client.sites || '[]');
+                    const parsed = JSON.parse(sitesSource || '[]');
                     parsedSites = Array.isArray(parsed) ? parsed : [];
                 } catch {
                     parsedSites = [];
@@ -6954,7 +6990,7 @@ const Clients = React.memo(() => {
                             </tr>
                         ) : (
                             parsedClientsData.flatMap((client) => {
-                                const sites = client.parsedSites || client.sites || [];
+                                const sites = client.parsedSites || client.sites || sitesForList[client.id] || [];
                                 const siteRows = showSitesInClientsList ? (Array.isArray(sites) ? sites : []) : [];
                                 return [
                                     <tr 

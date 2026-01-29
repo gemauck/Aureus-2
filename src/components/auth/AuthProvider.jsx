@@ -87,8 +87,11 @@ const AuthProvider = ({ children }) => {
                                     storage.setUser(user);
                                     setUser(user);
                                     
-                                    // Clean up URL
-                                    window.history.replaceState({}, document.title, window.location.pathname);
+                                    // Clean up URL but preserve hash (e.g. from email deep link opened in same tab before login)
+                                    const hash = window.location.hash || '';
+                                    const cleanPath = window.location.pathname || '/';
+                                    const nextUrl = hash ? cleanPath + hash : cleanPath;
+                                    window.history.replaceState({}, document.title, nextUrl);
                                 }
                             }
                         } catch (err) {

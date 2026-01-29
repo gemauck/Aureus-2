@@ -523,6 +523,40 @@ async function handler(req, res) {
         } catch (e) {
           console.warn('⚠️ Could not hydrate client list relations:', e.message);
         }
+
+        // Always hydrate clientSites from ClientSite table so list shows sites (try Prisma, fallback to raw SQL)
+        const allClientIds = rawClients.map(c => c.id).filter(Boolean);
+        let sitesList = [];
+        if (allClientIds.length > 0) {
+          try {
+            sitesList = await prisma.clientSite.findMany({
+              where: { clientId: { in: allClientIds } },
+              orderBy: { createdAt: 'asc' }
+            });
+          } catch (prismaErr) {
+            try {
+              const rawSites = await prisma.$queryRaw`
+                SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "siteLead", stage, "aidaStatus", "siteType", "createdAt", "updatedAt"
+                FROM "ClientSite"
+                WHERE "clientId" IN (${Prisma.join(allClientIds)})
+                ORDER BY "createdAt" ASC
+              `;
+              sitesList = rawSites || [];
+            } catch (rawErr) {
+              console.warn('⚠️ Could not hydrate clientSites (Prisma or raw):', prismaErr.message, rawErr.message);
+            }
+          }
+          const sitesByClientId = {};
+          for (const site of sitesList || []) {
+            const key = String(site.clientId || '');
+            if (!sitesByClientId[key]) sitesByClientId[key] = [];
+            sitesByClientId[key].push(site);
+          }
+          rawClients = rawClients.map(c => ({
+            ...c,
+            clientSites: sitesByClientId[String(c.id || '')] || []
+          }));
+        }
         
         // Prisma returns objects with relations - parse JSON fields
         const clients = rawClients
@@ -655,9 +689,48 @@ async function handler(req, res) {
             orderBy: { createdAt: 'desc' },
             take: 5000
           })
-          const parsed = (minimal || []).map(c => {
-            const p = parseClientJsonFields({ ...c, groupMemberships: [], starredBy: [] })
-            p.groupMemberships = []
+          // Hydrate sites from ClientSite so "Show sites" works even when main query failed (e.g. local vs production)
+          let clientsWithSites = minimal || []
+          try {
+            const clientIds = clientsWithSites.map(c => c.id).filter(Boolean)
+            if (clientIds.length > 0) {
+              let sitesList = []
+              try {
+                sitesList = await prisma.clientSite.findMany({
+                  where: { clientId: { in: clientIds } },
+                  orderBy: { createdAt: 'asc' }
+                })
+              } catch (e) {
+                const rawSites = await prisma.$queryRaw`
+                  SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "siteLead", stage, "aidaStatus", "siteType", "createdAt", "updatedAt"
+                  FROM "ClientSite"
+                  WHERE "clientId" IN (${Prisma.join(clientIds)})
+                  ORDER BY "createdAt" ASC
+                `
+                sitesList = rawSites || []
+              }
+              const sitesByClientId = {}
+              for (const site of sitesList || []) {
+                const key = String(site.clientId || '')
+                if (!sitesByClientId[key]) sitesByClientId[key] = []
+                sitesByClientId[key].push(site)
+              }
+              clientsWithSites = clientsWithSites.map(c => ({
+                ...c,
+                clientSites: sitesByClientId[String(c.id || '')] || [],
+                groupMemberships: [],
+                starredBy: []
+              }))
+            } else {
+              clientsWithSites = clientsWithSites.map(c => ({ ...c, groupMemberships: [], starredBy: [] }))
+            }
+          } catch (hydrateErr) {
+            console.warn('⚠️ Could not hydrate clientSites in minimal fallback:', hydrateErr.message)
+            clientsWithSites = (minimal || []).map(c => ({ ...c, groupMemberships: [], starredBy: [] }))
+          }
+          const parsed = clientsWithSites.map(c => {
+            const p = parseClientJsonFields(c)
+            p.groupMemberships = p.groupMemberships || []
             p.isStarred = false
             return p
           })

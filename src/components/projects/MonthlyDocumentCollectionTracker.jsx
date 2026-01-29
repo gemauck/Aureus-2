@@ -1733,7 +1733,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         sectionId,
                         documentId,
                         month,
-                        commentId: newCommentId
+                        commentId: newCommentId,
+                        docYear: selectedYear,
+                        year: selectedYear
                     };
                     
                     // Fire mention notifications (do not block UI on errors)

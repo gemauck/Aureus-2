@@ -1059,8 +1059,9 @@ const DatabaseAPI = {
     },
 
     // CLIENT OPERATIONS
-    async getClients() {
-        const response = await this.makeRequest('/clients');
+    async getClients(forceRefresh = false) {
+        const endpoint = forceRefresh ? `/clients?_t=${Date.now()}` : '/clients';
+        const response = await this.makeRequest(endpoint);
         const clients = response?.data?.clients || [];
         if (clients.length === 0) {
             console.warn('⚠️ WARNING: No clients found in database response. This could indicate:');

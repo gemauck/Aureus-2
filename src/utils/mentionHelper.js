@@ -167,6 +167,13 @@ const MentionHelper = {
                 if (projectInfo.commentId) {
                     metadata.commentId = projectInfo.commentId;
                 }
+                // docYear/year so backend and email links open the correct year (fixes production "blank comment box")
+                if (projectInfo.docYear !== undefined && projectInfo.docYear !== null) {
+                    metadata.docYear = projectInfo.docYear;
+                }
+                if (projectInfo.year !== undefined && projectInfo.year !== null) {
+                    metadata.year = projectInfo.year;
+                }
             }
             
             // Generate entity URL if we have entity information
