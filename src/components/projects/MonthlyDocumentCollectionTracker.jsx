@@ -491,6 +491,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+    const [emailModalContext, setEmailModalContext] = useState(null);
 
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
@@ -2897,7 +2898,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    
+                    {!isMonthlyDataReview && (
+                        <div className="absolute top-0.5 right-0.5 z-10">
+                            <button
+                                type="button"
+                                data-email-cell={cellKey}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setEmailModalContext({ section, doc, month });
+                                }}
+                                className="text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded"
+                                title="Request documents via email"
+                                aria-label="Request documents via email"
+                            >
+                                <i className="fas fa-envelope text-[10px]"></i>
+                            </button>
+                        </div>
+                    )}
                     <div className="absolute top-1/2 right-1 -translate-y-1/2 z-10">
                         <button
                             data-comment-cell={cellKey}
@@ -3070,6 +3088,194 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        );
+    };
+
+    const DocumentRequestEmailModal = () => {
+        const ctx = emailModalContext;
+        const docName = ctx?.doc?.name || 'Document';
+        const sectionName = ctx?.section?.name || '';
+        const month = ctx?.month || '';
+        const projectName = project?.name || 'Project';
+        const defaultSubject = `Document request: ${projectName} – ${docName} – ${month} ${selectedYear}`;
+        const defaultBody = `Dear Sir/Madam,
+
+We kindly request the following document(s) for our records:
+
+• Document: ${docName}${sectionName ? `\n• Section: ${sectionName}` : ''}
+• Period: ${month} ${selectedYear}
+• Project: ${projectName}
+
+Please send these at your earliest convenience.
+
+Kind regards,
+Abcotronics`;
+
+        const [contacts, setContacts] = useState([]);
+        const [newContact, setNewContact] = useState('');
+        const [subject, setSubject] = useState(defaultSubject);
+        const [body, setBody] = useState(defaultBody);
+        const [sending, setSending] = useState(false);
+        const [result, setResult] = useState(null);
+        const [resetKey, setResetKey] = useState(0);
+
+        useEffect(() => {
+            setSubject(defaultSubject);
+            setBody(defaultBody);
+            setContacts([]);
+            setNewContact('');
+            setResult(null);
+            setResetKey((k) => k + 1);
+        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear, project?.id]);
+
+        const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const addContact = () => {
+            const t = newContact.trim();
+            if (!t || !emailRe.test(t)) return;
+            if (contacts.includes(t)) return;
+            setContacts((c) => [...c, t]);
+            setNewContact('');
+        };
+        const removeContact = (email) => setContacts((c) => c.filter((e) => e !== email));
+
+        const handleSend = async () => {
+            if (contacts.length === 0) {
+                alert('Please add at least one recipient.');
+                return;
+            }
+            if (!subject.trim()) {
+                alert('Please enter a subject.');
+                return;
+            }
+            if (!body.trim()) {
+                alert('Please enter the email body.');
+                return;
+            }
+            setSending(true);
+            setResult(null);
+            try {
+                const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+                const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        to: contacts,
+                        subject: subject.trim(),
+                        html: body.trim().split('\n').map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')).join('<br>'),
+                        text: body.trim()
+                    })
+                });
+                const json = await res.json().catch(() => ({}));
+                const data = json.data || json;
+                if (!res.ok) {
+                    setResult({ error: data.error || json.error || 'Failed to send' });
+                    return;
+                }
+                setResult({ sent: data.sent || [], failed: data.failed || [] });
+            } catch (err) {
+                setResult({ error: err.message || 'Request failed' });
+            } finally {
+                setSending(false);
+            }
+        };
+
+        const hasSuccess = result && result.sent && result.sent.length > 0;
+        const hasFailures = result && result.failed && result.failed.length > 0;
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">Request documents via email</h2>
+                        <button type="button" onClick={() => setEmailModalContext(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+                    <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Recipients</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="email"
+                                    value={newContact}
+                                    onChange={(e) => setNewContact(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addContact(); } }}
+                                    placeholder="email@example.com"
+                                    className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                />
+                                <button type="button" onClick={addContact} className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg">
+                                    Add
+                                </button>
+                            </div>
+                            {contacts.length > 0 && (
+                                <ul className="mt-2 space-y-1">
+                                    {contacts.map((email) => (
+                                        <li key={email} className="flex items-center justify-between text-xs bg-gray-50 px-2 py-1 rounded">
+                                            <span className="truncate">{email}</span>
+                                            <button type="button" onClick={() => removeContact(email)} className="text-red-600 hover:text-red-700 ml-2">
+                                                <i className="fas fa-times"></i>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Subject</label>
+                            <input
+                                type="text"
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                placeholder="Subject"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Email body</label>
+                            <textarea
+                                key={resetKey}
+                                value={body}
+                                onChange={(e) => setBody(e.target.value)}
+                                rows={10}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono"
+                                placeholder="Draft your email..."
+                            />
+                        </div>
+                        {result?.error && (
+                            <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded">{result.error}</div>
+                        )}
+                        {hasSuccess && (
+                            <div className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded">
+                                Sent to: {result.sent.join(', ')}
+                            </div>
+                        )}
+                        {hasFailures && (
+                            <div className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded">
+                                Failed: {result.failed.map((f) => `${f.email} (${f.error})`).join('; ')}
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
+                        <button type="button" onClick={() => setEmailModalContext(null)} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50">
+                            Close
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSend}
+                            disabled={sending || contacts.length === 0}
+                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {sending ? 'Sending…' : 'Send email'}
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -4407,6 +4613,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             
             {/* Modals */}
             {showSectionModal && <SectionModal />}
+            {emailModalContext && <DocumentRequestEmailModal />}
             {showDocumentModal && <DocumentModal />}
             {showTemplateModal && <TemplateModal />}
             {showApplyTemplateModal && <ApplyTemplateModal />}

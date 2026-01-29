@@ -12,10 +12,13 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'GET').json({ error: 'Method not allowed' })
   }
 
-  const match = (req.url || req.path || '').match(/\/api\/projects\/([^/]+)\/document-sections/)
-  const id = match ? match[1] : (req.params && req.params.id)
+  // Prefer server-set param; then parse from path (req.url is relative to /api mount)
+  const pathOrUrl = (req.originalUrl || req.url || req.path || '').split('?')[0].split('#')[0]
+  const match = pathOrUrl.match(/(?:\/api)?\/projects\/([^/]+)\/document-sections(?!-v2)(?:\/|$|\?)/)
+  const rawId = (req.params && req.params.id) || (match ? match[1] : null)
+  const id = rawId ? String(rawId).split('?')[0].split('&')[0].trim() : null
   if (!id) {
-    return res.status(400).json({ error: 'Project ID required' })
+    return res.status(400).json({ error: 'Project ID required', path: pathOrUrl })
   }
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')

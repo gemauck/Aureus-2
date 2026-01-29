@@ -1,0 +1,72 @@
+/**
+ * POST /api/projects/:id/document-collection-send-email
+ * Send document request emails to contacts. Used by Document Collection checklist
+ * "Request documents" flow. Uses existing mail infrastructure (Resend/SendGrid/SMTP).
+ */
+import { authRequired } from '../../_lib/authRequired.js'
+import { parseJsonBody } from '../../_lib/body.js'
+import { sendEmail } from '../../_lib/email.js'
+import { ok, badRequest, serverError } from '../../_lib/response.js'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isValidEmail(s) {
+  return typeof s === 'string' && s.trim().length > 0 && EMAIL_RE.test(s.trim())
+}
+
+async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).setHeader('Allow', 'POST').json({ error: 'Method not allowed' })
+  }
+
+  const pathOrUrl = (req.url || req.path || '').split('?')[0].split('#')[0]
+  const match = pathOrUrl.match(/(?:\/api)?\/projects\/([^/]+)\/document-collection-send-email/)
+  const rawId = match ? match[1] : (req.params && req.params.id)
+  const projectId = rawId ? String(rawId).split('?')[0].split('&')[0].trim() : null
+  if (!projectId) {
+    return badRequest(res, 'Project ID required')
+  }
+
+  try {
+    const body = await parseJsonBody(req)
+    const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
+    const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
+    const html = typeof body.html === 'string' ? body.html.trim() : ''
+    const text = typeof body.text === 'string' ? body.text.trim() : undefined
+
+    if (!subject) {
+      return badRequest(res, 'Subject is required')
+    }
+    if (!html && !text) {
+      return badRequest(res, 'Either html or text body is required')
+    }
+    const validTo = to.filter((e) => isValidEmail(e))
+    if (validTo.length === 0) {
+      return badRequest(res, 'At least one valid recipient email is required')
+    }
+
+    const sent = []
+    const failed = []
+
+    for (const email of validTo) {
+      try {
+        await sendEmail({
+          to: email.trim(),
+          subject,
+          html: html || undefined,
+          text: text || undefined
+        })
+        sent.push(email.trim())
+      } catch (err) {
+        failed.push({ email: email.trim(), error: err.message || 'Send failed' })
+      }
+    }
+
+    return ok(res, { sent, failed })
+  } catch (e) {
+    console.error('POST /api/projects/:id/document-collection-send-email error:', e)
+    return serverError(res, e.message || 'Failed to send document request emails')
+  }
+}
+
+export default authRequired(handler)

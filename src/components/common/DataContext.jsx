@@ -335,13 +335,25 @@ const DataProvider = ({ children }) => {
 
     // Initial data load on mount
     useEffect(() => {
+        const INITIAL_LOAD_SAFETY_MS = 25000; // 25s max - then show app even if a request is stuck
+
         const initialLoad = async () => {
             setGlobalLoading(true);
-            
+
+            // Safety: force completion after max time so app never stays on loading forever
+            const safetyTimer = setTimeout(() => {
+                setGlobalLoading(false);
+                setInitialLoadComplete(true);
+                if (window.debug && !window.debug.performanceMode) {
+                    console.warn('⚠️ Initial load safety timeout – showing app. Some data may still load in background.');
+                }
+            }, INITIAL_LOAD_SAFETY_MS);
+
             try {
                 // Check authentication
                 const token = window.storage?.getToken?.();
                 if (!token) {
+                    clearTimeout(safetyTimer);
                     setInitialLoadComplete(true);
                     setGlobalLoading(false);
                     return;
@@ -355,7 +367,7 @@ const DataProvider = ({ children }) => {
                     { key: 'projects', priority: 3 },
                     { key: 'users', priority: 4 }
                 ];
-                
+
                 // Load data sequentially with delays between requests
                 for (let i = 0; i < dataTypes.length; i++) {
                     const dataType = dataTypes[i];
@@ -364,7 +376,7 @@ const DataProvider = ({ children }) => {
                         if (i > 0) {
                             await new Promise(resolve => setTimeout(resolve, 600)); // 600ms delay between requests
                         }
-                        
+
                         await fetchData(dataType.key).catch(err => {
                             const errorMessage = err?.message || String(err);
                             const isDatabaseError = errorMessage.includes('Database connection failed') ||
@@ -373,22 +385,20 @@ const DataProvider = ({ children }) => {
                                                   errorMessage.includes('connection refused') ||
                                                   errorMessage.includes('econnrefused');
                             const isRateLimitError = err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED';
-                            const isUnauthorized = err?.status === 401 || errorMessage.includes('401') || 
+                            const isUnauthorized = err?.status === 401 || errorMessage.includes('401') ||
                                                   errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
-                            
+
                             // If unauthorized, stop loading immediately - token is invalid
                             if (isUnauthorized) {
                                 console.warn('⚠️ Unauthorized - stopping data load');
-                                // Clear invalid token
                                 if (window.storage?.removeToken) {
                                     window.storage.removeToken();
                                 }
-                                // Stop loading and let app show login page
                                 setInitialLoadComplete(true);
                                 setGlobalLoading(false);
                                 return null;
                             }
-                            
+
                             // Don't log rate limit errors (they're handled by RateLimitManager)
                             if (!isDatabaseError && !isRateLimitError) {
                                 console.error(`❌ Error fetching ${dataType.key}:`, err);
@@ -404,12 +414,12 @@ const DataProvider = ({ children }) => {
                         }
                     }
                 }
-                
+
             } catch (error) {
                 const errorMessage = error?.message || String(error);
-                const isUnauthorized = error?.status === 401 || errorMessage.includes('401') || 
+                const isUnauthorized = error?.status === 401 || errorMessage.includes('401') ||
                                       errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
-                
+
                 // If unauthorized, stop loading immediately
                 if (isUnauthorized) {
                     console.warn('⚠️ Unauthorized during initial load - stopping');
@@ -417,9 +427,10 @@ const DataProvider = ({ children }) => {
                     setGlobalLoading(false);
                     return;
                 }
-                
+
                 console.error('❌ Initial load error:', error);
             } finally {
+                clearTimeout(safetyTimer);
                 setGlobalLoading(false);
                 setInitialLoadComplete(true);
             }

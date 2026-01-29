@@ -1990,12 +1990,18 @@ app.use('/api', async (req, res) => {
     const handlerPath = toHandlerPath(req.url)
     console.log(`🔍 Loading handler for ${req.method} ${req.url} -> ${handlerPath}`)
     
-    // Extract ID from URL for dynamic routes (e.g., /api/leads/[id] or /api/clients/[id])
+    // Extract ID from URL for dynamic routes (e.g., /api/leads/[id] or /api/projects/[id]/document-sections-v2)
     // This ensures req.params.id is available for handlers that expect it
-    if (handlerPath.includes('[id].js')) {
-      const urlPath = req.url.split('?')[0].split('#')[0]
-      const pathSegments = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
-      if (pathSegments.length >= 2) {
+    if (handlerPath.includes('[id]')) {
+      const urlPath = (req.originalUrl || req.url || '').split('?')[0].split('#')[0]
+      const pathSegments = urlPath.replace(/^\/api\/?/, '').replace(/^\//, '').split('/').filter(Boolean)
+      const relPath = path.relative(apiDir, handlerPath)
+      const pathParts = relPath.split(path.sep)
+      const idSegmentIndex = pathParts.findIndex((p) => p === '[id]')
+      if (idSegmentIndex >= 0 && pathSegments[idSegmentIndex]) {
+        req.params = req.params || {}
+        req.params.id = pathSegments[idSegmentIndex]
+      } else if (pathSegments.length >= 2) {
         req.params = req.params || {}
         req.params.id = pathSegments[pathSegments.length - 1]
       }

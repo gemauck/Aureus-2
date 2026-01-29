@@ -1671,14 +1671,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [client?.id]);
     
-    // Resolve lead sites persistence another way: when user opens Sites tab for a lead,
-    // always load from GET /api/sites/client/:id so we show sites even if the lead was loaded from cache/list
+    // Resolve lead sites persistence: when user opens Sites tab for a lead, always load from GET /api/sites/client/:id.
+    // For clients, load when initialSiteId is set (deep link to specific site) so we have sites before opening it.
     useEffect(() => {
-        if (activeTab === 'sites' && isLead && (formData?.id || client?.id) && window.api?.getSites) {
-            const id = formData?.id || client?.id;
-            loadSitesFromDatabase(id);
-        }
-    }, [activeTab, isLead, formData?.id, client?.id, loadSitesFromDatabase]);
+        if (activeTab !== 'sites' || !(formData?.id || client?.id) || !window.api?.getSites) return;
+        const id = formData?.id || client?.id;
+        const shouldLoad = isLead || (initialSiteId && (!formData?.sites || formData.sites.length === 0));
+        if (shouldLoad) loadSitesFromDatabase(id);
+    }, [activeTab, isLead, initialSiteId, formData?.id, formData?.sites, client?.id, loadSitesFromDatabase]);
 
     // REMOVED: Tab-specific job cards loading
     // Job cards are now loaded immediately when client opens (in the main client load useEffect)
@@ -3388,20 +3388,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     }, [client?.id]);
     useEffect(() => {
         if (!initialSiteId) return;
-        const sites = formData?.sites || [];
-        const site = sites.find(s => String(s.id) === String(initialSiteId));
-        // Always switch to Sites tab when initialSiteId is set so sites load and we can open the site
+        // 1. Switch to Sites tab first so it mounts and (for leads) we load sites
         if (activeTabRef.current !== 'sites') {
             if (typeof onTabChange === 'function') onTabChange('sites');
             setActiveTab('sites');
             activeTabRef.current = 'sites';
+            return; // Re-run after tab switch (and optionally sites load)
         }
-        if (!site) return; // Site not in formData yet (e.g. still loading) – effect will run again when formData.sites updates
+        // 2. Only open the specific site when we're actually on Sites tab
+        if (activeTab !== 'sites') return;
+        const formSites = formData?.sites || [];
+        const opt = optimisticSites || [];
+        const siteMap = new Map();
+        formSites.forEach(s => { if (s?.id) siteMap.set(String(s.id), s); });
+        opt.forEach(s => { if (s?.id) siteMap.set(String(s.id), s); });
+        const site = siteMap.get(String(initialSiteId));
+        if (!site) return; // Site not loaded yet – effect will re-run when formData.sites / optimisticSites updates
         if (openedInitialSiteIdRef.current === initialSiteId) return;
         openedInitialSiteIdRef.current = initialSiteId;
+        // 3. Open the actual site (edit form). Don't clear initialSiteId here – clear only when user clicks "Back to list".
         handleEditSite(site);
-        if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
-    }, [initialSiteId, formData?.sites]);
+    }, [initialSiteId, formData?.sites, optimisticSites, activeTab]);
 
     const handleUpdateSite = () => {
         // Build site payload with API-expected fields
@@ -5410,7 +5417,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <div className="flex items-center justify-between mb-3">
                                             <button
                                                 type="button"
-                                                onClick={() => { setShowSiteForm(false); setEditingSite(null); setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', siteType: isLead ? 'lead' : 'client', stage: 'Potential', aidaStatus: 'Awareness' }); }}
+                                                onClick={() => {
+                                                    setShowSiteForm(false);
+                                                    setEditingSite(null);
+                                                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', siteType: isLead ? 'lead' : 'client', stage: 'Potential', aidaStatus: 'Awareness' });
+                                                    if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
+                                                }}
                                                 className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
                                             >
                                                 <i className="fas fa-arrow-left"></i>

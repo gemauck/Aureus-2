@@ -313,6 +313,70 @@ function checkEmailConfiguration() {
     return true;
 }
 
+/**
+ * Send a simple email (raw subject/body). Used for document collection requests,
+ * leave notifications, and other custom user-drafted emails.
+ * @param {{ to: string, subject: string, html?: string, text?: string }} opts
+ * @returns {{ success: boolean, messageId: string }}
+ */
+export async function sendEmail(opts) {
+    const { to, subject, html, text } = opts;
+    if (!to || !subject) {
+        throw new Error('sendEmail requires "to" and "subject"');
+    }
+    const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
+    const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
+    const textContent = text || (html ? html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n') : '');
+    const mailOptions = {
+        from: fromAddress,
+        to,
+        subject,
+        ...(html && { html }),
+        ...(textContent && { text: textContent })
+    };
+
+    checkEmailConfiguration();
+    const emailTransporter = getTransporter();
+    const resendKey = process.env.RESEND_API_KEY;
+    const sendGridKey = process.env.SENDGRID_API_KEY ||
+        (emailTransporter?.apiKey && emailTransporter.apiKey?.startsWith?.('SG.') ? emailTransporter.apiKey : null) ||
+        (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
+
+    const hasAnyConfig = !!(
+        process.env.RESEND_API_KEY ||
+        process.env.SENDGRID_API_KEY ||
+        (process.env.SMTP_USER && process.env.SMTP_PASS) ||
+        (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ||
+        process.env.SMTP_URL
+    );
+    if (!hasAnyConfig) {
+        throw new Error('Email configuration not available. Configure RESEND_API_KEY, SENDGRID_API_KEY, or SMTP settings.');
+    }
+
+    let result;
+    if (resendKey && resendKey.startsWith('re_')) {
+        mailOptions.fromName = 'Abcotronics';
+        result = await sendViaResendAPI(mailOptions, resendKey);
+    } else if (sendGridKey && (useSendGridHTTP || emailTransporter?.provider === 'sendgrid')) {
+        mailOptions.fromName = 'Abcotronics';
+        const fromEmail = mailOptions.from.includes('<')
+            ? (mailOptions.from.match(/<(.+)>/)?.[1] || mailOptions.from)
+            : mailOptions.from;
+        mailOptions.from = fromEmail;
+        result = await sendViaSendGridAPI(mailOptions, sendGridKey);
+    } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
+        const sendPromise = emailTransporter.sendMail(mailOptions);
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Email sending timed out after 15 seconds')), 15000)
+        );
+        result = await Promise.race([sendPromise, timeoutPromise]);
+    } else {
+        throw new Error('No email transporter available. Configure RESEND_API_KEY, SENDGRID_API_KEY, or SMTP.');
+    }
+
+    return { success: true, messageId: result?.messageId ?? result?.id ?? 'unknown' };
+}
+
 // Send invitation email
 export const sendInvitationEmail = async (invitationData) => {
     const { email, name, role, invitationLink } = invitationData;
