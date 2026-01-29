@@ -41,6 +41,9 @@ out/
 logs
 *.log
 
+# User uploads (runtime files, do not commit)
+uploads/
+
 # Runtime data
 pids
 *.pid
