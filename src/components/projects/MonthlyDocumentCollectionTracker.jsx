@@ -2889,7 +2889,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full px-2 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
+                        className={`w-full pl-2 pr-7 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2898,25 +2898,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    <div className="absolute top-1/2 right-1 -translate-y-1/2 flex flex-row items-center gap-1.5 z-10">
-                        {!isMonthlyDataReview && (
-                            <button
-                                type="button"
-                                data-email-cell={cellKey}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setEmailModalContext({ section, doc, month });
-                                }}
-                                className="text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
-                                title="Request documents via email"
-                                aria-label="Request documents via email"
-                            >
-                                <i className="fas fa-envelope text-[10px]"></i>
-                            </button>
-                        )}
-                        <button
-                            data-comment-cell={cellKey}
+                    {/* Comment at top of cell */}
+                    <button
+                        data-comment-cell={cellKey}
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -2998,7 +2982,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     }, 10);
                                 }
                             }}
-                            className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
+                            className="absolute top-1 right-1 z-10 text-gray-500 hover:text-gray-700 transition-colors p-1 rounded"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
@@ -3009,7 +2993,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                 </span>
                             )}
                         </button>
-                    </div>
+                    {/* Email at bottom of cell */}
+                    {!isMonthlyDataReview && (
+                        <button
+                            type="button"
+                            data-email-cell={cellKey}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEmailModalContext({ section, doc, month });
+                            }}
+                            className="absolute bottom-1 right-1 z-10 text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
+                            title="Request documents via email"
+                            aria-label="Request documents via email"
+                        >
+                            <i className="fas fa-envelope text-[10px]"></i>
+                        </button>
+                    )}
                 </div>
             </td>
         );
