@@ -254,11 +254,12 @@ const MainLayout = () => {
                                 url: fullPath,
                                 options: {
                                     ...parsed.options,
-                                    // Parse query params for tab/section/task
+                                    // Parse query params for tab/section/task/siteId (client/lead site deep links)
                                     tab: route.search?.get('tab') || parsed.options?.tab,
                                     section: route.search?.get('section') || parsed.options?.section,
                                     commentId: route.search?.get('commentId') || parsed.options?.commentId,
-                                    task: route.search?.get('task') || parsed.options?.task
+                                    task: route.search?.get('task') || parsed.options?.task,
+                                    siteId: route.search?.get('siteId') || parsed.options?.siteId
                                 }
                             }
                         }));
@@ -272,11 +273,12 @@ const MainLayout = () => {
                                     url: fullPath,
                                     options: {
                                         ...parsed.options,
-                                        // Parse query params for tab/section/task
+                                        // Parse query params for tab/section/task/siteId (client/lead site deep links)
                                         tab: route.search?.get('tab') || parsed.options?.tab,
                                         section: route.search?.get('section') || parsed.options?.section,
                                         commentId: route.search?.get('commentId') || parsed.options?.commentId,
-                                        task: route.search?.get('task') || parsed.options?.task
+                                        task: route.search?.get('task') || parsed.options?.task,
+                                        siteId: route.search?.get('siteId') || parsed.options?.siteId
                                     }
                                 }
                             }));

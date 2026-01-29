@@ -618,7 +618,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             loadData();
         }
     }, [project?.id, selectedYear, loadData]);
-    
+
+    // When data is loaded, if the selected year has no sections but other years do, switch to the latest year that has data
+    useEffect(() => {
+        if (isLoading || !project?.id || !sectionsByYear || typeof sectionsByYear !== 'object') return;
+        const yearsWithData = Object.keys(sectionsByYear).filter((y) => {
+            const arr = sectionsByYear[y];
+            return Array.isArray(arr) && arr.length > 0;
+        }).map((y) => parseInt(y, 10)).filter((y) => !Number.isNaN(y)).sort((a, b) => b - a);
+        if (yearsWithData.length === 0) return;
+        const currentSections = Array.isArray(sectionsByYear[selectedYear]) ? sectionsByYear[selectedYear] : [];
+        if (currentSections.length > 0) return;
+        const bestYear = yearsWithData[0];
+        if (bestYear != null && bestYear !== selectedYear) {
+            setSelectedYear(bestYear);
+            try {
+                if (typeof window !== 'undefined' && project?.id) {
+                    localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(bestYear));
+                }
+            } catch (_) {}
+        }
+    }, [sectionsByYear, isLoading, project?.id, selectedYear]);
+
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
@@ -4101,6 +4122,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             {/* Per-section tables with independent horizontal scroll */}
             <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
                 {sections.length === 0 ? (
+                    (() => {
+                        const yearsWithSections = Object.keys(sectionsByYear || {}).filter((y) => (sectionsByYear[y] || []).length > 0).map((y) => parseInt(y, 10)).filter((y) => !Number.isNaN(y)).sort((a, b) => b - a);
+                        const hasDataInOtherYears = yearsWithSections.length > 0;
+                        const bestYear = yearsWithSections[0];
+                        return (
                     <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
                         <div className="flex flex-col items-center gap-4">
                             <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
@@ -4108,12 +4134,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </div>
                             <div>
                                 <p className="text-lg font-bold text-gray-900">No sections yet</p>
-                                <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                                {hasDataInOtherYears ? (
+                                    <>
+                                        <p className="text-sm text-gray-600 mt-1">No sections for <strong>{selectedYear}</strong>. Your document collection has data for {yearsWithSections.join(', ')}.</p>
+                                        <p className="text-sm text-primary-600 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
+                                    </>
+                                ) : (
+                                    <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                                )}
+                                {!hasDataInOtherYears && (
                                 <p className="text-xs text-amber-700 mt-3 p-2 bg-amber-50 rounded border border-amber-200">
                                     <strong>Works in another browser but not here?</strong> Likely cache or an extension. Use <strong>Clear cache & reload</strong> below, or try Incognito/Private. Or F12 → Network and check <code className="bg-amber-100 px-0.5">document-sections-v2</code>.
                                 </p>
+                                )}
                             </div>
                             <div className="flex flex-wrap gap-2 justify-center">
+                                {hasDataInOtherYears && bestYear != null && (
+                                    <button
+                                        onClick={() => handleYearChange(bestYear)}
+                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold"
+                                    >
+                                        Show {bestYear}
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => {
                                         if (typeof window === 'undefined' || !window.location) return;
@@ -4142,6 +4185,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </div>
                         </div>
                     </div>
+                        );
+                    })()
                 ) : (
                     sections.map((section, sectionIndex) => (
                         <div

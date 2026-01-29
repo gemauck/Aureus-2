@@ -299,11 +299,26 @@
         if (window.RouteState) {
             const parsed = parseEntityUrl(url);
             if (parsed) {
-                window.RouteState.setPageSubpath(parsed.page, [parsed.entityId], {
-                    replace: false,
-                    preserveSearch: false,
-                    preserveHash: false
-                });
+                const hasSearch = !!(parsed.options?.tab || parsed.options?.siteId);
+                if (hasSearch && window.RouteState.navigate) {
+                    const search = new URLSearchParams();
+                    if (parsed.options.tab) search.set('tab', parsed.options.tab);
+                    if (parsed.options.siteId) search.set('siteId', parsed.options.siteId);
+                    window.RouteState.navigate({
+                        page: parsed.page,
+                        segments: [parsed.entityId],
+                        search: search.toString(),
+                        preserveSearch: false,
+                        preserveHash: false,
+                        replace: false
+                    });
+                } else {
+                    window.RouteState.setPageSubpath(parsed.page, [parsed.entityId], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                }
                 
                 // Dispatch custom event for entity navigation
                 window.dispatchEvent(new CustomEvent('navigateToEntity', {
