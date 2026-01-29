@@ -1328,8 +1328,9 @@ const DatabaseAPI = {
         return response;
     },
 
-    async getProject(id) {
-        const response = await this.makeRequest(`/projects/${id}`);
+    async getProject(id, options = {}) {
+        const url = options.summary ? `/projects/${id}?summary=1` : `/projects/${id}`;
+        const response = await this.makeRequest(url);
         return response;
     },
 

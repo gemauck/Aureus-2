@@ -526,33 +526,61 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setIsLoading(true);
         
         try {
-            // ALWAYS load from database first (most reliable, has latest data)
-            if (apiRef.current) {
-                console.log('📥 Loading from database...', { projectId: project.id });
-                const freshProject = await apiRef.current.fetchProject(project.id);
-                const sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
-                console.log('📥 Loaded project from database:', { 
-                    hasSections: !!sectionsField,
-                    sectionsType: typeof sectionsField,
-                    dataSource: dataSource
-                });
-                
-                if (sectionsField) {
-                    const normalized = normalizeSectionsByYear(sectionsField);
-                    console.log('📥 Normalized sections:', { 
-                        yearKeys: Object.keys(normalized),
-                        sectionsCount: normalized[selectedYear]?.length || 0
+            // 1) For document collection only: use v2 endpoint (different path = no cached response)
+            let sectionsField = null;
+            if (!isMonthlyDataReview) {
+                const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                const endpointV2 = `/api/projects/${project.id}/document-sections-v2?_=${Date.now()}`;
+                const endpointV1 = `/api/projects/${project.id}/document-sections?_=${Date.now()}`;
+                try {
+                    const res = await fetch(base + endpointV2, {
+                        method: 'GET',
+                        credentials: 'include',
+                        cache: 'no-store',
+                        headers: { Accept: 'application/json' }
                     });
-                    setSectionsByYear(normalized);
-                    sectionsRef.current = normalized;
-                    lastSavedDataRef.current = JSON.stringify(normalized);
-                    setIsLoading(false);
-                    return;
+                    if (res.ok) {
+                        const json = await res.json();
+                        sectionsField = json.data?.documentSections ?? json.documentSections;
+                    }
+                } catch (fetchErr) {
+                    console.warn('📥 document-sections-v2 failed, trying v1:', fetchErr?.message);
+                }
+                if (sectionsField == null) {
+                    try {
+                        const res = await fetch(base + endpointV1, {
+                            method: 'GET',
+                            credentials: 'include',
+                            cache: 'no-store',
+                            headers: { Accept: 'application/json' }
+                        });
+                        if (res.ok) {
+                            const json = await res.json();
+                            sectionsField = json.data?.documentSections ?? json.documentSections;
+                        }
+                    } catch (fetchErr) {
+                        console.warn('📥 document-sections endpoint failed, trying fetchProject:', fetchErr?.message);
+                    }
                 }
             }
             
-            // Fallback to prop data (only if database load failed)
-            console.log('⚠️ Falling back to prop data');
+            // 2) Fallback: full project fetch (may be cached in some browsers)
+            if (sectionsField == null && apiRef.current) {
+                console.log('📥 Loading from fetchProject...', { projectId: project.id });
+                const freshProject = await apiRef.current.fetchProject(project.id);
+                sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
+            }
+            
+            if (sectionsField != null && typeof sectionsField === 'object') {
+                const normalized = normalizeSectionsByYear(sectionsField);
+                setSectionsByYear(normalized);
+                sectionsRef.current = normalized;
+                lastSavedDataRef.current = JSON.stringify(normalized);
+                setIsLoading(false);
+                return;
+            }
+            
+            // 3) Fallback to prop data
             const propSections = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
             if (propSections) {
                 const normalized = normalizeSectionsByYear(propSections);
@@ -560,19 +588,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
             } else {
-                // No data - initialize empty
-                console.log('📭 No data found, initializing empty');
                 setSectionsByYear({});
                 sectionsRef.current = {};
                 lastSavedDataRef.current = JSON.stringify({});
+                // One-time forced reload when Document Collection shows empty (busts stale cache so new bundle + dedicated API load)
+                if (!isMonthlyDataReview && typeof sessionStorage !== 'undefined') {
+                    const reloadKey = 'docCollection_reloaded_' + project.id;
+                    if (sessionStorage.getItem(reloadKey) !== '1') {
+                        sessionStorage.setItem(reloadKey, '1');
+                        const q = (typeof window !== 'undefined' && window.location) ? (window.location.search ? '&' : '?') + 'v=' + Date.now() : '';
+                        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) || '';
+                        window.location.href = (window.location.pathname || '/') + q + hash;
+                        return;
+                    }
+                }
             }
         } catch (error) {
             console.error('❌ Error loading data:', error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                projectId: project.id
-            });
             setSectionsByYear({});
             sectionsRef.current = {};
         } finally {
@@ -4077,13 +4109,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             <div>
                                 <p className="text-lg font-bold text-gray-900">No sections yet</p>
                                 <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                                <p className="text-xs text-amber-700 mt-3 p-2 bg-amber-50 rounded border border-amber-200">
+                                    <strong>Works in another browser but not here?</strong> Likely cache or an extension. Use <strong>Clear cache & reload</strong> below, or try Incognito/Private. Or F12 → Network and check <code className="bg-amber-100 px-0.5">document-sections-v2</code>.
+                                </p>
                             </div>
-                            <button
-                                onClick={handleAddSection}
-                                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-                            >
-                                <i className="fas fa-plus"></i><span>Add First Section</span>
-                            </button>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                                <button
+                                    onClick={() => {
+                                        const q = (typeof window !== 'undefined' && window.location) ? (window.location.search ? '&' : '?') + 'clearCache=1';
+                                        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) || '';
+                                        if (typeof window !== 'undefined' && window.location) {
+                                            window.location.href = (window.location.pathname || '/') + q + hash;
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 text-sm font-medium border border-amber-300"
+                                >
+                                    Clear cache & reload
+                                </button>
+                                <button
+                                    onClick={() => { if (project?.id) loadData(); }}
+                                    disabled={isLoading}
+                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium disabled:opacity-50"
+                                >
+                                    {isLoading ? 'Loading…' : 'Retry load'}
+                                </button>
+                                <button
+                                    onClick={handleAddSection}
+                                    className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                                >
+                                    <i className="fas fa-plus"></i><span>Add First Section</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (

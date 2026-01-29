@@ -2292,9 +2292,31 @@ app.get('*', (req, res) => {
   if (pathname.startsWith('/vite-projects/')) {
     return res.status(404).type('text/plain').setHeader('Cache-Control', 'no-store').send('Vite asset not found. Ensure npm run build:vite-projects ran and dist/vite-projects/ is deployed.')
   }
-  
+
+  // Force fresh HTML for root: redirect / to /?v=BUILD_VERSION so browser never uses cached index.html
+  if (pathname === '/' || pathname === '') {
+    const hasVersion = req.query && (req.query.v || req.query.nocache || req.query._)
+    if (!hasVersion) {
+      let buildVersion = ''
+      try {
+        const versionPath = path.join(rootDir, 'dist', 'build-version.json')
+        if (existsSync(versionPath)) {
+          const raw = readFileSync(versionPath, 'utf8')
+          const data = JSON.parse(raw)
+          buildVersion = data.version ? String(data.version) : String(Date.now())
+        } else {
+          buildVersion = String(Date.now())
+        }
+      } catch (_) {
+        buildVersion = String(Date.now())
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+      return res.redirect(302, `/?v=${encodeURIComponent(buildVersion)}`)
+    }
+  }
+
   // CRITICAL: Set no-cache headers for index.html to prevent stale deployments
-  // This ensures browsers always fetch the latest version after deployment
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.setHeader('Pragma', 'no-cache')
   res.setHeader('Expires', '0')

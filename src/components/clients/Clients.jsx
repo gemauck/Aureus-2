@@ -1409,22 +1409,36 @@ const Clients = React.memo(() => {
             }
         }
 
-        // CRITICAL: Don't update URL with client ID - this can cause RouteState to misinterpret it as a project ID
-        // The client modal is rendered via viewMode='client-detail', not via URL routing
-        // Only update URL if explicitly needed, and use a prefix to avoid conflicts
-        // if (window.RouteState && client?.id) {
-        //     window.RouteState.setPageSubpath('clients', ['client', String(client.id)], {
-        //         replace: false,
-        //         preserveSearch: false,
-        //         preserveHash: false
-        //     });
-        // }
+        // Deep URL: /clients/{id} or /clients/{id}?tab=sites&siteId=... for site platform click-through
+        if (window.RouteState && clientId) {
+            const segments = [String(clientId)];
+            const hasSite = options.initialTab === 'sites' || options.initialSiteId;
+            if (hasSite) {
+                const search = new URLSearchParams({ tab: 'sites' });
+                if (options.initialSiteId) search.set('siteId', String(options.initialSiteId));
+                window.RouteState.navigate({
+                    page: 'clients',
+                    segments,
+                    search: search.toString(),
+                    preserveSearch: false,
+                    preserveHash: false,
+                    replace: false
+                });
+            } else {
+                window.RouteState.setPageSubpath('clients', segments, {
+                    replace: false,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            }
+        }
     }, [stopSync]);
 
     const handleOpenClientToSite = useCallback((client, site) => {
         if (!client?.id) return;
         const siteId = site?.id ?? (typeof site === 'object' && site !== null ? site.id : null);
         handleOpenClient(client, { initialTab: 'sites', initialSiteId: siteId || undefined });
+        // handleOpenClient already updates deep URL with ?tab=sites&siteId=...
     }, [handleOpenClient]);
 
     const handleOpenLead = useCallback((lead, options = {}) => {
@@ -1470,13 +1484,28 @@ const Clients = React.memo(() => {
         selectedClientRef.current = null;
         isFormOpenRef.current = true;
         
-        // Update URL to reflect the selected lead
+        // Deep URL: /clients/{id} or /clients/{id}?tab=sites&siteId=... for site platform click-through
         if (window.RouteState && normalizedId) {
-            window.RouteState.setPageSubpath('clients', [normalizedId], {
-                replace: false,
-                preserveSearch: false,
-                preserveHash: false
-            });
+            const segments = [normalizedId];
+            const hasSite = options.initialTab === 'sites' || options.initialSiteId;
+            if (hasSite) {
+                const search = new URLSearchParams({ tab: 'sites' });
+                if (options.initialSiteId) search.set('siteId', String(options.initialSiteId));
+                window.RouteState.navigate({
+                    page: 'clients',
+                    segments,
+                    search: search.toString(),
+                    preserveSearch: false,
+                    preserveHash: false,
+                    replace: false
+                });
+            } else {
+                window.RouteState.setPageSubpath('clients', segments, {
+                    replace: false,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            }
         }
         
         if (options.fromPipeline) {
@@ -1495,19 +1524,7 @@ const Clients = React.memo(() => {
         if (!lead?.id) return;
         const siteId = site?.id ?? (typeof site === 'object' && site !== null ? site.id : null);
         handleOpenLead(lead, { initialTab: 'sites', initialSiteId: siteId || undefined });
-        // Update URL to include ?tab=sites&siteId= so link targets the site and survives refresh
-        if (window.RouteState && window.RouteState.navigate) {
-            const search = new URLSearchParams({ tab: 'sites' });
-            if (siteId) search.set('siteId', String(siteId));
-            window.RouteState.navigate({
-                page: 'clients',
-                segments: [String(lead.id)],
-                search: search.toString(),
-                preserveSearch: false,
-                preserveHash: false,
-                replace: true
-            });
-        }
+        // handleOpenLead already updates deep URL with ?tab=sites&siteId=...
     }, [handleOpenLead]);
 
     // Listen for entity navigation events (from notifications, comments, etc.)
@@ -1755,8 +1772,13 @@ const Clients = React.memo(() => {
                     (String(editingClientId) === String(entity.id) || String(selectedClientRef.current?.id) === String(entity.id));
 
                 if (entityType === 'client') {
-                    if (!alreadyViewingThisClient) setCurrentTab('overview');
-                    handleOpenClient(entity);
+                    const tabFromUrl = route.search?.get('tab');
+                    const siteIdFromUrl = route.search?.get('siteId');
+                    if (tabFromUrl) setCurrentTab(tabFromUrl);
+                    else if (!alreadyViewingThisClient) setCurrentTab('overview');
+                    if (siteIdFromUrl) setOpenSiteIdForClient(siteIdFromUrl);
+                    const openToSite = tabFromUrl === 'sites' || siteIdFromUrl;
+                    handleOpenClient(entity, openToSite ? { initialTab: tabFromUrl || 'sites', initialSiteId: siteIdFromUrl || undefined } : (tabFromUrl ? { initialTab: tabFromUrl } : {}));
                 } else if (entityType === 'lead') {
                     const tabFromUrl = route.search?.get('tab');
                     const siteIdFromUrl = route.search?.get('siteId');
@@ -6993,7 +7015,18 @@ const Clients = React.memo(() => {
                                                         {(client.name || '?').charAt(0).toUpperCase()}
                                                     </div>
                                                 )}
-                                                <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
+                                                <a
+                                                    href={window.EntityUrl ? window.EntityUrl.getEntityUrl('client', client.id) : '#'}
+                                                    onClick={(e) => {
+                                                        if (e.ctrlKey || e.metaKey || e.button === 1) return;
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenClient(client);
+                                                    }}
+                                                    className={`text-sm font-medium ${isDark ? 'text-gray-100 hover:underline' : 'text-gray-900 hover:underline'}`}
+                                                >
+                                                    {client.name}
+                                                </a>
                                             </div>
                                         </td>
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
@@ -7045,14 +7078,23 @@ const Clients = React.memo(() => {
                                             onClick={() => handleOpenClientToSite(client, site)}
                                             className={`cursor-pointer ${isDark ? 'bg-gray-800/60 hover:bg-gray-800' : 'bg-gray-50/80 hover:bg-gray-100'}`}
                                         >
-                                            <td className="px-6 py-1.5 text-sm" style={{ paddingLeft: '5.5rem' }}>
-                                                <span className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} onClick={e => e.stopPropagation()}>
+                                            <td className="px-6 py-1.5 text-sm" style={{ paddingLeft: '5.5rem' }} onClick={e => e.stopPropagation()}>
+                                                <a
+                                                    href={window.EntityUrl ? window.EntityUrl.getSiteDeepUrl('client', client.id, site.id || null, { useHash: false }) : '#'}
+                                                    onClick={(e) => {
+                                                        if (e.ctrlKey || e.metaKey || e.button === 1) return;
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenClientToSite(client, site);
+                                                    }}
+                                                    className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300 hover:underline' : 'text-gray-600 hover:underline'}`}
+                                                >
                                                     <i className="fas fa-map-marker-alt text-xs opacity-70 flex-shrink-0"></i>
                                                     <span>
                                                         {site.name || 'Unnamed site'}
                                                         {site.address ? <span className="text-xs opacity-80"> — {site.address}</span> : null}
                                                     </span>
-                                                </span>
+                                                </a>
                                             </td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{client.industry || '—'}</td>
@@ -8761,7 +8803,18 @@ const Clients = React.memo(() => {
                                                         {(lead.name || '?').charAt(0).toUpperCase()}
                                                     </div>
                                                 )}
-                                                <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
+                                                <a
+                                                    href={window.EntityUrl ? window.EntityUrl.getEntityUrl('lead', lead.id) : '#'}
+                                                    onClick={(e) => {
+                                                        if (e.ctrlKey || e.metaKey || e.button === 1) return;
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenLead(lead);
+                                                    }}
+                                                    className={`text-sm font-medium ${isDark ? 'text-gray-100 hover:underline' : 'text-gray-900 hover:underline'}`}
+                                                >
+                                                    {lead.name}
+                                                </a>
                                             </div>
                                         </td>
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
@@ -8838,14 +8891,23 @@ const Clients = React.memo(() => {
                                             onClick={() => handleOpenLeadToSite(lead, site)}
                                             className={`cursor-pointer ${isDark ? 'bg-gray-800/60 hover:bg-gray-800' : 'bg-gray-50/80 hover:bg-gray-100'}`}
                                         >
-                                            <td className="px-6 py-1.5 text-sm" style={{ paddingLeft: '5.5rem' }}>
-                                                <span className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} onClick={e => e.stopPropagation()}>
+                                            <td className="px-6 py-1.5 text-sm" style={{ paddingLeft: '5.5rem' }} onClick={e => e.stopPropagation()}>
+                                                <a
+                                                    href={window.EntityUrl ? window.EntityUrl.getSiteDeepUrl('lead', lead.id, site.id || null, { useHash: false }) : '#'}
+                                                    onClick={(e) => {
+                                                        if (e.ctrlKey || e.metaKey || e.button === 1) return;
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenLeadToSite(lead, site);
+                                                    }}
+                                                    className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300 hover:underline' : 'text-gray-600 hover:underline'}`}
+                                                >
                                                     <i className="fas fa-map-marker-alt text-xs opacity-70 flex-shrink-0"></i>
                                                     <span>
                                                         {site.name || 'Unnamed site'}
                                                         {site.address ? <span className="text-xs opacity-80"> — {site.address}</span> : null}
                                                     </span>
-                                                </span>
+                                                </a>
                                             </td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                                                 {lead.industry || '—'}

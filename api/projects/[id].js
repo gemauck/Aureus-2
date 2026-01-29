@@ -197,7 +197,44 @@ async function handler(req, res) {
             return notFound(res);
           }
         }
-        
+
+        // FAST PATH: ?summary=1 returns project + tasks only (~2 queries, show UI in seconds)
+        const summaryOnly = req.query?.summary === '1' || req.query?.summary === 'true' || (() => {
+          try {
+            const q = (req.url || '').split('?')[1] || '';
+            const p = new URLSearchParams(q);
+            return p.get('summary') === '1' || p.get('summary') === 'true';
+          } catch (_) { return false; }
+        })();
+        if (summaryOnly) {
+          const [projectRow, tasksRows] = await Promise.all([
+            prisma.project.findUnique({ where: { id } }),
+            prisma.task.findMany({
+              where: { projectId: id, parentTaskId: null },
+              orderBy: { createdAt: 'asc' },
+              include: {
+                subtasks: { orderBy: { createdAt: 'asc' } },
+                assigneeUser: { select: { id: true, name: true, email: true } }
+              }
+            }).catch(() => [])
+          ]);
+          if (!projectRow) return notFound(res);
+          const projectSummary = {
+            ...projectRow,
+            tasks: tasksRows || [],
+            documentSections: {},
+            weeklyFMSReviewSections: {},
+            monthlyFMSReviewSections: {},
+            taskLists: [],
+            comments: [],
+            documents: [],
+            team: [],
+            customFieldDefinitions: [],
+            activityLog: []
+          };
+          return ok(res, { project: projectSummary });
+        }
+
         // PERFORMANCE OPTIMIZATION: Check query parameters for selective loading
         let onlyFields = null;
         try {
@@ -214,7 +251,7 @@ async function handler(req, res) {
             onlyFields = fields.split(',').map(f => f.trim());
           }
         }
-        
+
         if (process.env.NODE_ENV === 'development') {
           if (onlyFields && onlyFields.length > 0) {
             console.log('⚡ OPTIMIZED ENDPOINT: Loading only fields:', onlyFields, 'for project:', id);

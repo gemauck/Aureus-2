@@ -1454,30 +1454,37 @@ const Projects = () => {
             const fetchAndOpen = async () => {
                 if (window.DatabaseAPI?.getProject) {
                     try {
-                        console.log('📡 Projects: IMMEDIATE - Fetching project:', projectId);
-                        const response = await window.DatabaseAPI.getProject(projectId);
-                        const projectData = response?.data?.project || response?.project || response?.data;
+                        // Fast path: summary first (project + tasks only) so UI shows in ~2s
+                        console.log('📡 Projects: IMMEDIATE - Fetching project summary:', projectId);
+                        const summaryRes = await window.DatabaseAPI.getProject(projectId, { summary: true });
+                        const projectData = summaryRes?.data?.project || summaryRes?.project || summaryRes?.data;
                         
                         if (projectData) {
                             const fetchedProject = {
                                 ...projectData,
                                 client: projectData.clientName || projectData.client || ''
                             };
-                            console.log('✅ Projects: IMMEDIATE - Opening project:', fetchedProject.name);
+                            console.log('✅ Projects: IMMEDIATE - Opening project (summary):', fetchedProject.name);
                             
-                            // Track load timestamp for performance optimization
                             projectLoadTimestampsRef.current.set(String(projectId), Date.now());
-                            
-                            // Add to projects array
                             setProjects(prev => {
                                 const exists = prev.find(p => String(p.id) === String(projectId));
                                 return exists ? prev : [...prev, fetchedProject];
                             });
-                            
-                            // Open immediately
                             setViewingProject(fetchedProject);
                             setSelectedProject(fetchedProject);
                             setShowModal(false);
+
+                            // Load full project in background; update when done so tabs have full data
+                            window.DatabaseAPI.getProject(projectId).then((fullRes) => {
+                                const full = fullRes?.data?.project || fullRes?.project || fullRes?.data;
+                                if (full) {
+                                    const fullProject = { ...full, client: full.clientName || full.client || '' };
+                                    setViewingProject(prev => prev?.id === full.id ? fullProject : prev);
+                                    setSelectedProject(prev => prev?.id === full.id ? fullProject : prev);
+                                    setProjects(prev => prev.map(p => String(p.id) === String(full.id) ? fullProject : p));
+                                }
+                            }).catch(() => {});
                             
                             // Update URL - preserve hash if it contains any tracker deep-link params (doc collection, weekly/monthly FMS)
                             const hasDocCollectionParams = hashParams && (
@@ -2656,63 +2663,26 @@ const Projects = () => {
         }
         
         try {
-            // Fetch full project data from API for detail view
-            // Always use safe fallback approach to avoid function errors
+            // Fast path: load summary first (project + tasks only) so UI shows in ~2s
             let response;
-            
-            // Safely check and use DatabaseAPI.getProject
             try {
-                if (window.DatabaseAPI && 
-                    window.DatabaseAPI.getProject && 
-                    typeof window.DatabaseAPI.getProject === 'function') {
-                    response = await window.DatabaseAPI.getProject(project.id);
+                if (window.DatabaseAPI?.getProject && typeof window.DatabaseAPI.getProject === 'function') {
+                    response = await window.DatabaseAPI.getProject(project.id, { summary: true });
                 } else {
                     throw new Error('DatabaseAPI.getProject not available');
                 }
             } catch (apiError) {
-                console.warn('⚠️ DatabaseAPI.getProject failed, trying fallback:', apiError);
-                // Try window.api.getProject as fallback
+                console.warn('⚠️ getProject(summary) failed, trying full load:', apiError);
                 try {
-                    if (window.api && 
-                        window.api.getProject && 
-                        typeof window.api.getProject === 'function') {
-                        response = await window.api.getProject(project.id);
-                    } else {
-                        throw new Error('window.api.getProject not available');
-                    }
-                } catch (api2Error) {
-                    console.warn('⚠️ window.api.getProject failed, trying direct fetch:', api2Error);
-                    // Final fallback: fetch directly
-                    try {
-                        // Get token from proper storage location
-                        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || '';
-                        const fetchResponse = await fetch(`/api/projects/${project.id}`, {
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': token ? `Bearer ${token}` : ''
-                            }
-                        });
-                        if (!fetchResponse.ok) {
-                            const errorText = await fetchResponse.text();
-                            let errorData;
-                            try {
-                                errorData = JSON.parse(errorText);
-                            } catch {
-                                errorData = { message: errorText || `HTTP ${fetchResponse.status}` };
-                            }
-                            throw new Error(`HTTP error! status: ${fetchResponse.status}, message: ${errorData.message || errorData.error || 'Unknown error'}`);
-                        }
-                        const data = await fetchResponse.json();
-                        response = { data: { project: data.project || data.data || data } };
-                    } catch (fetchError) {
-                        console.error('❌ All project fetch methods failed:', {
-                            apiError: apiError.message,
-                            api2Error: api2Error.message,
-                            fetchError: fetchError.message,
-                            projectId: project.id
-                        });
-                        throw new Error(`Failed to fetch project: ${fetchError.message || apiError.message || 'Unknown error'}`);
-                    }
+                    response = window.api?.getProject ? await window.api.getProject(project.id) : await window.DatabaseAPI.getProject(project.id);
+                } catch (e2) {
+                    const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || '';
+                    const fetchResponse = await fetch(`/api/projects/${project.id}?summary=1`, {
+                        headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' }
+                    });
+                    if (!fetchResponse.ok) throw new Error(`HTTP ${fetchResponse.status}`);
+                    const data = await fetchResponse.json();
+                    response = { data: { project: data.project || data.data || data } };
                 }
             }
             const fullProject = response?.data?.project || response?.project || response?.data;
@@ -2763,6 +2733,33 @@ const Projects = () => {
                 // API returns year-map object { "2024": [...], "2025": [...] }; preserve it so Weekly FMS comments/status survive refresh
                 weeklyFMSReviewSections: (fullProject.weeklyFMSReviewSections != null && typeof fullProject.weeklyFMSReviewSections === 'object') ? fullProject.weeklyFMSReviewSections : {}
             };
+
+            // Load full project in background so tabs get full data (comments, document sections, etc.)
+            if (window.DatabaseAPI?.getProject && typeof window.DatabaseAPI.getProject === 'function') {
+                window.DatabaseAPI.getProject(project.id).then((fullRes) => {
+                    const full = fullRes?.data?.project || fullRes?.project || fullRes?.data;
+                    if (!full || String(full.id) !== String(project.id)) return;
+                    const normalizedFull = {
+                        ...full,
+                        client: full.clientName || full.client || '',
+                        taskLists: Array.isArray(full.taskLists) ? full.taskLists : [],
+                        tasks: Array.isArray(full.tasksList) ? full.tasksList : (Array.isArray(full.tasks) ? full.tasks : []),
+                        customFieldDefinitions: Array.isArray(full.customFieldDefinitions) ? full.customFieldDefinitions : [],
+                        documents: Array.isArray(full.documents) ? full.documents : [],
+                        comments: Array.isArray(full.comments) ? full.comments : [],
+                        activityLog: Array.isArray(full.activityLog) ? full.activityLog : [],
+                        team: Array.isArray(full.team) ? full.team : [],
+                        hasDocumentCollectionProcess: !!(full.hasDocumentCollectionProcess === true || full.hasDocumentCollectionProcess === 'true' || full.hasDocumentCollectionProcess === 1),
+                        hasWeeklyFMSReviewProcess: !!(full.hasWeeklyFMSReviewProcess === true || full.hasWeeklyFMSReviewProcess === 'true' || full.hasWeeklyFMSReviewProcess === 1),
+                        hasTimeProcess: !!(full.hasTimeProcess === true || full.hasTimeProcess === 'true' || full.hasTimeProcess === 1),
+                        hasMonthlyFMSReviewProcess: !!(full.hasMonthlyFMSReviewProcess === true || full.hasMonthlyFMSReviewProcess === 'true' || full.hasMonthlyFMSReviewProcess === 1),
+                        weeklyFMSReviewSections: (full.weeklyFMSReviewSections != null && typeof full.weeklyFMSReviewSections === 'object') ? full.weeklyFMSReviewSections : {}
+                    };
+                    setViewingProject(prev => prev && String(prev.id) === String(full.id) ? normalizedFull : prev);
+                    setSelectedProject(prev => prev && String(prev.id) === String(full.id) ? normalizedFull : prev);
+                    setProjects(prev => prev.map(p => String(p.id) === String(full.id) ? normalizedFull : p));
+                }).catch(() => {});
+            }
             
             // Expose a function to update viewingProject from child components
             // This allows ProjectDetail to refresh the project data after saving

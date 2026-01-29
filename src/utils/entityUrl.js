@@ -152,6 +152,10 @@
         if (options.commentId) {
             queryParams.set('commentId', options.commentId);
         }
+        if (options.siteId) {
+            queryParams.set('siteId', options.siteId);
+            if (!queryParams.has('tab')) queryParams.set('tab', 'sites');
+        }
 
         const queryString = queryParams.toString();
         if (queryString) {
@@ -230,6 +234,9 @@
             if (urlObj.searchParams.get('commentId')) {
                 options.commentId = urlObj.searchParams.get('commentId');
             }
+            if (urlObj.searchParams.get('siteId')) {
+                options.siteId = urlObj.searchParams.get('siteId');
+            }
             
             return {
                 entityType: childType,
@@ -266,6 +273,9 @@
         }
         if (urlObj.searchParams.get('commentId')) {
             options.commentId = urlObj.searchParams.get('commentId');
+        }
+        if (urlObj.searchParams.get('siteId')) {
+            options.siteId = urlObj.searchParams.get('siteId');
         }
 
         return {
@@ -370,6 +380,26 @@
         });
     };
 
+    /**
+     * Deep URL for a client or lead site (Sites tab, optionally specific site).
+     * Use for links from listings, pipeline, notifications.
+     *
+     * @param {string} entityType - 'client' or 'lead'
+     * @param {string} entityId - Client or lead ID
+     * @param {string} siteId - Site ID (optional; if omitted, opens Sites tab without specific site)
+     * @param {Object} options - { useHash: boolean } – useHash true returns #/clients/... for SPA hash routing
+     * @returns {string} Path like /clients/xyz?tab=sites&siteId=abc or #/clients/xyz?tab=sites&siteId=abc
+     */
+    const getSiteDeepUrl = (entityType, entityId, siteId, options = {}) => {
+        const opts = { tab: 'sites', ...(siteId && { siteId }) };
+        const path = getEntityUrl(entityType, entityId, opts);
+        if (options.useHash) {
+            const pre = path.startsWith('/') ? path : `/${path}`;
+            return `#${pre}`;
+        }
+        return path.startsWith('/') ? path : `/${path}`;
+    };
+
     // Export to window
     if (!window.EntityUrl) {
         window.EntityUrl = {
@@ -379,6 +409,7 @@
             getEntityUrlFromObject,
             getCommentUrl,
             getSectionUrl,
+            getSiteDeepUrl,
             ENTITY_PAGE_MAP,
             NESTED_ENTITY_MAP
         };
