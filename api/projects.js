@@ -7,35 +7,39 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 
+/** Run Project table migration at most once per process (perf: avoid ALTER on every list GET). */
+let projectListColumnsMigrated = false;
+
 /**
  * Convert DocumentSection table data to JSON format (for backward compatibility)
  */
 async function documentSectionsToJson(projectId, options = {}) {
   try {
-    // Check if table exists (for environments that haven't migrated yet)
-    try {
-      await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
-    } catch (e) {
-      // Table doesn't exist yet, return null to use JSON fallback
-      return null
+    const includeComments = !options.skipComments;
+    let sections = options.preloadedSections;
+
+    if (!sections || !Array.isArray(sections)) {
+      try {
+        await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+      } catch (e) {
+        return null
+      }
+      sections = await prisma.documentSection.findMany({
+        where: { projectId: projectId },
+        include: {
+          documents: {
+            include: {
+              statuses: true,
+              ...(includeComments ? { comments: true } : {})
+            },
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [{ year: 'desc' }, { order: 'asc' }]
+      })
     }
 
-    const includeComments = !options.skipComments;
-    const sections = await prisma.documentSection.findMany({
-      where: { projectId: projectId },
-      include: {
-        documents: {
-          include: {
-            statuses: true,
-            ...(includeComments ? { comments: true } : {})
-          },
-          orderBy: { order: 'asc' }
-        }
-      },
-      orderBy: [{ year: 'desc' }, { order: 'asc' }]
-    })
-
-    if (sections.length === 0) {
+    if (!sections.length) {
       return null // Return null to indicate no table data, use JSON fallback
     }
 
@@ -118,46 +122,43 @@ async function documentSectionsToJson(projectId, options = {}) {
  */
 async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
   try {
-    // Check if table exists (for environments that haven't migrated yet)
-    try {
-      await prisma.$queryRaw`SELECT 1 FROM "MonthlyFMSReviewSection" LIMIT 1`
-    } catch (e) {
-      // Table doesn't exist yet, return null to use JSON fallback
-      return null
-    }
-
-    // Get the project to access the JSON field (which may contain data not yet in table)
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { monthlyFMSReviewSections: true }
-    })
-    
-    // Parse JSON field to merge with table data (for data recovery)
-    let jsonFieldData = null
-    if (project?.monthlyFMSReviewSections) {
-      try {
-        jsonFieldData = typeof project.monthlyFMSReviewSections === 'string'
-          ? JSON.parse(project.monthlyFMSReviewSections)
-          : project.monthlyFMSReviewSections
-      } catch (e) {
-        console.warn('Failed to parse monthlyFMSReviewSections JSON field:', e)
-      }
-    }
-
     const includeComments = !options.skipComments;
-    const sections = await prisma.monthlyFMSReviewSection.findMany({
-      where: { projectId },
-      include: {
-        items: {
-          include: {
-            statuses: true,
-            ...(includeComments ? { comments: true } : {})
-          },
-          orderBy: { order: 'asc' }
+    let sections = options.preloadedSections;
+    let jsonFieldData = options.preloadedJsonField ?? null;
+
+    if (!sections || !Array.isArray(sections)) {
+      try {
+        await prisma.$queryRaw`SELECT 1 FROM "MonthlyFMSReviewSection" LIMIT 1`
+      } catch (e) {
+        return null
+      }
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { monthlyFMSReviewSections: true }
+      })
+      if (project?.monthlyFMSReviewSections) {
+        try {
+          jsonFieldData = typeof project.monthlyFMSReviewSections === 'string'
+            ? JSON.parse(project.monthlyFMSReviewSections)
+            : project.monthlyFMSReviewSections
+        } catch (e) {
+          console.warn('Failed to parse monthlyFMSReviewSections JSON field:', e)
         }
-      },
-      orderBy: [{ year: 'desc' }, { order: 'asc' }]
-    })
+      }
+      sections = await prisma.monthlyFMSReviewSection.findMany({
+        where: { projectId },
+        include: {
+          items: {
+            include: {
+              statuses: true,
+              ...(includeComments ? { comments: true } : {})
+            },
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [{ year: 'desc' }, { order: 'asc' }]
+      })
+    }
 
     // If table is empty but JSON field has data, return JSON field data for recovery
     if (sections.length === 0) {
@@ -1206,23 +1207,23 @@ async function handler(req, res) {
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       try {
-        // Try to add missing columns if they don't exist (one-time migration)
-        try {
-          await prisma.$executeRaw`
-            ALTER TABLE "Project" 
-            ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
-            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
-            ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
-          `;
-        } catch (migrationError) {
-          // Ignore migration errors (columns might already exist or connection issues)
-          // Only log if it's not a "column already exists" error
-          if (!migrationError.message?.includes('already exists') && 
-              !migrationError.message?.includes('duplicate column')) {
-            console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
+        // One-time migration: add missing columns once per process (not on every request)
+        if (!projectListColumnsMigrated) {
+          try {
+            await prisma.$executeRaw`
+              ALTER TABLE "Project" 
+              ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
+              ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+              ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
+            `;
+            projectListColumnsMigrated = true;
+          } catch (migrationError) {
+            if (!migrationError.message?.includes('already exists') && !migrationError.message?.includes('duplicate column')) {
+              console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
+            }
           }
         }
-        
+
         const userRole = req.user?.role?.toLowerCase();
         
         // Parse pagination parameters

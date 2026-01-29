@@ -6,6 +6,9 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson } from '../projects.js'
 
+/** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
+let projectColumnsMigrated = false;
+
 /**
  * Safely load project with all relations. Uses step-by-step loading so a missing
  * table or relation never 500s the request.
@@ -49,86 +52,70 @@ async function loadProjectWithRelations(projectId) {
   project.weeklyFMSReviewSectionsTable = Array.isArray(project.weeklyFMSReviewSectionsTable) ? project.weeklyFMSReviewSectionsTable : [];
   project.monthlyFMSReviewSectionsTable = Array.isArray(project.monthlyFMSReviewSectionsTable) ? project.monthlyFMSReviewSectionsTable : [];
 
-    // 2. Load tasks (with subtasks and assignees)
-    try {
-      const tasks = await prisma.task.findMany({
-        where: { projectId, parentTaskId: null },
-        orderBy: { createdAt: 'asc' },
-        include: {
-          subtasks: { orderBy: { createdAt: 'asc' } },
-          assigneeUser: { select: { id: true, name: true, email: true } }
+  // 2–5. Load all relation tables in parallel (major perf win in production)
+  const [tasksResult, documentSectionsResult, weeklyFMSResult, monthlyFMSResult] = await Promise.all([
+    prisma.task.findMany({
+      where: { projectId, parentTaskId: null },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        subtasks: { orderBy: { createdAt: 'asc' } },
+        assigneeUser: { select: { id: true, name: true, email: true } }
+      }
+    }).catch(e => { console.warn('⚠️ tasks load skipped:', e.message); return []; }),
+    prisma.documentSection.findMany({
+      where: { projectId },
+      include: {
+        documents: {
+          include: {
+            statuses: true,
+            comments: {
+              include: { authorUser: { select: { id: true, name: true, email: true } } },
+              orderBy: { createdAt: 'asc' }
+            }
+          },
+          orderBy: { order: 'asc' }
         }
-      });
-      project.tasks = tasks;
-    } catch (e) {
-      console.warn('⚠️ tasks load skipped:', e.message);
-    }
+      },
+      orderBy: [{ year: 'desc' }, { order: 'asc' }]
+    }).catch(e => { console.warn('⚠️ documentSectionsTable load skipped:', e.message); return []; }),
+    prisma.weeklyFMSReviewSection.findMany({
+      where: { projectId },
+      include: {
+        items: {
+          include: {
+            statuses: true,
+            comments: {
+              include: { authorUser: { select: { id: true, name: true, email: true } } },
+              orderBy: { createdAt: 'asc' }
+            }
+          },
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [{ year: 'desc' }, { order: 'asc' }]
+    }).catch(e => { console.warn('⚠️ weeklyFMSReviewSectionsTable load skipped:', e.message); return []; }),
+    prisma.monthlyFMSReviewSection.findMany({
+      where: { projectId },
+      include: {
+        items: {
+          include: {
+            statuses: true,
+            comments: {
+              include: { authorUser: { select: { id: true, name: true, email: true } } },
+              orderBy: { createdAt: 'asc' }
+            }
+          },
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [{ year: 'desc' }, { order: 'asc' }]
+    }).catch(e => { console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', e.message); return []; })
+  ]);
 
-    // 3. Load document sections table
-    try {
-      project.documentSectionsTable = await prisma.documentSection.findMany({
-        where: { projectId },
-        include: {
-          documents: {
-            include: {
-              statuses: true,
-              comments: {
-                include: { authorUser: { select: { id: true, name: true, email: true } } },
-                orderBy: { createdAt: 'asc' }
-              }
-            },
-            orderBy: { order: 'asc' }
-          }
-        },
-        orderBy: [{ year: 'desc' }, { order: 'asc' }]
-      });
-    } catch (e) {
-      console.warn('⚠️ documentSectionsTable load skipped:', e.message);
-    }
-
-    // 4. Load weekly FMS sections table
-    try {
-      project.weeklyFMSReviewSectionsTable = await prisma.weeklyFMSReviewSection.findMany({
-        where: { projectId },
-        include: {
-          items: {
-            include: {
-              statuses: true,
-              comments: {
-                include: { authorUser: { select: { id: true, name: true, email: true } } },
-                orderBy: { createdAt: 'asc' }
-              }
-            },
-            orderBy: { order: 'asc' }
-          }
-        },
-        orderBy: [{ year: 'desc' }, { order: 'asc' }]
-      });
-    } catch (e) {
-      console.warn('⚠️ weeklyFMSReviewSectionsTable load skipped:', e.message);
-    }
-
-    // 5. Load monthly FMS sections table
-    try {
-      project.monthlyFMSReviewSectionsTable = await prisma.monthlyFMSReviewSection.findMany({
-        where: { projectId },
-        include: {
-          items: {
-            include: {
-              statuses: true,
-              comments: {
-                include: { authorUser: { select: { id: true, name: true, email: true } } },
-                orderBy: { createdAt: 'asc' }
-              }
-            },
-            orderBy: { order: 'asc' }
-          }
-        },
-        orderBy: [{ year: 'desc' }, { order: 'asc' }]
-      });
-    } catch (e) {
-      console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', e.message);
-    }
+  project.tasks = Array.isArray(tasksResult) ? tasksResult : [];
+  project.documentSectionsTable = Array.isArray(documentSectionsResult) ? documentSectionsResult : [];
+  project.weeklyFMSReviewSectionsTable = Array.isArray(weeklyFMSResult) ? weeklyFMSResult : [];
+  project.monthlyFMSReviewSectionsTable = Array.isArray(monthlyFMSResult) ? monthlyFMSResult : [];
 
   return project;
 }
@@ -164,22 +151,23 @@ async function handler(req, res) {
     // Get Single Project (GET /api/projects/[id])
     if (req.method === 'GET') {
       try {
-        // Try to add missing columns if they don't exist (one-time migration)
-        try {
-          await prisma.$executeRaw`
-            ALTER TABLE "Project" 
-            ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
-            ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
-            ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
-          `;
-        } catch (migrationError) {
-          // Ignore migration errors (columns might already exist or connection issues)
-          if (!migrationError.message?.includes('already exists') && 
-              !migrationError.message?.includes('duplicate column')) {
-            console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
+        // One-time migration: add missing columns once per process (not on every request)
+        if (!projectColumnsMigrated) {
+          try {
+            await prisma.$executeRaw`
+              ALTER TABLE "Project"
+              ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
+              ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+              ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
+            `;
+            projectColumnsMigrated = true;
+          } catch (migrationError) {
+            if (!migrationError.message?.includes('already exists') && !migrationError.message?.includes('duplicate column')) {
+              console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
+            }
           }
         }
-        
+
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();
         let whereClause = { id };
@@ -370,47 +358,77 @@ async function handler(req, res) {
           return notFound(res);
         }
         
-        // Load TaskComments for all tasks (since Task model doesn't have comments relation yet)
+        // Load TaskComments + all other project tables in parallel (perf: one round-trip instead of 7)
         const allTaskIds = [
           ...(project.tasks || []).map(t => t.id),
           ...(project.tasks || []).flatMap(t => (t.subtasks || []).map(st => st.id))
         ];
-        
+
+        const [
+          taskCommentsResult,
+          taskListsResult,
+          projectCommentsResult,
+          projectDocumentsResult,
+          projectTeamMembersResult,
+          projectCustomFieldDefinitionsResult,
+          projectActivityLogsResult
+        ] = await Promise.all([
+          allTaskIds.length > 0
+            ? prisma.taskComment.findMany({
+                where: { taskId: { in: allTaskIds } },
+                include: { authorUser: { select: { id: true, name: true, email: true } } },
+                orderBy: { createdAt: 'asc' }
+              }).catch(e => {
+                console.warn('⚠️ Task comments load failed:', e.message);
+                return [];
+              })
+            : Promise.resolve([]),
+          prisma.projectTaskList?.findMany
+            ? prisma.projectTaskList.findMany({ where: { projectId: id }, orderBy: { order: 'asc' } }).catch(e => { console.warn('⚠️ Task lists load failed:', e.message); return []; })
+            : Promise.resolve([]),
+          prisma.projectComment?.findMany
+            ? prisma.projectComment.findMany({
+                where: { projectId: id, parentId: null },
+                include: {
+                  authorUser: { select: { id: true, name: true, email: true } },
+                  replies: { include: { authorUser: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } }
+                },
+                orderBy: { createdAt: 'asc' }
+              }).catch(e => { console.warn('⚠️ Project comments load failed:', e.message); return []; })
+            : Promise.resolve([]),
+          prisma.projectDocument?.findMany
+            ? prisma.projectDocument.findMany({
+                where: { projectId: id, isActive: true },
+                include: { uploader: { select: { id: true, name: true, email: true } } },
+                orderBy: { uploadDate: 'desc' }
+              }).catch(e => { console.warn('⚠️ Project documents load failed:', e.message); return []; })
+            : Promise.resolve([]),
+          prisma.projectTeamMember?.findMany
+            ? prisma.projectTeamMember.findMany({
+                where: { projectId: id },
+                include: { user: { select: { id: true, name: true, email: true } }, adder: { select: { id: true, name: true, email: true } } },
+                orderBy: { addedDate: 'asc' }
+              }).catch(e => { console.warn('⚠️ Project team members load failed:', e.message); return []; })
+            : Promise.resolve([]),
+          prisma.projectCustomFieldDefinition?.findMany
+            ? prisma.projectCustomFieldDefinition.findMany({ where: { projectId: id }, orderBy: { order: 'asc' } }).catch(e => { console.warn('⚠️ Custom field definitions load failed:', e.message); return []; })
+            : Promise.resolve([]),
+          prisma.projectActivityLog?.findMany
+            ? prisma.projectActivityLog.findMany({
+                where: { projectId: id },
+                include: { user: { select: { id: true, name: true, email: true } } },
+                orderBy: { createdAt: 'desc' },
+                take: 50
+              }).catch(e => { console.warn('⚠️ Project activity logs load failed:', e.message); return []; })
+            : Promise.resolve([])
+        ]);
+
         const taskCommentsMap = {};
-        if (allTaskIds.length > 0) {
-          try {
-            const taskComments = await prisma.taskComment.findMany({
-              where: { taskId: { in: allTaskIds } },
-              include: {
-                authorUser: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              },
-              orderBy: { createdAt: 'asc' }
-            });
-            
-            // Group comments by taskId
-            taskComments.forEach(comment => {
-              if (!taskCommentsMap[comment.taskId]) {
-                taskCommentsMap[comment.taskId] = [];
-              }
-              taskCommentsMap[comment.taskId].push(comment);
-            });
-          } catch (commentError) {
-            console.error('❌ Error fetching task comments:', {
-              error: commentError.message,
-              code: commentError.code,
-              allTaskIds
-            });
-            // Continue without comments rather than failing the entire request
-          }
-        }
-        
-        // Attach comments to tasks
+        (taskCommentsResult || []).forEach(comment => {
+          if (!taskCommentsMap[comment.taskId]) taskCommentsMap[comment.taskId] = [];
+          taskCommentsMap[comment.taskId].push(comment);
+        });
+
         const tasksWithComments = (project.tasks || []).map(task => ({
           ...task,
           comments: taskCommentsMap[task.id] || [],
@@ -419,145 +437,14 @@ async function handler(req, res) {
             comments: taskCommentsMap[subtask.id] || []
           }))
         }));
-        
-        // Load data from separate tables (these are not relations in Prisma schema)
-        // Query them separately and use table data instead of JSON fields
-        // Guard: these models may not exist in schema yet; only call when present
-        let taskLists = [];
-        let projectComments = [];
-        let projectDocuments = [];
-        let projectTeamMembers = [];
-        let projectCustomFieldDefinitions = [];
-        let projectActivityLogs = [];
-        
-        if (prisma.projectTaskList?.findMany) {
-          try {
-            taskLists = await prisma.projectTaskList.findMany({
-              where: { projectId: id },
-              orderBy: { order: 'asc' }
-            });
-          } catch (e) {
-            console.warn('⚠️ Failed to load task lists from table:', e.message);
-          }
-        }
-        
-        if (prisma.projectComment?.findMany) {
-          try {
-            projectComments = await prisma.projectComment.findMany({
-            where: { 
-              projectId: id,
-              parentId: null // Only top-level comments
-            },
-            include: {
-              authorUser: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              },
-              replies: {
-                include: {
-                  authorUser: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true
-                    }
-                  }
-                },
-                orderBy: { createdAt: 'asc' }
-              }
-            },
-            orderBy: { createdAt: 'asc' }
-          });
-          } catch (e) {
-            console.warn('⚠️ Failed to load project comments from table:', e.message);
-          }
-        }
-        
-        if (prisma.projectDocument?.findMany) {
-          try {
-            projectDocuments = await prisma.projectDocument.findMany({
-            where: { 
-              projectId: id,
-              isActive: true
-            },
-            include: {
-              uploader: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              }
-            },
-            orderBy: { uploadDate: 'desc' }
-          });
-          } catch (e) {
-            console.warn('⚠️ Failed to load project documents from table:', e.message);
-          }
-        }
-        
-        if (prisma.projectTeamMember?.findMany) {
-          try {
-            projectTeamMembers = await prisma.projectTeamMember.findMany({
-            where: { projectId: id },
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              },
-              adder: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              }
-            },
-            orderBy: { addedDate: 'asc' }
-          });
-          } catch (e) {
-            console.warn('⚠️ Failed to load project team members from table:', e.message);
-          }
-        }
-        
-        if (prisma.projectCustomFieldDefinition?.findMany) {
-          try {
-            projectCustomFieldDefinitions = await prisma.projectCustomFieldDefinition.findMany({
-            where: { projectId: id },
-            orderBy: { order: 'asc' }
-          });
-          } catch (e) {
-            console.warn('⚠️ Failed to load project custom field definitions from table:', e.message);
-          }
-        }
-        
-        if (prisma.projectActivityLog?.findMany) {
-          try {
-            projectActivityLogs = await prisma.projectActivityLog.findMany({
-            where: { projectId: id },
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              }
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 50
-          });
-          } catch (e) {
-            console.warn('⚠️ Failed to load project activity logs from table:', e.message);
-          }
-        }
-        
+
+        const taskLists = Array.isArray(taskListsResult) ? taskListsResult : [];
+        const projectComments = Array.isArray(projectCommentsResult) ? projectCommentsResult : [];
+        const projectDocuments = Array.isArray(projectDocumentsResult) ? projectDocumentsResult : [];
+        const projectTeamMembers = Array.isArray(projectTeamMembersResult) ? projectTeamMembersResult : [];
+        const projectCustomFieldDefinitions = Array.isArray(projectCustomFieldDefinitionsResult) ? projectCustomFieldDefinitionsResult : [];
+        const projectActivityLogs = Array.isArray(projectActivityLogsResult) ? projectActivityLogsResult : [];
+
         // Convert table data to JSON format that frontend expects
         // Frontend components expect year-based objects: { "2024": [...], "2025": [...] }
         let documentSectionsJson = null;
@@ -565,8 +452,8 @@ async function handler(req, res) {
         let monthlyFMSReviewSectionsJson = null;
         
         try {
-          // Convert documentSections from table to JSON format
-          documentSectionsJson = await documentSectionsToJson(id);
+          // Use pre-loaded table data to avoid duplicate DB queries (perf)
+          documentSectionsJson = await documentSectionsToJson(id, { preloadedSections: project.documentSectionsTable });
           if (process.env.NODE_ENV === 'development') {
             console.log('📊 GET /api/projects/[id]: documentSectionsToJson result:', {
               projectId: id,
@@ -616,8 +503,15 @@ async function handler(req, res) {
         }
         
         try {
-          // Convert weeklyFMSReviewSections from table to JSON format (include comments so weekly comments persist)
-          weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: false });
+          // Use project.weeklyFMSReviewSections when already loaded to avoid extra findUnique (perf)
+          if (project.weeklyFMSReviewSections) {
+            const raw = project.weeklyFMSReviewSections;
+            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            weeklyFMSReviewSectionsJson = (parsed && typeof parsed === 'object') ? parsed : null;
+          }
+          if (weeklyFMSReviewSectionsJson === null || weeklyFMSReviewSectionsJson === undefined) {
+            weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: false });
+          }
           if (process.env.NODE_ENV === 'development') {
             console.log('📊 GET /api/projects/[id]: weeklyFMSReviewSectionsToJson result:', {
               projectId: id,
@@ -667,8 +561,21 @@ async function handler(req, res) {
         }
         
         try {
-          // Convert monthlyFMSReviewSections from table to JSON format
-          monthlyFMSReviewSectionsJson = await monthlyFMSReviewSectionsToJson(id);
+          // Use pre-loaded table data to avoid duplicate DB queries (perf)
+          let monthlyJsonField = null;
+          if (project.monthlyFMSReviewSections) {
+            try {
+              monthlyJsonField = typeof project.monthlyFMSReviewSections === 'string'
+                ? JSON.parse(project.monthlyFMSReviewSections)
+                : project.monthlyFMSReviewSections;
+            } catch (_) {
+              monthlyJsonField = null;
+            }
+          }
+          monthlyFMSReviewSectionsJson = await monthlyFMSReviewSectionsToJson(id, {
+            preloadedSections: project.monthlyFMSReviewSectionsTable,
+            preloadedJsonField: monthlyJsonField
+          });
           if (process.env.NODE_ENV === 'development') {
             console.log('📊 GET /api/projects/[id]: monthlyFMSReviewSectionsToJson result:', {
               projectId: id,
