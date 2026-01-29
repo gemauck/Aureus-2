@@ -129,11 +129,7 @@ async function loadProjectWithRelations(projectId) {
       console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', e.message);
     }
 
-    return project;
-  } catch (err) {
-    console.error('❌ loadProjectWithRelations failed:', err.message, err.code, projectId);
-    throw err;
-  }
+  return project;
 }
 
 async function handler(req, res) {
