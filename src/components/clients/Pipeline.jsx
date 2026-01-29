@@ -1129,7 +1129,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return items;
     };
 
-    // List view: nest sites under their lead (or client). Returns { item, isNested, parentName, parentLabel }[].
+    // List view: nest sites under their lead (or client). Inserts a parent header row before each group of site rows.
+    // Returns { item, isNested, parentName, parentLabel, isParentHeader?, parentId?, parentType? }[].
     const getNestedListRows = () => {
         const items = getFilteredItems();
         const leads = items.filter(i => i.type === 'lead');
@@ -1138,16 +1139,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const rows = [];
         leads.forEach(lead => {
             rows.push({ item: lead, isNested: false, parentName: null, parentLabel: null });
-            siteItems.filter(s => (s.leadId || s.lead?.id) === lead.id).forEach(site => {
-                rows.push({ item: site, isNested: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead' });
-            });
+            const leadSites = siteItems.filter(s => (s.leadId || s.lead?.id) === lead.id);
+            if (leadSites.length > 0) {
+                rows.push({ isParentHeader: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead', parentId: lead.id, parentType: 'lead', item: null });
+                leadSites.forEach(site => {
+                    rows.push({ item: site, isNested: true, parentName: lead.name || lead.company || 'Lead', parentLabel: 'Lead' });
+                });
+            }
         });
         opportunities.forEach(opp => {
             rows.push({ item: opp, isNested: false, parentName: null, parentLabel: null });
         });
-        siteItems.filter(s => s.clientId && !(s.leadId || s.lead?.id)).forEach(site => {
-            const parentName = site.client?.name || site.raw?.client?.name || 'Client';
-            rows.push({ item: site, isNested: true, parentName, parentLabel: 'Client' });
+        const clientSites = siteItems.filter(s => s.clientId && !(s.leadId || s.lead?.id));
+        const clientIds = [...new Set(clientSites.map(s => s.clientId).filter(Boolean))];
+        clientIds.forEach(clientId => {
+            const sites = clientSites.filter(s => s.clientId === clientId);
+            const first = sites[0];
+            const parentName = first?.client?.name || first?.raw?.client?.name || 'Client';
+            rows.push({ isParentHeader: true, parentName, parentLabel: 'Client', parentId: clientId, parentType: 'client', item: null });
+            sites.forEach(site => {
+                rows.push({ item: site, isNested: true, parentName, parentLabel: 'Client' });
+            });
         });
         return rows;
     };
@@ -2766,7 +2778,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                         </td>
                                     </tr>
                                 ) : (
-                                    rows.map(({ item, isNested, parentName, parentLabel }) => {
+                                    rows.map((row, rowIndex) => {
+                                        const { item, isNested, parentName, parentLabel, isParentHeader, parentType } = row;
+                                        if (isParentHeader) {
+                                            return (
+                                                <tr key={`parent-header-${row.parentType}-${row.parentId}-${rowIndex}`} className="bg-gray-100 border-y border-gray-200">
+                                                    <td colSpan="4" className="px-6 py-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <i className={`fas ${parentType === 'client' ? 'fa-building' : 'fa-user-tie'} text-gray-500 text-sm`}></i>
+                                                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">{parentLabel}:</span>
+                                                            <span className="text-sm font-medium text-gray-900">{parentName}</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
                                         const isLead = item.type === 'lead';
                                         const isSite = item.type === 'site';
 
