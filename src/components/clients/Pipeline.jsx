@@ -2801,13 +2801,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                         const isSite = item.type === 'site';
                                         const isClient = item.type === 'client';
 
+                                        const rowPadding = isNested ? 'py-1' : 'py-2';
                                         return (
                                             <tr
                                                 key={`${item.type}-${item.id}`}
                                                 className={`hover:bg-gray-50 cursor-pointer transition ${isNested ? 'bg-gray-50/50' : ''}`}
                                                 onClick={() => openDealDetail(item)}
                                             >
-                                                <td className={`py-2 ${isNested ? 'pl-12 pr-6 border-l-4 border-l-amber-200' : 'px-6'}`}>
+                                                <td className={`${rowPadding} ${isNested ? 'pl-12 pr-6 border-l-4 border-l-amber-200' : 'px-6'}`}>
                                                     <div className="flex items-center gap-3">
                                                         {!isNested && (
                                                             <button
@@ -2829,21 +2830,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         )}
                                                         {isNested && <span className="w-7 shrink-0" aria-hidden />}
                                                         <div className="min-w-0">
-                                                            <span className="text-sm font-medium text-gray-900 block">
+                                                            <span className={`font-medium text-gray-900 block ${isNested ? 'text-xs' : 'text-sm'}`}>
                                                                 {isSite && isNested ? (item.site?.name || item.name?.replace?.(`${parentName} · `, '') || item.name) : item.name}
                                                             </span>
-                                                            {isNested && parentName && (
-                                                                <span className="text-xs text-gray-500">{parentLabel || 'Lead'}: {parentName}</span>
-                                                            )}
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-2">
+                                                <td className={`px-6 ${rowPadding}`}>
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : isSite ? 'bg-amber-100 text-amber-700' : isClient ? 'bg-slate-100 text-slate-700' : 'bg-green-100 text-green-700'}`}>
                                                         {isLead ? 'Lead' : isSite ? 'Site' : isClient ? 'Client' : 'Opportunity'}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-2" onClick={e => e.stopPropagation()}>
+                                                <td className={`px-6 ${rowPadding}`} onClick={e => e.stopPropagation()}>
                                                     <select
                                                         value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || 'awareness').toLowerCase()) || 'Awareness'}
                                                         onChange={e => handlePipelineStageChange(item, e.target.value)}
@@ -2859,7 +2857,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         {STAGE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                                     </select>
                                                 </td>
-                                                <td className="px-6 py-2" onClick={e => e.stopPropagation()}>
+                                                <td className={`px-6 ${rowPadding}`} onClick={e => e.stopPropagation()}>
                                                     <select
                                                         value={STATUS_OPTIONS.find(s => s.toLowerCase() === (item.status || 'potential').toLowerCase()) || 'Potential'}
                                                         onChange={e => handlePipelineStatusChange(item, e.target.value)}
