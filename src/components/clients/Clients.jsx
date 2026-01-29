@@ -1583,6 +1583,23 @@ const Clients = React.memo(() => {
         window.addEventListener('resetClientsView', handleResetView);
         return () => window.removeEventListener('resetClientsView', handleResetView);
     }, []);
+
+    // Sync parent state when Pipeline updates stage/status so values don't revert on view switch or refetch
+    useEffect(() => {
+        const handlePipelineLeadsClientsUpdated = (event) => {
+            const { leads: nextLeads, clients: nextClients } = event.detail || {};
+            if (Array.isArray(nextLeads)) {
+                setLeads(nextLeads);
+                try { window.storage?.setLeads?.(nextLeads); } catch (_) {}
+            }
+            if (Array.isArray(nextClients)) {
+                setClients(nextClients);
+                try { safeStorage.setClients(nextClients); } catch (_) {}
+            }
+        };
+        window.addEventListener('pipelineLeadsClientsUpdated', handlePipelineLeadsClientsUpdated);
+        return () => window.removeEventListener('pipelineLeadsClientsUpdated', handlePipelineLeadsClientsUpdated);
+    }, []);
     
     // Prefetch full client (including KYC) when opening client detail so the modal shows persisted KYC
     useEffect(() => {
