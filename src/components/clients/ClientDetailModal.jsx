@@ -3387,16 +3387,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (client?.id != null) openedInitialSiteIdRef.current = null;
     }, [client?.id]);
     useEffect(() => {
-        if (!initialSiteId || openedInitialSiteIdRef.current === initialSiteId) return;
+        if (!initialSiteId) return;
         const sites = formData?.sites || [];
         const site = sites.find(s => String(s.id) === String(initialSiteId));
-        if (!site) return;
-        openedInitialSiteIdRef.current = initialSiteId;
+        // Always switch to Sites tab when initialSiteId is set so sites load and we can open the site
         if (activeTabRef.current !== 'sites') {
             if (typeof onTabChange === 'function') onTabChange('sites');
             setActiveTab('sites');
             activeTabRef.current = 'sites';
         }
+        if (!site) return; // Site not in formData yet (e.g. still loading) – effect will run again when formData.sites updates
+        if (openedInitialSiteIdRef.current === initialSiteId) return;
+        openedInitialSiteIdRef.current = initialSiteId;
         handleEditSite(site);
         if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
     }, [initialSiteId, formData?.sites]);

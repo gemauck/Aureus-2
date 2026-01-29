@@ -1393,6 +1393,7 @@ const Clients = React.memo(() => {
         selectedLeadRef.current = null;
         isFormOpenRef.current = true;
         setCurrentTab(options.initialTab || 'overview');
+        if (options.initialSiteId !== undefined) setOpenSiteIdForClient(options.initialSiteId || null);
         setViewMode('client-detail');
 
         // Prefetch full client (including KYC) immediately so modal shows persisted KYC after refresh
@@ -1422,8 +1423,8 @@ const Clients = React.memo(() => {
 
     const handleOpenClientToSite = useCallback((client, site) => {
         if (!client?.id) return;
-        if (site?.id) setOpenSiteIdForClient(site.id);
-        handleOpenClient(client, { initialTab: 'sites' });
+        const siteId = site?.id ?? (typeof site === 'object' && site !== null ? site.id : null);
+        handleOpenClient(client, { initialTab: 'sites', initialSiteId: siteId || undefined });
     }, [handleOpenClient]);
 
     const handleOpenLead = useCallback((lead, options = {}) => {
@@ -1486,21 +1487,18 @@ const Clients = React.memo(() => {
             }
         }
         setCurrentLeadTab(options.initialTab || 'overview');
+        if (options.initialSiteId !== undefined) setOpenSiteIdForLead(options.initialSiteId || null);
         setViewMode('lead-detail');
     }, [stopSync]);
 
     const handleOpenLeadToSite = useCallback((lead, site) => {
         if (!lead?.id) return;
-        // Set state so lead detail opens on Sites tab with this site
-        if (site?.id) {
-            setOpenSiteIdForLead(site.id);
-        }
-        // Open lead with initialTab so we don't reset to overview
-        handleOpenLead(lead, { initialTab: 'sites' });
+        const siteId = site?.id ?? (typeof site === 'object' && site !== null ? site.id : null);
+        handleOpenLead(lead, { initialTab: 'sites', initialSiteId: siteId || undefined });
         // Update URL to include ?tab=sites&siteId= so link targets the site and survives refresh
         if (window.RouteState && window.RouteState.navigate) {
             const search = new URLSearchParams({ tab: 'sites' });
-            if (site?.id) search.set('siteId', String(site.id));
+            if (siteId) search.set('siteId', String(siteId));
             window.RouteState.navigate({
                 page: 'clients',
                 segments: [String(lead.id)],
@@ -1765,7 +1763,8 @@ const Clients = React.memo(() => {
                     if (tabFromUrl) setCurrentLeadTab(tabFromUrl);
                     else if (!alreadyViewingThisLead) setCurrentLeadTab('overview');
                     if (siteIdFromUrl) setOpenSiteIdForLead(siteIdFromUrl);
-                    handleOpenLead(entity, tabFromUrl ? { initialTab: tabFromUrl } : {});
+                    const openToSite = tabFromUrl === 'sites' || siteIdFromUrl;
+                    handleOpenLead(entity, openToSite ? { initialTab: tabFromUrl || 'sites', initialSiteId: siteIdFromUrl || undefined } : (tabFromUrl ? { initialTab: tabFromUrl } : {}));
                 }
                 
                 // Handle tab/section/comment from query params
@@ -5979,11 +5978,7 @@ const Clients = React.memo(() => {
             }
         }
 
-        if (siteId) {
-            setOpenSiteIdForLead(siteId);
-            setCurrentLeadTab('sites');
-        }
-        handleOpenLead(lead || null, { fromPipeline: true, leadId: resolvedLeadId });
+        handleOpenLead(lead || null, { fromPipeline: true, leadId: resolvedLeadId, initialTab: 'sites', initialSiteId: siteId || undefined });
     }, [handleOpenLead]);
 
     const openClientFromPipeline = useCallback(async ({ clientId, clientData, siteId, site } = {}) => {
