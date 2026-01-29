@@ -148,6 +148,8 @@ export function parseClientJsonFields(client) {
         aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus) : 'Awareness',
         siteType: site.siteType === 'client' ? 'client' : 'lead'
       }))
+      // Keep clientSites so Pipeline (and other consumers) can use client.clientSites || client.sites
+      parsed.clientSites = parsed.sites
     } else {
       // Fallback: Try JSONB field, then String field
       let value = client.sitesJsonb
@@ -164,6 +166,7 @@ export function parseClientJsonFields(client) {
         }
       }
       parsed.sites = Array.isArray(value) ? value : []
+      parsed.clientSites = parsed.sites
     }
     
     // Phase 6: Contracts - Use normalized table first, fallback to JSON
@@ -340,9 +343,9 @@ export function parseClientJsonFields(client) {
     }
     
     // Remove relation objects from parsed output (frontend doesn't need them)
+    // Keep clientSites - Pipeline needs it to show client sites listed as leads
     delete parsed.clientContacts
     delete parsed.clientComments
-    delete parsed.clientSites
     delete parsed.clientContracts
     delete parsed.clientProposals
     delete parsed.clientFollowUps
