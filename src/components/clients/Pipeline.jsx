@@ -879,7 +879,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             siteList.forEach((site, idx) => {
                 if (!site || typeof site !== 'object') return;
                 if (site.siteType === 'client') return; // Client sites do not show in Pipeline
-                const siteStage = site.stage || site.aidaStatus || lead.stage;
+                // API: site.stage = lifecycle status, site.aidaStatus = AIDA stage; prefer aidaStatus for Stage column
+                const siteStage = site.aidaStatus || site.stage || lead.stage;
                 const mappedStage = normalizeStageToAida(siteStage);
                 const siteId = site.id || `site-${lead.id}-${idx}`;
                 const pipelineId = `lead-${lead.id}-site-${siteId}`;
@@ -913,7 +914,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             siteList.forEach((site, idx) => {
                 if (!site || typeof site !== 'object') return;
                 if (site.siteType === 'client') return; // Only client-type sites are excluded; lead or missing = show in Pipeline
-                const siteStage = site.stage || site.aidaStatus || 'Awareness';
+                // API: site.stage = lifecycle status, site.aidaStatus = AIDA stage; prefer aidaStatus for Stage column
+                const siteStage = site.aidaStatus || site.stage || 'Awareness';
                 const mappedStage = normalizeStageToAida(siteStage);
                 const siteId = site.id || `site-${client.id}-${idx}`;
                 const pipelineId = `client-${client.id}-site-${siteId}`;
@@ -1341,15 +1343,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 const hasSiteId = clientId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest);
                 const hasIndexFallback = typeof item.siteIndex === 'number' && clientId && token;
 
+                const parentLeadId = item.leadId ?? item.lead?.id;
+                const parentClientId = item.clientId;
+                const matchSite = (s, i) =>
+                    (typeof item.siteIndex === 'number' && i === item.siteIndex) ||
+                    (siteId != null && siteId !== '' && (String(s.id) === String(siteId) || s.id === siteId));
                 const applySiteStageOptimistic = () => {
-                    const matchSite = (s, i) =>
-                        (typeof item.siteIndex === 'number' && i === item.siteIndex) ||
-                        (siteId != null && (String(s.id) === String(siteId) || s.id === siteId));
-                    if (item.leadId || item.lead?.id) {
+                    if (parentLeadId != null) {
                         setLeads(prev => {
-                            const parentId = item.leadId || item.lead?.id;
                             const updated = prev.map(lead => {
-                                if (String(lead.id) !== String(parentId)) return lead;
+                                if (getComparableId(lead.id) !== getComparableId(parentLeadId)) return lead;
                                 const sites = lead.clientSites || lead.sites || [];
                                 const newSites = sites.map((s, i) => matchSite(s, i) ? { ...s, aidaStatus: normalized } : s);
                                 return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
@@ -1358,10 +1361,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
                             return updated;
                         });
-                    } else if (item.clientId) {
+                    } else if (parentClientId != null) {
                         setClients(prev => {
                             const updated = prev.map(client => {
-                                if (String(client.id) !== String(item.clientId)) return client;
+                                if (getComparableId(client.id) !== getComparableId(parentClientId)) return client;
                                 const sites = client.clientSites || client.sites || [];
                                 const newSites = sites.map((s, i) => matchSite(s, i) ? { ...s, aidaStatus: normalized } : s);
                                 return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
@@ -1397,7 +1400,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const idx = item.siteIndex;
                             if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
                                 const updatedSites = sites.map((s, i) => i === idx ? { ...s, aidaStatus: normalized } : s);
-                                await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { clientSites: updatedSites });
+                                await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { sites: updatedSites });
                             }
                         }
                     }
@@ -1454,15 +1457,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 const hasSiteId = clientId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest);
                 const hasIndexFallback = typeof item.siteIndex === 'number' && clientId && token;
 
+                const parentLeadId = item.leadId ?? item.lead?.id;
+                const parentClientId = item.clientId;
                 const matchSiteForStatus = (s, i) =>
                     (typeof item.siteIndex === 'number' && i === item.siteIndex) ||
-                    (siteId != null && (String(s.id) === String(siteId) || s.id === siteId));
+                    (siteId != null && siteId !== '' && (String(s.id) === String(siteId) || s.id === siteId));
                 const applySiteStatusOptimistic = () => {
-                    if (item.leadId || item.lead?.id) {
+                    if (parentLeadId != null) {
                         setLeads(prev => {
-                            const parentId = item.leadId || item.lead?.id;
                             const updated = prev.map(lead => {
-                                if (String(lead.id) !== String(parentId)) return lead;
+                                if (getComparableId(lead.id) !== getComparableId(parentLeadId)) return lead;
                                 const sites = lead.clientSites || lead.sites || [];
                                 const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, stage: normalized } : s);
                                 return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
@@ -1471,10 +1475,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
                             return updated;
                         });
-                    } else if (item.clientId) {
+                    } else if (parentClientId != null) {
                         setClients(prev => {
                             const updated = prev.map(client => {
-                                if (String(client.id) !== String(item.clientId)) return client;
+                                if (getComparableId(client.id) !== getComparableId(parentClientId)) return client;
                                 const sites = client.clientSites || client.sites || [];
                                 const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, stage: normalized } : s);
                                 return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
@@ -1510,7 +1514,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const idx = item.siteIndex;
                             if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
                                 const updatedSites = sites.map((s, i) => i === idx ? { ...s, stage: normalized } : s);
-                                await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { clientSites: updatedSites });
+                                await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { sites: updatedSites });
                             }
                         }
                     }
