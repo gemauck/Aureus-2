@@ -888,7 +888,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             const siteList = Array.isArray(sites) ? sites : [];
             siteList.forEach((site, idx) => {
                 if (!site || typeof site !== 'object') return;
-                if (site.siteType !== 'lead') return; // Only lead-type sites from clients show in Pipeline
+                if (site.siteType === 'client') return; // Only client-type sites are excluded; lead or missing = show in Pipeline
                 const siteStage = site.stage || site.aidaStatus || 'Awareness';
                 const mappedStage = normalizeStageToAida(siteStage);
                 const siteId = site.id || `site-${client.id}-${idx}`;

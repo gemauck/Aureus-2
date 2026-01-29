@@ -1045,8 +1045,8 @@ async function handler(req, res) {
                 contactEmail: site.contactEmail || '',
                 notes: site.notes || '',
                 siteLead: site.siteLead != null ? String(site.siteLead) : '',
-                stage: site.stage != null ? String(site.stage) : '',
-                aidaStatus: site.aidaStatus != null ? String(site.aidaStatus) : '',
+                stage: (site.stage != null && String(site.stage).trim() !== '') ? String(site.stage).trim() : 'Potential',
+                aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus).trim() : 'Awareness',
                 siteType: site.siteType === 'client' ? 'client' : 'lead'
               }
               

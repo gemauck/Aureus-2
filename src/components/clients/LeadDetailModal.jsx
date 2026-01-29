@@ -2292,7 +2292,8 @@ const LeadDetailModal = ({
                 notes: newSite.notes ?? '',
                 siteLead: newSite.siteLead ?? '',
                 stage: newSite.stage ?? 'Potential',
-                aidaStatus: newSite.aidaStatus ?? 'Awareness'
+                aidaStatus: newSite.aidaStatus ?? 'Awareness',
+                siteType: 'lead' // Lead sites pull through to Pipeline; stage and Aida status control column
             };
             const existingSites = Array.isArray(formData.sites) ? formData.sites : [];
             const sitesWithNew = [...existingSites, sitePayload];
@@ -2463,7 +2464,8 @@ const LeadDetailModal = ({
             contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
             contactEmail: newSite.contactEmail ?? newSite.email ?? '',
             stage: newSite.stage ?? 'Potential',
-            aidaStatus: newSite.aidaStatus ?? 'Awareness'
+            aidaStatus: newSite.aidaStatus ?? 'Awareness',
+            siteType: 'lead' // Keep as lead so site continues to pull through to Pipeline
         };
         const sites = Array.isArray(formData.sites) ? formData.sites : [];
         const updatedSites = sites.map(s => (s.id === siteId ? sitePayload : s));
@@ -2502,7 +2504,8 @@ const LeadDetailModal = ({
                     notes: sitePayload.notes ?? '',
                     siteLead: sitePayload.siteLead ?? '',
                     stage: (sitePayload.stage != null && String(sitePayload.stage).trim() !== '') ? String(sitePayload.stage) : 'Potential',
-                    aidaStatus: (sitePayload.aidaStatus != null && String(sitePayload.aidaStatus).trim() !== '') ? String(sitePayload.aidaStatus) : 'Awareness'
+                    aidaStatus: (sitePayload.aidaStatus != null && String(sitePayload.aidaStatus).trim() !== '') ? String(sitePayload.aidaStatus) : 'Awareness',
+                    siteType: 'lead'
                 };
                 if (window.api?.updateSite) {
                     await window.api.updateSite(leadId, siteId, payload);
