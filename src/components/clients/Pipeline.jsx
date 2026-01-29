@@ -1322,70 +1322,82 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 updateLeadStageOptimistically(item.id, normalized);
             } else if (item.type === 'site') {
                 const clientId = item.leadId || item.lead?.id || item.clientId;
-                const siteId = item.siteId || item.site?.id;
+                const siteId = item.siteId ?? item.site?.id ?? item.raw?.site?.id ?? null;
                 const hasSiteId = clientId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest);
                 const hasIndexFallback = typeof item.siteIndex === 'number' && clientId && token;
-                if (hasSiteId && token) {
-                    await (window.api?.updateSite
-                        ? window.api.updateSite(clientId, siteId, { aidaStatus: normalized, stage: item.status || 'Potential' })
-                        : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ aidaStatus: normalized, stage: item.status || 'Potential' }) }));
-                } else if (hasIndexFallback && !hasSiteId && (window.api?.updateLead || window.DatabaseAPI?.makeRequest) && (item.leadId || item.lead?.id)) {
-                    const leadId = item.leadId || item.lead?.id;
-                    const lead = (storage?.getLeads?.() || []).find(l => String(l.id) === String(leadId)) || leads.find(l => String(l.id) === String(leadId));
-                    if (lead) {
-                        const sites = lead.clientSites || lead.sites || [];
-                        const idx = item.siteIndex;
-                        if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
-                            const updatedSites = sites.map((s, i) => i === idx ? { ...s, aidaStatus: normalized } : s);
-                            await (window.api?.updateLead || window.DatabaseAPI.updateLead)(leadId, { sites: updatedSites });
-                        }
+
+                const applySiteStageOptimistic = () => {
+                    if (item.leadId || item.lead?.id) {
+                        setLeads(prev => {
+                            const parentId = item.leadId || item.lead?.id;
+                            const updated = prev.map(lead => {
+                                if (String(lead.id) !== String(parentId)) return lead;
+                                const sites = lead.clientSites || lead.sites || [];
+                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
+                                const newSites = sites.map((s, i) => {
+                                    if (matchByIndex && i === item.siteIndex) return { ...s, aidaStatus: normalized };
+                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, aidaStatus: normalized };
+                                    return s;
+                                });
+                                return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
+                            });
+                            if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
+                            try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
+                            return updated;
+                        });
+                    } else if (item.clientId) {
+                        setClients(prev => {
+                            const updated = prev.map(client => {
+                                if (String(client.id) !== String(item.clientId)) return client;
+                                const sites = client.clientSites || client.sites || [];
+                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
+                                const newSites = sites.map((s, i) => {
+                                    if (matchByIndex && i === item.siteIndex) return { ...s, aidaStatus: normalized };
+                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, aidaStatus: normalized };
+                                    return s;
+                                });
+                                return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
+                            });
+                            if (typeof storage?.setClients === 'function') storage.setClients(updated);
+                            try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { clients: updated } })); } catch (_) {}
+                            return updated;
+                        });
                     }
-                } else if (hasIndexFallback && !hasSiteId && item.clientId && (window.api?.updateClient || window.DatabaseAPI?.makeRequest)) {
-                    const client = (storage?.getClients?.() || []).find(c => String(c.id) === String(item.clientId)) || clients.find(c => String(c.id) === String(item.clientId));
-                    if (client) {
-                        const sites = client.clientSites || client.sites || [];
-                        const idx = item.siteIndex;
-                        if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
-                            const updatedSites = sites.map((s, i) => i === idx ? { ...s, aidaStatus: normalized } : s);
-                            await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { clientSites: updatedSites });
-                        }
-                    }
-                }
-                if (item.leadId || item.lead?.id) {
-                    setLeads(prev => {
-                        const parentId = item.leadId || item.lead?.id;
-                        const updated = prev.map(lead => {
-                            if (String(lead.id) !== String(parentId)) return lead;
+                };
+
+                applySiteStageOptimistic();
+                try {
+                    if (hasSiteId && token) {
+                        await (window.api?.updateSite
+                            ? window.api.updateSite(clientId, siteId, { aidaStatus: normalized, stage: item.status || 'Potential' })
+                            : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ aidaStatus: normalized, stage: item.status || 'Potential' }) }));
+                    } else if (hasIndexFallback && !hasSiteId && (window.api?.updateLead || window.DatabaseAPI?.makeRequest) && (item.leadId || item.lead?.id)) {
+                        const leadId = item.leadId || item.lead?.id;
+                        const lead = (storage?.getLeads?.() || []).find(l => String(l.id) === String(leadId)) || leads.find(l => String(l.id) === String(leadId));
+                        if (lead) {
                             const sites = lead.clientSites || lead.sites || [];
-                            const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                            const newSites = sites.map((s, i) => {
-                                if (matchByIndex && i === item.siteIndex) return { ...s, aidaStatus: normalized };
-                                if (String(s.id) === String(siteId) || s.id === siteId) return { ...s, aidaStatus: normalized };
-                                return s;
-                            });
-                            return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
-                        });
-                        if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
-                        try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
-                        return updated;
-                    });
-                } else if (item.clientId) {
-                    setClients(prev => {
-                        const updated = prev.map(client => {
-                            if (String(client.id) !== String(item.clientId)) return client;
+                            const idx = item.siteIndex;
+                            if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
+                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, aidaStatus: normalized } : s);
+                                await (window.api?.updateLead || window.DatabaseAPI.updateLead)(leadId, { sites: updatedSites });
+                            }
+                        }
+                    } else if (hasIndexFallback && !hasSiteId && item.clientId && (window.api?.updateClient || window.DatabaseAPI?.makeRequest)) {
+                        const client = (storage?.getClients?.() || []).find(c => String(c.id) === String(item.clientId)) || clients.find(c => String(c.id) === String(item.clientId));
+                        if (client) {
                             const sites = client.clientSites || client.sites || [];
-                            const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                            const newSites = sites.map((s, i) => {
-                                if (matchByIndex && i === item.siteIndex) return { ...s, aidaStatus: normalized };
-                                if (String(s.id) === String(siteId) || s.id === siteId) return { ...s, aidaStatus: normalized };
-                                return s;
-                            });
-                            return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
-                        });
-                        if (typeof storage?.setClients === 'function') storage.setClients(updated);
-                        try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { clients: updated } })); } catch (_) {}
-                        return updated;
-                    });
+                            const idx = item.siteIndex;
+                            if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
+                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, aidaStatus: normalized } : s);
+                                await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { clientSites: updatedSites });
+                            }
+                        }
+                    }
+                } catch (apiErr) {
+                    schedulePipelineRefresh();
+                    console.error('❌ Pipeline: Failed to save site stage:', apiErr);
+                    alert('Failed to save stage. The list will refresh. Please try again.');
+                    return;
                 }
             } else if (item.type === 'opportunity') {
                 if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
@@ -1398,7 +1410,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             alert('Failed to save stage. Please try again.');
             return;
         }
-    }, [storage, updateLeadStageOptimistically, updateOpportunityStageOptimistically, leads, clients]);
+    }, [storage, updateLeadStageOptimistically, updateOpportunityStageOptimistically, leads, clients, schedulePipelineRefresh]);
 
     const handlePipelineStatusChange = useCallback(async (item, newStatus) => {
         const token = storage?.getToken?.();
@@ -1416,47 +1428,82 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 });
             } else if (item.type === 'site') {
                 const clientId = item.leadId || item.lead?.id || item.clientId;
-                const siteId = item.siteId || item.site?.id;
-                if (clientId && siteId && token && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
-                    await (window.api?.updateSite
-                        ? window.api.updateSite(clientId, siteId, { stage: normalized, aidaStatus: item.stage || 'Awareness' })
-                        : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ stage: normalized, aidaStatus: item.stage || 'Awareness' }) }));
-                }
-                if (item.leadId || item.lead?.id) {
-                    setLeads(prev => {
-                        const parentId = item.leadId || item.lead?.id;
-                        const updated = prev.map(lead => {
-                            if (String(lead.id) !== String(parentId)) return lead;
+                const siteId = item.siteId ?? item.site?.id ?? item.raw?.site?.id ?? null;
+                const hasSiteId = clientId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest);
+                const hasIndexFallback = typeof item.siteIndex === 'number' && clientId && token;
+
+                const applySiteStatusOptimistic = () => {
+                    if (item.leadId || item.lead?.id) {
+                        setLeads(prev => {
+                            const parentId = item.leadId || item.lead?.id;
+                            const updated = prev.map(lead => {
+                                if (String(lead.id) !== String(parentId)) return lead;
+                                const sites = lead.clientSites || lead.sites || [];
+                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
+                                const newSites = sites.map((s, i) => {
+                                    if (matchByIndex && i === item.siteIndex) return { ...s, stage: normalized };
+                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, stage: normalized };
+                                    return s;
+                                });
+                                return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
+                            });
+                            if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
+                            try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
+                            return updated;
+                        });
+                    } else if (item.clientId) {
+                        setClients(prev => {
+                            const updated = prev.map(client => {
+                                if (String(client.id) !== String(item.clientId)) return client;
+                                const sites = client.clientSites || client.sites || [];
+                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
+                                const newSites = sites.map((s, i) => {
+                                    if (matchByIndex && i === item.siteIndex) return { ...s, stage: normalized };
+                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, stage: normalized };
+                                    return s;
+                                });
+                                return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
+                            });
+                            if (typeof storage?.setClients === 'function') storage.setClients(updated);
+                            try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { clients: updated } })); } catch (_) {}
+                            return updated;
+                        });
+                    }
+                };
+
+                applySiteStatusOptimistic();
+                try {
+                    if (hasSiteId && token) {
+                        await (window.api?.updateSite
+                            ? window.api.updateSite(clientId, siteId, { stage: normalized, aidaStatus: item.stage || 'Awareness' })
+                            : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ stage: normalized, aidaStatus: item.stage || 'Awareness' }) }));
+                    } else if (hasIndexFallback && !hasSiteId && (window.api?.updateLead || window.DatabaseAPI?.makeRequest) && (item.leadId || item.lead?.id)) {
+                        const leadId = item.leadId || item.lead?.id;
+                        const lead = (storage?.getLeads?.() || []).find(l => String(l.id) === String(leadId)) || leads.find(l => String(l.id) === String(leadId));
+                        if (lead) {
                             const sites = lead.clientSites || lead.sites || [];
-                            const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                            const newSites = sites.map((s, i) => {
-                                if (matchByIndex && i === item.siteIndex) return { ...s, stage: normalized };
-                                if (String(s.id) === String(siteId) || s.id === siteId) return { ...s, stage: normalized };
-                                return s;
-                            });
-                            return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
-                        });
-                        if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
-                        try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
-                        return updated;
-                    });
-                } else if (item.clientId) {
-                    setClients(prev => {
-                        const updated = prev.map(client => {
-                            if (String(client.id) !== String(item.clientId)) return client;
+                            const idx = item.siteIndex;
+                            if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
+                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, stage: normalized } : s);
+                                await (window.api?.updateLead || window.DatabaseAPI.updateLead)(leadId, { sites: updatedSites });
+                            }
+                        }
+                    } else if (hasIndexFallback && !hasSiteId && item.clientId && (window.api?.updateClient || window.DatabaseAPI?.makeRequest)) {
+                        const client = (storage?.getClients?.() || []).find(c => String(c.id) === String(item.clientId)) || clients.find(c => String(c.id) === String(item.clientId));
+                        if (client) {
                             const sites = client.clientSites || client.sites || [];
-                            const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                            const newSites = sites.map((s, i) => {
-                                if (matchByIndex && i === item.siteIndex) return { ...s, stage: normalized };
-                                if (String(s.id) === String(siteId) || s.id === siteId) return { ...s, stage: normalized };
-                                return s;
-                            });
-                            return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
-                        });
-                        if (typeof storage?.setClients === 'function') storage.setClients(updated);
-                        try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { clients: updated } })); } catch (_) {}
-                        return updated;
-                    });
+                            const idx = item.siteIndex;
+                            if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
+                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, stage: normalized } : s);
+                                await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { clientSites: updatedSites });
+                            }
+                        }
+                    }
+                } catch (apiErr) {
+                    schedulePipelineRefresh();
+                    console.error('❌ Pipeline: Failed to save site status:', apiErr);
+                    alert('Failed to save status. The list will refresh. Please try again.');
+                    return;
                 }
             } else if (item.type === 'opportunity') {
                 if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
@@ -1478,7 +1525,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             alert('Failed to save status. Please try again.');
             return;
         }
-    }, [storage, normalizeLifecycleStage]);
+    }, [storage, normalizeLifecycleStage, schedulePipelineRefresh, leads, clients]);
 
     const handleToggleStar = async (event, item) => {
         event.preventDefault();

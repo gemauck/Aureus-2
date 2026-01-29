@@ -2435,6 +2435,7 @@ function initializeProjectDetail() {
         normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
     );
     const [forceDocumentCollectionDeepLink, setForceDocumentCollectionDeepLink] = useState(false);
+    const [monthlyDataReviewReady, setMonthlyDataReviewReady] = useState(() => typeof window.MonthlyDataReview === 'function');
     // Track if hasDocumentCollectionProcess was explicitly changed by user
     const hasDocumentCollectionProcessChangedRef = useRef(false);
     
@@ -2479,9 +2480,14 @@ function initializeProjectDetail() {
     // Preload MonthlyDataReview when project has Monthly Data Review process enabled
     useEffect(() => {
         if (!hasMonthlyDataReviewProcess) return;
-        if (window.MonthlyDataReview && typeof window.MonthlyDataReview === 'function') return;
+        if (window.MonthlyDataReview && typeof window.MonthlyDataReview === 'function') {
+            setMonthlyDataReviewReady(true);
+            return;
+        }
         if (window.loadComponent && typeof window.loadComponent === 'function') {
-            window.loadComponent('./src/components/projects/MonthlyDataReview.jsx').catch(() => {});
+            window.loadComponent('./src/components/projects/MonthlyDataReview.jsx')
+                .then(() => setMonthlyDataReviewReady(true))
+                .catch(() => {});
         }
     }, [hasMonthlyDataReviewProcess, project.id]);
 
