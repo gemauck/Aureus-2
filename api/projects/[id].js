@@ -52,7 +52,11 @@ async function loadProjectWithRelations(projectId) {
   project.weeklyFMSReviewSectionsTable = Array.isArray(project.weeklyFMSReviewSectionsTable) ? project.weeklyFMSReviewSectionsTable : [];
   project.monthlyFMSReviewSectionsTable = Array.isArray(project.monthlyFMSReviewSectionsTable) ? project.monthlyFMSReviewSectionsTable : [];
 
-  // 2–5. Load all relation tables in parallel (major perf win in production)
+  const loadDoc = !!project.hasDocumentCollectionProcess;
+  const loadWeekly = !!project.hasWeeklyFMSReviewProcess;
+  const loadMonthly = !!project.hasMonthlyFMSReviewProcess;
+
+  // 2–5. Load only enabled tab data in parallel (skip Document/Weekly/Monthly when tab disabled)
   const [tasksResult, documentSectionsResult, weeklyFMSResult, monthlyFMSResult] = await Promise.all([
     prisma.task.findMany({
       where: { projectId, parentTaskId: null },
@@ -62,7 +66,7 @@ async function loadProjectWithRelations(projectId) {
         assigneeUser: { select: { id: true, name: true, email: true } }
       }
     }).catch(e => { console.warn('⚠️ tasks load skipped:', e.message); return []; }),
-    prisma.documentSection.findMany({
+    loadDoc ? prisma.documentSection.findMany({
       where: { projectId },
       include: {
         documents: {
@@ -77,8 +81,8 @@ async function loadProjectWithRelations(projectId) {
         }
       },
       orderBy: [{ year: 'desc' }, { order: 'asc' }]
-    }).catch(e => { console.warn('⚠️ documentSectionsTable load skipped:', e.message); return []; }),
-    prisma.weeklyFMSReviewSection.findMany({
+    }).catch(e => { console.warn('⚠️ documentSectionsTable load skipped:', e.message); return []; }) : Promise.resolve([]),
+    loadWeekly ? prisma.weeklyFMSReviewSection.findMany({
       where: { projectId },
       include: {
         items: {
@@ -93,8 +97,8 @@ async function loadProjectWithRelations(projectId) {
         }
       },
       orderBy: [{ year: 'desc' }, { order: 'asc' }]
-    }).catch(e => { console.warn('⚠️ weeklyFMSReviewSectionsTable load skipped:', e.message); return []; }),
-    prisma.monthlyFMSReviewSection.findMany({
+    }).catch(e => { console.warn('⚠️ weeklyFMSReviewSectionsTable load skipped:', e.message); return []; }) : Promise.resolve([]),
+    loadMonthly ? prisma.monthlyFMSReviewSection.findMany({
       where: { projectId },
       include: {
         items: {
@@ -109,7 +113,7 @@ async function loadProjectWithRelations(projectId) {
         }
       },
       orderBy: [{ year: 'desc' }, { order: 'asc' }]
-    }).catch(e => { console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', e.message); return []; })
+    }).catch(e => { console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', e.message); return []; }) : Promise.resolve([])
   ]);
 
   project.tasks = Array.isArray(tasksResult) ? tasksResult : [];
@@ -393,8 +397,9 @@ async function handler(req, res) {
                   authorUser: { select: { id: true, name: true, email: true } },
                   replies: { include: { authorUser: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } }
                 },
-                orderBy: { createdAt: 'asc' }
-              }).catch(e => { console.warn('⚠️ Project comments load failed:', e.message); return []; })
+                orderBy: { createdAt: 'desc' },
+                take: 30
+              }).then(rows => rows.reverse()).catch(e => { console.warn('⚠️ Project comments load failed:', e.message); return []; })
             : Promise.resolve([]),
           prisma.projectDocument?.findMany
             ? prisma.projectDocument.findMany({
@@ -418,7 +423,7 @@ async function handler(req, res) {
                 where: { projectId: id },
                 include: { user: { select: { id: true, name: true, email: true } } },
                 orderBy: { createdAt: 'desc' },
-                take: 50
+                take: 20
               }).catch(e => { console.warn('⚠️ Project activity logs load failed:', e.message); return []; })
             : Promise.resolve([])
         ]);

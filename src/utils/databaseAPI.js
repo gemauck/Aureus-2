@@ -256,8 +256,10 @@ const DatabaseAPI = {
         if (method === 'GET' && !options.forceRefresh) {
             const cached = this._responseCache.get(cacheKey);
             if (cached) {
-                // Use endpoint-specific TTL if available, otherwise use default
-                const ttl = this._endpointCacheTTL[endpoint] || this._cacheTTL;
+                // Use endpoint-specific TTL; project detail GET /projects/:id gets 45s for faster tab switching
+                let ttl = this._endpointCacheTTL[endpoint];
+                if (ttl == null && /^\/projects\/[^/]+$/.test(endpoint)) ttl = 45000;
+                if (ttl == null) ttl = this._cacheTTL;
                 const age = Date.now() - cached.timestamp;
                 if (age < ttl) {
                     // Reset circuit breaker on successful cache hit
