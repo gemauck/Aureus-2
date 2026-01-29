@@ -3119,7 +3119,6 @@ Abcotronics`;
         const [body, setBody] = useState(defaultBody);
         const [sending, setSending] = useState(false);
         const [result, setResult] = useState(null);
-        const [resetKey, setResetKey] = useState(0);
 
         useEffect(() => {
             setSubject(defaultSubject);
@@ -3127,8 +3126,7 @@ Abcotronics`;
             setContacts([]);
             setNewContact('');
             setResult(null);
-            setResetKey((k) => k + 1);
-        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear, project?.id]);
+        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear, project?.id, project?.name, defaultSubject, defaultBody]);
 
         const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const addContact = () => {
@@ -3241,7 +3239,6 @@ Abcotronics`;
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1.5">Email body</label>
                             <textarea
-                                key={resetKey}
                                 value={body}
                                 onChange={(e) => setBody(e.target.value)}
                                 rows={10}

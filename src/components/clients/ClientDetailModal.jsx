@@ -3402,7 +3402,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const siteMap = new Map();
         formSites.forEach(s => { if (s?.id) siteMap.set(String(s.id), s); });
         opt.forEach(s => { if (s?.id) siteMap.set(String(s.id), s); });
-        const site = siteMap.get(String(initialSiteId));
+        const allSites = Array.from(siteMap.values());
+        let site = siteMap.get(String(initialSiteId));
+        if (!site && allSites.length === 1) site = allSites[0]; // Fallback: open single site when id mismatch
         if (!site) return; // Site not loaded yet – effect will re-run when formData.sites / optimisticSites updates
         if (openedInitialSiteIdRef.current === initialSiteId) return;
         openedInitialSiteIdRef.current = initialSiteId;
@@ -5691,6 +5693,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         stage: 'Potential',
                                                         aidaStatus: 'Awareness'
                                                     });
+                                                    if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
                                                 }}
                                                 className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                                             >
