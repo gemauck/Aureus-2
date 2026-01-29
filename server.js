@@ -2244,10 +2244,10 @@ app.get(/^\/uploads\//, (req, res) => {
 })
 
 // Serve Vite Projects bundle and CSS from /vite-projects
-// This maps /vite-projects/* URLs to dist/vite-projects output directory
+// Requires: npm run build:vite-projects (outputs to dist/vite-projects/)
 app.use(
   '/vite-projects',
-  express.static(path.join(__dirname, 'dist', 'vite-projects'), {
+  express.static(path.join(rootDir, 'dist', 'vite-projects'), {
     index: false,
     dotfiles: 'ignore',
     etag: true,
@@ -2287,6 +2287,10 @@ app.get('*', (req, res) => {
   const pathname = (req.url || '').split('?')[0]
   if (pathname.startsWith('/uploads/')) {
     return res.status(404).type('text/plain').send('File not found')
+  }
+  // Never serve index.html for /vite-projects/* - return 404 so browser doesn't get HTML as JS/CSS (MIME type error)
+  if (pathname.startsWith('/vite-projects/')) {
+    return res.status(404).type('text/plain').setHeader('Cache-Control', 'no-store').send('Vite asset not found. Ensure npm run build:vite-projects ran and dist/vite-projects/ is deployed.')
   }
   
   // CRITICAL: Set no-cache headers for index.html to prevent stale deployments

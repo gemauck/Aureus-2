@@ -11,8 +11,8 @@ import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMo
  */
 async function loadProjectWithRelations(projectId) {
   try {
-    // Try full query first
-    return await prisma.project.findUnique({
+    // Try full query first (monthlyFMSReviewSectionsTable loaded separately to avoid 500 if table missing)
+    let project = await prisma.project.findUnique({
       where: { id: projectId },
       include: {
         tasks: {
@@ -77,8 +77,42 @@ async function loadProjectWithRelations(projectId) {
           },
           orderBy: [{ year: 'desc' }, { order: 'asc' }]
         }
+        // monthlyFMSReviewSectionsTable loaded separately below to avoid 500 if table missing
       }
     });
+    // Load monthly FMS sections separately (table may not exist on all envs)
+    if (project) {
+      try {
+        project.monthlyFMSReviewSectionsTable = await prisma.monthlyFMSReviewSection.findMany({
+          where: { projectId },
+          include: {
+            items: {
+              include: {
+                statuses: true,
+                comments: {
+                  include: {
+                    authorUser: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true
+                      }
+                    }
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          },
+          orderBy: [{ year: 'desc' }, { order: 'asc' }]
+        });
+      } catch (monthlyErr) {
+        console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', monthlyErr.message);
+        project.monthlyFMSReviewSectionsTable = [];
+      }
+    }
+    return project;
   } catch (error) {
     console.error('❌ Full project query failed, attempting step-by-step load:', {
       error: error.message,
