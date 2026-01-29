@@ -762,6 +762,23 @@ async function handler(req, res) {
 
     // Update Project (PUT /api/projects/[id])
     if (req.method === 'PUT' || req.method === 'PATCH') {
+      // Ensure optional columns exist (safe no-op if already present)
+      try {
+        await prisma.$executeRawUnsafe(`
+          ALTER TABLE "Project"
+          ADD COLUMN IF NOT EXISTS "hasDocumentCollectionProcess" BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS "hasWeeklyFMSReviewProcess" BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS "hasMonthlyDataReviewProcess" BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS "monthlyDataReviewChecklist" TEXT DEFAULT '[]';
+        `);
+      } catch (alterErr) {
+        if (!alterErr.message?.includes('already exists') && !alterErr.message?.includes('duplicate column')) {
+          console.warn('⚠️ PUT projects: optional column migration:', alterErr.message?.substring(0, 80));
+        }
+      }
+
       let body = req.body
 
       if (typeof body === 'string') {
@@ -1089,22 +1106,15 @@ async function handler(req, res) {
                 length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
                 preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : JSON.stringify(body.documentSections).substring(0, 200)
               });
-              // Note: saveDocumentSectionsToTable uses prisma directly, not tx
-              // This is a limitation - we'll need to refactor those functions to accept a transaction client
-              // For now, we'll catch errors and provide better error messages
-              await saveDocumentSectionsToTable(id, body.documentSections)
+              await saveDocumentSectionsToTable(id, body.documentSections);
               console.log('✅ PUT /api/projects/[id]: Successfully saved documentSections to table');
             } catch (tableError) {
-              console.error('❌ CRITICAL: Error saving documentSections to table:', {
+              console.error('⚠️ Error saving documentSections to table (project row already updated):', {
                 error: tableError.message,
-                stack: tableError.stack,
                 code: tableError.code,
-                meta: tableError.meta,
-                projectId: id,
-                dataType: typeof body.documentSections
+                projectId: id
               });
-              // Re-throw with detailed error message
-              throw new Error(`Failed to save documentSections to table: ${tableError.message}${tableError.code ? ` (Code: ${tableError.code})` : ''}`);
+              // Don't fail the request - project update and JSON field are already saved
             }
           }
           
