@@ -7,270 +7,132 @@ import { withLogging } from '../_lib/logger.js'
 import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson } from '../projects.js'
 
 /**
- * Safely load project with all relations, with fallback if relations fail
+ * Safely load project with all relations. Uses step-by-step loading so a missing
+ * table or relation never 500s the request.
  */
 async function loadProjectWithRelations(projectId) {
+  let project = null;
   try {
-    // Try full query first (monthlyFMSReviewSectionsTable loaded separately to avoid 500 if table missing)
-    let project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        tasks: {
-          where: { parentTaskId: null },
-          include: {
-            subtasks: {
-              orderBy: { createdAt: 'asc' }
-            },
-            assigneeUser: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          },
-          orderBy: { createdAt: 'asc' }
-        },
-        documentSectionsTable: {
-          include: {
-            documents: {
-              include: {
-                statuses: true,
-                comments: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  },
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
-            }
-          },
-          orderBy: [{ year: 'desc' }, { order: 'asc' }]
-        },
-        weeklyFMSReviewSectionsTable: {
-          include: {
-            items: {
-              include: {
-                statuses: true,
-                comments: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  },
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
-            }
-          },
-          orderBy: [{ year: 'desc' }, { order: 'asc' }]
-        }
-        // monthlyFMSReviewSectionsTable loaded separately below to avoid 500 if table missing
-      }
+    // 1. Load project row only (no includes) - never fails due to relation schema
+    project = await prisma.project.findUnique({
+      where: { id: projectId }
     });
-    // Load monthly FMS sections separately (table may not exist on all envs)
-    if (project) {
-      try {
-        project.monthlyFMSReviewSectionsTable = await prisma.monthlyFMSReviewSection.findMany({
-          where: { projectId },
-          include: {
-            items: {
-              include: {
-                statuses: true,
-                comments: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  },
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
-            }
-          },
-          orderBy: [{ year: 'desc' }, { order: 'asc' }]
-        });
-      } catch (monthlyErr) {
-        console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', monthlyErr.message);
-        project.monthlyFMSReviewSectionsTable = [];
-      }
-    }
-    return project;
-  } catch (error) {
-    console.error('❌ Full project query failed, attempting step-by-step load:', {
-      error: error.message,
-      code: error.code,
-      projectId
-    });
-    
-    // Fallback: Load project and relations separately
+  } catch (findErr) {
+    console.warn('⚠️ Project findUnique failed, trying minimal raw query:', findErr.message);
     try {
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
+      const rows = await prisma.$queryRaw`SELECT id, name FROM "Project" WHERE id = ${projectId} LIMIT 1`;
+      const row = rows && rows[0];
+      if (!row) return null;
+      project = {
+        id: row.id,
+        name: row.name,
+        documentSections: null,
+        weeklyFMSReviewSections: null,
+        monthlyFMSReviewSections: null,
+        hasDocumentCollectionProcess: false,
+        hasTimeProcess: false,
+        hasWeeklyFMSReviewProcess: false,
+        hasMonthlyFMSReviewProcess: false,
+        hasMonthlyDataReviewProcess: false,
+        monthlyDataReviewChecklist: '[]'
+      };
+    } catch (rawErr) {
+      console.error('❌ Project raw query also failed:', rawErr.message);
+      throw rawErr;
+    }
+  }
+  if (!project) return null;
+
+  project.tasks = Array.isArray(project.tasks) ? project.tasks : [];
+  project.documentSectionsTable = Array.isArray(project.documentSectionsTable) ? project.documentSectionsTable : [];
+  project.weeklyFMSReviewSectionsTable = Array.isArray(project.weeklyFMSReviewSectionsTable) ? project.weeklyFMSReviewSectionsTable : [];
+  project.monthlyFMSReviewSectionsTable = Array.isArray(project.monthlyFMSReviewSectionsTable) ? project.monthlyFMSReviewSectionsTable : [];
+
+    // 2. Load tasks (with subtasks and assignees)
+    try {
+      const tasks = await prisma.task.findMany({
+        where: { projectId, parentTaskId: null },
+        orderBy: { createdAt: 'asc' },
         include: {
-          tasks: {
-            where: { parentTaskId: null },
-            orderBy: { createdAt: 'asc' }
-          }
+          subtasks: { orderBy: { createdAt: 'asc' } },
+          assigneeUser: { select: { id: true, name: true, email: true } }
         }
       });
-      
-      if (!project) {
-        return null;
-      }
-      
-      // Load relations separately with error handling
-      try {
-        project.documentSectionsTable = await prisma.documentSection.findMany({
-          where: { projectId },
-          include: {
-            documents: {
-              include: {
-                statuses: true,
-                comments: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  },
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
-            }
-          },
-          orderBy: [{ year: 'desc' }, { order: 'asc' }]
-        });
-      } catch (docError) {
-        console.error('❌ Failed to load documentSectionsTable:', docError.message);
-        project.documentSectionsTable = [];
-      }
-      
-      try {
-        project.weeklyFMSReviewSectionsTable = await prisma.weeklyFMSReviewSection.findMany({
-          where: { projectId },
-          include: {
-            items: {
-              include: {
-                statuses: true,
-                comments: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  },
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
-            }
-          },
-          orderBy: [{ year: 'desc' }, { order: 'asc' }]
-        });
-      } catch (fmsError) {
-        console.error('❌ Failed to load weeklyFMSReviewSectionsTable:', fmsError.message);
-        project.weeklyFMSReviewSectionsTable = [];
-      }
-      
-      try {
-        project.monthlyFMSReviewSectionsTable = await prisma.monthlyFMSReviewSection.findMany({
-          where: { projectId },
-          include: {
-            items: {
-              include: {
-                statuses: true,
-                comments: {
-                  include: {
-                    authorUser: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  },
-                  orderBy: { createdAt: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
-            }
-          },
-          orderBy: [{ year: 'desc' }, { order: 'asc' }]
-        });
-      } catch (monthlyFmsError) {
-        console.error('❌ Failed to load monthlyFMSReviewSectionsTable:', monthlyFmsError.message);
-        project.monthlyFMSReviewSectionsTable = [];
-      }
-      
-      // Load task subtasks and assignees separately
-      if (project.tasks && project.tasks.length > 0) {
-        try {
-          const taskIds = project.tasks.map(t => t.id);
-          const subtasks = await prisma.task.findMany({
-            where: {
-              parentTaskId: { in: taskIds }
-            },
-            orderBy: { createdAt: 'asc' }
-          });
-          
-          const assignees = await prisma.user.findMany({
-            where: {
-              id: { in: project.tasks.map(t => t.assigneeId).filter(Boolean) }
-            },
-            select: {
-              id: true,
-              name: true,
-              email: true
-            }
-          });
-          
-          const assigneeMap = new Map(assignees.map(a => [a.id, a]));
-          
-          project.tasks = project.tasks.map(task => ({
-            ...task,
-            subtasks: subtasks.filter(st => st.parentTaskId === task.id),
-            assigneeUser: task.assigneeId ? assigneeMap.get(task.assigneeId) : null
-          }));
-        } catch (taskError) {
-          console.error('❌ Failed to load task relations:', taskError.message);
-          project.tasks = project.tasks.map(task => ({
-            ...task,
-            subtasks: [],
-            assigneeUser: null
-          }));
-        }
-      }
-      
-      return project;
-    } catch (fallbackError) {
-      console.error('❌ Fallback query also failed:', fallbackError.message);
-      throw fallbackError;
+      project.tasks = tasks;
+    } catch (e) {
+      console.warn('⚠️ tasks load skipped:', e.message);
     }
+
+    // 3. Load document sections table
+    try {
+      project.documentSectionsTable = await prisma.documentSection.findMany({
+        where: { projectId },
+        include: {
+          documents: {
+            include: {
+              statuses: true,
+              comments: {
+                include: { authorUser: { select: { id: true, name: true, email: true } } },
+                orderBy: { createdAt: 'asc' }
+              }
+            },
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [{ year: 'desc' }, { order: 'asc' }]
+      });
+    } catch (e) {
+      console.warn('⚠️ documentSectionsTable load skipped:', e.message);
+    }
+
+    // 4. Load weekly FMS sections table
+    try {
+      project.weeklyFMSReviewSectionsTable = await prisma.weeklyFMSReviewSection.findMany({
+        where: { projectId },
+        include: {
+          items: {
+            include: {
+              statuses: true,
+              comments: {
+                include: { authorUser: { select: { id: true, name: true, email: true } } },
+                orderBy: { createdAt: 'asc' }
+              }
+            },
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [{ year: 'desc' }, { order: 'asc' }]
+      });
+    } catch (e) {
+      console.warn('⚠️ weeklyFMSReviewSectionsTable load skipped:', e.message);
+    }
+
+    // 5. Load monthly FMS sections table
+    try {
+      project.monthlyFMSReviewSectionsTable = await prisma.monthlyFMSReviewSection.findMany({
+        where: { projectId },
+        include: {
+          items: {
+            include: {
+              statuses: true,
+              comments: {
+                include: { authorUser: { select: { id: true, name: true, email: true } } },
+                orderBy: { createdAt: 'asc' }
+              }
+            },
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [{ year: 'desc' }, { order: 'asc' }]
+      });
+    } catch (e) {
+      console.warn('⚠️ monthlyFMSReviewSectionsTable load skipped:', e.message);
+    }
+
+    return project;
+  } catch (err) {
+    console.error('❌ loadProjectWithRelations failed:', err.message, err.code, projectId);
+    throw err;
   }
 }
 
