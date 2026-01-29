@@ -222,11 +222,12 @@ async function handler(req, res) {
           }
         }
         
-        // Log if optimized endpoint is being used
-        if (onlyFields && onlyFields.length > 0) {
-          console.log('⚡ OPTIMIZED ENDPOINT: Loading only fields:', onlyFields, 'for project:', id);
-        } else {
-          console.log('🐌 FULL ENDPOINT: Loading all project data for:', id);
+        if (process.env.NODE_ENV === 'development') {
+          if (onlyFields && onlyFields.length > 0) {
+            console.log('⚡ OPTIMIZED ENDPOINT: Loading only fields:', onlyFields, 'for project:', id);
+          } else {
+            console.log('🐌 FULL ENDPOINT: Loading all project data for:', id);
+          }
         }
         
         // If only specific fields are requested, use optimized loading
@@ -565,13 +566,15 @@ async function handler(req, res) {
         try {
           // Convert documentSections from table to JSON format
           documentSectionsJson = await documentSectionsToJson(id);
-          console.log('📊 GET /api/projects/[id]: documentSectionsToJson result:', {
-            projectId: id,
-            hasData: !!documentSectionsJson,
-            isObject: typeof documentSectionsJson === 'object',
-            keys: documentSectionsJson ? Object.keys(documentSectionsJson) : [],
-            yearCount: documentSectionsJson ? Object.keys(documentSectionsJson).length : 0
-          });
+          if (process.env.NODE_ENV === 'development') {
+            console.log('📊 GET /api/projects/[id]: documentSectionsToJson result:', {
+              projectId: id,
+              hasData: !!documentSectionsJson,
+              isObject: typeof documentSectionsJson === 'object',
+              keys: documentSectionsJson ? Object.keys(documentSectionsJson) : [],
+              yearCount: documentSectionsJson ? Object.keys(documentSectionsJson).length : 0
+            });
+          }
           
           // If no table data, fallback to JSON field if it exists
           if (!documentSectionsJson && project.documentSections) {
@@ -581,7 +584,7 @@ async function handler(req, res) {
               } else {
                 documentSectionsJson = project.documentSections;
               }
-              console.log('📊 GET /api/projects/[id]: Using JSON field fallback for documentSections');
+              if (process.env.NODE_ENV === 'development') console.log('📊 GET /api/projects/[id]: Using JSON field fallback for documentSections');
             } catch (e) {
               console.warn('⚠️ Failed to parse documentSections JSON field:', e.message);
               documentSectionsJson = {};
@@ -614,13 +617,15 @@ async function handler(req, res) {
         try {
           // Convert weeklyFMSReviewSections from table to JSON format (include comments so weekly comments persist)
           weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: false });
-          console.log('📊 GET /api/projects/[id]: weeklyFMSReviewSectionsToJson result:', {
-            projectId: id,
-            hasData: !!weeklyFMSReviewSectionsJson,
-            isObject: typeof weeklyFMSReviewSectionsJson === 'object',
-            keys: weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson) : [],
-            yearCount: weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson).length : 0
-          });
+          if (process.env.NODE_ENV === 'development') {
+            console.log('📊 GET /api/projects/[id]: weeklyFMSReviewSectionsToJson result:', {
+              projectId: id,
+              hasData: !!weeklyFMSReviewSectionsJson,
+              isObject: typeof weeklyFMSReviewSectionsJson === 'object',
+              keys: weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson) : [],
+              yearCount: weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson).length : 0
+            });
+          }
           
           // If no table data, fallback to JSON field if it exists
           if (!weeklyFMSReviewSectionsJson && project.weeklyFMSReviewSections) {
@@ -630,7 +635,7 @@ async function handler(req, res) {
               } else {
                 weeklyFMSReviewSectionsJson = project.weeklyFMSReviewSections;
               }
-              console.log('📊 GET /api/projects/[id]: Using JSON field fallback for weeklyFMSReviewSections');
+              if (process.env.NODE_ENV === 'development') console.log('📊 GET /api/projects/[id]: Using JSON field fallback for weeklyFMSReviewSections');
             } catch (e) {
               console.warn('⚠️ Failed to parse weeklyFMSReviewSections JSON field:', e.message);
               weeklyFMSReviewSectionsJson = {};
@@ -663,13 +668,15 @@ async function handler(req, res) {
         try {
           // Convert monthlyFMSReviewSections from table to JSON format
           monthlyFMSReviewSectionsJson = await monthlyFMSReviewSectionsToJson(id);
-          console.log('📊 GET /api/projects/[id]: monthlyFMSReviewSectionsToJson result:', {
-            projectId: id,
-            hasData: !!monthlyFMSReviewSectionsJson,
-            isObject: typeof monthlyFMSReviewSectionsJson === 'object',
-            keys: monthlyFMSReviewSectionsJson ? Object.keys(monthlyFMSReviewSectionsJson) : [],
-            yearCount: monthlyFMSReviewSectionsJson ? Object.keys(monthlyFMSReviewSectionsJson).length : 0
-          });
+          if (process.env.NODE_ENV === 'development') {
+            console.log('📊 GET /api/projects/[id]: monthlyFMSReviewSectionsToJson result:', {
+              projectId: id,
+              hasData: !!monthlyFMSReviewSectionsJson,
+              isObject: typeof monthlyFMSReviewSectionsJson === 'object',
+              keys: monthlyFMSReviewSectionsJson ? Object.keys(monthlyFMSReviewSectionsJson) : [],
+              yearCount: monthlyFMSReviewSectionsJson ? Object.keys(monthlyFMSReviewSectionsJson).length : 0
+            });
+          }
           
           // If no table data, fallback to JSON field if it exists
           if (!monthlyFMSReviewSectionsJson && project.monthlyFMSReviewSections) {
@@ -679,7 +686,7 @@ async function handler(req, res) {
               } else {
                 monthlyFMSReviewSectionsJson = project.monthlyFMSReviewSections;
               }
-              console.log('📊 GET /api/projects/[id]: Using JSON field fallback for monthlyFMSReviewSections');
+              if (process.env.NODE_ENV === 'development') console.log('📊 GET /api/projects/[id]: Using JSON field fallback for monthlyFMSReviewSections');
             } catch (e) {
               console.warn('⚠️ Failed to parse monthlyFMSReviewSections JSON field:', e.message);
               monthlyFMSReviewSectionsJson = {};
@@ -762,20 +769,24 @@ async function handler(req, res) {
 
     // Update Project (PUT /api/projects/[id])
     if (req.method === 'PUT' || req.method === 'PATCH') {
-      // Ensure optional columns exist (safe no-op if already present)
-      try {
-        await prisma.$executeRawUnsafe(`
-          ALTER TABLE "Project"
-          ADD COLUMN IF NOT EXISTS "hasDocumentCollectionProcess" BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS "hasWeeklyFMSReviewProcess" BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS "hasMonthlyDataReviewProcess" BOOLEAN DEFAULT false,
-          ADD COLUMN IF NOT EXISTS "monthlyDataReviewChecklist" TEXT DEFAULT '[]';
-        `);
-      } catch (alterErr) {
-        if (!alterErr.message?.includes('already exists') && !alterErr.message?.includes('duplicate column')) {
-          console.warn('⚠️ PUT projects: optional column migration:', alterErr.message?.substring(0, 80));
+      // Ensure optional columns exist (one ALTER per column for PostgreSQL compatibility)
+      const optionalColumns = [
+        ['hasDocumentCollectionProcess', 'BOOLEAN DEFAULT false'],
+        ['hasTimeProcess', 'BOOLEAN DEFAULT false'],
+        ['hasWeeklyFMSReviewProcess', 'BOOLEAN DEFAULT false'],
+        ['hasMonthlyFMSReviewProcess', 'BOOLEAN DEFAULT false'],
+        ['hasMonthlyDataReviewProcess', 'BOOLEAN DEFAULT false'],
+        ['monthlyDataReviewChecklist', "TEXT DEFAULT '[]'"]
+      ];
+      for (const [col, def] of optionalColumns) {
+        try {
+          await prisma.$executeRawUnsafe(
+            `ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "${col}" ${def}`
+          );
+        } catch (alterErr) {
+          if (!alterErr.message?.includes('already exists') && !alterErr.message?.includes('duplicate column')) {
+            console.warn('⚠️ PUT projects: optional column', col, alterErr.message?.substring(0, 60));
+          }
         }
       }
 
@@ -1099,15 +1110,11 @@ async function handler(req, res) {
           // Pass the original body value (could be string or object) - save functions handle both
           if (body.documentSections !== undefined && body.documentSections !== null) {
             try {
-              console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', {
-                projectId: id,
-                type: typeof body.documentSections,
-                isString: typeof body.documentSections === 'string',
-                length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
-                preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : JSON.stringify(body.documentSections).substring(0, 200)
-              });
+              if (process.env.NODE_ENV === 'development') {
+                console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', { projectId: id });
+              }
               await saveDocumentSectionsToTable(id, body.documentSections);
-              console.log('✅ PUT /api/projects/[id]: Successfully saved documentSections to table');
+              if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: documentSections saved');
             } catch (tableError) {
               console.error('⚠️ Error saving documentSections to table (project row already updated):', {
                 error: tableError.message,
@@ -1126,17 +1133,9 @@ async function handler(req, res) {
           
           if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
             try {
-              console.log('💾 PUT /api/projects/[id]: Saving monthlyFMSReviewSections to table', {
-                projectId: id,
-                type: typeof body.monthlyFMSReviewSections,
-                isString: typeof body.monthlyFMSReviewSections === 'string',
-                length: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.length : 'N/A',
-                preview: typeof body.monthlyFMSReviewSections === 'string' ? body.monthlyFMSReviewSections.substring(0, 200) : JSON.stringify(body.monthlyFMSReviewSections).substring(0, 200)
-              });
-              // Note: saveMonthlyFMSReviewSectionsToTable uses prisma directly, not tx
-              // Don't fail the request if table save fails - JSON field is already saved above
-              await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections)
-              console.log('✅ PUT /api/projects/[id]: Successfully saved monthlyFMSReviewSections to table');
+              if (process.env.NODE_ENV === 'development') console.log('💾 PUT /api/projects/[id]: Saving monthlyFMSReviewSections to table', { projectId: id });
+              await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections);
+              if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: monthlyFMSReviewSections saved');
             } catch (tableError) {
               console.error('⚠️ WARNING: Error saving monthlyFMSReviewSections to table (JSON field already saved):', {
                 error: tableError.message,
