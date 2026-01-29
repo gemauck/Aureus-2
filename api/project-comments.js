@@ -6,6 +6,7 @@ import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
+import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js';
 
 async function handler(req, res) {
   const { method } = req;
@@ -36,7 +37,7 @@ async function handler(req, res) {
                   }
                 }
               },
-              orderBy: { createdAt: 'asc' }
+              orderBy: [{ createdAt: 'asc' }]
             }
           }
         });
@@ -72,7 +73,7 @@ async function handler(req, res) {
                   }
                 }
               },
-              orderBy: { createdAt: 'asc' }
+              orderBy: [{ createdAt: 'asc' }]
             }
           }
         });
@@ -110,7 +111,9 @@ async function handler(req, res) {
         }
       }
 
-      const { projectId, text, author, authorId, userName, type, parentId } = body;
+      const { projectId, text, author, authorId, userName, type, parentId,
+        sectionId, documentId, month, year, docYear, source,
+        weeklySectionId, weeklyDocumentId, docWeek, weekNumber } = body;
 
       if (!projectId || !text) {
         return badRequest(res, 'Missing required fields: projectId and text are required');
@@ -157,6 +160,53 @@ async function handler(req, res) {
         projectId: comment.projectId,
         author: comment.author
       });
+
+      // Notify participants: project owner, prior commenters, @mentioned (in-app + email per preferences)
+      try {
+        const [project, priorComments] = await Promise.all([
+          prisma.project.findUnique({ where: { id: String(projectId) }, select: { ownerId: true, name: true } }),
+          prisma.projectComment.findMany({
+            where: { projectId: String(projectId) },
+            select: { authorId: true }
+          })
+        ]);
+        const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
+        const meta = {
+          projectId,
+          commentId: comment.id,
+          commentText: text,
+          sectionId: sectionId || undefined,
+          documentId: documentId || undefined,
+          month: month !== undefined && month !== null ? month : undefined,
+          year: year !== undefined && year !== null ? year : undefined,
+          docYear: docYear !== undefined && docYear !== null ? docYear : undefined,
+          source: source || undefined,
+          weeklySectionId: weeklySectionId || undefined,
+          weeklyDocumentId: weeklyDocumentId || undefined,
+          docWeek: docWeek !== undefined && docWeek !== null ? docWeek : undefined,
+          weekNumber: weekNumber !== undefined && weekNumber !== null ? weekNumber : undefined
+        };
+        const linkWithComment = `#/projects/${projectId}?commentId=${encodeURIComponent(comment.id)}` +
+          (sectionId ? `&docSectionId=${encodeURIComponent(sectionId)}` : '') +
+          (documentId ? `&docDocumentId=${encodeURIComponent(documentId)}` : '') +
+          (month != null ? `&docMonth=${encodeURIComponent(month)}` : '') +
+          ((year != null || docYear != null) ? `&docYear=${encodeURIComponent(year ?? docYear)}` : '') +
+          (source === 'monthlyFMSReview' ? '&tab=monthlyFMSReview' : '') +
+          (weeklySectionId ? `&weeklySectionId=${encodeURIComponent(weeklySectionId)}` : '') +
+          (docWeek != null ? `&docWeek=${encodeURIComponent(docWeek)}` : '');
+        await notifyCommentParticipants({
+          commentAuthorId: finalAuthorId,
+          commentText: text,
+          entityAuthorId: project?.ownerId || null,
+          priorCommentAuthorIds: priorAuthorIds,
+          authorName: finalAuthor,
+          contextTitle: `Project: ${project?.name || projectId}`,
+          link: linkWithComment,
+          metadata: meta
+        });
+      } catch (notifyErr) {
+        console.error('Notify comment participants failed (project comment):', notifyErr);
+      }
 
       return ok(res, { comment });
     }

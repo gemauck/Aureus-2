@@ -4,7 +4,7 @@ import { unauthorized } from './response.js'
 export function authRequired(handler) {
   return async function(req, res) {
     try {
-      const auth = req.headers['authorization'] || ''
+      const auth = req.headers['authorization'] || req.headers['Authorization'] || ''
       const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
       if (!token) {
         // Ensure response hasn't been sent before attempting to send

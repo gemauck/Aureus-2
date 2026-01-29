@@ -7,6 +7,7 @@ import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } from '../_lib/clientJsonFields.js'
+import { notifyCommentParticipants } from '../_lib/notifyCommentParticipants.js'
 
 async function handler(req, res) {
   try {
@@ -582,11 +583,13 @@ async function handler(req, res) {
             // Get existing comments to compare
             const existingComments = await prisma.clientComment.findMany({
               where: { clientId: id },
-              select: { id: true }
+              select: { id: true, authorId: true }
             })
             const existingCommentIds = new Set(existingComments.map(c => c.id))
+            const existingAuthorIds = [...new Set(existingComments.map(c => c.authorId).filter(Boolean))]
             const commentsToKeep = new Set()
-            
+            const newCommentsForNotify = []
+
             // Process each comment with upsert to handle duplicates properly
             for (const comment of commentsArray) {
               const commentData = {
@@ -597,7 +600,7 @@ async function handler(req, res) {
                   userName: comment.userName || userName || null,
                   createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined
               }
-              
+
               // Use upsert to handle both create and update
               if (comment.id && existingCommentIds.has(comment.id)) {
                 // Update existing comment
@@ -616,6 +619,7 @@ async function handler(req, res) {
                     }
                   })
                   commentsToKeep.add(comment.id)
+                  newCommentsForNotify.push({ authorId: commentData.authorId, text: commentData.text, author: commentData.author })
                 } catch (createError) {
                   // If ID conflict, update instead
                   if (createError.code === 'P2002') {
@@ -634,9 +638,31 @@ async function handler(req, res) {
                   data: commentData
                 })
                 commentsToKeep.add(created.id)
+                newCommentsForNotify.push({ authorId: commentData.authorId, text: commentData.text, author: commentData.author })
               }
             }
-            
+
+            // Notify participants for each new comment: client owner, prior commenters, @mentioned (in-app + email per preferences)
+            if (newCommentsForNotify.length > 0) {
+              try {
+                const client = await prisma.client.findUnique({ where: { id }, select: { ownerId: true, name: true } })
+                for (const nc of newCommentsForNotify) {
+                  await notifyCommentParticipants({
+                    commentAuthorId: nc.authorId,
+                    commentText: nc.text,
+                    entityAuthorId: client?.ownerId || null,
+                    priorCommentAuthorIds: existingAuthorIds,
+                    authorName: nc.author || 'Someone',
+                    contextTitle: `Client: ${client?.name || id}`,
+                    link: `#/clients/${id}?tab=notes`,
+                    metadata: { clientId: id, commentText: nc.text }
+                  })
+                }
+              } catch (notifyErr) {
+                console.error('Notify comment participants failed (client comments):', notifyErr)
+              }
+            }
+
             // Delete comments that are no longer in the array
             await prisma.clientComment.deleteMany({
               where: {

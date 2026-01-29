@@ -746,16 +746,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     0
                 );
 
+                // Preserve clientSites/sites when API returns leads without them (e.g. fallback query)
+                // so Pipeline site cards don't appear then disappear after API load
+                const leadsWithSitesPreserved = apiLeads.map((apiLead) => {
+                    const hasSites = Array.isArray(apiLead.clientSites) && apiLead.clientSites.length > 0 ||
+                        Array.isArray(apiLead.sites) && apiLead.sites.length > 0;
+                    if (hasSites) return apiLead;
+                    const cachedLead = normalizedCachedLeads.find(
+                        (c) => getComparableId(c.id) === getComparableId(apiLead.id)
+                    );
+                    const prevSites = cachedLead && (cachedLead.clientSites || cachedLead.sites);
+                    if (Array.isArray(prevSites) && prevSites.length > 0) {
+                        return { ...apiLead, clientSites: prevSites, sites: prevSites };
+                    }
+                    return apiLead;
+                });
 
                 setClients(finalClients);
-                setLeads(apiLeads);
+                setLeads(leadsWithSitesPreserved);
 
                 if (typeof storage?.setClients === 'function') {
                     storage.setClients(finalClients);
                 }
 
                 if (typeof storage?.setLeads === 'function') {
-                    storage.setLeads(apiLeads);
+                    storage.setLeads(leadsWithSitesPreserved);
                 }
 
                 setIsLoading(false);
@@ -821,6 +836,39 @@ function doesOpportunityBelongToClient(opportunity, client) {
             };
         });
 
+        const siteItems = [];
+        leads.forEach(lead => {
+            const sites = lead.clientSites || lead.sites || [];
+            const siteList = Array.isArray(sites) ? sites : [];
+            siteList.forEach((site, idx) => {
+                if (!site || typeof site !== 'object') return;
+                const siteStage = site.stage || site.aidaStatus || lead.stage;
+                const mappedStage = normalizeStageToAida(siteStage);
+                const siteId = site.id || `site-${lead.id}-${idx}`;
+                const pipelineId = `lead-${lead.id}-site-${siteId}`;
+                const leadName = lead.name || lead.company || 'Lead';
+                const siteName = site.name || 'Unnamed site';
+                siteItems.push({
+                    id: pipelineId,
+                    type: 'site',
+                    itemType: 'Site',
+                    name: `${leadName} · ${siteName}`,
+                    stage: mappedStage,
+                    status: normalizeLifecycleStage(site.stage || lead.status),
+                    isStarred: Boolean(lead.isStarred),
+                    value: 0,
+                    createdDate: site.createdAt || lead.createdDate || new Date().toISOString(),
+                    expectedCloseDate: null,
+                    industry: lead.industry || 'Other',
+                    leadId: lead.id,
+                    lead,
+                    site,
+                    siteId: site.id || null,
+                    raw: { site, lead }
+                });
+            });
+        });
+
         const opportunityItems = [];
         clients.forEach(client => {
             // Ensure client has opportunities array (defensive check)
@@ -881,7 +929,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         } else {
         }
 
-        return [...leadItems, ...opportunityItems];
+        return [...leadItems, ...siteItems, ...opportunityItems];
     };
 
     // Apply filters and sorting
@@ -1869,6 +1917,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
             console.warn('⚠️ Pipeline: Unable to set returnToPipeline flag', error);
         }
 
+        if (item.type === 'site') {
+            const resolvedLeadId = item.leadId || item.lead?.id;
+            const siteId = item.siteId || item.site?.id;
+            if (!resolvedLeadId) return;
+            const payload = { leadId: resolvedLeadId, leadData: item.lead || { ...item, id: resolvedLeadId }, siteId: siteId || undefined };
+            if (typeof onOpenLead === 'function') {
+                onOpenLead({ ...payload, origin: 'prop' });
+                return;
+            }
+            window.dispatchEvent(new CustomEvent('openLeadDetailFromPipeline', { detail: { ...payload, origin: 'event' } }));
+            return;
+        }
+
         if (item.type === 'lead') {
             const resolvedLeadId = item.legacyId || item.id;
             if (!resolvedLeadId) {
@@ -2288,9 +2349,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             <span className={`px-2 py-0.5 text-[10px] rounded-full font-medium ${
                                                                 itemType === 'lead' 
                                                                     ? 'bg-blue-100 text-blue-700' 
+                                                                    : itemType === 'site'
+                                                                    ? 'bg-amber-100 text-amber-700'
                                                                     : 'bg-purple-100 text-purple-700'
                                                             }`}>
-                                                                {itemType === 'lead' ? 'Lead' : 'Opportunity'}
+                                                                {itemType === 'lead' ? 'Lead' : itemType === 'site' ? 'Site' : 'Opportunity'}
                                                             </span>
                                                             
                                                             {/* Show opposite grouping as badge */}
@@ -2378,15 +2441,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </p>
                     <span
                         className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${
-                            item.type === 'lead' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                            item.type === 'lead' ? 'bg-blue-50 text-blue-600' : item.type === 'site' ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'
                         }`}
                     >
-                        {item.type === 'lead' ? 'Lead' : 'Opportunity'}
+                        {item.type === 'lead' ? 'Lead' : item.type === 'site' ? 'Site' : 'Opportunity'}
                     </span>
                 </div>
 
                 <p className="text-xs text-gray-500 truncate">
-                    {item.clientName || item.company || 'No company'}
+                    {item.type === 'site' ? (item.lead?.name || item.clientName) : (item.clientName || item.company || 'No company')}
                 </p>
 
                 <div className="flex items-center justify-between text-xs text-gray-500">
@@ -2510,6 +2573,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 ) : (
                                     items.map(item => {
                                         const isLead = item.type === 'lead';
+                                        const isSite = item.type === 'site';
 
                                         return (
                                             <tr
@@ -2541,8 +2605,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-2">
-                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                                                        {isLead ? 'Lead' : 'Opportunity'}
+                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : isSite ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {isLead ? 'Lead' : isSite ? 'Site' : 'Opportunity'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-2">

@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { authRequired } from './_lib/authRequired.js'
@@ -38,8 +39,9 @@ async function handler(req, res) {
       return badRequest(res, 'File too large (max 50MB)')
     }
 
-    // Ensure uploads directory exists
-    const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+    // Ensure uploads directory exists - use project root (same as server's rootDir) so saved files are served
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
+    const rootDir = path.resolve(__dirname, '..')
     const uploadRoot = path.join(rootDir, 'uploads')
     const targetDir = path.join(uploadRoot, folder)
     fs.mkdirSync(targetDir, { recursive: true })

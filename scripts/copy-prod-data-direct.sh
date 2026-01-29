@@ -1,10 +1,21 @@
 #!/bin/bash
-# Copy production data directly using provided credentials
+# Copy production data directly into local database.
+# Run in your terminal (can take 5–10+ minutes for dump/restore):
+#   ./scripts/copy-prod-data-direct.sh
+# Optional: set PROD_DATABASE_URL and/or DATABASE_URL (local) in .env.local to override.
 
 set -e
 
-PROD_DB_URL="postgresql://doadmin:AVNS_D14tRDDknkgUUoVZ4Bv@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
-LOCAL_DB_URL="postgresql://gemau@localhost:5432/abcotronics_erp_local"
+# Load .env.local so PROD_DATABASE_URL / DATABASE_URL override defaults
+if [ -f .env.local ]; then
+  set -a
+  source .env.local
+  set +a
+fi
+
+PROD_DB_URL="${PROD_DATABASE_URL:-postgresql://doadmin:AVNS_D14tRDDknkgUUoVZ4Bv@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}"
+# Local DB: match .env.local or use DATABASE_URL from .env.local
+LOCAL_DB_URL="${DATABASE_URL:-postgresql://gemau:localdev@localhost:5432/abcotronics_erp_local}"
 DB_NAME="abcotronics_erp_local"
 
 echo "📥 Copying production data to local database..."
@@ -32,10 +43,12 @@ echo "✅ Schema ready"
 
 # Dump production database
 echo ""
-echo "📦 Dumping production database..."
+echo "📦 Dumping production database (this may take several minutes)..."
 DUMP_FILE="/tmp/prod_dump_$(date +%Y%m%d_%H%M%S).sql"
 
-export PGPASSWORD="AVNS_D14tRDDknkgUUoVZ4Bv"
+# Extract password from URL for pg_dump
+PROD_PASS=$(echo "$PROD_DB_URL" | sed -nE 's|postgresql://[^:]+:([^@]+)@.*|\1|p')
+export PGPASSWORD="${PROD_PASS}"
 pg_dump "${PROD_DB_URL}" > "${DUMP_FILE}" 2>&1 || {
     echo "❌ Failed to dump production database"
     echo "   Check your network connection and firewall settings"

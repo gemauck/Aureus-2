@@ -36,6 +36,10 @@ if (existsSync(join(__dirname, '.env.local'))) {
     console.log('✅ Loaded .env.local for local development')
   }
 }
+// Allow test script to force port (e.g. TEST_PORT=3001) so dev-auth server doesn't conflict with main app
+if (process.env.TEST_PORT) {
+  process.env.PORT = process.env.TEST_PORT
+}
 
 import express from 'express'
 import compression from 'compression'
@@ -762,6 +766,11 @@ app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   } catch (e) {
     console.error('❌ Error in sites handler:', e)
     if (!res.headersSent) {
+      // GET /api/sites/client/:id must never 500 — return empty sites so UI does not retry/rate-limit
+      const isGetSitesList = req.method === 'GET' && req.params && req.params.clientId && !req.params.siteId
+      if (isGetSitesList) {
+        return res.status(200).json({ data: { sites: [] } })
+      }
       return res.status(500).json({
         error: 'Internal server error',
         message: e.message,
@@ -2211,6 +2220,29 @@ function setHttp2SafeStaticHeaders(res, path) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
 }
 
+// Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
+// open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
+const uploadsDir = path.join(rootDir, 'uploads')
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments']
+for (const d of uploadSubdirs) {
+  try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
+}
+app.get(/^\/uploads\//, (req, res) => {
+  const pathname = (req.originalUrl || req.url || '').split('?')[0]
+  const subPath = (pathname.replace(/^\/uploads\/?/, '') || '').replace(/^\//, '')
+  const filePath = path.join(uploadsDir, subPath)
+  const resolved = path.resolve(filePath)
+  const uploadsResolved = path.resolve(uploadsDir)
+  if (!resolved.startsWith(uploadsResolved) || subPath.includes('..')) {
+    return res.status(403).type('text/plain').send('Forbidden')
+  }
+  res.sendFile(resolved, (err) => {
+    if (err) {
+      if (!res.headersSent) res.status(404).type('text/plain').send('File not found')
+    }
+  })
+})
+
 // Serve Vite Projects bundle and CSS from /vite-projects
 // This maps /vite-projects/* URLs to dist/vite-projects output directory
 app.use(
@@ -2250,6 +2282,11 @@ app.get('*', (req, res) => {
   // Skip API routes - they should have been handled by the API middleware above
   if (req.url.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' })
+  }
+  // Never serve SPA for /uploads/* - attachments must get file or 404 (handled above)
+  const pathname = (req.url || '').split('?')[0]
+  if (pathname.startsWith('/uploads/')) {
+    return res.status(404).type('text/plain').send('File not found')
   }
   
   // CRITICAL: Set no-cache headers for index.html to prevent stale deployments

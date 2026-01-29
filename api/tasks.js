@@ -143,7 +143,7 @@ async function handler(req, res) {
               }
             },
             subtasks: {
-              orderBy: { createdAt: 'asc' }
+              orderBy: [{ createdAt: 'asc' }]
             }
           }
         });
@@ -220,7 +220,7 @@ async function handler(req, res) {
                 }
               },
               subtasks: {
-                orderBy: { createdAt: 'asc' }
+                orderBy: [{ createdAt: 'asc' }]
               }
             },
             orderBy: { createdAt: 'asc' }

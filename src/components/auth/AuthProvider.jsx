@@ -278,15 +278,23 @@ const AuthProvider = ({ children }) => {
                                       errorMessage.includes('unreachable') ||
                                       errorMessage.includes('timeout') ||
                                       errorMessage.includes('ECONNREFUSED') ||
+                                      errorMessage.includes('connection refused') ||
+                                      errorMessage.includes('failed to fetch') ||
                                       errorMessage.includes('ETIMEDOUT') ||
                                       errorMessage.includes('502') ||
                                       errorMessage.includes('503') ||
                                       errorMessage.includes('504');
+                const isConnectionRefused = errorMessage.includes('connection refused') ||
+                                           errorMessage.includes('ECONNREFUSED') ||
+                                           errorMessage.includes('econnrefused') ||
+                                           errorMessage.includes('is the server running');
 
                 if (isNetworkError) {
                     console.warn('⚠️ Could not validate session - server unreachable. Working in offline mode.');
-                    // Dispatch event so UI can show offline indicator if desired
-                    window.dispatchEvent(new CustomEvent('auth:server-unreachable'));
+                    // Dispatch event so UI can show offline indicator; pass actionable message when connection refused
+                    window.dispatchEvent(new CustomEvent('auth:server-unreachable', {
+                        detail: isConnectionRefused ? { message: 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' } : {}
+                    }));
                 } else {
                     console.error('❌ Session validation error:', errorMessage);
                 }

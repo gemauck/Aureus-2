@@ -260,156 +260,25 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
 }
 
 /**
- * Convert WeeklyFMSReviewSection table data to JSON format (for backward compatibility)
- * Merges table data (monthly keys) with JSON field data (weekly keys preserved)
+ * Convert WeeklyFMSReviewSection to JSON for frontend.
+ * Uses the same logic as Monthly FMS / Document Collection: JSON field is source of truth.
+ * When project.weeklyFMSReviewSections has data, return it as-is (preserves week keys and comments).
  */
-async function weeklyFMSReviewSectionsToJson(projectId, options = {}) {
+async function weeklyFMSReviewSectionsToJson(projectId) {
   try {
-    // Check if table exists (for environments that haven't migrated yet)
-    try {
-      await prisma.$queryRaw`SELECT 1 FROM "WeeklyFMSReviewSection" LIMIT 1`
-    } catch (e) {
-      // Table doesn't exist yet, return null to use JSON fallback
-      return null
-    }
-
-    // Get the project to access the JSON field (which may contain weekly keys)
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: { weeklyFMSReviewSections: true }
     })
-    
-    // Parse JSON field to get weekly keys
-    let jsonFieldData = null
-    if (project?.weeklyFMSReviewSections) {
-      try {
-        jsonFieldData = typeof project.weeklyFMSReviewSections === 'string'
-          ? JSON.parse(project.weeklyFMSReviewSections)
-          : project.weeklyFMSReviewSections
-      } catch (e) {
-        console.warn('Failed to parse weeklyFMSReviewSections JSON field:', e)
-      }
+    if (!project?.weeklyFMSReviewSections) return null
+    const raw = project.weeklyFMSReviewSections
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+      return parsed
     }
-
-    const includeComments = !options.skipComments;
-    const sections = await prisma.weeklyFMSReviewSection.findMany({
-      where: { projectId },
-      include: {
-        items: {
-          include: {
-            statuses: true,
-            ...(includeComments ? { comments: true } : {})
-          },
-          orderBy: { order: 'asc' }
-        }
-      },
-      orderBy: [{ year: 'desc' }, { order: 'asc' }]
-    })
-
-    if (sections.length === 0) {
-      return null // Return null to indicate no table data, use JSON fallback
-    }
-
-    // Group by year: { "2024": [...], "2025": [...] }
-    const byYear = {}
-    for (const section of sections) {
-      if (!byYear[section.year]) {
-        byYear[section.year] = []
-      }
-
-      // Find corresponding section in JSON field data (if it exists)
-      const jsonSection = jsonFieldData?.[section.year]?.find(s => 
-        s.id === section.id || s.name === section.name
-      )
-
-      const sectionData = {
-        id: section.id,
-        name: section.name,
-        description: section.description || '',
-        reviewer: section.reviewer || '',
-        documents: section.items.map(item => {
-          // Start with monthly statuses from table
-          const collectionStatus = {}
-          for (const status of item.statuses) {
-            const key = `${status.year}-${String(status.month).padStart(2, '0')}`
-            collectionStatus[key] = status.status
-          }
-
-          // Start with monthly comments from table
-          const comments = {}
-          if (includeComments && item.comments) {
-            for (const comment of item.comments) {
-              const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
-              if (!comments[key]) {
-                comments[key] = []
-              }
-              let attachments = []
-              if (comment.attachments) {
-                try {
-                  attachments = typeof comment.attachments === 'string'
-                    ? JSON.parse(comment.attachments || '[]')
-                    : (Array.isArray(comment.attachments) ? comment.attachments : [])
-                } catch (_) {
-                  attachments = []
-                }
-              }
-              comments[key].push({
-                id: comment.id,
-                text: comment.text,
-                author: comment.author,
-                authorId: comment.authorId,
-                authorName: comment.author,
-                date: comment.createdAt?.toISOString() || new Date(comment.createdAt).toISOString(),
-                createdAt: comment.createdAt,
-                attachments
-              })
-            }
-          }
-
-          // Merge with weekly keys from JSON field (preserve weekly data)
-          const jsonDoc = jsonSection?.documents?.find(d => 
-            d.id === item.id || d.name === item.name
-          )
-          if (jsonDoc) {
-            // Merge statuses: weekly keys take precedence, monthly keys from table are fallback
-            if (jsonDoc.collectionStatus && typeof jsonDoc.collectionStatus === 'object') {
-              for (const [key, value] of Object.entries(jsonDoc.collectionStatus)) {
-                // Preserve weekly keys (YYYY-MM-W##) and empty strings (explicitly cleared)
-                if (key.includes('-W') || value === '') {
-                  collectionStatus[key] = value
-                }
-                // Monthly keys from JSON are only used if not in table (table is source of truth for monthly)
-              }
-            }
-            
-            // Merge comments: weekly keys take precedence
-            if (includeComments && jsonDoc.comments && typeof jsonDoc.comments === 'object') {
-              for (const [key, value] of Object.entries(jsonDoc.comments)) {
-                // Preserve weekly keys (YYYY-MM-W##)
-                if (key.includes('-W')) {
-                  comments[key] = Array.isArray(value) ? value : []
-                }
-              }
-            }
-          }
-
-          return {
-            id: item.id,
-            name: item.name,
-            description: item.description || '',
-            required: item.required || false,
-            collectionStatus,
-            ...(includeComments ? { comments } : { comments: {} })
-          }
-        })
-      }
-
-      byYear[section.year].push(sectionData)
-    }
-
-    return byYear
-  } catch (error) {
-    console.error('Error converting weeklyFMSReviewSections to JSON:', error)
+    return null
+  } catch (e) {
+    console.warn('weeklyFMSReviewSectionsToJson:', e)
     return null
   }
 }
@@ -663,9 +532,12 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
 }
 
 /**
- * Save weeklyFMSReviewSections JSON to table structure
+ * Save weeklyFMSReviewSections JSON to table structure.
+ * NO-OP: Weekly FMS uses Project.weeklyFMSReviewSections JSON only. Table write disabled
+ * to avoid P2022 (missing attachments column) and keep all callers succeeding.
  */
 async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
+  return;
   if (!jsonData) {
     console.log('⚠️ saveWeeklyFMSReviewSectionsToTable: No jsonData provided, skipping save');
     return;
@@ -993,23 +865,15 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
       throw new Error(`Invalid sections data format: expected object or array, got ${typeof sections}`);
     }
   } catch (error) {
-    console.error('❌ Error saving weeklyFMSReviewSections to table:', {
+    console.warn('⚠️ Weekly FMS table save skipped (JSON is source of truth):', {
       error: error.message,
-      stack: error.stack,
       code: error.code,
-      meta: error.meta,
       projectId,
       jsonDataType: typeof jsonData
     });
-    // Re-throw the error so the caller knows it failed, but preserve original error details
-    if (error.code || error.meta) {
-      // If it's a Prisma error, include code and meta in the message
-      const enhancedError = new Error(`Failed to save weeklyFMSReviewSections: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}${error.meta ? ` (Meta: ${JSON.stringify(error.meta)})` : ''}`);
-      enhancedError.code = error.code;
-      enhancedError.meta = error.meta;
-      throw enhancedError;
-    }
-    throw error;
+    // Do NOT re-throw. Weekly FMS uses Project.weeklyFMSReviewSections JSON only.
+    // Table save is best-effort; missing columns (e.g. attachments) must not cause 500.
+    return;
   }
 }
 
@@ -1612,13 +1476,15 @@ async function handler(req, res) {
           
           // If client doesn't exist, create it
           if (!client) {
+            // dev-admin (TEST_DEV_AUTH) is not in User table; use null for ownerId
+            const ownerId = req.user?.sub === 'dev-admin' ? null : (req.user?.sub || null)
             client = await prisma.client.create({
               data: {
                 name: body.clientName,
                 type: 'client',
                 industry: 'Other',
                 status: 'active',
-                ownerId: req.user?.sub || null
+                ownerId
               }
             });
           }
@@ -1629,6 +1495,8 @@ async function handler(req, res) {
         }
       }
 
+      // dev-admin (TEST_DEV_AUTH) is not in User table; use null for ownerId
+      const projectOwnerId = req.user?.sub === 'dev-admin' ? null : (req.user?.sub || null)
       // Parse dates safely
       const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
       let startDate = new Date();
@@ -1675,7 +1543,7 @@ async function handler(req, res) {
         type: body.type || 'Monthly Review',
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
-        ownerId: req.user?.sub || null,
+        ownerId: projectOwnerId,
         // New projects: only Tasks tab by default; other modules added via + Module
         hasTimeProcess: false,
         hasDocumentCollectionProcess: false,
@@ -1830,7 +1698,7 @@ async function handler(req, res) {
                   type: 'client',
                   industry: 'Other',
                   status: 'active',
-                  ownerId: req.user?.sub || null
+                  ownerId: req.user?.sub === 'dev-admin' ? null : (req.user?.sub || null)
                 }
               });
             }
@@ -2078,21 +1946,10 @@ async function handler(req, res) {
           if (body.documentSections !== undefined && body.documentSections !== null) {
             await saveDocumentSectionsToTable(id, body.documentSections)
           }
+          // Weekly FMS: source of truth is Project.weeklyFMSReviewSections JSON only. Skip table save
+          // to avoid P2022 (e.g. missing attachments column) and keep PUT always succeeding.
           if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
-            console.log('💾 API: Saving weeklyFMSReviewSections to table', {
-              projectId: id,
-              dataType: typeof body.weeklyFMSReviewSections,
-              dataLength: typeof body.weeklyFMSReviewSections === 'string' 
-                ? body.weeklyFMSReviewSections.length 
-                : 'N/A'
-            });
-            try {
-              await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections);
-              console.log('✅ API: Successfully saved weeklyFMSReviewSections to table');
-            } catch (tableSaveError) {
-              console.error('❌ API: Error saving weeklyFMSReviewSections to table:', tableSaveError);
-              // Don't fail the entire update, but log the error - the JSON field will still be saved
-            }
+            // saveWeeklyFMSReviewSectionsToTable intentionally not called – JSON-only persistence.
           }
           
           const project = await prisma.project.update({ 

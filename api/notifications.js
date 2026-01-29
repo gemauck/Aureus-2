@@ -19,6 +19,148 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
+/**
+ * Create in-app and email notification for a single user.
+ * Used by POST /notifications and by notifyCommentParticipants.
+ * @returns {{ notification, created } | null} null if user not found
+ */
+export async function createNotificationForUser(targetUserId, type, title, message, link, metadata) {
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) return null;
+
+    let settings = await prisma.notificationSetting.findUnique({ where: { userId: targetUserId } });
+    if (!settings) {
+        settings = await prisma.notificationSetting.create({
+            data: {
+                userId: targetUserId,
+                emailTasks: true, emailMentions: true, emailComments: true, emailInvoices: true, emailSystem: true,
+                inAppTasks: true, inAppMentions: true, inAppComments: true, inAppInvoices: true, inAppSystem: true
+            }
+        });
+    }
+
+    let shouldCreateInApp = (type === 'mention' && settings.inAppMentions) || (type === 'comment' && settings.inAppComments) ||
+        (type === 'task' && settings.inAppTasks) || (type === 'invoice' && settings.inAppInvoices) || (type === 'system' && settings.inAppSystem);
+
+    const metadataObj = typeof metadata === 'string' ? (() => { try { return JSON.parse(metadata); } catch (_) { return {}; } })() : (metadata || {});
+    let validLink = link || '';
+    // Always build a direct-to-comment link from metadata when we have tracker params, so in-app and email both open the comment
+    const hasTrackerMetadata = metadataObj.projectId && (
+        metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null ||
+        metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weekNumber != null
+    );
+    if (hasTrackerMetadata || !validLink || !validLink.trim()) {
+        try {
+            const isWeeklyFMS = metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weeklyMonth != null || (metadataObj.sectionId && metadataObj.weekNumber != null));
+            if (isWeeklyFMS) {
+                validLink = `#/projects/${metadataObj.projectId}`;
+                const q = [];
+                const sectionId = metadataObj.weeklySectionId || metadataObj.sectionId;
+                const documentId = metadataObj.weeklyDocumentId || metadataObj.documentId;
+                const weekLabel = metadataObj.weeklyWeek ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
+                if (sectionId) q.push(`docSectionId=${encodeURIComponent(sectionId)}`);
+                if (documentId) q.push(`docDocumentId=${encodeURIComponent(documentId)}`);
+                if (weekLabel != null) q.push(`docWeek=${encodeURIComponent(weekLabel)}`);
+                if (metadataObj.docYear != null) q.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
+                if (metadataObj.year != null) q.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
+                if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                if (sectionId) q.push(`weeklySectionId=${encodeURIComponent(sectionId)}`);
+                if (q.length) validLink += `?${q.join('&')}`;
+            } else if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null)) {
+                validLink = `#/projects/${metadataObj.projectId}`;
+                const q = [];
+                if (metadataObj.sectionId) q.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
+                if (metadataObj.documentId) q.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
+                if (metadataObj.month != null) q.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
+                if (metadataObj.docYear != null) q.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
+                if (metadataObj.year != null) q.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
+                if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                if (metadataObj.source === 'monthlyFMSReview') q.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
+                if (q.length) validLink += `?${q.join('&')}`;
+            } else if (!validLink || !validLink.trim()) {
+                if (metadataObj.projectId) validLink = `#/projects/${metadataObj.projectId}`;
+                else if (metadataObj.taskId) validLink = metadataObj.projectId ? `#/projects/${metadataObj.projectId}?task=${encodeURIComponent(metadataObj.taskId)}` : `#/tasks/${metadataObj.taskId}`;
+                else if (metadataObj.clientId) validLink = `#/clients/${metadataObj.clientId}`;
+                else if (metadataObj.leadId) validLink = `#/clients/${metadataObj.leadId}`;
+                else if (metadataObj.ticketId) validLink = `#/helpdesk/${metadataObj.ticketId}`;
+                else validLink = '/dashboard';
+            }
+        } catch (_) {
+            if (!validLink || !validLink.trim()) validLink = '/dashboard';
+        }
+    }
+    if (validLink && !validLink.startsWith('/') && !validLink.startsWith('#')) validLink = '/' + validLink;
+
+    let notification = null;
+    if (shouldCreateInApp) {
+        try {
+            notification = await prisma.notification.create({
+                data: {
+                    userId: targetUserId,
+                    type, title, message,
+                    link: validLink || '/dashboard',
+                    metadata: metadata ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : '{}',
+                    read: false
+                }
+            });
+        } catch (e) {
+            console.error('Failed to create in-app notification for user', targetUserId, e);
+        }
+    }
+
+    const shouldSendEmail = (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||
+        (type === 'task' && settings.emailTasks) || (type === 'invoice' && settings.emailInvoices) || (type === 'system' && settings.emailSystem);
+    if (shouldSendEmail && targetUser.email) {
+        try {
+            let projectName = null, clientName = null, commentText = null, commentLink = link || null, taskTitle = null;
+            const metadataObj = metadata && (typeof metadata === 'string' ? JSON.parse(metadata) : metadata);
+            if (metadataObj && (type === 'comment' || type === 'mention' || type === 'task')) {
+                commentText = metadataObj.commentText || metadataObj.fullComment || null;
+                taskTitle = metadataObj.taskTitle || null;
+                if (metadataObj.projectId) {
+                    const p = await prisma.project.findUnique({ where: { id: metadataObj.projectId }, include: { client: true } });
+                    if (p) {
+                        projectName = p.name || null;
+                        clientName = p.client?.name || null;
+                        // Use the same validLink we built (with docSectionId, commentId, etc.) so email goes to the comment
+                        commentLink = validLink && validLink.includes('?') ? validLink : (link || `#/projects/${metadataObj.projectId}`);
+                        if (metadataObj.taskId && !commentLink.includes('task=')) commentLink += (commentLink.includes('?') ? '&' : '?') + `task=${encodeURIComponent(metadataObj.taskId)}`;
+                    }
+                } else if (metadataObj.clientId || metadataObj.leadId) {
+                    const cid = metadataObj.clientId || metadataObj.leadId;
+                    const c = await prisma.client.findUnique({ where: { id: cid }, select: { name: true } });
+                    if (c) clientName = c.name || null;
+                    commentLink = link || `#/clients/${cid}`;
+                } else if (metadataObj.ticketId) {
+                    commentLink = link || `#/helpdesk/${metadataObj.ticketId}`;
+                }
+            }
+            let enhancedSubject = title;
+            if (clientName || projectName) enhancedSubject = `[${[clientName, projectName].filter(Boolean).join(' - ')}] ${title}`;
+            let enhancedMessage = message;
+            if (clientName || projectName || taskTitle) {
+                enhancedMessage = '<div style="background:#e7f3ff;border-left:4px solid #007bff;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📋 Context</h3>';
+                if (clientName) enhancedMessage += `<p style="color:#555;margin:5px 0;"><strong>Client:</strong> ${escapeHtml(clientName)}</p>`;
+                if (projectName) enhancedMessage += `<p style="color:#555;margin:5px 0;"><strong>Project:</strong> ${escapeHtml(projectName)}</p>`;
+                if (taskTitle) enhancedMessage += `<p style="color:#555;margin:5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>`;
+                enhancedMessage += '</div>' + enhancedMessage;
+            }
+            if (commentText) {
+                const prev = commentText.length > 200 ? commentText.slice(0, 200) + '...' : commentText;
+                enhancedMessage += `<div style="background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:15px;margin:20px 0;"><h4 style="color:#333;margin:0 0 10px;font-size:14px;">💬 Comment</h4><p style="color:#555;margin:0;line-height:1.6;white-space:pre-wrap;">${escapeHtml(prev)}</p></div>`;
+            }
+            await sendNotificationEmail(targetUser.email, enhancedSubject, enhancedMessage, {
+                projectName, clientName, commentText, commentLink, taskTitle,
+                isProjectRelated: !!(metadataObj && (type === 'comment' || type === 'mention' || type === 'task')),
+                skipNotificationCreation: true
+            });
+        } catch (e) {
+            console.error('Failed to send email notification to', targetUserId, e);
+        }
+    }
+    return { notification, created: !!notification };
+}
+
 async function handler(req, res) {
     // JWT payload uses 'sub' for user ID, not 'id'
     const userId = req.user?.sub || req.user?.id;
@@ -96,539 +238,13 @@ async function handler(req, res) {
         try {
             const body = req.body || await parseJsonBody(req);
             const { userId: targetUserId, type, title, message, link, metadata } = body;
-            
-            
             if (!targetUserId || !type || !title || !message) {
-                console.error('❌ POST /notifications - Missing required fields:', {
-                    hasUserId: !!targetUserId,
-                    hasType: !!type,
-                    hasTitle: !!title,
-                    hasMessage: !!message
-                });
+                console.error('❌ POST /notifications - Missing required fields:', { hasUserId: !!targetUserId, hasType: !!type, hasTitle: !!title, hasMessage: !!message });
                 return badRequest(res, 'Missing required fields: userId, type, title, message');
             }
-            
-            // Check if target user exists
-            const targetUser = await prisma.user.findUnique({
-                where: { id: targetUserId }
-            });
-            
-            if (!targetUser) {
-                return badRequest(res, 'User not found');
-            }
-            
-            // Get or create notification settings
-            let settings = await prisma.notificationSetting.findUnique({
-                where: { userId: targetUserId }
-            });
-            
-            if (!settings) {
-                // Create default settings (all notifications enabled by default, including emailTasks)
-                settings = await prisma.notificationSetting.create({
-                    data: { 
-                        userId: targetUserId,
-                        emailTasks: true,  // Explicitly set to true for new users
-                        emailMentions: true,
-                        emailComments: true,
-                        emailInvoices: true,
-                        emailSystem: true,
-                        inAppTasks: true,
-                        inAppMentions: true,
-                        inAppComments: true,
-                        inAppInvoices: true,
-                        inAppSystem: true
-                    }
-                });
-            }
-            
-            
-            // Check if user wants in-app notifications for this type
-            let shouldCreateInAppNotification = false;
-            if (type === 'mention' && settings.inAppMentions) {
-                shouldCreateInAppNotification = true;
-            } else if (type === 'comment' && settings.inAppComments) {
-                shouldCreateInAppNotification = true;
-            } else if (type === 'task' && settings.inAppTasks) {
-                shouldCreateInAppNotification = true;
-            } else if (type === 'invoice' && settings.inAppInvoices) {
-                shouldCreateInAppNotification = true;
-            } else if (type === 'system' && settings.inAppSystem) {
-                shouldCreateInAppNotification = true;
-            }
-            
-            
-            let notification = null;
-            
-            // Ensure link is valid - construct from metadata if missing
-            let validLink = link || '';
-            if (!validLink || validLink.trim() === '') {
-                // Try to construct link from metadata
-                try {
-                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : (metadata || {});
-                    
-                    // Check for entity IDs in metadata
-                    // Handle weekly FMS review tracker links first (check for weekNumber to distinguish from document collection)
-                    if (metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek || metadataObj.weeklyMonth || (metadataObj.sectionId && metadataObj.weekNumber))) {
-                        // Weekly FMS review tracker comment - build link with weekly parameters
-                        validLink = `#/projects/${metadataObj.projectId}`;
-                        const queryParams = [];
-                        if (metadataObj.weeklySectionId || metadataObj.sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(metadataObj.weeklySectionId || metadataObj.sectionId)}`);
-                        if (metadataObj.weeklyDocumentId || metadataObj.documentId) queryParams.push(`weeklyDocumentId=${encodeURIComponent(metadataObj.weeklyDocumentId || metadataObj.documentId)}`);
-                        if (metadataObj.weeklyMonth !== undefined && metadataObj.weeklyMonth !== null) {
-                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.weeklyMonth)}`);
-                        } else if (metadataObj.month !== undefined && metadataObj.month !== null) {
-                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.month)}`);
-                        }
-                        if (metadataObj.weeklyWeek !== undefined && metadataObj.weeklyWeek !== null) {
-                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weeklyWeek)}`);
-                        } else if (metadataObj.weekNumber !== undefined && metadataObj.weekNumber !== null) {
-                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weekNumber)}`);
-                        }
-                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                        if (queryParams.length > 0) {
-                            validLink += `?${queryParams.join('&')}`;
-                        }
-                    } else if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId)) {
-                        // Document collection tracker comment - build link with all parameters
-                        validLink = `#/projects/${metadataObj.projectId}`;
-                        const queryParams = [];
-                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
-                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
-                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
-                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                        if (queryParams.length > 0) {
-                            validLink += `?${queryParams.join('&')}`;
-                        }
-                    } else if (metadataObj.projectId) {
-                        validLink = `/projects/${metadataObj.projectId}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else if (metadataObj.taskId) {
-                        if (metadataObj.projectId) {
-                            validLink = `/projects/${metadataObj.projectId}/tasks/${metadataObj.taskId}`;
-                        } else {
-                            validLink = `/tasks/${metadataObj.taskId}`;
-                        }
-                        if (metadataObj.tab) validLink += (validLink.includes('?') ? '&' : '?') + `tab=${metadataObj.tab}`;
-                    } else if (metadataObj.clientId) {
-                        validLink = `/clients/${metadataObj.clientId}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else if (metadataObj.leadId) {
-                        validLink = `/clients/${metadataObj.leadId}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else if (metadataObj.opportunityId) {
-                        validLink = `/clients/${metadataObj.opportunityId}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else if (metadataObj.invoiceId) {
-                        validLink = `/clients/${metadataObj.clientId || metadataObj.invoiceId}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else if (metadataObj.userId) {
-                        validLink = `/users/${metadataObj.userId}`;
-                    } else if (metadataObj.teamId) {
-                        validLink = `/teams/${metadataObj.teamId}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else if (metadataObj.jobcardId) {
-                        validLink = `/service-maintenance/${metadataObj.jobcardId}`;
-                    } else if (metadataObj.vehicleId) {
-                        validLink = `/service-maintenance?tab=vehicles&vehicleId=${metadataObj.vehicleId}`;
-                    } else if (metadataObj.productionorderId) {
-                        validLink = `/manufacturing/${metadataObj.productionorderId}`;
-                    } else if (metadataObj.bomId) {
-                        validLink = `/manufacturing?tab=boms&bomId=${metadataObj.bomId}`;
-                    } else if (metadataObj.inventoryitemId) {
-                        validLink = `/manufacturing?tab=inventory&itemId=${metadataObj.inventoryitemId}`;
-                    } else if (metadataObj.leaveapplicationId) {
-                        validLink = `/leave-platform/${metadataObj.leaveapplicationId}`;
-                    } else if (metadataObj.timeentryId) {
-                        validLink = `/time-tracking/${metadataObj.timeentryId}`;
-                    } else if (metadataObj.component || metadataObj.page) {
-                        const componentName = metadataObj.component || metadataObj.page;
-                        validLink = `/${componentName}`;
-                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
-                    } else {
-                        // Default to dashboard if no entity info found
-                        validLink = '/dashboard';
-                    }
-                } catch (parseError) {
-                    console.warn('Failed to parse metadata for link construction:', parseError);
-                    validLink = '/dashboard';
-                }
-            }
-            
-            // Ensure link starts with / (for hash-based routing)
-            if (validLink && !validLink.startsWith('/') && !validLink.startsWith('#')) {
-                validLink = '/' + validLink;
-            }
-            
-            // Only create in-app notification if user has enabled it for this type
-            if (shouldCreateInAppNotification) {
-                try {
-                    notification = await prisma.notification.create({
-                        data: {
-                            userId: targetUserId,
-                            type,
-                            title,
-                            message,
-                            link: validLink || '/dashboard',
-                            metadata: metadata ? JSON.stringify(metadata) : '{}',
-                            read: false
-                        }
-                    });
-                } catch (dbError) {
-                    console.error(`❌ Failed to create in-app notification for user ${targetUserId}:`, dbError);
-                    console.error('❌ Database error details:', {
-                        message: dbError.message,
-                        code: dbError.code,
-                        meta: dbError.meta
-                    });
-                    // Don't fail the request if notification creation fails
-                }
-            } else {
-                console.warn(`⏭️ Skipping in-app notification for user ${targetUserId} (type: ${type}) - preference disabled`, {
-                    setting: type === 'mention' ? 'inAppMentions' : 
-                            type === 'comment' ? 'inAppComments' : 
-                            type === 'task' ? 'inAppTasks' : 
-                            type === 'invoice' ? 'inAppInvoices' : 
-                            type === 'system' ? 'inAppSystem' : 'unknown',
-                    value: type === 'mention' ? settings.inAppMentions : 
-                            type === 'comment' ? settings.inAppComments : 
-                            type === 'task' ? settings.inAppTasks : 
-                            type === 'invoice' ? settings.inAppInvoices : 
-                            type === 'system' ? settings.inAppSystem : false
-                });
-            }
-            
-            // Determine if email should be sent based on type and user settings
-            let shouldSendEmail = false;
-            if (type === 'mention' && settings.emailMentions) {
-                shouldSendEmail = true;
-            } else if (type === 'comment' && settings.emailComments) {
-                shouldSendEmail = true;
-            } else if (type === 'task' && settings.emailTasks) {
-                shouldSendEmail = true;
-            } else if (type === 'invoice' && settings.emailInvoices) {
-                shouldSendEmail = true;
-            } else if (type === 'system' && settings.emailSystem) {
-                shouldSendEmail = true;
-            }
-            
-            
-            if (!shouldSendEmail) {
-                console.warn(`⚠️ Email notification skipped for user ${targetUserId} (type: ${type}) - user preference disabled`, {
-                    setting: type === 'mention' ? 'emailMentions' : 
-                            type === 'comment' ? 'emailComments' : 
-                            type === 'task' ? 'emailTasks' : 
-                            type === 'invoice' ? 'emailInvoices' : 
-                            type === 'system' ? 'emailSystem' : 'unknown',
-                    value: type === 'mention' ? settings.emailMentions : 
-                            type === 'comment' ? settings.emailComments : 
-                            type === 'task' ? settings.emailTasks : 
-                            type === 'invoice' ? settings.emailInvoices : 
-                            type === 'system' ? settings.emailSystem : false
-                });
-            }
-            
-            if (!targetUser.email) {
-                console.warn(`⚠️ Email notification skipped for user ${targetUserId} (type: ${type}) - user has no email address`);
-            }
-            
-            // Send email notification if enabled
-            if (shouldSendEmail && targetUser.email) {
-                
-                // For ALL project-related notifications (including mentions), fetch project and client details
-                // This ensures emails include project name, client name, and comment extract
-                try {
-                    // For project-related notifications, fetch client and project details
-                    let projectName = null;
-                    let clientName = null;
-                    let clientDescription = null;
-                    let projectDescription = null;
-                    let commentText = null;
-                    let commentLink = link || null;
-                    let taskTitle = null;
-                    let taskDescription = null;
-                    let taskStatus = null;
-                    let taskPriority = null;
-                    let taskDueDate = null;
-                    let taskListName = null;
-                    
-                    if (metadata && (type === 'comment' || type === 'mention' || type === 'task')) {
-                        try {
-                            const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-                            const projectId = metadataObj?.projectId;
-                            const taskId = metadataObj?.taskId;
-                            
-                            // Extract comment text from metadata
-                            if (metadataObj?.commentText) {
-                                commentText = metadataObj.commentText;
-                            } else if (metadataObj?.fullComment) {
-                                commentText = metadataObj.fullComment;
-                            }
-                            
-                            // Extract task information from metadata (if available)
-                            if (metadataObj?.taskTitle) {
-                                taskTitle = metadataObj.taskTitle;
-                            }
-                            if (metadataObj?.taskDescription) {
-                                taskDescription = metadataObj.taskDescription;
-                            }
-                            if (metadataObj?.taskStatus) {
-                                taskStatus = metadataObj.taskStatus;
-                            }
-                            if (metadataObj?.taskPriority) {
-                                taskPriority = metadataObj.taskPriority;
-                            }
-                            if (metadataObj?.taskDueDate) {
-                                taskDueDate = metadataObj.taskDueDate;
-                            }
-                            if (metadataObj?.taskListName) {
-                                taskListName = metadataObj.taskListName;
-                            }
-                            
-                            // If we have a taskId but missing task details, fetch from database
-                            if (taskId && (!taskDescription || !taskStatus || !taskPriority)) {
-                                try {
-                                    const task = await prisma.task.findUnique({
-                                        where: { id: taskId },
-                                        include: {
-                                            list: {
-                                                select: { name: true }
-                                            }
-                                        }
-                                    });
-                                    
-                                    if (task) {
-                                        if (!taskTitle) taskTitle = task.title || null;
-                                        if (!taskDescription) taskDescription = task.description || null;
-                                        if (!taskStatus) taskStatus = task.status || 'To Do';
-                                        if (!taskPriority) taskPriority = task.priority || 'Medium';
-                                        if (!taskDueDate) taskDueDate = task.dueDate ? task.dueDate.toISOString() : null;
-                                        if (!taskListName && task.list) taskListName = task.list.name || null;
-                                    }
-                                } catch (taskFetchError) {
-                                    console.warn('⚠️ Could not fetch task details from database:', taskFetchError.message);
-                                    // Continue with metadata values only
-                                }
-                            }
-                            
-                            // Client/lead comment (no project) – use link as commentLink and fetch client/lead for subject
-                            const metaClientId = metadataObj?.clientId;
-                            const metaLeadId = metadataObj?.leadId;
-                            if ((metaClientId || metaLeadId) && !projectId) {
-                                commentLink = link || (metaClientId ? `#/clients/${metaClientId}?tab=notes` : `#/leads/${metaLeadId}?tab=notes`);
-                                try {
-                                    const entityId = metaClientId || metaLeadId;
-                                    const entity = await prisma.client.findUnique({
-                                        where: { id: entityId },
-                                        select: { name: true, notes: true }
-                                    });
-                                    if (entity) {
-                                        clientName = entity.name || null;
-                                        clientDescription = entity.notes || null;
-                                    }
-                                } catch (clientFetchErr) {
-                                    console.warn('⚠️ Could not fetch client/lead for comment email:', clientFetchErr.message);
-                                }
-                            }
-
-                            if (projectId) {
-                                // Fetch project with client information
-                                const project = await prisma.project.findUnique({
-                                    where: { id: projectId },
-                                    include: {
-                                        client: true
-                                    }
-                                });
-                                
-                                if (project) {
-                                    // Get project name and description
-                                    projectName = project.name || null;
-                                    projectDescription = project.description || null;
-                                    
-                                    // Get client name and description if client exists
-                                    if (project.client) {
-                                        clientName = project.client.name || null;
-                                        clientDescription = project.client.notes || null;
-                                    } else if (project.clientId) {
-                                        // Try to fetch client separately if not included
-                                        const client = await prisma.client.findUnique({
-                                            where: { id: project.clientId }
-                                        });
-                                        if (client) {
-                                            clientName = client.name || null;
-                                            clientDescription = client.notes || null;
-                                        }
-                                    }
-                                    
-                                    // Build comment link - prioritize weekly FMS review tracker links, then document collection tracker links
-                                    // First, check if link already contains weekly FMS review parameters - if so, use it as-is
-                                    if (link && (link.includes('weeklySectionId=') || link.includes('weeklyDocumentId=') || link.includes('weeklyWeek=') || link.includes('weeklyMonth='))) {
-                                        // Link already has weekly FMS review parameters, preserve it
-                                        commentLink = link;
-                                        console.log('📧 Email link: Using existing link with weekly FMS review params:', commentLink);
-                                    } else if (link && (link.includes('docSectionId=') || link.includes('docDocumentId=') || link.includes('commentId='))) {
-                                        // Link already has document collection tracker parameters, preserve it
-                                        commentLink = link;
-                                        console.log('📧 Email link: Using existing link with doc collection params:', commentLink);
-                                    } else if (metadataObj?.weeklySectionId || metadataObj?.weeklyDocumentId || metadataObj?.weeklyWeek || metadataObj?.weeklyMonth || (metadataObj?.sectionId && metadataObj?.weekNumber)) {
-                                        // Weekly FMS review tracker comment - build link with weekly parameters from metadata
-                                        const baseLink = link || `#/projects/${projectId}`;
-                                        
-                                        // Build weekly FMS review tracker link with all parameters
-                                        const queryParams = [];
-                                        if (metadataObj.weeklySectionId || metadataObj.sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(metadataObj.weeklySectionId || metadataObj.sectionId)}`);
-                                        if (metadataObj.weeklyDocumentId || metadataObj.documentId) queryParams.push(`weeklyDocumentId=${encodeURIComponent(metadataObj.weeklyDocumentId || metadataObj.documentId)}`);
-                                        if (metadataObj.weeklyMonth !== undefined && metadataObj.weeklyMonth !== null) {
-                                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.weeklyMonth)}`);
-                                        } else if (metadataObj.month !== undefined && metadataObj.month !== null) {
-                                            queryParams.push(`weeklyMonth=${encodeURIComponent(metadataObj.month)}`);
-                                        }
-                                        if (metadataObj.weeklyWeek !== undefined && metadataObj.weeklyWeek !== null) {
-                                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weeklyWeek)}`);
-                                        } else if (metadataObj.weekNumber !== undefined && metadataObj.weekNumber !== null) {
-                                            queryParams.push(`weeklyWeek=${encodeURIComponent(metadataObj.weekNumber)}`);
-                                        }
-                                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                                        
-                                        const separator = baseLink.includes('?') ? '&' : '?';
-                                        commentLink = queryParams.length > 0 
-                                            ? `${baseLink}${separator}${queryParams.join('&')}`
-                                            : baseLink;
-                                        console.log('📧 Email link: Built weekly FMS review link from metadata:', commentLink, 'Metadata:', { weeklySectionId: metadataObj.weeklySectionId || metadataObj.sectionId, weeklyDocumentId: metadataObj.weeklyDocumentId || metadataObj.documentId, weeklyMonth: metadataObj.weeklyMonth || metadataObj.month, weeklyWeek: metadataObj.weeklyWeek || metadataObj.weekNumber, commentId: metadataObj.commentId });
-                                    } else if (metadataObj?.sectionId || metadataObj?.documentId || metadataObj?.commentId) {
-                                        // Document collection tracker comment - build link with all parameters from metadata
-                                        const baseLink = link || `#/projects/${projectId}`;
-                                        
-                                        // Build document collection tracker link with all parameters
-                                        const queryParams = [];
-                                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
-                                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
-                                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
-                                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                                        
-                                        const separator = baseLink.includes('?') ? '&' : '?';
-                                        commentLink = queryParams.length > 0 
-                                            ? `${baseLink}${separator}${queryParams.join('&')}`
-                                            : baseLink;
-                                        console.log('📧 Email link: Built document collection link from metadata:', commentLink, 'Metadata:', { sectionId: metadataObj.sectionId, documentId: metadataObj.documentId, month: metadataObj.month, commentId: metadataObj.commentId });
-                                    } else if (metadataObj?.taskId) {
-                                        // Task comment - include task ID and commentId for direct navigation
-                                        // Check if link already has task/commentId parameters - if so, use it as-is
-                                        if (link && (link.includes('?task=') || link.includes('&task=') || link.includes('commentId='))) {
-                                            commentLink = link;
-                                        } else {
-                                            // Build task-specific link with query parameters
-                                            // Use hash-based routing format for frontend navigation
-                                            const baseLink = link || `#/projects/${projectId}`;
-                                            
-                                            // Build query parameters
-                                            const queryParams = [];
-                                            if (metadataObj.taskId) queryParams.push(`task=${encodeURIComponent(metadataObj.taskId)}`);
-                                            if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                                            
-                                            const separator = baseLink.includes('?') ? '&' : '?';
-                                            commentLink = queryParams.length > 0 
-                                                ? `${baseLink}${separator}${queryParams.join('&')}`
-                                                : baseLink;
-                                        }
-                                    } else {
-                                        // For project-level notifications, use project link with hash routing
-                                        commentLink = link || `#/projects/${projectId}`;
-                                    }
-                                }
-                            }
-                        } catch (fetchError) {
-                            console.error('❌ Error fetching project/client details for email:', fetchError.message);
-                            // Continue with email even if fetch fails - we'll use what we have
-                        }
-                    }
-                    
-                    // Build enhanced email subject with project and client names
-                    let enhancedSubject = title;
-                    if (projectName || clientName) {
-                        const parts = [];
-                        if (clientName) parts.push(clientName);
-                        if (projectName) parts.push(projectName);
-                        if (parts.length > 0) {
-                            enhancedSubject = `[${parts.join(' - ')}] ${title}`;
-                        }
-                    }
-                    
-                    // Build enhanced message with project/client context and comment extract
-                    let enhancedMessage = message;
-                    
-                    // Add project and client context at the top of the message
-                    if (projectName || clientName) {
-                        let contextHtml = '<div style="background: #e7f3ff; border-left: 4px solid #007bff; padding: 15px; margin-bottom: 20px; border-radius: 4px;">';
-                        contextHtml += '<h3 style="color: #333; margin-top: 0; margin-bottom: 10px; font-size: 16px;">📋 Project Context</h3>';
-                        if (clientName) {
-                            contextHtml += `<p style="color: #555; margin: 5px 0;"><strong>Client:</strong> ${escapeHtml(clientName)}</p>`;
-                        }
-                        if (projectName) {
-                            contextHtml += `<p style="color: #555; margin: 5px 0;"><strong>Project:</strong> ${escapeHtml(projectName)}</p>`;
-                        }
-                        if (taskTitle) {
-                            contextHtml += `<p style="color: #555; margin: 5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>`;
-                        }
-                        contextHtml += '</div>';
-                        enhancedMessage = contextHtml + enhancedMessage;
-                    }
-                    
-                    // Add comment extract if available
-                    if (commentText) {
-                        const commentPreview = commentText.length > 200 
-                            ? commentText.substring(0, 200) + '...' 
-                            : commentText;
-                        const commentHtml = `
-                            <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin: 20px 0;">
-                                <h4 style="color: #333; margin-top: 0; margin-bottom: 10px; font-size: 14px;">💬 Comment:</h4>
-                                <p style="color: #555; margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(commentPreview)}</p>
-                            </div>
-                        `;
-                        enhancedMessage = enhancedMessage + commentHtml;
-                    }
-                    
-                    const emailResult = await sendNotificationEmail(
-                        targetUser.email,
-                        enhancedSubject,
-                        enhancedMessage,
-                        {
-                            projectName,
-                            clientName,
-                            clientDescription,
-                            projectDescription,
-                            commentText,
-                            commentLink,
-                            taskTitle,
-                            taskDescription,
-                            taskStatus,
-                            taskPriority,
-                            taskDueDate,
-                            taskListName,
-                            isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task')),
-                            skipNotificationCreation: true // Skip because notification is already created above
-                        }
-                    );
-                } catch (emailError) {
-                    console.error('❌ Failed to send email notification:', emailError);
-                    console.error('❌ Email notification error details:', {
-                        message: emailError.message,
-                        code: emailError.code,
-                        response: emailError.response,
-                        to: targetUser.email,
-                        subject: title,
-                        type,
-                        stack: emailError.stack
-                    });
-                    // Don't fail the request if email fails - notification was still created
-                    // But log the error so we can diagnose email configuration issues
-                }
-            } else if (shouldSendEmail && !targetUser.email) {
-                console.warn(`⚠️ Cannot send email notification to user ${targetUserId} - user has no email address`);
-            }
-            
-            const responseData = { notification, created: !!notification };
-            
-            return ok(res, responseData);
+            const result = await createNotificationForUser(targetUserId, type, title, message, link, metadata);
+            if (!result) return badRequest(res, 'User not found');
+            return ok(res, result);
         } catch (error) {
             console.error('❌ POST /notifications - Error creating notification:', error);
             console.error('❌ Error details:', {

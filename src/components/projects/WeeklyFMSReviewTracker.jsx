@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
@@ -38,6 +38,48 @@ const truncateDescription = (text, maxLength = 60) => {
     return { truncated: text.substring(0, cutPoint), isLong: true };
 };
 
+// Non-blocking toast for attachment errors (avoids native alert).
+const showAttachmentToast = (message) => {
+    const el = document.createElement('div');
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:90%;padding:12px 20px;background:#1e293b;color:#f1f5f9;border-radius:8px;font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+    el.textContent = message;
+    document.body.appendChild(el);
+    setTimeout(() => { el.remove(); }, 4000);
+};
+
+// Download comment attachment to disk (no new tab). Fetches file and triggers browser download.
+const downloadCommentAttachment = (url, filename) => {
+    if (!url) return;
+    const name = (filename || '').trim() || (url.split('/').pop() || 'download').split('?')[0];
+    fetch(url, { credentials: 'same-origin', mode: 'cors' })
+        .catch(() => null)
+        .then((res) => {
+            if (!res) return null;
+            if (!res.ok) {
+                const msg = res.status === 404
+                    ? 'Attachment not found. It may have been deleted or is stored on another server.'
+                    : `Download failed (${res.status}).`;
+                showAttachmentToast(msg);
+                return null;
+            }
+            return res.blob();
+        })
+        .then((blob) => {
+            if (!blob) return;
+            const u = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = u;
+            a.download = name;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(u);
+        })
+        .catch(() => {});
+};
+
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentDate = new Date();
@@ -51,10 +93,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionTimestampRef = useRef(null); // Track when deletion started
-    const scrollableContainersRef = useRef([]); // Store refs to all scrollable table containers
+    const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
-    const lastLoadedProjectIdRef = useRef(null); // Track last loaded project ID to prevent unnecessary reloads
-    const lastSelectedYearRef = useRef(currentYear); // Track last selected year to detect year changes
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -440,55 +480,66 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [isTemplateDropdownOpen]);
     
-    // Synchronize horizontal scrolling across all table containers
-    useEffect(() => {
-        // Clean up old refs when sections change
-        scrollableContainersRef.current = [];
-        
-        let scrollHandlers = new Map();
-        let timeoutId;
-        
-        // Small delay to allow DOM to update
-        timeoutId = setTimeout(() => {
-            const containers = scrollableContainersRef.current.filter(Boolean);
-            if (containers.length === 0) return;
-            
-            const handleScroll = (sourceElement) => {
-                if (isScrollingRef.current) return;
-                isScrollingRef.current = true;
-                
-                const scrollLeft = sourceElement.scrollLeft;
-                containers.forEach(container => {
-                    if (container !== sourceElement && container) {
-                        container.scrollLeft = scrollLeft;
-                    }
-                });
-                
-                // Reset flag after a short delay to allow smooth scrolling
-                requestAnimationFrame(() => {
-                    setTimeout(() => {
-                        isScrollingRef.current = false;
-                    }, 50);
-                });
-            };
-            
-            // Add scroll listeners to all containers
-            containers.forEach(container => {
-                const handler = () => handleScroll(container);
-                scrollHandlers.set(container, handler);
-                container.addEventListener('scroll', handler, { passive: true });
+    // Synchronize horizontal scrolling across all table containers.
+    // Use root ref + querySelectorAll. Listen to both 'scroll' and 'wheel' (deltaX); trackpad
+    // horizontal scroll often fires wheel but not scroll on the overflow div.
+    useLayoutEffect(() => {
+        if (sections.length === 0) return;
+        const root = scrollSyncRootRef.current;
+        if (!root) return;
+        const scrollHandlers = new Map();
+        const wheelHandlers = new Map();
+        const handleScroll = (sourceElement) => {
+            if (isScrollingRef.current) return;
+            isScrollingRef.current = true;
+            const scrollLeft = sourceElement.scrollLeft;
+            scrollHandlers.forEach((_, el) => {
+                if (el !== sourceElement && el.isConnected) el.scrollLeft = scrollLeft;
             });
-        }, 100);
-        
-        return () => {
-            clearTimeout(timeoutId);
-            // Cleanup: remove all scroll listeners
-            scrollHandlers.forEach((handler, container) => {
-                container.removeEventListener('scroll', handler);
-            });
-            scrollHandlers.clear();
+            requestAnimationFrame(() => { isScrollingRef.current = false; });
         };
-    }, [sections.length]); // Re-run when sections change
+        const attach = () => {
+            const containers = Array.from(root.querySelectorAll('[data-scroll-sync]'));
+            const connected = containers.filter(el => el.isConnected);
+            if (connected.length === 0) return false;
+            connected.forEach(el => {
+                if (scrollHandlers.has(el)) return;
+                const onScroll = () => handleScroll(el);
+                scrollHandlers.set(el, onScroll);
+                el.addEventListener('scroll', onScroll, { passive: true });
+                const onWheel = (e) => {
+                    if (e.deltaX === 0) return;
+                    e.preventDefault();
+                    const maxScroll = el.scrollWidth - el.clientWidth;
+                    el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + e.deltaX, maxScroll));
+                    handleScroll(el);
+                };
+                wheelHandlers.set(el, onWheel);
+                el.addEventListener('wheel', onWheel, { passive: false });
+            });
+            return true;
+        };
+        const cleanup = () => {
+            scrollHandlers.forEach((handler, el) => el.removeEventListener('scroll', handler));
+            scrollHandlers.clear();
+            wheelHandlers.forEach((handler, el) => el.removeEventListener('wheel', handler));
+            wheelHandlers.clear();
+        };
+        if (attach()) return cleanup;
+        let rafId = null;
+        let retries = 0;
+        const retry = () => {
+            rafId = null;
+            if (attach()) return;
+            retries += 1;
+            if (retries < 10) rafId = requestAnimationFrame(retry);
+        };
+        rafId = requestAnimationFrame(retry);
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId);
+            cleanup();
+        };
+    }, [sections.length]);
     
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
@@ -502,7 +553,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
+    const [pendingCommentAttachments, setPendingCommentAttachments] = useState([]);
+    const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
+    const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+
+    useEffect(() => { setPendingCommentAttachments([]); }, [hoverCommentCell]);
     const pendingCommentOpenRef = useRef(null);
     const userHasScrolledRef = useRef(false);
     const hasAutoScrolledRef = useRef(false);
@@ -518,54 +574,21 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [selectedCells]);
     
     // ============================================================
-    // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
+    // LOAD DATA – same logic as Monthly FMS Review and Document Collection
     // ============================================================
-    // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
-    
-    // Simplified loading - load from database, use prop as fallback
-    const loadData = useCallback(async (forceReload = false) => {
+    const loadData = useCallback(async () => {
         if (!project?.id) return;
-        
-        // Don't reload if we're currently saving - wait for save to complete
         if (isSavingRef.current) {
             console.log('⏸️ Load skipped: save in progress');
             return;
         }
-        
-        // CRITICAL FIX: Don't reload if there are unsaved changes (unless forced)
-        // This prevents overwriting user changes when parent component updates the prop
-        if (!forceReload) {
-            const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
-            if (currentData !== lastSavedDataRef.current && lastSavedDataRef.current !== null) {
-                console.log('⏸️ Load skipped: unsaved changes detected', {
-                    hasCurrentData: Object.keys(sectionsRef.current || sectionsByYear).length > 0,
-                    hasLastSaved: lastSavedDataRef.current !== null
-                });
-                return;
-            }
-        }
-        
         setIsLoading(true);
-        
         try {
-            // ALWAYS load from database first (most reliable, has latest data)
             if (apiRef.current) {
-                console.log('📥 Loading from database...', { projectId: project.id, forceReload });
+                console.log('📥 Loading from database...', { projectId: project.id });
                 const freshProject = await apiRef.current.fetchProject(project.id);
-                console.log('📥 Loaded project from database:', { 
-                    hasWeeklyFMSReviewSections: !!freshProject?.weeklyFMSReviewSections,
-                    weeklyFMSReviewSectionsType: typeof freshProject?.weeklyFMSReviewSections,
-                    weeklyFMSReviewSectionsLength: typeof freshProject?.weeklyFMSReviewSections === 'string' 
-                        ? freshProject.weeklyFMSReviewSections.length 
-                        : 'N/A'
-                });
-                
                 if (freshProject?.weeklyFMSReviewSections) {
                     const normalized = normalizeSectionsByYear(freshProject.weeklyFMSReviewSections);
-                    console.log('📥 Normalized sections:', { 
-                        yearKeys: Object.keys(normalized),
-                        sectionsCount: normalized[selectedYear]?.length || 0
-                    });
                     setSectionsByYear(normalized);
                     sectionsRef.current = normalized;
                     lastSavedDataRef.current = JSON.stringify(normalized);
@@ -573,30 +596,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     return;
                 }
             }
-            
-            // Fallback to prop data (only if database load failed AND we don't have existing data)
-            // Only use prop data on initial load, not when prop updates after save
-            const hasExistingData = sectionsRef.current && Object.keys(sectionsRef.current).length > 0;
-            if (!hasExistingData && project?.weeklyFMSReviewSections) {
-                console.log('⚠️ Falling back to prop data (initial load only)');
+            console.log('⚠️ Falling back to prop data');
+            if (project?.weeklyFMSReviewSections) {
                 const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
-            } else if (!hasExistingData) {
-                // Check localStorage as backup before initializing empty
+            } else {
                 const snapshotKey = getSnapshotKey(project.id);
                 if (snapshotKey && window.localStorage) {
                     try {
                         const stored = window.localStorage.getItem(snapshotKey);
                         if (stored && stored.trim() && stored !== '{}' && stored !== 'null') {
-                            console.log('📥 Loading from localStorage backup...');
                             const parsed = JSON.parse(stored);
                             const normalized = normalizeSectionsByYear(parsed);
-                            console.log('📥 Loaded from localStorage:', { 
-                                yearKeys: Object.keys(normalized),
-                                sectionsCount: normalized[selectedYear]?.length || 0
-                            });
                             setSectionsByYear(normalized);
                             sectionsRef.current = normalized;
                             lastSavedDataRef.current = stored;
@@ -607,54 +620,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         console.warn('⚠️ Failed to load from localStorage:', storageError);
                     }
                 }
-                
-                // No data - initialize empty
-                console.log('📭 No data found, initializing empty');
                 setSectionsByYear({});
                 sectionsRef.current = {};
                 lastSavedDataRef.current = JSON.stringify({});
-            } else {
-                console.log('⏸️ Skipping load: existing data present and no force reload');
             }
         } catch (error) {
             console.error('❌ Error loading data:', error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                projectId: project.id
-            });
-            // Only clear data if we don't have existing data
-            if (!sectionsRef.current || Object.keys(sectionsRef.current).length === 0) {
-                setSectionsByYear({});
-                sectionsRef.current = {};
-            }
+            setSectionsByYear({});
+            sectionsRef.current = {};
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, selectedYear, sectionsByYear]);
-    
-    // Load data on mount and when project ID changes (NOT when project prop updates)
+    }, [project?.id, project?.weeklyFMSReviewSections, selectedYear]);
+
     useEffect(() => {
         if (project?.id) {
-            // Only load if project ID actually changed (not just prop update)
-            const projectIdChanged = lastLoadedProjectIdRef.current !== project.id;
-            
-            if (projectIdChanged) {
-                console.log('🔄 Project ID changed, loading data...', { 
-                    oldId: lastLoadedProjectIdRef.current, 
-                    newId: project.id 
-                });
-                lastLoadedProjectIdRef.current = project.id;
-                lastSelectedYearRef.current = selectedYear;
-                loadData(true); // Force reload on project change
-            } else if (lastSelectedYearRef.current !== selectedYear) {
-                // Year changed for same project - don't reload data, just track the change
-                console.log('🔄 Year changed, no reload needed', { 
-                    oldYear: lastSelectedYearRef.current, 
-                    newYear: selectedYear 
-                });
-                lastSelectedYearRef.current = selectedYear;
-            }
+            loadData();
         }
     }, [project?.id, selectedYear, loadData]);
     
@@ -1920,7 +1901,34 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [selectedYear, sectionsByYear]);
     
-    const handleAddComment = async (sectionId, documentId, week, commentText) => {
+    const uploadCommentAttachments = async (files) => {
+        if (!files?.length) return [];
+        const folder = 'weekly-fms-comments';
+        const token = window.storage?.getToken?.();
+        const results = [];
+        for (const { file, name } of files) {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result);
+                r.onerror = reject;
+                r.readAsDataURL(file);
+            });
+            const res = await fetch('/api/files', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ name, dataUrl, folder })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || err.error || 'Upload failed');
+            }
+            const data = await res.json();
+            results.push({ name, url: data.url || data.data?.url });
+        }
+        return results;
+    };
+
+    const handleAddComment = async (sectionId, documentId, week, commentText, attachments = []) => {
         if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
@@ -1931,7 +1939,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             date: new Date().toISOString(),
             author: currentUser.name,
             authorEmail: currentUser.email,
-            authorId: currentUser.id
+            authorId: currentUser.id,
+            attachments: Array.isArray(attachments) ? attachments : []
         };
         
         // Use current state (most up-to-date) or fallback to ref
@@ -2328,8 +2337,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     useEffect(() => {
         const handleClickOutside = (event) => {
-            const isCommentButton = event.target.closest('[data-comment-cell]');
-            const isInsidePopup = event.target.closest('.comment-popup');
+            const el = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+            const isCommentButton = el?.closest?.('[data-comment-cell]');
+            const isInsidePopup = el?.closest?.('.comment-popup') || el?.closest?.('[data-comment-attachment]') || el?.closest?.('[data-comment-attachment-area]');
             const isStatusCell = event.target.closest('select[data-section-id]') || 
                                  event.target.closest('td')?.querySelector('select[data-section-id]');
             
@@ -2355,6 +2365,41 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         documentRef.addEventListener('mousedown', handleClickOutside);
         return () => documentRef.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
+
+    // Capture-phase listeners for attachment: trigger download, stop propagation so no navigation.
+    useEffect(() => {
+        if (!hoverCommentCell) return;
+        const getAttachmentEl = (target) => {
+            if (!target) return null;
+            const node = target.nodeType === 1 ? target : target.parentElement;
+            return node && typeof node.closest === 'function' ? node.closest('[data-comment-attachment]') : null;
+        };
+        const handleAttachmentMousedown = (e) => {
+            const el = getAttachmentEl(e.target);
+            if (!el) return;
+            const url = el.getAttribute('data-url');
+            const filename = el.getAttribute('data-download-name') || '';
+            if (url) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                downloadCommentAttachment(url, filename);
+            }
+        };
+        const handleAttachmentClick = (e) => {
+            if (getAttachmentEl(e.target)) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
+        };
+        documentRef.addEventListener('mousedown', handleAttachmentMousedown, true);
+        documentRef.addEventListener('click', handleAttachmentClick, true);
+        return () => {
+            documentRef.removeEventListener('mousedown', handleAttachmentMousedown, true);
+            documentRef.removeEventListener('click', handleAttachmentClick, true);
+        };
+    }, [hoverCommentCell]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
@@ -3511,7 +3556,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }
     
     return (
-        <div className="space-y-3">
+        <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
             {/* Comment Popup */}
             {hoverCommentCell && (() => {
                 // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
@@ -3564,7 +3609,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                             data-comment-id={comment.id}
                                             id={comment.id ? `comment-${comment.id}` : undefined}
                                             className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group cursor-pointer"
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                const ce = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
+                                                if (ce?.closest?.('[data-comment-attachment]') || ce?.closest?.('[data-comment-attachment-area]')) {
+                                                    e.stopPropagation();
+                                                    return;
+                                                }
                                                 // Update URL when clicking on a comment to enable sharing
                                                 if (section && doc && weekObj && comment.id) {
                                                     const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docWeek=${encodeURIComponent(weekObj.label)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
@@ -3617,6 +3667,43 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             : (comment.text || '')
                                                 }}
                                             />
+                                            {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                <div
+                                                    className="mt-1 flex flex-wrap gap-1"
+                                                    data-comment-attachment-area="true"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    {comment.attachments.map((att, i) => {
+                                                        const fullUrl = (att.url && /^https?:\/\//i.test(att.url)) ? att.url : (window.location.origin + (att.url || ''));
+                                                        const downloadName = att.name || (att.url && att.url.split('/').pop()) || 'attachment';
+                                                        return (
+                                                            <button
+                                                                key={i}
+                                                                type="button"
+                                                                data-comment-attachment="true"
+                                                                data-url={fullUrl}
+                                                                data-download-name={downloadName}
+                                                                className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-transparent border-0 p-0 font-inherit align-baseline"
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    e.stopImmediatePropagation();
+                                                                    downloadCommentAttachment(fullUrl, downloadName);
+                                                                }}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    e.stopImmediatePropagation();
+                                                                }}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); downloadCommentAttachment(fullUrl, downloadName); } }}
+                                                                title={`Download ${downloadName}`}
+                                                            >
+                                                                <i className="fas fa-paperclip text-[8px]"></i> <span>{att.name || downloadName}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
                                                 <span>{comment.date ? (() => {
@@ -3683,13 +3770,55 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         )}
                         
                         <div>
-                            <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-semibold text-gray-600">Add Comment</span>
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        ref={commentFileInputRef}
+                                        type="file"
+                                        multiple
+                                        className="hidden"
+                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt"
+                                        onChange={(e) => {
+                                            const files = e.target.files;
+                                            if (files?.length) {
+                                                const newItems = Array.from(files).map((f) => ({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, file: f, name: f.name }));
+                                                setPendingCommentAttachments((prev) => [...prev, ...newItems]);
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                    <button type="button" onClick={() => commentFileInputRef.current?.click()} className="p-1 text-gray-500 hover:text-gray-700 rounded" title="Attach files"><i className="fas fa-paperclip text-[12px]"></i></button>
+                                </div>
+                            </div>
+                            {pendingCommentAttachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-1.5">
+                                    {pendingCommentAttachments.map((p) => (
+                                        <span key={p.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gray-200 rounded text-[10px]">
+                                            {p.name}
+                                            <button type="button" onClick={() => setPendingCommentAttachments((prev) => prev.filter((x) => x.id !== p.id))} className="ml-0.5 text-gray-500 hover:text-red-600">×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                             {commentInputAvailable && section && doc && weekObj ? (
                                 <window.CommentInputWithMentions
-                                    onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, doc.id, weekObj, commentText);
+                                    onSubmit={async (commentText) => {
+                                        if (!commentText?.trim()) return;
+                                        let atts = [];
+                                        if (pendingCommentAttachments.length > 0) {
+                                            setUploadingCommentAttachments(true);
+                                            try {
+                                                atts = await uploadCommentAttachments(pendingCommentAttachments);
+                                                setPendingCommentAttachments([]);
+                                            } catch (err) {
+                                                alert(err.message || 'Failed to upload attachments');
+                                                setUploadingCommentAttachments(false);
+                                                return;
+                                            }
+                                            setUploadingCommentAttachments(false);
                                         }
+                                        handleAddComment(section.id, doc.id, weekObj, commentText, atts);
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
                                     rows={2}
@@ -3703,7 +3832,25 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && e.ctrlKey && section && doc && weekObj) {
-                                                handleAddComment(section.id, doc.id, weekObj, quickComment);
+                                                e.preventDefault();
+                                                (async () => {
+                                                    if (!quickComment.trim()) return;
+                                                    let atts = [];
+                                                    if (pendingCommentAttachments.length > 0) {
+                                                        setUploadingCommentAttachments(true);
+                                                        try {
+                                                            atts = await uploadCommentAttachments(pendingCommentAttachments);
+                                                            setPendingCommentAttachments([]);
+                                                        } catch (err) {
+                                                            alert(err.message || 'Failed to upload attachments');
+                                                            setUploadingCommentAttachments(false);
+                                                            return;
+                                                        }
+                                                        setUploadingCommentAttachments(false);
+                                                    }
+                                                    handleAddComment(section.id, doc.id, weekObj, quickComment, atts);
+                                                    setQuickComment('');
+                                                })();
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3712,14 +3859,28 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         autoFocus
                                     />
                                     <button
-                                        onClick={() => {
-                                            if (!section || !doc || !weekObj) return;
-                                            handleAddComment(section.id, doc.id, weekObj, quickComment);
+                                        onClick={async () => {
+                                            if (!section || !doc || !weekObj || !quickComment.trim()) return;
+                                            let atts = [];
+                                            if (pendingCommentAttachments.length > 0) {
+                                                setUploadingCommentAttachments(true);
+                                                try {
+                                                    atts = await uploadCommentAttachments(pendingCommentAttachments);
+                                                    setPendingCommentAttachments([]);
+                                                } catch (err) {
+                                                    alert(err.message || 'Failed to upload attachments');
+                                                    setUploadingCommentAttachments(false);
+                                                    return;
+                                                }
+                                                setUploadingCommentAttachments(false);
+                                            }
+                                            handleAddComment(section.id, doc.id, weekObj, quickComment, atts);
+                                            setQuickComment('');
                                         }}
-                                        disabled={!quickComment.trim()}
+                                        disabled={!quickComment.trim() || uploadingCommentAttachments}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
                                     >
-                                        Add Comment
+                                        {uploadingCommentAttachments ? 'Uploading…' : 'Add Comment'}
                                     </button>
                                 </>
                             )}
@@ -3981,17 +4142,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             </div>
 
                             {/* Scrollable week/document grid for this section only */}
-                            <div 
-                                ref={(el) => {
-                                    if (el) {
-                                        const current = scrollableContainersRef.current;
-                                        if (!current.includes(el)) {
-                                            current.push(el);
-                                        }
-                                    }
-                                }}
-                                className="overflow-x-auto"
-                            >
+                            <div data-scroll-sync className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
                                         <tr>

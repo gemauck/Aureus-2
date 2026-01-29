@@ -83,6 +83,11 @@ model User {
   clientComments            ClientComment[]              @relation("ClientCommentAuthor")
   clientFollowUps           ClientFollowUp[]             @relation("ClientFollowUpAssignee")
   commentThreadSubscriptions CommentThreadSubscription[] @relation("CommentThreadSubscriber")
+  projectCommentsAuthored   ProjectComment[]             @relation("ProjectCommentAuthor")
+  projectDocumentsUploaded  ProjectDocument[]            @relation("ProjectDocumentUploader")
+  projectTeamMemberships   ProjectTeamMember[]          @relation("ProjectTeamMemberUser")
+  projectTeamMembersAdded   ProjectTeamMember[]          @relation("ProjectTeamMemberAdder")
+  projectActivityLogs       ProjectActivityLog[]         @relation("ProjectActivityLogUser")
 
   @@index([createdAt])
   @@index([role])
@@ -432,10 +437,108 @@ model Project {
   documentSectionsTable        DocumentSection[]        @relation("DocumentSections")
   weeklyFMSReviewSectionsTable WeeklyFMSReviewSection[] @relation("WeeklyFMSReviewSections")
   monthlyFMSReviewSectionsTable MonthlyFMSReviewSection[] @relation("MonthlyFMSReviewSections")
+  projectTaskLists              ProjectTaskList[]
+  projectComments               ProjectComment[]         @relation("ProjectComments")
+  projectDocuments              ProjectDocument[]
+  projectTeamMembers            ProjectTeamMember[]
+  projectCustomFieldDefinitions ProjectCustomFieldDefinition[]
+  projectActivityLogs           ProjectActivityLog[]
 
   @@index([clientId])
   @@index([status])
   @@index([ownerId])
+  @@index([createdAt])
+}
+
+model ProjectTaskList {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String   @default("")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ProjectComment {
+  id        String          @id @default(cuid())
+  projectId String
+  parentId  String?
+  text      String          @default("")
+  authorId  String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  project   Project         @relation("ProjectComments", fields: [projectId], references: [id], onDelete: Cascade)
+  authorUser User?          @relation("ProjectCommentAuthor", fields: [authorId], references: [id])
+  parent   ProjectComment?  @relation("ProjectCommentReplies", fields: [parentId], references: [id])
+  replies  ProjectComment[] @relation("ProjectCommentReplies")
+
+  @@index([projectId])
+  @@index([parentId])
+  @@index([authorId])
+}
+
+model ProjectDocument {
+  id         String   @id @default(cuid())
+  projectId  String
+  name       String   @default("")
+  filePath   String   @default("")
+  isActive   Boolean  @default(true)
+  uploadDate DateTime @default(now())
+  uploaderId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader   User?    @relation("ProjectDocumentUploader", fields: [uploaderId], references: [id])
+
+  @@index([projectId])
+  @@index([uploaderId])
+}
+
+model ProjectTeamMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String?
+  addedById String?
+  addedDate DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User?    @relation("ProjectTeamMemberUser", fields: [userId], references: [id])
+  adder     User?    @relation("ProjectTeamMemberAdder", fields: [addedById], references: [id])
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([addedById])
+}
+
+model ProjectCustomFieldDefinition {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String   @default("")
+  type      String   @default("text")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ProjectActivityLog {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String?
+  action    String   @default("")
+  details   String   @default("")
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User?    @relation("ProjectActivityLogUser", fields: [userId], references: [id])
+
+  @@index([projectId])
+  @@index([userId])
   @@index([createdAt])
 }
 
@@ -646,15 +749,16 @@ model DocumentItemStatus {
 }
 
 model DocumentItemComment {
-  id        String   @id @default(cuid())
-  itemId    String
-  year      Int
-  month     Int
-  text      String
-  authorId  String?
-  author    String // Denormalized author name
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  itemId      String
+  year        Int
+  month       Int
+  text        String
+  authorId    String?
+  author      String   // Denormalized author name
+  attachments String?  @default("[]") // JSON array of { name, url }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   item       DocumentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   authorUser User?        @relation("DocumentCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
@@ -719,15 +823,16 @@ model WeeklyFMSReviewItemStatus {
 }
 
 model WeeklyFMSReviewItemComment {
-  id        String   @id @default(cuid())
-  itemId    String
-  year      Int
-  month     Int
-  text      String
-  authorId  String?
-  author    String // Denormalized author name
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  itemId      String
+  year        Int
+  month       Int
+  text        String
+  authorId    String?
+  author      String   // Denormalized author name
+  attachments String?  @default("[]") // JSON array of { name, url }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   item       WeeklyFMSReviewItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   authorUser User?               @relation("WeeklyFMSCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
@@ -791,15 +896,16 @@ model MonthlyFMSReviewItemStatus {
 }
 
 model MonthlyFMSReviewItemComment {
-  id        String   @id @default(cuid())
-  itemId    String
-  year      Int
-  month     Int
-  text      String
-  authorId  String?
-  author    String // Denormalized author name
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  itemId      String
+  year        Int
+  month       Int
+  text        String
+  authorId    String?
+  author      String   // Denormalized author name
+  attachments String?  @default("[]") // JSON array of { name, url }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   item       MonthlyFMSReviewItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   authorUser User?                @relation("MonthlyFMSCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)

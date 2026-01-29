@@ -389,7 +389,8 @@ async function handler(req, res) {
             if (hasWeeklyFMS) {
               try {
                 const startTime = Date.now();
-                const weeklyFMSJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: true });
+                // Include comments so weekly comments and status persist (skipComments: false)
+                const weeklyFMSJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: false });
                 const loadTime = Date.now() - startTime;
                 console.log(`⚡ Loaded weeklyFMSReviewSections in ${loadTime}ms`);
                 result.weeklyFMSReviewSections = weeklyFMSJson || 
@@ -527,6 +528,7 @@ async function handler(req, res) {
         
         // Load data from separate tables (these are not relations in Prisma schema)
         // Query them separately and use table data instead of JSON fields
+        // Guard: these models may not exist in schema yet; only call when present
         let taskLists = [];
         let projectComments = [];
         let projectDocuments = [];
@@ -534,19 +536,20 @@ async function handler(req, res) {
         let projectCustomFieldDefinitions = [];
         let projectActivityLogs = [];
         
-        try {
-          // Load task lists from ProjectTaskList table
-          taskLists = await prisma.projectTaskList.findMany({
-            where: { projectId: id },
-            orderBy: { order: 'asc' }
-          });
-        } catch (e) {
-          console.warn('⚠️ Failed to load task lists from table:', e.message);
+        if (prisma.projectTaskList?.findMany) {
+          try {
+            taskLists = await prisma.projectTaskList.findMany({
+              where: { projectId: id },
+              orderBy: { order: 'asc' }
+            });
+          } catch (e) {
+            console.warn('⚠️ Failed to load task lists from table:', e.message);
+          }
         }
         
-        try {
-          // Load comments from ProjectComment table
-          projectComments = await prisma.projectComment.findMany({
+        if (prisma.projectComment?.findMany) {
+          try {
+            projectComments = await prisma.projectComment.findMany({
             where: { 
               projectId: id,
               parentId: null // Only top-level comments
@@ -574,13 +577,14 @@ async function handler(req, res) {
             },
             orderBy: { createdAt: 'asc' }
           });
-        } catch (e) {
-          console.warn('⚠️ Failed to load project comments from table:', e.message);
+          } catch (e) {
+            console.warn('⚠️ Failed to load project comments from table:', e.message);
+          }
         }
         
-        try {
-          // Load documents from ProjectDocument table
-          projectDocuments = await prisma.projectDocument.findMany({
+        if (prisma.projectDocument?.findMany) {
+          try {
+            projectDocuments = await prisma.projectDocument.findMany({
             where: { 
               projectId: id,
               isActive: true
@@ -596,13 +600,14 @@ async function handler(req, res) {
             },
             orderBy: { uploadDate: 'desc' }
           });
-        } catch (e) {
-          console.warn('⚠️ Failed to load project documents from table:', e.message);
+          } catch (e) {
+            console.warn('⚠️ Failed to load project documents from table:', e.message);
+          }
         }
         
-        try {
-          // Load team members from ProjectTeamMember table
-          projectTeamMembers = await prisma.projectTeamMember.findMany({
+        if (prisma.projectTeamMember?.findMany) {
+          try {
+            projectTeamMembers = await prisma.projectTeamMember.findMany({
             where: { projectId: id },
             include: {
               user: {
@@ -622,23 +627,25 @@ async function handler(req, res) {
             },
             orderBy: { addedDate: 'asc' }
           });
-        } catch (e) {
-          console.warn('⚠️ Failed to load project team members from table:', e.message);
+          } catch (e) {
+            console.warn('⚠️ Failed to load project team members from table:', e.message);
+          }
         }
         
-        try {
-          // Load custom field definitions from ProjectCustomFieldDefinition table
-          projectCustomFieldDefinitions = await prisma.projectCustomFieldDefinition.findMany({
+        if (prisma.projectCustomFieldDefinition?.findMany) {
+          try {
+            projectCustomFieldDefinitions = await prisma.projectCustomFieldDefinition.findMany({
             where: { projectId: id },
             orderBy: { order: 'asc' }
           });
-        } catch (e) {
-          console.warn('⚠️ Failed to load project custom field definitions from table:', e.message);
+          } catch (e) {
+            console.warn('⚠️ Failed to load project custom field definitions from table:', e.message);
+          }
         }
         
-        try {
-          // Load activity logs from ProjectActivityLog table (limit to most recent 50)
-          projectActivityLogs = await prisma.projectActivityLog.findMany({
+        if (prisma.projectActivityLog?.findMany) {
+          try {
+            projectActivityLogs = await prisma.projectActivityLog.findMany({
             where: { projectId: id },
             include: {
               user: {
@@ -652,8 +659,9 @@ async function handler(req, res) {
             orderBy: { createdAt: 'desc' },
             take: 50
           });
-        } catch (e) {
-          console.warn('⚠️ Failed to load project activity logs from table:', e.message);
+          } catch (e) {
+            console.warn('⚠️ Failed to load project activity logs from table:', e.message);
+          }
         }
         
         // Convert table data to JSON format that frontend expects
@@ -712,8 +720,8 @@ async function handler(req, res) {
         }
         
         try {
-          // Convert weeklyFMSReviewSections from table to JSON format
-          weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id);
+          // Convert weeklyFMSReviewSections from table to JSON format (include comments so weekly comments persist)
+          weeklyFMSReviewSectionsJson = await weeklyFMSReviewSectionsToJson(id, { skipComments: false });
           console.log('📊 GET /api/projects/[id]: weeklyFMSReviewSectionsToJson result:', {
             projectId: id,
             hasData: !!weeklyFMSReviewSectionsJson,
@@ -1181,33 +1189,10 @@ async function handler(req, res) {
             }
           }
           
+          // Weekly FMS: source of truth is Project.weeklyFMSReviewSections JSON (already saved above).
+          // Skip table save to avoid P2022 (e.g. missing attachments column) and keep PUT always succeeding.
           if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
-            try {
-              console.log('💾 PUT /api/projects/[id]: Saving weeklyFMSReviewSections to table', {
-                projectId: id,
-                type: typeof body.weeklyFMSReviewSections,
-                isString: typeof body.weeklyFMSReviewSections === 'string',
-                length: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 'N/A',
-                preview: typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.substring(0, 200) : JSON.stringify(body.weeklyFMSReviewSections).substring(0, 200)
-              });
-              // Note: saveWeeklyFMSReviewSectionsToTable uses prisma directly, not tx
-              // This is a limitation - we'll need to refactor those functions to accept a transaction client
-              // For now, we'll catch errors and provide better error messages
-              await saveWeeklyFMSReviewSectionsToTable(id, body.weeklyFMSReviewSections)
-              console.log('✅ PUT /api/projects/[id]: Successfully saved weeklyFMSReviewSections to table');
-            } catch (tableError) {
-              console.error('❌ CRITICAL: Error saving weeklyFMSReviewSections to table:', {
-                error: tableError.message,
-                stack: tableError.stack,
-                code: tableError.code,
-                meta: tableError.meta,
-                projectId: id,
-                dataType: typeof body.weeklyFMSReviewSections
-              });
-              // Re-throw with detailed error message including Prisma error code if available
-              const errorMessage = `Failed to save weeklyFMSReviewSections to table: ${tableError.message}${tableError.code ? ` (Code: ${tableError.code})` : ''}${tableError.meta ? ` (Meta: ${JSON.stringify(tableError.meta)})` : ''}`;
-              throw new Error(errorMessage);
-            }
+            // saveWeeklyFMSReviewSectionsToTable intentionally not called – JSON-only persistence.
           }
           
           if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {

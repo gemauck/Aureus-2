@@ -293,7 +293,11 @@ async function handler(req, res) {
     // Update Lead (PATCH /api/leads/[id])
     // ⚠️ DEPRECATED ENDPOINT: This endpoint is deprecated. Use /api/leads (PATCH) instead.
     if (req.method === 'PATCH') {
-      const body = req.body || await parseJsonBody(req)
+      let body = req.body
+      if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+        body = await parseJsonBody(req)
+      }
+      if (!body) body = {}
       
       console.warn(`⚠️ DEPRECATED: PATCH /api/leads/[id] endpoint used for lead ${id}. Use /api/leads (PATCH) instead.`)
       
@@ -366,8 +370,13 @@ async function handler(req, res) {
       console.log(`📝 [LEADS ID] Update data for lead ${id}:`, JSON.stringify(updateData, null, 2))
       console.log(`📝 [LEADS ID] Fields in body:`, Object.keys(body || {}))
       
-      // Check if updateData is empty (only has type) - this would mean no fields were provided
-      if (Object.keys(updateData).length === 1 && updateData.type) {
+      // Check if updateData is empty (only has type) - but do NOT early-return if body has
+      // sites/contacts/groupIds etc. (handled in phases below); otherwise site/contact/group
+      // updates from the list would never persist.
+      const hasPhaseOnlyUpdates = body.sites !== undefined || body.contacts !== undefined ||
+        body.groupIds !== undefined || body.contracts !== undefined || body.proposals !== undefined ||
+        body.followUps !== undefined || body.services !== undefined
+      if (Object.keys(updateData).length === 1 && updateData.type && !hasPhaseOnlyUpdates) {
         console.warn(`⚠️ [LEADS ID] Update data is empty (only type field) - no fields to update for lead ${id}`)
         // Return the existing lead without updating
         const existing = await prisma.client.findUnique({ 
@@ -648,12 +657,14 @@ async function handler(req, res) {
           try {
             const existingSites = await prisma.clientSite.findMany({
               where: { clientId: id },
-              select: { id: true }
+              select: { id: true },
+              orderBy: { id: 'asc' }
             })
             const existingSiteIds = new Set(existingSites.map(s => s.id))
             const sitesToKeep = new Set()
             
-            for (const site of sitesArray) {
+            for (let idx = 0; idx < sitesArray.length; idx++) {
+              const site = sitesArray[idx]
               // Use defaults for stage/aidaStatus so we never overwrite with empty (persistence after refresh)
               const stageVal = site.stage != null && String(site.stage).trim() !== '' ? String(site.stage).trim() : 'Potential'
               const aidaVal = site.aidaStatus != null && String(site.aidaStatus).trim() !== '' ? String(site.aidaStatus).trim() : 'Awareness'
@@ -669,13 +680,17 @@ async function handler(req, res) {
                 stage: stageVal,
                 aidaStatus: aidaVal
               }
-              
-              if (site.id && existingSiteIds.has(site.id)) {
+              // Resolve target id: use site.id if it exists in DB, else match by index to existing site (list view often sends by index)
+              let targetId = site.id && existingSiteIds.has(site.id) ? site.id : null
+              if (!targetId && existingSites[idx]) {
+                targetId = existingSites[idx].id
+              }
+              if (targetId) {
                 await prisma.clientSite.update({
-                  where: { id: site.id },
+                  where: { id: targetId },
                   data: siteData
                 })
-                sitesToKeep.add(site.id)
+                sitesToKeep.add(targetId)
               } else if (site.id) {
                 try {
                   await prisma.clientSite.create({
@@ -1056,7 +1071,7 @@ async function handler(req, res) {
         }
         
         // Now update it
-        const lead = await prisma.client.update({
+        let lead = await prisma.client.update({
           where: { id },
           data: updateData,
           include: {
@@ -1069,7 +1084,6 @@ async function handler(req, res) {
             clientServices: true,
             projects: { select: { id: true, name: true, status: true } },
             externalAgent: true,
-            // CRITICAL: Include groupMemberships to ensure they're returned in response
             groupMemberships: {
               include: {
                 group: {
@@ -1084,6 +1098,45 @@ async function handler(req, res) {
             }
           }
         })
+        
+        // Apply group membership replacement if provided (Company Group dropdown)
+        const groupIdsToSet = body.groupIds === undefined
+          ? undefined
+          : (Array.isArray(body.groupIds) ? body.groupIds.filter(Boolean) : [])
+        if (groupIdsToSet !== undefined) {
+          try {
+            await prisma.clientCompanyGroup.deleteMany({ where: { clientId: id } })
+            for (const gid of groupIdsToSet) {
+              if (gid) {
+                await prisma.clientCompanyGroup.create({
+                  data: { clientId: id, groupId: String(gid), role: 'member' }
+                })
+              }
+            }
+            lead = await prisma.client.findUnique({
+              where: { id },
+              include: {
+                clientContacts: true,
+                clientComments: true,
+                clientSites: true,
+                clientContracts: true,
+                clientProposals: true,
+                clientFollowUps: true,
+                clientServices: true,
+                projects: { select: { id: true, name: true, status: true } },
+                externalAgent: true,
+                groupMemberships: {
+                  include: {
+                    group: { select: { id: true, name: true, type: true, industry: true } }
+                  }
+                }
+              }
+            })
+          } catch (groupErr) {
+            console.error('❌ [LEADS ID] Failed to update lead group memberships:', groupErr)
+            return serverError(res, 'Failed to update group memberships', groupErr.message)
+          }
+        }
         
         // If name changed, trigger RSS feed update (async, don't wait)
         if (updateData.name !== undefined && oldName && oldName !== lead.name) {

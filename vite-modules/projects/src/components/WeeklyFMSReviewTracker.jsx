@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
@@ -51,6 +51,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const deletionTimestampRef = useRef(null); // Track when deletion started
     const deletionQueueRef = useRef([]); // Queue for pending deletions when one is already in progress
     const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
+    const scrollSyncRootRef = useRef(null);
+    const isScrollingRef = useRef(false);
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
@@ -2509,6 +2511,65 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => documentRef.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
 
+    // Synchronize horizontal scrolling across section tables (scroll + wheel deltaX).
+    useLayoutEffect(() => {
+        if (sections.length === 0) return;
+        const root = scrollSyncRootRef.current;
+        if (!root) return;
+        const scrollHandlers = new Map();
+        const wheelHandlers = new Map();
+        const handleScroll = (sourceElement) => {
+            if (isScrollingRef.current) return;
+            isScrollingRef.current = true;
+            const scrollLeft = sourceElement.scrollLeft;
+            scrollHandlers.forEach((_, el) => {
+                if (el !== sourceElement && el.isConnected) el.scrollLeft = scrollLeft;
+            });
+            requestAnimationFrame(() => { isScrollingRef.current = false; });
+        };
+        const attach = () => {
+            const containers = Array.from(root.querySelectorAll('[data-scroll-sync]'));
+            const connected = containers.filter(el => el.isConnected);
+            if (connected.length === 0) return false;
+            connected.forEach(el => {
+                if (scrollHandlers.has(el)) return;
+                const onScroll = () => handleScroll(el);
+                scrollHandlers.set(el, onScroll);
+                el.addEventListener('scroll', onScroll, { passive: true });
+                const onWheel = (e) => {
+                    if (e.deltaX === 0) return;
+                    e.preventDefault();
+                    const maxScroll = el.scrollWidth - el.clientWidth;
+                    el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + e.deltaX, maxScroll));
+                    handleScroll(el);
+                };
+                wheelHandlers.set(el, onWheel);
+                el.addEventListener('wheel', onWheel, { passive: false });
+            });
+            return true;
+        };
+        const cleanup = () => {
+            scrollHandlers.forEach((handler, el) => el.removeEventListener('scroll', handler));
+            scrollHandlers.clear();
+            wheelHandlers.forEach((handler, el) => el.removeEventListener('wheel', handler));
+            wheelHandlers.clear();
+        };
+        if (attach()) return cleanup;
+        let rafId = null;
+        let retries = 0;
+        const retry = () => {
+            rafId = null;
+            if (attach()) return;
+            retries += 1;
+            if (retries < 10) rafId = requestAnimationFrame(retry);
+        };
+        rafId = requestAnimationFrame(retry);
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId);
+            cleanup();
+        };
+    }, [sections.length]);
+
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
     // immediately see the relevant discussion.
@@ -3832,7 +3893,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             </div>
             
             {/* Per-section tables with independent horizontal scroll */}
-            <div className="space-y-3">
+            <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
                 {sections.length === 0 ? (
                     <div className="bg-white rounded-lg border border-gray-200 p-6 text-center text-gray-400">
                         <i className="fas fa-folder-open text-3xl mb-2 opacity-50"></i>
@@ -3907,7 +3968,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                             </div>
 
                             {/* Scrollable month/document grid for this section only */}
-                            <div className="border-t border-gray-200 overflow-x-auto">
+                            <div data-scroll-sync className="border-t border-gray-200 overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>

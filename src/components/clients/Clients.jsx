@@ -846,6 +846,7 @@ const Clients = React.memo(() => {
     const groupMembershipsFetchRef = useRef(false); // Prevent multiple simultaneous groupMemberships fetches
     const processedClientIdsRef = useRef(new Set()); // Track which client IDs have been processed to prevent re-fetching
     const restoredGroupMembershipsRef = useRef(new Map()); // Track restored groupMemberships by client ID to prevent overwriting
+    const hasForceRefreshedLeadsForSitesRef = useRef(false); // Force refresh once when opening Leads so site child rows load
     
     // Industry management state - declared early to avoid temporal dead zone issues
     const [industries, setIndustries] = useState([]);
@@ -945,6 +946,7 @@ const Clients = React.memo(() => {
     const [selectedOpportunityClient, setSelectedOpportunityClient] = useState(null);
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
+    const [openSiteIdForLead, setOpenSiteIdForLead] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
@@ -964,11 +966,25 @@ const Clients = React.memo(() => {
     const [sortDirection, setSortDirection] = useState('asc');
     const [leadSortField, setLeadSortField] = useState('name');
     const [leadSortDirection, setLeadSortDirection] = useState('asc');
+    const [showSitesInLeadsList, setShowSitesInLeadsList] = useState(() => {
+        try {
+            const v = localStorage.getItem('clients.leads.showSitesInList');
+            return v !== null ? v === 'true' : true;
+        } catch {
+            return true;
+        }
+    });
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const [groupsPage, setGroupsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
     
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients.leads.showSitesInList', String(showSitesInLeadsList));
+        } catch (_) {}
+    }, [showSitesInLeadsList]);
+
     // Persist filterServices to localStorage whenever it changes
     useEffect(() => {
         try {
@@ -1441,9 +1457,32 @@ const Clients = React.memo(() => {
                 // Silently fail - sessionStorage access is non-critical
             }
         }
-        setCurrentLeadTab('overview');
+        setCurrentLeadTab(options.initialTab || 'overview');
         setViewMode('lead-detail');
     }, [stopSync]);
+
+    const handleOpenLeadToSite = useCallback((lead, site) => {
+        if (!lead?.id) return;
+        // Set state so lead detail opens on Sites tab with this site
+        if (site?.id) {
+            setOpenSiteIdForLead(site.id);
+        }
+        // Open lead with initialTab so we don't reset to overview
+        handleOpenLead(lead, { initialTab: 'sites' });
+        // Update URL to include ?tab=sites&siteId= so link targets the site and survives refresh
+        if (window.RouteState && window.RouteState.navigate) {
+            const search = new URLSearchParams({ tab: 'sites' });
+            if (site?.id) search.set('siteId', String(site.id));
+            window.RouteState.navigate({
+                page: 'clients',
+                segments: [String(lead.id)],
+                search: search.toString(),
+                preserveSearch: false,
+                preserveHash: false,
+                replace: true
+            });
+        }
+    }, [handleOpenLead]);
 
     // Listen for entity navigation events (from notifications, comments, etc.)
     useEffect(() => {
@@ -1611,13 +1650,45 @@ const Clients = React.memo(() => {
                 entityType = 'client';
             } else {
                 // Try to find in leads
-                entity = leads.find(l => String(l.id) === String(entityId));
-                if (entity) {
+                const leadFromList = leads.find(l => String(l.id) === String(entityId));
+                if (leadFromList) {
                     entityType = 'lead';
-                } else {
-                    // Try to fetch from API
+                    // Always refetch lead from API when opening from URL so we get sites (list rarely has clientSites)
                     try {
-                        if (window.DatabaseAPI?.getClient) {
+                        if (window.DatabaseAPI?.getLead || window.api?.getLead) {
+                            const getLead = window.DatabaseAPI?.getLead || window.api?.getLead;
+                            const leadRes = await getLead(entityId);
+                            const leadData = leadRes?.data?.lead ?? leadRes?.lead ?? leadRes?.data ?? leadRes;
+                            if (leadData && leadData.id) {
+                                const sites = Array.isArray(leadData.clientSites)
+                                    ? leadData.clientSites
+                                    : (Array.isArray(leadData.sites) ? leadData.sites : []);
+                                entity = { ...leadData, sites };
+                            } else {
+                                entity = leadFromList;
+                            }
+                        } else {
+                            entity = leadFromList;
+                        }
+                    } catch (_) {
+                        entity = leadFromList;
+                    }
+                } else {
+                    // Not in list: try lead API first so GET /api/leads/:id always runs for lead URLs (sites load)
+                    try {
+                        const getLead = window.DatabaseAPI?.getLead || window.api?.getLead;
+                        if (getLead) {
+                            const leadRes = await getLead(entityId);
+                            const leadData = leadRes?.data?.lead ?? leadRes?.lead ?? leadRes?.data ?? leadRes;
+                            if (leadData && leadData.id) {
+                                const sites = Array.isArray(leadData.clientSites)
+                                    ? leadData.clientSites
+                                    : (Array.isArray(leadData.sites) ? leadData.sites : []);
+                                entity = { ...leadData, sites };
+                                entityType = 'lead';
+                            }
+                        }
+                        if (!entity && (window.DatabaseAPI?.getClient)) {
                             const response = await window.DatabaseAPI.getClient(entityId);
                             const clientData = response?.data?.client || response?.client || response?.data;
                             if (clientData) {
@@ -1644,8 +1715,12 @@ const Clients = React.memo(() => {
                     if (!alreadyViewingThisClient) setCurrentTab('overview');
                     handleOpenClient(entity);
                 } else if (entityType === 'lead') {
-                    if (!alreadyViewingThisLead) setCurrentLeadTab('overview');
-                    handleOpenLead(entity);
+                    const tabFromUrl = route.search?.get('tab');
+                    const siteIdFromUrl = route.search?.get('siteId');
+                    if (tabFromUrl) setCurrentLeadTab(tabFromUrl);
+                    else if (!alreadyViewingThisLead) setCurrentLeadTab('overview');
+                    if (siteIdFromUrl) setOpenSiteIdForLead(siteIdFromUrl);
+                    handleOpenLead(entity, tabFromUrl ? { initialTab: tabFromUrl } : {});
                 }
                 
                 // Handle tab/section/comment from query params
@@ -1653,11 +1728,13 @@ const Clients = React.memo(() => {
                 const section = route.search?.get('section');
                 const commentId = route.search?.get('commentId');
                 
+                const siteIdFromUrl = route.search?.get('siteId');
+                if (entityType === 'lead' && siteIdFromUrl) setOpenSiteIdForLead(siteIdFromUrl);
                 if (tab || section || commentId) {
                     setTimeout(() => {
                         if (tab) {
                             window.dispatchEvent(new CustomEvent('switchClientsTab', {
-                                detail: { tab, section, commentId }
+                                detail: { tab, section, commentId, siteId: siteIdFromUrl || undefined }
                             }));
                         }
                         if (section) {
@@ -3614,6 +3691,14 @@ const Clients = React.memo(() => {
             isLeadsLoading = false;
         }
     };
+
+    // When user switches to Leads tab, force refresh once so we get leads with clientSites (site child rows)
+    useEffect(() => {
+        if (viewMode !== 'leads') return;
+        if (hasForceRefreshedLeadsForSitesRef.current) return;
+        hasForceRefreshedLeadsForSitesRef.current = true;
+        loadLeads(true);
+    }, [viewMode]);
 
     // Listen for storage changes to refresh clients (DISABLED - was causing infinite loop)
     // useEffect(() => {
@@ -5836,7 +5921,7 @@ const Clients = React.memo(() => {
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
-    const openLeadFromPipeline = useCallback(async ({ leadId, leadData } = {}) => {
+    const openLeadFromPipeline = useCallback(async ({ leadId, leadData, siteId } = {}) => {
         const resolvedLeadId = leadId || leadData?.id;
         if (!resolvedLeadId) return;
 
@@ -5855,6 +5940,10 @@ const Clients = React.memo(() => {
             }
         }
 
+        if (siteId) {
+            setOpenSiteIdForLead(siteId);
+            setCurrentLeadTab('sites');
+        }
         handleOpenLead(lead || null, { fromPipeline: true, leadId: resolvedLeadId });
     }, [handleOpenLead]);
 
@@ -6138,8 +6227,9 @@ const Clients = React.memo(() => {
             });
             const token = window.storage?.getToken?.();
             if (!token) { alert('Authentication required'); throw new Error('auth'); }
+            let response;
             if (window.api?.updateLead) {
-                await window.api.updateLead(leadId, patch);
+                response = await window.api.updateLead(leadId, patch);
             } else {
                 const res = await fetch(`/api/leads/${leadId}`, {
                     method: 'PATCH',
@@ -6148,6 +6238,28 @@ const Clients = React.memo(() => {
                     body: JSON.stringify(patch)
                 });
                 if (!res.ok) throw new Error('Update failed');
+                response = await res.json().catch(() => ({}));
+            }
+            // Merge server response into state so list and detail stay in sync (especially sites)
+            const serverLead = response?.data?.lead || response?.lead;
+            if (serverLead && serverLead.id === leadId) {
+                const mergedSites = Array.isArray(serverLead.sites) ? serverLead.sites : (Array.isArray(serverLead.clientSites) ? serverLead.clientSites : undefined);
+                setLeads(prev => {
+                    const next = prev.map(l => {
+                        if (l.id !== leadId) return l;
+                        const merged = { ...l, ...serverLead };
+                        if (mergedSites) merged.sites = mergedSites;
+                        return merged;
+                    });
+                    try { window.storage?.setLeads?.(next); } catch (_) {}
+                    return next;
+                });
+                // So lead detail (Sites section) shows updated sites: keep selectedLeadRef in sync
+                if (selectedLeadRef.current?.id === leadId) {
+                    const merged = { ...selectedLeadRef.current, ...serverLead };
+                    if (mergedSites) merged.sites = mergedSites;
+                    selectedLeadRef.current = merged;
+                }
             }
             if (window.ClientCache?.clearCache) window.ClientCache.clearCache();
             if (window.DatabaseAPI?.clearCache) window.DatabaseAPI.clearCache('/leads');
@@ -6156,7 +6268,8 @@ const Clients = React.memo(() => {
             if (original) {
                 setLeads(prev => prev.map(l => l.id === leadId ? original : l));
             }
-            alert('Failed to save. Please try again.');
+            const message = (err && (err.message || err.details)) || 'Failed to save. Please try again.';
+            alert(message);
         }
     }, []);
 
@@ -6168,6 +6281,22 @@ const Clients = React.memo(() => {
     const handleUpdateLeadStage = useCallback((leadId, stage) => {
         const normalized = stage ? (stage.charAt(0).toUpperCase() + stage.slice(1).toLowerCase()) : 'Awareness';
         updateLeadField(leadId, { stage: normalized }, l => ({ ...l, stage: normalized }));
+    }, [updateLeadField]);
+
+    const handleUpdateSiteStage = useCallback((lead, site, siteIdx, newStage) => {
+        const normalized = newStage ? (newStage.charAt(0).toUpperCase() + newStage.slice(1).toLowerCase()) : 'Potential';
+        const currentLead = leadsRef.current?.find(l => l.id === lead.id) || lead;
+        const sites = Array.isArray(currentLead.sites) ? currentLead.sites : (Array.isArray(currentLead.clientSites) ? currentLead.clientSites : []);
+        const updatedSites = sites.map((s, i) => i === siteIdx ? { ...s, stage: normalized } : s);
+        updateLeadField(lead.id, { sites: updatedSites }, l => ({ ...l, sites: updatedSites }));
+    }, [updateLeadField]);
+
+    const handleUpdateSiteAidaStatus = useCallback((lead, site, siteIdx, newAida) => {
+        const normalized = newAida ? (newAida.charAt(0).toUpperCase() + newAida.slice(1).toLowerCase()) : 'Awareness';
+        const currentLead = leadsRef.current?.find(l => l.id === lead.id) || lead;
+        const sites = Array.isArray(currentLead.sites) ? currentLead.sites : (Array.isArray(currentLead.clientSites) ? currentLead.clientSites : []);
+        const updatedSites = sites.map((s, i) => i === siteIdx ? { ...s, aidaStatus: normalized } : s);
+        updateLeadField(lead.id, { sites: updatedSites }, l => ({ ...l, sites: updatedSites }));
     }, [updateLeadField]);
 
     const handleUpdateLeadCompanyGroup = useCallback((leadId, groupId) => {
@@ -8416,6 +8545,20 @@ const Clients = React.memo(() => {
 
     const LeadsListView = () => (
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full`}>
+            <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Leads</span>
+                <div className="flex items-center gap-4">
+                    <button
+                        type="button"
+                        onClick={() => loadLeads(true)}
+                        disabled={isLeadsLoading}
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
+                    >
+                        <i className={`fas fa-sync-alt text-xs ${isLeadsLoading ? 'animate-spin' : ''}`}></i>
+                        {isLeadsLoading ? 'Refreshing…' : 'Refresh leads'}
+                    </button>
+                </div>
+            </div>
             <div className="flex-1 overflow-auto w-full">
                 <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ width: '100%' }}>
                     <thead className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
@@ -8492,100 +8635,168 @@ const Clients = React.memo(() => {
                                 </td>
                             </tr>
                         ) : (
-                            paginatedLeads.map(lead => (
-                                <tr 
-                                    key={`lead-${lead.id}-${lead.name}`}
-                                    onClick={() => handleOpenLead(lead)}
+                            paginatedLeads.flatMap(lead => {
+                                const sites = lead.clientSites || lead.sites || [];
+                                const siteRows = showSitesInLeadsList ? (Array.isArray(sites) ? sites : []) : [];
+                                return [
+                                    <tr 
+                                        key={`lead-${lead.id}-${lead.name}`}
+                                        onClick={() => handleOpenLead(lead)}
                                         className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} cursor-pointer transition`}
-                                >
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={(e) => handleToggleStar(e, lead, true)}
-                                                className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
-                                                title={lead.isStarred ? 'Unstar this lead' : 'Star this lead'}
+                                    >
+                                        <td className="px-6 py-2 whitespace-nowrap">
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={(e) => handleToggleStar(e, lead, true)}
+                                                    className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
+                                                    title={lead.isStarred ? 'Unstar this lead' : 'Star this lead'}
+                                                >
+                                                    <i className={`${lead.isStarred ? 'fas' : 'far'} fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
+                                                </button>
+                                                {lead.thumbnail ? (
+                                                    <img src={lead.thumbnail} alt={lead.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                                ) : (
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                        {(lead.name || '?').charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
+                                            </div>
+                                        </td>
+                                        <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
+                                        <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                            <select
+                                                value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.status || 'potential').toLowerCase())) || 'Potential'}
+                                                onChange={e => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                                className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                    (lead.status || '').toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                    (lead.status || '').toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                    (lead.status || '').toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                    (lead.status || '').toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                                    (lead.status || '').toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                                    (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
+                                                }`}
                                             >
-                                                <i className={`${lead.isStarred ? 'fas' : 'far'} fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
-                                            </button>
-                                            {lead.thumbnail ? (
-                                                <img src={lead.thumbnail} alt={lead.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
-                                            ) : (
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                    {(lead.name || '?').charAt(0).toUpperCase()}
-                                                </div>
-                                            )}
-                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
-                                        </div>
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
-                                    <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                                        <select
-                                            value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.status || 'potential').toLowerCase())) || 'Potential'}
-                                            onChange={e => handleUpdateLeadStatus(lead.id, e.target.value)}
-                                            className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                (lead.status || '').toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                (lead.status || '').toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                (lead.status || '').toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
-                                                (lead.status || '').toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
-                                                (lead.status || '').toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
-                                                (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
-                                            }`}
+                                                <option value="Potential">Potential</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
+                                                <option value="On Hold">On Hold</option>
+                                                <option value="Qualified">Qualified</option>
+                                                <option value="Disinterested">Disinterested</option>
+                                                <option value="Proposal">Proposal</option>
+                                                <option value="Tender">Tender</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                            <select
+                                                value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.stage || 'awareness').toLowerCase())) || 'Awareness'}
+                                                onChange={e => handleUpdateLeadStage(lead.id, e.target.value)}
+                                                className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                    (lead.stage || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
+                                                    (lead.stage || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                                    (lead.stage || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                    (lead.stage || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                    (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                                }`}
+                                            >
+                                                <option value="No Engagement">No Engagement</option>
+                                                <option value="Awareness">Awareness</option>
+                                                <option value="Interest">Interest</option>
+                                                <option value="Desire">Desire</option>
+                                                <option value="Action">Action</option>
+                                            </select>
+                                        </td>
+                                        <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`} onClick={e => e.stopPropagation()}>
+                                            <select
+                                                value={((lead.groupMemberships && lead.groupMemberships[0] && (lead.groupMemberships[0].groupId || (lead.groupMemberships[0].group && lead.groupMemberships[0].group.id))) || '').toString()}
+                                                onChange={e => handleUpdateLeadCompanyGroup(lead.id, e.target.value || null)}
+                                                className={`w-full min-w-[6rem] px-2 py-1 text-xs rounded border cursor-pointer appearance-none ${isDark ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-white text-gray-800 border-gray-200'}`}
+                                            >
+                                                <option value="">None</option>
+                                                {groups.map(g => (
+                                                    <option key={g.id} value={g.id}>{g.name}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                        <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`} onClick={e => e.stopPropagation()}>
+                                            <select
+                                                value={lead.externalAgentId || ''}
+                                                onChange={e => handleUpdateLeadExternalAgent(lead.id, e.target.value || null)}
+                                                className={`w-full min-w-[5.5rem] px-2 py-1 text-xs rounded border cursor-pointer appearance-none ${isDark ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-white text-gray-800 border-gray-200'}`}
+                                            >
+                                                <option value="">—</option>
+                                                {externalAgents.map(a => (
+                                                    <option key={a.id} value={a.id}>{a.name}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    </tr>,
+                                    ...siteRows.map((site, siteIdx) => (
+                                        <tr
+                                            key={`lead-${lead.id}-site-${site.id || siteIdx}`}
+                                            onClick={() => handleOpenLeadToSite(lead, site)}
+                                            className={`cursor-pointer ${isDark ? 'bg-gray-800/60 hover:bg-gray-800' : 'bg-gray-50/80 hover:bg-gray-100'}`}
                                         >
-                                            <option value="Potential">Potential</option>
-                                            <option value="Active">Active</option>
-                                            <option value="Inactive">Inactive</option>
-                                            <option value="On Hold">On Hold</option>
-                                            <option value="Qualified">Qualified</option>
-                                            <option value="Disinterested">Disinterested</option>
-                                            <option value="Proposal">Proposal</option>
-                                            <option value="Tender">Tender</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                                        <select
-                                            value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.stage || 'awareness').toLowerCase())) || 'Awareness'}
-                                            onChange={e => handleUpdateLeadStage(lead.id, e.target.value)}
-                                            className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                (lead.stage || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                                (lead.stage || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                                (lead.stage || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                (lead.stage || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
-                                                (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                            }`}
-                                        >
-                                            <option value="No Engagement">No Engagement</option>
-                                            <option value="Awareness">Awareness</option>
-                                            <option value="Interest">Interest</option>
-                                            <option value="Desire">Desire</option>
-                                            <option value="Action">Action</option>
-                                        </select>
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`} onClick={e => e.stopPropagation()}>
-                                        <select
-                                            value={((lead.groupMemberships && lead.groupMemberships[0] && (lead.groupMemberships[0].groupId || (lead.groupMemberships[0].group && lead.groupMemberships[0].group.id))) || '').toString()}
-                                            onChange={e => handleUpdateLeadCompanyGroup(lead.id, e.target.value || null)}
-                                            className={`w-full min-w-[6rem] px-2 py-1 text-xs rounded border cursor-pointer appearance-none ${isDark ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-white text-gray-800 border-gray-200'}`}
-                                        >
-                                            <option value="">None</option>
-                                            {groups.map(g => (
-                                                <option key={g.id} value={g.id}>{g.name}</option>
-                                            ))}
-                                        </select>
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`} onClick={e => e.stopPropagation()}>
-                                        <select
-                                            value={lead.externalAgentId || ''}
-                                            onChange={e => handleUpdateLeadExternalAgent(lead.id, e.target.value || null)}
-                                            className={`w-full min-w-[5.5rem] px-2 py-1 text-xs rounded border cursor-pointer appearance-none ${isDark ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-white text-gray-800 border-gray-200'}`}
-                                        >
-                                            <option value="">—</option>
-                                            {externalAgents.map(a => (
-                                                <option key={a.id} value={a.id}>{a.name}</option>
-                                            ))}
-                                        </select>
-                                    </td>
-                                </tr>
-                            ))
+                                            <td className="px-6 py-1.5 text-sm" style={{ paddingLeft: '5.5rem' }}>
+                                                <span className={`inline-flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} onClick={e => e.stopPropagation()}>
+                                                    <i className="fas fa-map-marker-alt text-xs opacity-70 flex-shrink-0"></i>
+                                                    <span>
+                                                        {site.name || 'Unnamed site'}
+                                                        {site.address ? <span className="text-xs opacity-80"> — {site.address}</span> : null}
+                                                    </span>
+                                                </span>
+                                            </td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                                {lead.industry || '—'}
+                                            </td>
+                                            <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                                <select
+                                                    value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.stage || 'potential').toLowerCase())) || 'Potential'}
+                                                    onChange={e => handleUpdateSiteStage(lead, site, siteIdx, e.target.value)}
+                                                    className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                        (site.stage || '').toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                        (site.stage || '').toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                        (site.stage || '').toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                        (site.stage || '').toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                                        (site.stage || '').toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                                        (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
+                                                    }`}
+                                                >
+                                                    <option value="Potential">Potential</option>
+                                                    <option value="Active">Active</option>
+                                                    <option value="Inactive">Inactive</option>
+                                                    <option value="On Hold">On Hold</option>
+                                                    <option value="Qualified">Qualified</option>
+                                                    <option value="Disinterested">Disinterested</option>
+                                                    <option value="Proposal">Proposal</option>
+                                                    <option value="Tender">Tender</option>
+                                                </select>
+                                            </td>
+                                            <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                                <select
+                                                    value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((site.aidaStatus || 'awareness').toLowerCase())) || 'Awareness'}
+                                                    onChange={e => handleUpdateSiteAidaStatus(lead, site, siteIdx, e.target.value)}
+                                                    className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                        (site.aidaStatus || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                        (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                                    }`}
+                                                >
+                                                    <option value="No Engagement">No Engagement</option>
+                                                    <option value="Awareness">Awareness</option>
+                                                    <option value="Interest">Interest</option>
+                                                    <option value="Desire">Desire</option>
+                                                    <option value="Action">Action</option>
+                                                </select>
+                                            </td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
+                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
+                                        </tr>
+                                    ))
+                                ];
+                            })
                         )}
                     </tbody>
                 </table>
@@ -8740,6 +8951,8 @@ const Clients = React.memo(() => {
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
                         onPauseSync={handlePauseSync}
+                        initialSiteId={openSiteIdForLead}
+                        onInitialSiteOpened={() => setOpenSiteIdForLead(null)}
                     />
                 ) : (
                     <div className="text-center py-8 text-gray-500">
@@ -9179,21 +9392,33 @@ const Clients = React.memo(() => {
                                 />
                             </div>
                         )}
-                        <div className="flex items-center">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                        <div className="flex items-center gap-6 flex-nowrap">
+                            <label className="inline-flex items-center gap-2 cursor-pointer flex-shrink-0">
                                 <input
                                     type="checkbox"
                                     checked={showStarredOnly}
                                     onChange={(e) => setShowStarredOnly(e.target.checked)}
-                                    className={`w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                                        isDark ? 'bg-gray-700 border-gray-600' : ''
-                                    }`}
+                                    className={`w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600' : ''}`}
                                 />
-                                <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                <span className={`text-sm whitespace-nowrap ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                                     <i className="fas fa-star text-yellow-500 mr-1"></i>
                                     Starred Only
                                 </span>
                             </label>
+                            {viewMode === 'leads' && (
+                                <label className="inline-flex items-center gap-2 cursor-pointer flex-shrink-0" title="Show or hide site rows under each lead">
+                                    <input
+                                        type="checkbox"
+                                        checked={showSitesInLeadsList}
+                                        onChange={(e) => setShowSitesInLeadsList(e.target.checked)}
+                                        className={`w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600' : ''}`}
+                                    />
+                                    <span className={`text-sm whitespace-nowrap ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                        <i className="fas fa-map-marker-alt text-amber-500 mr-1"></i>
+                                        Show sites
+                                    </span>
+                                </label>
+                            )}
                         </div>
                     </div>
                     

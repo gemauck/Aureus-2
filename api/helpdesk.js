@@ -4,6 +4,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js'
 
 // Helper function to parse JSON fields from database responses
 function parseTicketJsonFields(ticket) {
@@ -656,6 +657,24 @@ async function handler(req, res) {
         })
 
         const parsedTicket = parseTicketJsonFields(updatedTicket)
+
+        // Notify participants: ticket creator, assignee, prior commenters, @mentioned (in-app + email per preferences)
+        try {
+          const priorUserIds = [ticket.assignedToId, ...currentComments.map((c) => c.userId)].filter(Boolean)
+          await notifyCommentParticipants({
+            commentAuthorId: userId,
+            commentText: body.message.trim(),
+            entityAuthorId: ticket.createdById || null,
+            priorCommentAuthorIds: priorUserIds,
+            authorName: user.name || user.email || 'Someone',
+            contextTitle: `Ticket #${ticket.ticketNumber}: ${ticket.title || 'Helpdesk'}`,
+            link: `#/helpdesk/${id}`,
+            metadata: { ticketId: id, commentText: body.message.trim() }
+          })
+        } catch (notifyErr) {
+          console.error('Notify comment participants failed (helpdesk):', notifyErr)
+        }
+
         return created(res, { ticket: parsedTicket, comment: newComment })
       } catch (error) {
         console.error('❌ Error adding comment:', error)

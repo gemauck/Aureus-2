@@ -85,6 +85,10 @@ const LeadDetailModal = ({
                 if (fetchedLead) {
                     setLead(fetchedLead);
                     
+                    // API returns clientSites; use it for sites so persistence survives refresh
+                    const sitesFromApi = Array.isArray(fetchedLead.clientSites)
+                        ? fetchedLead.clientSites
+                        : (typeof fetchedLead.sites === 'string' ? JSON.parse(fetchedLead.sites || '[]') : (fetchedLead.sites || []));
                     // Initialize lastSavedDataRef with fetched lead data
                     const parsedLead = {
                         ...fetchedLead,
@@ -93,7 +97,7 @@ const LeadDetailModal = ({
                         comments: typeof fetchedLead.comments === 'string' ? JSON.parse(fetchedLead.comments || '[]') : (fetchedLead.comments || []),
                         proposals: typeof fetchedLead.proposals === 'string' ? JSON.parse(fetchedLead.proposals || '[]') : (fetchedLead.proposals || []),
                         projectIds: typeof fetchedLead.projectIds === 'string' ? JSON.parse(fetchedLead.projectIds || '[]') : (fetchedLead.projectIds || []),
-                        sites: typeof fetchedLead.sites === 'string' ? JSON.parse(fetchedLead.sites || '[]') : (fetchedLead.sites || [])
+                        sites: sitesFromApi
                     };
                     lastSavedDataRef.current = parsedLead;
                 }
@@ -234,6 +238,12 @@ const LeadDetailModal = ({
             return;
         }
 
+        // CRITICAL: Don't overwrite formData if user has edited any field (prevents "still overwriting" while typing)
+        if (userEditedFieldsRef.current.size > 0 && !isDifferentLead) {
+            console.log('⏸️ Skipping formData update - user has edited fields');
+            return;
+        }
+
         // Only update if it's a different lead (new lead loaded) OR if status/stage changed in the lead prop
         // This ensures we update formData when parent refreshes lead data after save
         const currentStatus = normalizeLifecycleStage(lead.status);
@@ -262,7 +272,7 @@ const LeadDetailModal = ({
                 activityLog: Array.isArray(lead.activityLog) ? lead.activityLog : (typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : []),
                 billingTerms: typeof lead.billingTerms === 'object' && lead.billingTerms !== null ? lead.billingTerms : (typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : {}),
                 proposals: Array.isArray(lead.proposals) ? lead.proposals : (typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : []),
-                sites: Array.isArray(lead.sites) ? lead.sites : (typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : []),
+                sites: Array.isArray(lead.sites) ? lead.sites : (Array.isArray(lead.clientSites) ? lead.clientSites : (typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : [])),
                 thumbnail: lead.thumbnail || '',
                 externalAgentId: lead.externalAgentId || (lead.externalAgent?.id || null),
                 firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate),
@@ -313,6 +323,9 @@ const LeadDetailModal = ({
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
+    
+    // CRITICAL: Override ref for Entity Name - display this while user is typing so effects can't overwrite visible value
+    const nameOverrideRef = useRef(null);
     
     // Track when user has started typing - once they start, NEVER update inputs from prop
     const userHasStartedTypingRef = useRef(false);
@@ -1280,6 +1293,11 @@ const LeadDetailModal = ({
         previousLeadIdRef.current = currentLeadId;
     }, [lead?.id]);
     
+    // Clear name override when switching to a different lead so we show the new lead's name
+    useEffect(() => {
+        nameOverrideRef.current = null;
+    }, [lead?.id]);
+    
     // DISABLED: This was causing status/stage to be overwritten from stale parent data
     // When auto-saving changes, the parent's lead prop wasn't updated fast enough,
     // causing this effect to revert changes back to old values
@@ -1352,10 +1370,10 @@ const LeadDetailModal = ({
             return false;
         }
 
-        // Rate limiting: Don't auto-save if we just saved recently (within 3 seconds - increased from 2)
+        // Rate limiting: Don't auto-save if we just saved recently (within 1.2s)
         const now = Date.now();
         const timeSinceLastSave = now - lastAutoSaveAttemptRef.current;
-        if (timeSinceLastSave < 3000 && !skipChangeCheck) {
+        if (timeSinceLastSave < 1200 && !skipChangeCheck) {
             return false; // Skip if we just attempted a save recently
         }
 
@@ -1394,6 +1412,7 @@ const LeadDetailModal = ({
             
             const leadData = {
                 ...currentFormData,
+                name: nameOverrideRef.current != null ? nameOverrideRef.current : (currentFormData.name ?? ''),
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 // Explicitly include externalAgentId to ensure it's saved (even if null)
@@ -1491,7 +1510,6 @@ const LeadDetailModal = ({
         }
         
         // Debounce auto-save to prevent rapid API calls when switching tabs quickly
-        // Increased debounce time to 1000ms to give more time between requests
         autoSaveDebounceTimeoutRef.current = setTimeout(async () => {
             // Check rate limit again before executing (in case it changed during debounce)
             if (window.RateLimitManager?.isRateLimited()) {
@@ -1515,6 +1533,9 @@ const LeadDetailModal = ({
                 // Update formDataRef immediately so it's in sync
                 formDataRef.current = currentFormData;
             }
+            if (nameOverrideRef.current != null) {
+                currentFormData = { ...currentFormData, name: nameOverrideRef.current };
+            }
             
             // Auto-save logic:
             // 1. For existing leads (leadId exists): Save when switching tabs (only if changed)
@@ -1530,8 +1551,61 @@ const LeadDetailModal = ({
             }
             
             autoSaveDebounceTimeoutRef.current = null;
-        }, 1000); // Increased to 1000ms debounce - wait for user to finish switching tabs and prevent rapid requests
+        }, 500);
     };
+    
+    // Flush pending auto-save before close (ensures changes persist on hard refresh)
+    const flushPendingSave = useCallback(async () => {
+        if (autoSaveDebounceTimeoutRef.current) {
+            clearTimeout(autoSaveDebounceTimeoutRef.current);
+            autoSaveDebounceTimeoutRef.current = null;
+        }
+        let currentFormData = formDataRef.current || formData;
+        if (notesTextareaRef.current) {
+            const latestNotes = notesTextareaRef.current.value ?? '';
+            currentFormData = { ...currentFormData, notes: latestNotes };
+            formDataRef.current = currentFormData;
+        }
+        if (nameOverrideRef.current != null) {
+            currentFormData = { ...currentFormData, name: nameOverrideRef.current };
+        }
+        const nameToUse = currentFormData.name;
+        if (!nameToUse || !String(nameToUse).trim()) return;
+        await handleAutoSave(currentFormData, false, false);
+    }, [formData]);
+    
+    // Close handler: flush pending save then close
+    const handleClose = useCallback(async () => {
+        await flushPendingSave();
+        if (onClose) onClose();
+    }, [flushPendingSave, onClose]);
+    
+    // Flush pending save on unmount (e.g. navigation via global nav or route change) so changes persist
+    useEffect(() => {
+        return () => {
+            flushPendingSave().catch(() => {});
+        };
+    }, [flushPendingSave]);
+    
+    // Warn on refresh/close tab when there are unsaved changes
+    useEffect(() => {
+        const onBeforeUnload = (e) => {
+            if (!userHasStartedTypingRef.current && userEditedFieldsRef.current.size === 0) return;
+            try {
+                const last = lastSavedDataRef.current;
+                let cur = formDataRef.current;
+                if (nameOverrideRef.current != null) {
+                    cur = { ...cur, name: nameOverrideRef.current };
+                }
+                if (!cur?.name?.trim()) return;
+                if (last && JSON.stringify(cur) === JSON.stringify(last)) return;
+            } catch (_) { /* ignore */ }
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    }, []);
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
@@ -1597,6 +1671,7 @@ const LeadDetailModal = ({
     const isLoadingSitesRef = useRef(false);
     const [showSiteForm, setShowSiteForm] = useState(false);
     const [editingSite, setEditingSite] = useState(null);
+    const [isAddingSite, setIsAddingSite] = useState(false);
     const [newSite, setNewSite] = useState({
         name: '',
         address: '',
@@ -1765,10 +1840,9 @@ const LeadDetailModal = ({
             if (onSave && finalFormData) {
                 try {
                     await onSave(finalFormData, true);
-                    // Keep the flag set longer to prevent immediate reset when API response comes back
                     setTimeout(() => {
                         isSavingProposalsRef.current = false;
-                    }, 3000); // Increased to 3 seconds to ensure API response is processed
+                    }, 1000);
                 } catch (error) {
                     console.error('❌ Error saving proposals:', error);
                     isSavingProposalsRef.current = false;
@@ -1777,7 +1851,7 @@ const LeadDetailModal = ({
                 console.warn('⚠️ onSave not available or finalFormData missing');
                 isSavingProposalsRef.current = false;
             }
-        }, 500); // Increased debounce to 500ms
+        }, 300);
     };
     
     // Helper function to send notifications
@@ -2178,12 +2252,22 @@ const LeadDetailModal = ({
         }
     };
     
-    // REMOVED: Automatic sites loading useEffect
-    // Sites are already included in the lead object from the API (via parseClientJsonFields)
-    // The loadSitesFromDatabase function is kept for manual refresh when needed (e.g., after adding a site)
+    // Resolve lead sites persistence another way: when user opens Sites tab, always load from GET /api/sites/client/:id
+    // so we show sites even if the lead was loaded from cache/list without clientSites
+    useEffect(() => {
+        if (activeTab === 'sites' && formData?.id && window.api?.getSites) {
+            loadSitesFromDatabase(formData.id);
+        }
+    }, [activeTab, formData?.id]);
 
     const handleAddSite = async () => {
-        if (!newSite.name) {
+        if (isAddingSite) return;
+        let siteName = (newSite.name ?? '').trim();
+        if (!siteName) {
+            const el = document.querySelector('[data-testid="site-name-input"]');
+            if (el && typeof el.value === 'string') siteName = el.value.trim();
+        }
+        if (!siteName) {
             alert('Site name is required');
             return;
         }
@@ -2192,6 +2276,7 @@ const LeadDetailModal = ({
             alert('Save the lead first before adding sites.');
             return;
         }
+        setIsAddingSite(true);
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -2199,7 +2284,7 @@ const LeadDetailModal = ({
                 return;
             }
             const sitePayload = {
-                name: newSite.name ?? '',
+                name: siteName,
                 address: newSite.address ?? '',
                 contactPerson: newSite.contactPerson ?? '',
                 contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
@@ -2209,17 +2294,28 @@ const LeadDetailModal = ({
                 stage: newSite.stage ?? 'Potential',
                 aidaStatus: newSite.aidaStatus ?? 'Awareness'
             };
-            let response;
-            if (window.api?.createSite) {
-                response = await window.api.createSite(leadId, sitePayload);
-            } else if (window.DatabaseAPI?.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}`, { method: 'POST', body: JSON.stringify(sitePayload) });
+            const existingSites = Array.isArray(formData.sites) ? formData.sites : [];
+            const sitesWithNew = [...existingSites, sitePayload];
+            const updateLeadForSites = window.api?.updateLead || window.DatabaseAPI?.updateLead;
+            let savedSite = null;
+
+            if (typeof updateLeadForSites === 'function') {
+                await updateLeadForSites(leadId, { id: leadId, name: (formData?.name ?? '').trim() || 'Lead', sites: sitesWithNew });
+                if (typeof loadSitesFromDatabase === 'function') await loadSitesFromDatabase(leadId);
+                savedSite = { id: 'temp-' + Date.now(), ...sitePayload };
             } else {
-                alert('❌ Site API not available. Please refresh the page.');
-                return;
+                let response;
+                if (window.api?.createSite) {
+                    response = await window.api.createSite(leadId, sitePayload);
+                } else if (window.DatabaseAPI?.makeRequest) {
+                    response = await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}`, { method: 'POST', body: JSON.stringify(sitePayload) });
+                } else {
+                    alert('❌ Site API not available. Please refresh the page.');
+                    return;
+                }
+                savedSite = response?.data?.site || response?.site || response;
             }
-            const savedSite = response?.data?.site || response?.site || response;
-            
+
             if (savedSite && savedSite.id) {
                 // Add to optimistic sites state
                 setOptimisticSites(prev => {
@@ -2264,7 +2360,7 @@ const LeadDetailModal = ({
                 const activity = {
                     id: Date.now(),
                     type: 'Site Added',
-                    description: `Added site: ${newSite.name}`,
+                    description: `Added site: ${siteName}`,
                     timestamp: new Date().toISOString(),
                     user: currentUser.name,
                     userId: currentUser.id,
@@ -2282,7 +2378,10 @@ const LeadDetailModal = ({
                     await onSave(updatedFormData, true);
                 } catch (error) {
                     console.error('❌ Error saving site:', error);
-                    alert('Failed to save site. Please try again.');
+                    const errMsg = (error?.message || '').toLowerCase();
+                    const isConnectionFailure = errMsg.includes('database connection failed') || errMsg.includes('failed to fetch') || errMsg.includes('network error') || errMsg.includes('connection reset') || errMsg.includes('connection refused') || errMsg.includes('econnrefused') || errMsg.includes('unreachable') || error?.isNetworkError;
+                    const refusedMsg = (errMsg.includes('connection refused') || errMsg.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : (isConnectionFailure ? 'Site connection has failed. Please check your connection and try again.' : 'Failed to save site. Please try again.');
+                    alert('❌ ' + refusedMsg);
                 }
                 handleTabChange('sites');
                 
@@ -2306,15 +2405,34 @@ const LeadDetailModal = ({
             }
         } catch (error) {
             console.error('❌ Error creating site:', error);
-            const errorMessage = error?.message || 'Unknown error';
+            const updateLeadForSites = window.api?.updateLead || window.DatabaseAPI?.updateLead;
+            if (typeof updateLeadForSites === 'function' && leadId) {
+                const sitesWithNew = [...(Array.isArray(formData.sites) ? formData.sites : []), sitePayload];
+                try {
+                    await updateLeadForSites(leadId, { id: leadId, name: (formData?.name ?? '').trim() || 'Lead', sites: sitesWithNew });
+                    if (typeof loadSitesFromDatabase === 'function') await loadSitesFromDatabase(leadId);
+                    setFormData(prev => ({ ...prev, sites: sitesWithNew }));
+                    setShowSiteForm(false);
+                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', stage: 'Potential', aidaStatus: 'Awareness' });
+                    handleTabChange('sites');
+                    return;
+                } catch (e) { console.warn('Fallback PATCH lead for sites failed:', e); }
+            }
+            const errorMessage = (error?.message || 'Unknown error').toLowerCase();
             const details = (error && typeof error.details === 'string') ? error.details : '';
-            const fullMessage = details ? (errorMessage + ' — ' + details) : errorMessage;
-            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error') || errorMessage.includes('Failed to add site') || errorMessage.includes('Sites table not initialized');
-            if (isServerError) {
+            const fullMessage = details ? ((error?.message || 'Unknown error') + ' — ' + details) : (error?.message || 'Unknown error');
+            const isConnectionFailure = errorMessage.includes('database connection failed') || errorMessage.includes('failed to fetch') || errorMessage.includes('network error') || errorMessage.includes('connection reset') || errorMessage.includes('connection refused') || errorMessage.includes('econnrefused') || errorMessage.includes('unreachable') || errorMessage.includes('timeout') || (error?.isNetworkError);
+            const isServerError = errorMessage.includes('500') || errorMessage.includes('internal server error') || errorMessage.includes('failed to add site') || errorMessage.includes('sites table not initialized');
+            if (isConnectionFailure) {
+                const refusedMsg = (errorMessage.includes('connection refused') || errorMessage.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : 'Site connection has failed. Please check your connection and try again.';
+                alert('❌ ' + refusedMsg);
+            } else if (isServerError) {
                 alert('❌ ' + (fullMessage || 'Unable to save site. This may be due to a database issue. Please contact support if this persists.'));
             } else {
                 alert('❌ Error saving site to database: ' + fullMessage);
             }
+        } finally {
+            setIsAddingSite(false);
         }
     };
 
@@ -2390,7 +2508,10 @@ const LeadDetailModal = ({
             await onSave(updatedFormData, true);
         } catch (error) {
             console.error('❌ Error saving site update:', error);
-            alert('Failed to save site update. Please try again.');
+            const errMsg = (error?.message || '').toLowerCase();
+            const isConnectionFailure = errMsg.includes('database connection failed') || errMsg.includes('failed to fetch') || errMsg.includes('network error') || errMsg.includes('connection reset') || errMsg.includes('connection refused') || errMsg.includes('econnrefused') || errMsg.includes('unreachable') || error?.isNetworkError;
+            const refusedMsg = (errMsg.includes('connection refused') || errMsg.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : (isConnectionFailure ? 'Site connection has failed. Please check your connection and try again.' : 'Failed to save site update. Please try again.');
+            alert('❌ ' + refusedMsg);
         } finally {
             setTimeout(() => { isAutoSavingRef.current = false; }, 800);
         }
@@ -2434,7 +2555,10 @@ const LeadDetailModal = ({
             await onSave(updatedFormData, true);
         } catch (error) {
             console.error('❌ Error saving site deletion:', error);
-            alert('Failed to delete site. Please try again.');
+            const errMsg = (error?.message || '').toLowerCase();
+            const isConnectionFailure = errMsg.includes('database connection failed') || errMsg.includes('failed to fetch') || errMsg.includes('network error') || errMsg.includes('connection reset') || errMsg.includes('connection refused') || errMsg.includes('econnrefused') || errMsg.includes('unreachable') || error?.isNetworkError;
+            const refusedMsg = (errMsg.includes('connection refused') || errMsg.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : (isConnectionFailure ? 'Site connection has failed. Please check your connection and try again.' : 'Failed to delete site. Please try again.');
+            alert('❌ ' + refusedMsg);
             setFormData(prevFormData);
         } finally {
             setTimeout(() => { isAutoSavingRef.current = false; }, 800);
@@ -2757,10 +2881,10 @@ const LeadDetailModal = ({
                     handleTabChange('notes');
                 }, 0);
             }).finally(() => {
-                // Clear the flag after a delay to allow API response to propagate
+                // Clear the flag after a short delay to allow API response to propagate
                 setTimeout(() => {
                     isAutoSavingRef.current = false;
-                }, 3000);
+                }, 800);
             });
             
         }
@@ -2770,7 +2894,8 @@ const LeadDetailModal = ({
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.name || formData.name.trim() === '') {
+        const nameToSubmit = nameOverrideRef.current != null ? nameOverrideRef.current : (formData.name ?? '');
+        if (!nameToSubmit || String(nameToSubmit).trim() === '') {
             alert('Please enter an Entity Name');
             return;
         }
@@ -2783,6 +2908,7 @@ const LeadDetailModal = ({
             
             const leadData = {
                 ...formData,
+                name: nameToSubmit,
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 // CRITICAL: Explicitly include followUps and comments to ensure they're saved
@@ -2870,19 +2996,16 @@ const LeadDetailModal = ({
         );
     }
 
-    // Navigation helper function
-    const navigateToPage = (page) => {
-        // If navigating to clients page, reset the Clients component view first
+    // Navigation helper function: flush and close FIRST so changes persist, then navigate
+    const navigateToPage = async (page) => {
+        await handleClose();
         if (page === 'clients') {
-            // Dispatch event to reset Clients component view
             if (window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('resetClientsView', { 
                     detail: { viewMode: 'clients' } 
                 }));
             }
         }
-        
-        // Navigate using RouteState
         if (window.RouteState && window.RouteState.navigate) {
             window.RouteState.navigate({
                 page: page,
@@ -2898,11 +3021,6 @@ const LeadDetailModal = ({
                 detail: { page: page } 
             }));
         }
-        
-        // Close modal when navigating away
-        if (onClose) {
-            onClose();
-        }
     };
 
     if (isFullPage) {
@@ -2917,9 +3035,7 @@ const LeadDetailModal = ({
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (onClose) {
-                                    onClose();
-                                }
+                                handleClose();
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 mr-2`}
                             title="Go back"
@@ -2942,9 +3058,7 @@ const LeadDetailModal = ({
                                         detail: { viewMode: 'leads' } 
                                     }));
                                 }
-                                if (onClose) {
-                                    onClose();
-                                }
+                                handleClose();
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                         >
@@ -3026,7 +3140,7 @@ const LeadDetailModal = ({
                             </div>
                         </div>
                         <button 
-                            onClick={onClose} 
+                            onClick={handleClose} 
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} p-2 rounded transition-colors`}
                         >
                             <i className="fas fa-times text-lg"></i>
@@ -3081,7 +3195,18 @@ const LeadDetailModal = ({
 
                 {/* Content */}
                 <div ref={contentScrollableRef} className="flex-1 overflow-y-auto p-6">
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form
+                        onSubmit={handleSubmit}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            const el = e.target;
+                            if (el.tagName === 'TEXTAREA') return;
+                            if ((el.tagName === 'INPUT' && el.type !== 'submit' && el.type !== 'button') || el.tagName === 'SELECT') {
+                                e.preventDefault();
+                            }
+                        }}
+                        className="space-y-6"
+                    >
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <div className="space-y-4">
@@ -3093,14 +3218,18 @@ const LeadDetailModal = ({
                                         <input 
                                             type="text" 
                                             ref={nameInputRef}
-                                            value={formData.name || ''}
+                                            value={nameOverrideRef.current != null ? nameOverrideRef.current : (formData.name || '')}
                                             onFocus={() => {
+                                                nameOverrideRef.current = formData.name ?? '';
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('name'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true, isAutoSavingRef.current);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
+                                                const v = e.target.value;
+                                                nameOverrideRef.current = v;
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name'); // Track that user has edited this field
@@ -3111,14 +3240,23 @@ const LeadDetailModal = ({
                                                     notifyEditingChange(false); // Only notify if state changed
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
-                                                    const updated = {...prev, name: e.target.value};
+                                                    const updated = {...prev, name: v};
                                                     // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
                                             }}
                                             onBlur={() => {
-                                                // Clear editing flag after a delay to allow for final keystrokes
+                                                const sync = nameOverrideRef.current;
+                                                if (sync != null) {
+                                                    setFormData(prev => {
+                                                        const next = {...prev, name: sync};
+                                                        formDataRef.current = next;
+                                                        return next;
+                                                    });
+                                                    nameOverrideRef.current = null;
+                                                    flushPendingSave().catch(() => {});
+                                                }
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
                                                     notifyEditingChange(false, isAutoSavingRef.current);
@@ -3137,6 +3275,7 @@ const LeadDetailModal = ({
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('industry'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
@@ -3215,6 +3354,7 @@ const LeadDetailModal = ({
                                             value={formData.firstContactDate || new Date().toISOString().split('T')[0]}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userEditedFieldsRef.current.add('firstContactDate'); // Prevent overwrite as soon as user focuses
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
@@ -3243,6 +3383,7 @@ const LeadDetailModal = ({
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('website'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
@@ -3284,6 +3425,7 @@ const LeadDetailModal = ({
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('source'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
@@ -3615,9 +3757,7 @@ const LeadDetailModal = ({
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            if (onClose) {
-                                                onClose();
-                                            }
+                                            handleClose();
                                         }}
                                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
                                             isDark 
@@ -3949,6 +4089,7 @@ const LeadDetailModal = ({
                                                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Name *</label>
                                                 <input
                                                     type="text"
+                                                    data-testid="site-name-input"
                                                     value={newSite.name}
                                                     onChange={(e) => setNewSite({...newSite, name: e.target.value})}
                                                     onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
@@ -4154,9 +4295,12 @@ const LeadDetailModal = ({
                                             <button
                                                 type="button"
                                                 onClick={editingSite ? handleUpdateSite : handleAddSite}
-                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                                disabled={!editingSite && isAddingSite}
+                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                {editingSite ? 'Update' : 'Add'} Site
+                                                {!editingSite && isAddingSite ? (
+                                                    <><i className="fas fa-spinner fa-spin mr-1.5"></i>Adding…</>
+                                                ) : editingSite ? 'Update' : 'Add'} Site
                                             </button>
                                         </div>
                                     </div>
@@ -5804,7 +5948,7 @@ const LeadDetailModal = ({
                             <div className="flex gap-3">
                                 <button 
                                     type="button" 
-                                    onClick={onClose} 
+                                    onClick={handleClose} 
                                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                                 >
                                     Cancel
@@ -6033,7 +6177,18 @@ const LeadDetailModal = ({
                     )
                 ),
                 React.createElement('div', { className: 'flex-1 overflow-y-auto' },
-                    React.createElement('form', { onSubmit: handleSubmit, className: 'h-full flex flex-col' },
+                    React.createElement('form', {
+                        onSubmit: handleSubmit,
+                        onKeyDown: (e) => {
+                            if (e.key !== 'Enter') return;
+                            const el = e.target;
+                            if (el.tagName === 'TEXTAREA') return;
+                            if ((el.tagName === 'INPUT' && el.type !== 'submit' && el.type !== 'button') || el.tagName === 'SELECT') {
+                                e.preventDefault();
+                            }
+                        },
+                        className: 'h-full flex flex-col'
+                    },
                         React.createElement('div', { className: 'border-b border-gray-200 px-3 sm:px-6' },
                             React.createElement('div', { className: 'flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide', style: { scrollbarWidth: 'none', msOverflowStyle: 'none' } },
                                 ['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab =>
@@ -6057,9 +6212,10 @@ const LeadDetailModal = ({
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Entity Name'),
                                         React.createElement('input', {
                                             type: 'text',
-                                            value: formData.name,
+                                            value: nameOverrideRef.current != null ? nameOverrideRef.current : (formData.name || ''),
                                             onChange: (e) => {
-                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                const v = e.target.value;
+                                                nameOverrideRef.current = v;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name');
                                                 isEditingRef.current = true;
@@ -6069,18 +6225,29 @@ const LeadDetailModal = ({
                                                     isEditingRef.current = false;
                                                     notifyEditingChange(false);
                                                 }, 5000);
-                                                
-                                                // Use functional update to avoid closure issues
                                                 setFormData(prev => {
-                                                    const updated = {...prev, name: e.target.value};
+                                                    const updated = {...prev, name: v};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
                                             },
                                             onFocus: () => {
+                                                nameOverrideRef.current = formData.name ?? '';
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('name');
                                                 notifyEditingChange(true);
+                                            },
+                                            onBlur: () => {
+                                                const sync = nameOverrideRef.current;
+                                                if (sync != null) {
+                                                    setFormData(prev => {
+                                                        const next = {...prev, name: sync};
+                                                        formDataRef.current = next;
+                                                        return next;
+                                                    });
+                                                    nameOverrideRef.current = null;
+                                                }
                                             },
                                             ref: nameInputRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',

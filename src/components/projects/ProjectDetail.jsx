@@ -1176,6 +1176,7 @@ function initializeProjectDetail() {
         }
         const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = ReactHooks;
         const React = ReactHooks; // Keep React available for React.Fragment fallback
+        const TASK_LIST_DEBUG = false; // Set true to log tasks without matching listId
         const [listModalComponent, setListModalComponent] = useState(
             () => (typeof window.ListModal === 'function' ? window.ListModal : null)
         );
@@ -1416,101 +1417,37 @@ function initializeProjectDetail() {
     // Check URL for deep link parameters first (e.g., docSectionId for Document Collection)
     // If found, start with the appropriate tab; otherwise default to Overview
     const getInitialActiveSection = () => {
-        // Check for document collection deep link parameters
         const hash = window.location.hash || '';
         const search = window.location.search || '';
-        
         let params = null;
-        let hasDocCollectionParams = false;
-        
-        // Check hash first (for hash-based routing)
-        if (hash.includes('?') && hash.includes('docSectionId=')) {
+        if (hash.includes('?')) {
             const hashParts = hash.split('?');
-            if (hashParts.length > 1) {
-                params = new URLSearchParams(hashParts[1]);
-                hasDocCollectionParams = !!params.get('docSectionId');
-            }
+            if (hashParts.length > 1) params = new URLSearchParams(hashParts[1]);
         }
+        if (!params && search) params = new URLSearchParams(search);
         
-        // Check search params as fallback
-        if (!hasDocCollectionParams && search.includes('docSectionId=')) {
-            params = new URLSearchParams(search);
-            hasDocCollectionParams = !!params.get('docSectionId');
-        }
+        const tabFromUrl = params ? (() => {
+            const t = params.get('tab');
+            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(t) ? t : null;
+        })() : null;
+        const hasDocWeek = params ? !!params.get('docWeek') : false;
+        const hasWeeklySectionId = params ? !!params.get('weeklySectionId') : false;
+        const hasDocMonth = params ? !!params.get('docMonth') : false;
+        const hasDocSectionId = params ? !!params.get('docSectionId') : false;
+        const hasDocDocumentId = params ? !!params.get('docDocumentId') : false;
+        const hasDocYear = params ? !!params.get('docYear') : false;
+        const hasCommentId = params ? !!params.get('commentId') : false;
         
-        // Check if commentId exists but other params don't (might be document collection comment)
-        let hasCommentIdOnly = false;
-        if (!hasDocCollectionParams) {
-            if (!params) {
-                // Parse params if not already done
-                if (hash.includes('?')) {
-                    const hashParts = hash.split('?');
-                    if (hashParts.length > 1) {
-                        params = new URLSearchParams(hashParts[1]);
-                    }
-                } else if (search) {
-                    params = new URLSearchParams(search);
-                }
-            }
-            if (params) {
-                hasCommentIdOnly = !!params.get('commentId') && 
-                                  !params.get('docSectionId') && 
-                                  !params.get('task') && 
-                                  !params.get('weeklySectionId');
-            }
-        }
-        
-        // Check for weekly FMS review params
-        let hasWeeklyFMSParams = false;
-        if (!hasDocCollectionParams && !hasCommentIdOnly) {
-            if (hash.includes('?') && hash.includes('weeklySectionId=')) {
-                const hashParts = hash.split('?');
-                if (hashParts.length > 1) {
-                    params = new URLSearchParams(hashParts[1]);
-                    hasWeeklyFMSParams = !!params.get('weeklySectionId');
-                }
-            }
-            if (!hasWeeklyFMSParams && search.includes('weeklySectionId=')) {
-                params = new URLSearchParams(search);
-                hasWeeklyFMSParams = !!params.get('weeklySectionId');
-            }
-        }
-        
-        // Check for tab parameter in URL (e.g., ?tab=tasks)
-        let tabFromUrl = null;
-        if (!hasDocCollectionParams && !hasWeeklyFMSParams && !hasCommentIdOnly) {
-            if (!params) {
-                // Parse params if not already done
-                if (hash.includes('?')) {
-                    const hashParts = hash.split('?');
-                    if (hashParts.length > 1) {
-                        params = new URLSearchParams(hashParts[1]);
-                    }
-                } else if (search) {
-                    params = new URLSearchParams(search);
-                }
-            }
-            if (params) {
-                tabFromUrl = params.get('tab');
-                // Validate tab value
-                if (tabFromUrl && !['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview'].includes(tabFromUrl)) {
-                    tabFromUrl = null;
-                }
-            }
-        }
-        
-        if (hasDocCollectionParams) {
-            return 'documentCollection';
-        } else if (hasWeeklyFMSParams) {
-            return 'weeklyFMSReview';
-        } else if (tabFromUrl) {
-            // Tab parameter takes precedence for simple navigation
-            return tabFromUrl;
-        } else if (hasCommentIdOnly) {
-            // If only commentId is present, default to document collection tab
-            // The tracker will search for the comment across all sections
-            return 'documentCollection';
-        }
+        // Email/link deep links: tab=monthlyFMSReview goes to Monthly FMS tab
+        if (tabFromUrl === 'monthlyFMSReview') return 'monthlyFMSReview';
+        // docWeek or weeklySectionId -> Weekly FMS tab (links from email/notifications)
+        if (hasDocWeek || hasWeeklySectionId) return 'weeklyFMSReview';
+        // docSectionId + docMonth (and not docWeek) -> Document Collection tab
+        const hasDocCollectionParams = (hasDocSectionId || (hasDocDocumentId && hasDocMonth) || (hasDocYear && (hasDocSectionId || hasDocDocumentId))) && !hasDocWeek;
+        if (hasDocCollectionParams) return 'documentCollection';
+        if (tabFromUrl) return tabFromUrl;
+        // commentId only (no section/doc) -> document collection; tracker will search for comment
+        if (hasCommentId && !hasDocSectionId && !params?.get('task') && !hasWeeklySectionId) return 'documentCollection';
         return 'overview';
     };
     
@@ -1924,13 +1861,18 @@ function initializeProjectDetail() {
                 expectedPath
             });
             
-            // Preserve any existing search params (like task=)
+            // Preserve any existing search params (like task=) and hash (e.g. docSectionId for document collection deep link)
             const currentSearch = window.location.search;
+            const currentHash = window.location.hash || '';
             const url = new URL(window.location.href);
             url.pathname = expectedPath;
             // Keep existing search params
             if (currentSearch) {
                 url.search = currentSearch;
+            }
+            // Preserve hash so document collection / comment deep links still work
+            if (currentHash) {
+                url.hash = currentHash;
             }
             
             try {
@@ -2308,21 +2250,29 @@ function initializeProjectDetail() {
     }, [activeSection, project?.id, updateUrl]);
     
     // Ensure we are on the overview tab when switching to a different project.
-    // Use a ref to track the previous project ID to only reset when actually switching projects
-    const previousProjectIdForSectionRef = useRef(project?.id);
+    // Use a ref to track the previous project ID to only reset when actually switching projects.
+    // IMPORTANT: Use null initially so "first time we have a project" (e.g. from URL deep link)
+    // does not get treated as "switching projects" and reset to overview — we preserve the
+    // initial tab from getInitialActiveSection() (e.g. documentCollection when URL has doc params).
+    const previousProjectIdForSectionRef = useRef(null);
     useEffect(() => {
         if (!project?.id) return;
         
-        // Only reset to overview if we're actually switching to a different project
-        const projectIdChanged = previousProjectIdForSectionRef.current !== project?.id;
-        if (projectIdChanged && previousProjectIdForSectionRef.current !== null && previousProjectIdForSectionRef.current !== undefined) {
-            // We're switching to a different project, reset to overview
+        const prevId = previousProjectIdForSectionRef.current;
+        const isFirstProject = prevId === null || prevId === undefined;
+        
+        if (isFirstProject) {
+            // First time we have a project (e.g. opened from URL) — just track it, do not reset tab
+            previousProjectIdForSectionRef.current = project?.id;
+            return;
+        }
+        
+        // Only reset to overview if we're actually switching from one project to another
+        const projectIdChanged = prevId !== project?.id;
+        if (projectIdChanged) {
             if (activeSection !== 'overview') {
                 switchSection('overview');
             }
-            previousProjectIdForSectionRef.current = project?.id;
-        } else if (previousProjectIdForSectionRef.current === null || previousProjectIdForSectionRef.current === undefined) {
-            // First time setting project ID, just track it
             previousProjectIdForSectionRef.current = project?.id;
         }
     }, [project?.id, activeSection, switchSection]);
@@ -2647,9 +2597,14 @@ function initializeProjectDetail() {
             }
         };
         
-        // Check immediately
+        // Check immediately and again after a short delay so we catch the hash if it's set
+        // after mount (e.g. by router or when opening project from URL)
         checkAndSwitchToDocumentCollection();
         checkAndSwitchToWeeklyFMSReview();
+        const delayedCheck = setTimeout(() => {
+            checkAndSwitchToDocumentCollection();
+            checkAndSwitchToWeeklyFMSReview();
+        }, 50);
         
         // Also listen for hash changes
         const handleHashChange = () => {
@@ -2660,7 +2615,10 @@ function initializeProjectDetail() {
         };
         
         window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
+        return () => {
+            clearTimeout(delayedCheck);
+            window.removeEventListener('hashchange', handleHashChange);
+        };
     }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess, forceDocumentCollectionDeepLink]);
     
     // If the project is opened via a deep-link to a specific task
@@ -4322,8 +4280,7 @@ function initializeProjectDetail() {
                     ...targetList,
                     tasks: [...targetList.tasks, ...unmatchedTasksForList]
                 };
-                console.warn(`ProjectDetail: ${unmatchedTasksForList.length} task(s) without matching listId assigned to "${targetList.name}" list. Task IDs:`, 
-                    unmatchedTasksForList.map(item => item.task.id));
+                if (TASK_LIST_DEBUG) console.warn(`ProjectDetail: ${unmatchedTasksForList.length} task(s) without matching listId assigned to "${targetList.name}" list. Task IDs:`, unmatchedTasksForList.map(item => item.task.id));
             }
         }
 

@@ -3,6 +3,7 @@
 
 import { prisma } from './_lib/prisma.js';
 import { ok, serverError, badRequest, notFound } from './_lib/response.js';
+import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js';
 
 export default async function handler(req, res) {
   const { method } = req;
@@ -135,6 +136,27 @@ export default async function handler(req, res) {
         projectId: comment.projectId,
         author: comment.author
       });
+
+      // Notify participants: task assignee, prior commenters, @mentioned (in-app + email per preferences)
+      try {
+        const [task, priorComments] = await Promise.all([
+          prisma.task.findUnique({ where: { id: String(taskId) }, select: { assigneeId: true, title: true } }),
+          prisma.taskComment.findMany({ where: { taskId: String(taskId) }, select: { authorId: true } })
+        ]);
+        const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
+        await notifyCommentParticipants({
+          commentAuthorId: finalAuthorId,
+          commentText: text,
+          entityAuthorId: task?.assigneeId || null,
+          priorCommentAuthorIds: priorAuthorIds,
+          authorName: finalAuthor,
+          contextTitle: `Task: ${task?.title || taskId}`,
+          link: `#/projects/${projectId}?task=${taskId}&commentId=${comment.id}`,
+          metadata: { projectId, taskId, taskTitle: task?.title, commentId: comment.id, commentText: text }
+        });
+      } catch (notifyErr) {
+        console.error('Notify comment participants failed (task comment):', notifyErr);
+      }
 
       return ok(res, { comment });
     }

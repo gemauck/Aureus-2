@@ -29,9 +29,10 @@ async function handler(req, res) {
 
     logger.info({ email }, '✅ Email and password validated, proceeding...')
 
-    // Development-only shortcut to allow local login without a database
-    if (process.env.DEV_LOCAL_NO_DB === 'true') {
-      logger.info({ email }, '🔧 Using DEV_LOCAL_NO_DB mode')
+    // Test script / dev shortcut: TEST_DEV_AUTH is set by run-projects-test-with-dev-auth.sh (not in .env.local)
+    const useDevAuth = process.env.DEV_LOCAL_NO_DB === 'true' || process.env.TEST_DEV_AUTH === 'true'
+    if (useDevAuth) {
+      logger.info({ email }, '🔧 Using dev auth mode (DEV_LOCAL_NO_DB or TEST_DEV_AUTH)')
       const devEmail = 'admin@example.com'
       const devPassword = 'password123'
       if (email !== devEmail || password !== devPassword) {
@@ -129,16 +130,22 @@ async function handler(req, res) {
       hashLength: user.passwordHash?.length || 0, 
       hashPrefix: user.passwordHash?.substring(0, 7) || 'N/A',
       passwordType: typeof password,
-      hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/)
+      hashFormatValid: !!(user.passwordHash && user.passwordHash.match(/^\$2[ayb]\$.{56}$/))
     }, '🔑 Verifying password')
     
-    // Verify password - ensure password is a string
+    // Verify password - ensure password is a string; bcrypt.compare can throw on invalid hash format
     const passwordString = typeof password === 'string' ? password : String(password || '')
-    const valid = await bcrypt.compare(passwordString, user.passwordHash)
+    let valid = false
+    try {
+      valid = await bcrypt.compare(passwordString, user.passwordHash)
+    } catch (compareError) {
+      logger.warn({ email, userId: user.id, err: compareError.message }, '❌ Password compare threw (invalid hash format?)')
+      return unauthorized(res, 'Invalid credentials')
+    }
     logger.info({ 
       email, 
       valid, 
-      hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/),
+      hashFormatValid: !!(user.passwordHash && user.passwordHash.match(/^\$2[ayb]\$.{56}$/)),
       passwordProvided: !!passwordString,
       passwordStringLength: passwordString.length
     }, '🔑 Password comparison result')
@@ -173,14 +180,18 @@ async function handler(req, res) {
     const accessToken = signAccessToken(payload)
     const refreshToken = signRefreshToken(payload)
 
-    // Update last login and last seen timestamps
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { 
-        lastLoginAt: new Date(),
-        lastSeenAt: new Date()
-      }
-    })
+    // Update last login and last seen timestamps (non-fatal: do not fail login if update fails)
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { 
+          lastLoginAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+    } catch (updateErr) {
+      logger.warn({ email, userId: user.id, err: updateErr.message }, '⚠️ lastLoginAt/lastSeenAt update failed, login still succeeding')
+    }
 
     // Set refresh token cookie
     const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'

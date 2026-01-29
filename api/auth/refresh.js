@@ -6,6 +6,9 @@ import { verifyRefreshToken, signAccessToken } from '../_lib/jwt.js'
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   try {
+    if (!process.env.JWT_SECRET) {
+      return serverError(res, 'Server configuration error', 'JWT_SECRET missing')
+    }
     const cookieHeader = req.headers['cookie'] || ''
     const cookies = Object.fromEntries(cookieHeader.split(';').map(c => {
       const idx = c.indexOf('=')

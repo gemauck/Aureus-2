@@ -1,7 +1,9 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
+const DEEPLINK_DEBUG = false; // Set true to log deep-link checks (noisy)
+const DEBUG_SCROLL_SYNC = false; // Log scroll-sync attach/scroll (set true to debug)
 
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
@@ -25,6 +27,48 @@ const getFacilitiesLabel = (project) => {
     }
 
     return String(candidate || '').trim();
+};
+
+// Non-blocking toast for attachment errors (avoids native alert / CursorBrowser dialog suppression).
+const showAttachmentToast = (message) => {
+  const el = document.createElement('div');
+  el.setAttribute('role', 'alert');
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:90%;padding:12px 20px;background:#1e293b;color:#f1f5f9;border-radius:8px;font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => { el.remove(); }, 4000);
+};
+
+// Download comment attachment to disk (no new tab). Fetches file and triggers browser download.
+const downloadCommentAttachment = (url, filename) => {
+  if (!url) return;
+  const name = (filename || '').trim() || (url.split('/').pop() || 'download').split('?')[0];
+  fetch(url, { credentials: 'same-origin', mode: 'cors' })
+    .catch(() => null)
+    .then((res) => {
+      if (!res) return null;
+      if (!res.ok) {
+        const msg = res.status === 404
+          ? 'Attachment not found. It may have been deleted or is stored on another server.'
+          : `Download failed (${res.status}).`;
+        showAttachmentToast(msg);
+        return null;
+      }
+      return res.blob();
+    })
+    .then((blob) => {
+      if (!blob) return;
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = u;
+      a.download = name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(u);
+    })
+    .catch(() => {});
 };
 
 // Helper function to format dates as date and time (without timezone info)
@@ -112,7 +156,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const deletionTimestampRef = useRef(null); // Track when deletion started
     const deletionQueueRef = useRef([]); // Queue for pending deletions when one is already in progress
     const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
-    const scrollableContainersRef = useRef([]); // Store refs to all scrollable table containers
+    const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     
     const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
@@ -439,8 +483,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
+    const [pendingCommentAttachments, setPendingCommentAttachments] = useState([]);
+    const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
+    const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+
+    // Clear pending attachments when switching to another comment cell
+    useEffect(() => {
+        setPendingCommentAttachments([]);
+    }, [hoverCommentCell]);
     const pendingCommentOpenRef = useRef(null); // Store comment location to open after year switch
+    const deepLinkHandledRef = useRef(null); // Last cellKey we opened for; skip re-open to prevent loop
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -564,55 +617,66 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
     }, [sectionsByYear, isLoading, project?.id]);
     
-    // Synchronize horizontal scrolling across all table containers
-    useEffect(() => {
-        // Clean up old refs when sections change
-        scrollableContainersRef.current = [];
-        
-        let scrollHandlers = new Map();
-        let timeoutId;
-        
-        // Small delay to allow DOM to update
-        timeoutId = setTimeout(() => {
-            const containers = scrollableContainersRef.current.filter(Boolean);
-            if (containers.length === 0) return;
-            
-            const handleScroll = (sourceElement) => {
-                if (isScrollingRef.current) return;
-                isScrollingRef.current = true;
-                
-                const scrollLeft = sourceElement.scrollLeft;
-                containers.forEach(container => {
-                    if (container !== sourceElement && container) {
-                        container.scrollLeft = scrollLeft;
-                    }
-                });
-                
-                // Reset flag after a short delay to allow smooth scrolling
-                requestAnimationFrame(() => {
-                    setTimeout(() => {
-                        isScrollingRef.current = false;
-                    }, 50);
-                });
-            };
-            
-            // Add scroll listeners to all containers
-            containers.forEach(container => {
-                const handler = () => handleScroll(container);
-                scrollHandlers.set(container, handler);
-                container.addEventListener('scroll', handler, { passive: true });
+    // Synchronize horizontal scrolling across all table containers.
+    // Use root ref + querySelectorAll. Listen to both 'scroll' and 'wheel' (deltaX); trackpad
+    // horizontal scroll often fires wheel but not scroll on the overflow div.
+    useLayoutEffect(() => {
+        if (sections.length === 0) return;
+        const root = scrollSyncRootRef.current;
+        if (!root) return;
+        const scrollHandlers = new Map();
+        const wheelHandlers = new Map();
+        const handleScroll = (sourceElement) => {
+            if (isScrollingRef.current) return;
+            isScrollingRef.current = true;
+            const scrollLeft = sourceElement.scrollLeft;
+            scrollHandlers.forEach((_, el) => {
+                if (el !== sourceElement && el.isConnected) el.scrollLeft = scrollLeft;
             });
-        }, 100);
-        
-        return () => {
-            clearTimeout(timeoutId);
-            // Cleanup: remove all scroll listeners
-            scrollHandlers.forEach((handler, container) => {
-                container.removeEventListener('scroll', handler);
-            });
-            scrollHandlers.clear();
+            requestAnimationFrame(() => { isScrollingRef.current = false; });
         };
-    }, [sections.length]); // Re-run when sections change
+        const attach = () => {
+            const containers = Array.from(root.querySelectorAll('[data-scroll-sync]'));
+            const connected = containers.filter(el => el.isConnected);
+            if (connected.length === 0) return false;
+            connected.forEach(el => {
+                if (scrollHandlers.has(el)) return;
+                const onScroll = () => handleScroll(el);
+                scrollHandlers.set(el, onScroll);
+                el.addEventListener('scroll', onScroll, { passive: true });
+                const onWheel = (e) => {
+                    if (e.deltaX === 0) return;
+                    e.preventDefault();
+                    const maxScroll = el.scrollWidth - el.clientWidth;
+                    el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + e.deltaX, maxScroll));
+                    handleScroll(el);
+                };
+                wheelHandlers.set(el, onWheel);
+                el.addEventListener('wheel', onWheel, { passive: false });
+            });
+            return true;
+        };
+        const cleanup = () => {
+            scrollHandlers.forEach((handler, el) => el.removeEventListener('scroll', handler));
+            scrollHandlers.clear();
+            wheelHandlers.forEach((handler, el) => el.removeEventListener('wheel', handler));
+            wheelHandlers.clear();
+        };
+        if (attach()) return cleanup;
+        let rafId = null;
+        let retries = 0;
+        const retry = () => {
+            rafId = null;
+            if (attach()) return;
+            retries += 1;
+            if (retries < 10) rafId = requestAnimationFrame(retry);
+        };
+        rafId = requestAnimationFrame(retry);
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId);
+            cleanup();
+        };
+    }, [sections.length]);
     
     // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
@@ -1541,7 +1605,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [selectedYear]);
     
-    const handleAddComment = async (sectionId, documentId, month, commentText) => {
+    const uploadCommentAttachments = async (files) => {
+        if (!files?.length) return [];
+        const folder = 'doc-collection-comments';
+        const token = window.storage?.getToken?.();
+        const results = [];
+        for (const { file, name } of files) {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result);
+                r.onerror = reject;
+                r.readAsDataURL(file);
+            });
+            const res = await fetch('/api/files', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ name, dataUrl, folder })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || err.error || 'Upload failed');
+            }
+            const data = await res.json();
+            results.push({ name, url: data.url || data.data?.url });
+        }
+        return results;
+    };
+
+    const handleAddComment = async (sectionId, documentId, month, commentText, attachments = []) => {
         if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
@@ -1552,7 +1643,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             date: new Date().toISOString(),
             author: currentUser.name,
             authorEmail: currentUser.email,
-            authorId: currentUser.id
+            authorId: currentUser.id,
+            attachments: Array.isArray(attachments) ? attachments : []
         };
         
         // Use current state (most up-to-date) or fallback to ref
@@ -1849,6 +1941,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
+    // Clear deep-link "already opened" guard when popup is closed so we can re-open from same URL later
+    useEffect(() => {
+        if (!hoverCommentCell) deepLinkHandledRef.current = null;
+    }, [hoverCommentCell]);
+
     // Smart positioning for comment popup (no auto-scroll, no window scroll listener)
     useEffect(() => {
         if (!hoverCommentCell) {
@@ -1913,8 +2010,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     useEffect(() => {
         const handleClickOutside = (event) => {
-            const isCommentButton = event.target.closest('[data-comment-cell]');
-            const isInsidePopup = event.target.closest('.comment-popup');
+            const el = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+            const isCommentButton = el?.closest?.('[data-comment-cell]');
+            const isInsidePopup = el?.closest?.('.comment-popup') || el?.closest?.('[data-comment-attachment]') || el?.closest?.('[data-comment-attachment-area]');
             const isStatusCell = event.target.closest('select[data-section-id]') || 
                                  event.target.closest('td')?.querySelector('select[data-section-id]');
             
@@ -1952,6 +2050,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         window.document.addEventListener('mousedown', handleClickOutside);
         return () => window.document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell, selectedCells]);
+
+    // Capture-phase listeners for attachment: trigger download, stop propagation so no navigation.
+    useEffect(() => {
+        if (!hoverCommentCell) return;
+        const getAttachmentEl = (target) => {
+            if (!target) return null;
+            const node = target.nodeType === 1 ? target : target.parentElement;
+            return node && typeof node.closest === 'function' ? node.closest('[data-comment-attachment]') : null;
+        };
+        const handleAttachmentMousedown = (e) => {
+            const el = getAttachmentEl(e.target);
+            if (!el) return;
+            const url = el.getAttribute('data-url');
+            const filename = el.getAttribute('data-download-name') || '';
+            if (url) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                downloadCommentAttachment(url, filename);
+            }
+        };
+        const handleAttachmentClick = (e) => {
+            if (getAttachmentEl(e.target)) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
+        };
+        const doc = window.document;
+        doc.addEventListener('mousedown', handleAttachmentMousedown, true);
+        doc.addEventListener('click', handleAttachmentClick, true);
+        return () => {
+            doc.removeEventListener('mousedown', handleAttachmentMousedown, true);
+            doc.removeEventListener('click', handleAttachmentClick, true);
+        };
+    }, [hoverCommentCell]);
     
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
@@ -1961,11 +2095,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             // Check if we have a pending comment to open after year switch
             if (pendingCommentOpenRef.current) {
                 const pending = pendingCommentOpenRef.current;
-                console.log('🔄 MonthlyDocumentCollectionTracker: Opening pending comment after year switch:', pending);
+                if (DEEPLINK_DEBUG) console.log('🔄 MonthlyDocumentCollectionTracker: Opening pending comment after year switch:', pending);
                 
                 // Only proceed if sections are loaded for the new year
                 if (sections && sections.length > 0) {
                     const cellKey = `${pending.sectionId}-${pending.documentId}-${pending.month}`;
+                    if (deepLinkHandledRef.current === cellKey) return;
+                    deepLinkHandledRef.current = cellKey;
                     
                     // Clear the pending ref
                     pendingCommentOpenRef.current = null;
@@ -2016,7 +2152,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     
                     return;
                 } else {
-                    console.log('⏳ MonthlyDocumentCollectionTracker: Waiting for sections to load after year switch');
+                    if (DEEPLINK_DEBUG) console.log('⏳ MonthlyDocumentCollectionTracker: Waiting for sections to load after year switch');
                     return;
                 }
             }
@@ -2095,18 +2231,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                     }
                 }
-                console.log('🔍 MonthlyDocumentCollectionTracker: Sections not loaded yet, skipping deep link check');
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Sections not loaded yet, skipping deep link check');
                 return;
             }
             
-            console.log('🔍 MonthlyDocumentCollectionTracker: Deep link params:', {
-                deepSectionId,
-                deepDocumentId,
-                deepMonth,
-                deepCommentId,
-                sectionsCount: sections.length
-            });
-            
+            if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Deep link params:', { deepSectionId, deepDocumentId, deepMonth, deepCommentId, sectionsCount: sections?.length });
+
             // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
             isValidDocumentId = deepDocumentId && 
                                 deepDocumentId !== 'undefined' && 
@@ -2160,7 +2290,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 // If comment not found at specified location, or if params are missing, search for it
                 if (!commentFoundAtLocation) {
-                    console.log('🔍 MonthlyDocumentCollectionTracker: Searching for commentId:', deepCommentId);
+                    if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Searching for commentId:', deepCommentId);
                     
                     // Search through all sections, documents, and months to find the comment
                     let foundComment = null;
@@ -2178,7 +2308,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         yearsToSearch.push(String(selectedYear));
                     }
                     
-                    console.log('🔍 MonthlyDocumentCollectionTracker: Searching in years:', yearsToSearch);
+                    if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Searching in years:', yearsToSearch);
                     
                     // Search through all years
                     for (const year of yearsToSearch) {
@@ -2210,12 +2340,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         foundDocumentId = doc.id;
                                         foundMonth = month;
                                         foundYear = parseInt(year, 10);
-                                        console.log('✅ MonthlyDocumentCollectionTracker: Found comment!', {
-                                            sectionId: foundSectionId,
-                                            documentId: foundDocumentId,
-                                            month: foundMonth,
-                                            year: foundYear
-                                        });
+                                        if (DEEPLINK_DEBUG) console.log('✅ MonthlyDocumentCollectionTracker: Found comment!', { sectionId: foundSectionId, documentId: foundDocumentId, month: foundMonth, year: foundYear });
                                         break;
                                     }
                                 }
@@ -2237,7 +2362,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         // Switch to the correct year if needed, then retry opening the popup
                         if (foundYear && foundYear !== selectedYear) {
-                            console.log('📅 MonthlyDocumentCollectionTracker: Switching year from', selectedYear, 'to', foundYear);
+                            if (DEEPLINK_DEBUG) console.log('📅 MonthlyDocumentCollectionTracker: Switching year from', selectedYear, 'to', foundYear);
                             // Store the location to open after year switch
                             pendingCommentOpenRef.current = {
                                 sectionId: foundSectionId,
@@ -2262,7 +2387,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         });
                         
                         // Debug: Log all comment IDs we found during search
-                        console.log('🔍 MonthlyDocumentCollectionTracker: Debug - Searching for comment IDs in all sections...');
+                        if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Debug - Searching for comment IDs in all sections...');
                         let totalComments = 0;
                         for (const year of yearsToSearch) {
                             const yearSections = sectionsByYear[year] || [];
@@ -2273,26 +2398,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     for (const month of months) {
                                         const comments = getCommentsForYear(doc.comments, month, parseInt(year, 10));
                                         totalComments += comments.length;
-                                        if (comments.length > 0) {
-                                            console.log(`  Found ${comments.length} comment(s) in ${section.name}/${doc.name}/${month}/${year}:`, 
-                                                comments.map(c => ({ id: c.id, idType: typeof c.id, text: c.text?.substring(0, 30) }))
-                                            );
+                                        if (comments.length > 0 && DEEPLINK_DEBUG) {
+                                            console.log(`  Found ${comments.length} comment(s) in ${section.name}/${doc.name}/${month}/${year}:`, comments.map(c => ({ id: c.id, idType: typeof c.id, text: c.text?.substring(0, 30) })));
                                         }
                                     }
                                 }
                             }
                         }
-                        console.log(`🔍 MonthlyDocumentCollectionTracker: Total comments found: ${totalComments}`);
+                        if (DEEPLINK_DEBUG) console.log(`🔍 MonthlyDocumentCollectionTracker: Total comments found: ${totalComments}`);
                     }
                 } else {
-                    console.log('✅ MonthlyDocumentCollectionTracker: Comment found at specified location, using existing params');
+                    if (DEEPLINK_DEBUG) console.log('✅ MonthlyDocumentCollectionTracker: Comment found at specified location, using existing params');
                 }
             }
             
             if (deepSectionId && isValidDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
+                if (deepLinkHandledRef.current === cellKey) return;
+                deepLinkHandledRef.current = cellKey;
                 
-                console.log('🎯 MonthlyDocumentCollectionTracker: Opening comment popup for cell:', cellKey);
+                if (DEEPLINK_DEBUG) console.log('🎯 MonthlyDocumentCollectionTracker: Opening comment popup for cell:', cellKey);
                 
                 // Set initial position (will be updated once cell is found)
                 setCommentPopupPosition({
@@ -2300,14 +2425,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     left: Math.max(window.innerWidth / 2 - 180, 20)
                 });
                 
-                // Open the popup immediately
-                console.log('🎯 MonthlyDocumentCollectionTracker: Setting hoverCommentCell to:', cellKey);
                 setHoverCommentCell(cellKey);
-                
-                // Verify the state was set (check in next tick)
-                setTimeout(() => {
-                    console.log('🎯 MonthlyDocumentCollectionTracker: hoverCommentCell state after set:', hoverCommentCell);
-                }, 0);
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
@@ -2434,7 +2552,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 }, 300);
                             }, 2000);
                             
-                            console.log('✅ Scrolled to comment:', deepCommentId);
+                            if (DEEPLINK_DEBUG) console.log('✅ Scrolled to comment:', deepCommentId);
                             return true;
                         }
                         return false;
@@ -2462,19 +2580,31 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Check for deep link on mount and when sections load
     useEffect(() => {
-        // Wait a bit for component to fully render and sections to load
+        // Run soon after mount so we catch doc params in URL
         const timer = setTimeout(() => {
-            console.log('🔍 MonthlyDocumentCollectionTracker: Initial deep link check');
+            if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Initial deep link check');
             checkAndOpenDeepLink();
         }, 500);
         return () => clearTimeout(timer);
     }, [checkAndOpenDeepLink]);
     
+    // Run deep link check when data load finishes (isLoading -> false) and we have sections
+    // This ensures we open the comment dialog when opening the project via a doc-collection URL
+    useEffect(() => {
+        if (!isLoading && sections && sections.length > 0) {
+            const timer = setTimeout(() => {
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Load complete, checking deep link');
+                checkAndOpenDeepLink();
+            }, 400);
+            return () => clearTimeout(timer);
+        }
+    }, [isLoading, sections.length, checkAndOpenDeepLink]);
+    
     // Also retry if sections load after initial mount
     useEffect(() => {
         if (sections && sections.length > 0) {
             const timer = setTimeout(() => {
-                console.log('🔍 MonthlyDocumentCollectionTracker: Sections loaded, checking deep link');
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Sections loaded, checking deep link');
                 checkAndOpenDeepLink();
             }, 300);
             return () => clearTimeout(timer);
@@ -2488,7 +2618,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const retries = [800, 1500, 2500];
             const timers = retries.map(delay => 
                 setTimeout(() => {
-                    console.log(`🔍 MonthlyDocumentCollectionTracker: Retry check (${delay}ms delay)`);
+                    if (DEEPLINK_DEBUG) console.log(`🔍 MonthlyDocumentCollectionTracker: Retry check (${delay}ms delay)`);
                     checkAndOpenDeepLink();
                 }, delay)
             );
@@ -2509,14 +2639,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Also listen for hash changes in case URL is updated after component mounts
     useEffect(() => {
         const handleHashChange = () => {
-            console.log('🔍 MonthlyDocumentCollectionTracker: Hash changed, checking deep link');
+            if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Hash changed, checking deep link');
             setTimeout(() => {
                 checkAndOpenDeepLink();
             }, 100);
         };
         
         const handlePopState = () => {
-            console.log('🔍 MonthlyDocumentCollectionTracker: PopState event, checking deep link');
+            if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: PopState event, checking deep link');
             setTimeout(() => {
                 checkAndOpenDeepLink();
             }, 100);
@@ -2529,7 +2659,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const handlePushState = (...args) => {
             originalPushState.apply(history, args);
             setTimeout(() => {
-                console.log('🔍 MonthlyDocumentCollectionTracker: PushState detected, checking deep link');
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: PushState detected, checking deep link');
                 checkAndOpenDeepLink();
             }, 100);
         };
@@ -2537,7 +2667,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const handleReplaceState = (...args) => {
             originalReplaceState.apply(history, args);
             setTimeout(() => {
-                console.log('🔍 MonthlyDocumentCollectionTracker: ReplaceState detected, checking deep link');
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: ReplaceState detected, checking deep link');
                 checkAndOpenDeepLink();
             }, 100);
         };
@@ -3434,7 +3564,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             data-comment-id={comment.id}
                                             id={comment.id ? `comment-${comment.id}` : undefined}
                                             className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group cursor-pointer"
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                const ce = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
+                                                if (ce?.closest?.('[data-comment-attachment]') || ce?.closest?.('[data-comment-attachment-area]')) {
+                                                    e.stopPropagation();
+                                                    return;
+                                                }
                                                 // Update URL when clicking on a comment to enable sharing
                                                 if (section && doc && comment.id) {
                                                     const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
@@ -3487,6 +3622,43 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             : (comment.text || '')
                                                 }}
                                             />
+                                            {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                <div
+                                                    className="mt-1 flex flex-wrap gap-1"
+                                                    data-comment-attachment-area="true"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    {comment.attachments.map((att, i) => {
+                                                        const fullUrl = (att.url && /^https?:\/\//i.test(att.url)) ? att.url : (window.location.origin + (att.url || ''));
+                                                        const downloadName = att.name || (att.url && att.url.split('/').pop()) || 'attachment';
+                                                        return (
+                                                            <button
+                                                                key={i}
+                                                                type="button"
+                                                                data-comment-attachment="true"
+                                                                data-url={fullUrl}
+                                                                data-download-name={downloadName}
+                                                                className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-transparent border-0 p-0 font-inherit align-baseline"
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    e.stopImmediatePropagation();
+                                                                    downloadCommentAttachment(fullUrl, downloadName);
+                                                                }}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    e.stopImmediatePropagation();
+                                                                }}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); downloadCommentAttachment(fullUrl, downloadName); } }}
+                                                                title={`Download ${downloadName}`}
+                                                            >
+                                                                <i className="fas fa-paperclip text-[8px]"></i> <span>{att.name || downloadName}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
                                                 <span>{(comment.date || comment.createdAt) ? (() => {
@@ -3575,13 +3747,55 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         )}
                         
                         <div>
-                            <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-semibold text-gray-600">Add Comment</span>
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        ref={commentFileInputRef}
+                                        type="file"
+                                        multiple
+                                        className="hidden"
+                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt"
+                                        onChange={(e) => {
+                                            const files = e.target.files;
+                                            if (files?.length) {
+                                                const newItems = Array.from(files).map((f) => ({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, file: f, name: f.name }));
+                                                setPendingCommentAttachments((prev) => [...prev, ...newItems]);
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                    <button type="button" onClick={() => commentFileInputRef.current?.click()} className="p-1 text-gray-500 hover:text-gray-700 rounded" title="Attach files"><i className="fas fa-paperclip text-[12px]"></i></button>
+                                </div>
+                            </div>
+                            {pendingCommentAttachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-1.5">
+                                    {pendingCommentAttachments.map((p) => (
+                                        <span key={p.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gray-200 rounded text-[10px]">
+                                            {p.name}
+                                            <button type="button" onClick={() => setPendingCommentAttachments((prev) => prev.filter((x) => x.id !== p.id))} className="ml-0.5 text-gray-500 hover:text-red-600">×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                             {commentInputAvailable && section && doc ? (
                                 <window.CommentInputWithMentions
-                                    onSubmit={(commentText) => {
-                                        if (commentText && commentText.trim()) {
-                                            handleAddComment(section.id, doc.id, month, commentText);
+                                    onSubmit={async (commentText) => {
+                                        if (!commentText?.trim()) return;
+                                        let atts = [];
+                                        if (pendingCommentAttachments.length > 0) {
+                                            setUploadingCommentAttachments(true);
+                                            try {
+                                                atts = await uploadCommentAttachments(pendingCommentAttachments);
+                                                setPendingCommentAttachments([]);
+                                            } catch (err) {
+                                                alert(err.message || 'Failed to upload attachments');
+                                                setUploadingCommentAttachments(false);
+                                                return;
+                                            }
+                                            setUploadingCommentAttachments(false);
                                         }
+                                        handleAddComment(section.id, doc.id, month, commentText, atts);
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
                                     rows={2}
@@ -3595,7 +3809,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && e.ctrlKey && section && doc) {
-                                                handleAddComment(section.id, doc.id, month, quickComment);
+                                                e.preventDefault();
+                                                (async () => {
+                                                    if (!quickComment.trim()) return;
+                                                    let atts = [];
+                                                    if (pendingCommentAttachments.length > 0) {
+                                                        setUploadingCommentAttachments(true);
+                                                        try {
+                                                            atts = await uploadCommentAttachments(pendingCommentAttachments);
+                                                            setPendingCommentAttachments([]);
+                                                        } catch (err) {
+                                                            alert(err.message || 'Failed to upload attachments');
+                                                            setUploadingCommentAttachments(false);
+                                                            return;
+                                                        }
+                                                        setUploadingCommentAttachments(false);
+                                                    }
+                                                    handleAddComment(section.id, doc.id, month, quickComment, atts);
+                                                    setQuickComment('');
+                                                })();
                                             }
                                         }}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -3603,14 +3835,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         placeholder="Type comment... (Ctrl+Enter to submit)"
                                     />
                                     <button
-                                        onClick={() => {
-                                            if (!section || !doc) return;
-                                            handleAddComment(section.id, doc.id, month, quickComment);
+                                        onClick={async () => {
+                                            if (!section || !doc || !quickComment.trim()) return;
+                                            let atts = [];
+                                            if (pendingCommentAttachments.length > 0) {
+                                                setUploadingCommentAttachments(true);
+                                                try {
+                                                    atts = await uploadCommentAttachments(pendingCommentAttachments);
+                                                    setPendingCommentAttachments([]);
+                                                } catch (err) {
+                                                    alert(err.message || 'Failed to upload attachments');
+                                                    setUploadingCommentAttachments(false);
+                                                    return;
+                                                }
+                                                setUploadingCommentAttachments(false);
+                                            }
+                                            handleAddComment(section.id, doc.id, month, quickComment, atts);
+                                            setQuickComment('');
                                         }}
-                                        disabled={!quickComment.trim()}
+                                        disabled={!quickComment.trim() || uploadingCommentAttachments}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
                                     >
-                                        Add Comment
+                                        {uploadingCommentAttachments ? 'Uploading…' : 'Add Comment'}
                                     </button>
                                 </>
                             )}
@@ -3789,7 +4035,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             </div>
             
             {/* Per-section tables with independent horizontal scroll */}
-            <div className="space-y-3">
+            <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
                 {sections.length === 0 ? (
                     <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
                         <div className="flex flex-col items-center gap-4">
@@ -3859,17 +4105,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </div>
 
                             {/* Scrollable month/document grid for this section only */}
-                            <div 
-                                ref={(el) => {
-                                    if (el) {
-                                        const current = scrollableContainersRef.current;
-                                        if (!current.includes(el)) {
-                                            current.push(el);
-                                        }
-                                    }
-                                }}
-                                className="overflow-x-auto"
-                            >
+                            <div data-scroll-sync className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
                                         <tr>

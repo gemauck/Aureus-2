@@ -68,17 +68,23 @@ function initializePrisma() {
       databaseUrl = databaseUrl.slice(1, -1)
     }
     
-    // Add connection_limit to prevent connection pool exhaustion
-    // Parse existing query params and add/update connection_limit
+    // Add connection_limit and SSL for cloud DBs
     try {
       const url = new URL(databaseUrl)
-      url.searchParams.set('connection_limit', '3') // Limit to 3 connections max (very conservative)
-      url.searchParams.set('pool_timeout', '10') // 10 second timeout
+      url.searchParams.set('connection_limit', '3')
+      url.searchParams.set('pool_timeout', '10')
+      // DigitalOcean and most managed Postgres require SSL; add if host is DO and not set
+      if (url.hostname && url.hostname.includes('ondigitalocean.com') && !url.searchParams.has('sslmode') && !url.searchParams.has('ssl')) {
+        url.searchParams.set('sslmode', 'require')
+      }
       databaseUrl = url.toString()
     } catch (e) {
-      // If URL parsing fails, append connection_limit manually
       const separator = databaseUrl.includes('?') ? '&' : '?'
-      databaseUrl = `${databaseUrl}${separator}connection_limit=3&pool_timeout=10`
+      let extra = 'connection_limit=3&pool_timeout=10'
+      if (databaseUrl.includes('ondigitalocean.com') && !databaseUrl.includes('sslmode=') && !databaseUrl.includes('ssl=')) {
+        extra += '&sslmode=require'
+      }
+      databaseUrl = `${databaseUrl}${separator}${extra}`
     }
     
     // Check for valid database hostname (allow multiple valid hostnames)

@@ -247,10 +247,12 @@ const DataProvider = ({ children }) => {
                 throw error;
             }
             
-            // Check if it's a database connection error (expected when DB is down)
+            // Check if it's a database/connection error (expected when DB or server is down)
             const isDatabaseError = errorMessage.includes('Database connection failed') ||
                                   errorMessage.includes('unreachable') ||
                                   errorMessage.includes('ECONNREFUSED') ||
+                                  errorMessage.includes('connection refused') ||
+                                  errorMessage.includes('econnrefused') ||
                                   errorMessage.includes('ETIMEDOUT');
             
             // Only log non-database errors (database errors are expected when DB is down)
@@ -366,7 +368,10 @@ const DataProvider = ({ children }) => {
                         await fetchData(dataType.key).catch(err => {
                             const errorMessage = err?.message || String(err);
                             const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                                  errorMessage.includes('unreachable');
+                                                  errorMessage.includes('unreachable') ||
+                                                  errorMessage.includes('ECONNREFUSED') ||
+                                                  errorMessage.includes('connection refused') ||
+                                                  errorMessage.includes('econnrefused');
                             const isRateLimitError = err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED';
                             const isUnauthorized = err?.status === 401 || errorMessage.includes('401') || 
                                                   errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');

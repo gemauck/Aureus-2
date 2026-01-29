@@ -14,7 +14,7 @@ const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
 // jump back to Overview. Must be long enough for parent re-renders and effect runs to settle.
 const TAB_PRESERVE_AFTER_INLINE_SAVE_MS = 3500;
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, initialSiteId, onInitialSiteOpened }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
     const entityLabel = isLead ? 'Lead' : 'Client';
@@ -1363,11 +1363,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // Only reset if we're switching to a different client/lead
         if (currentClientId && currentClientId !== previousClientId) {
-            // Always default to 'overview' when opening a new client/lead
-            // Only use initialTab if it's explicitly set via URL query params (not from state persistence)
-            const shouldUseInitialTab = initialTab && initialTab !== 'overview' && 
-                                       (window.location.search?.includes('tab=') || 
-                                        window.location.hash?.includes('tab='));
+            // Use initialTab when parent passed a content tab (e.g. 'sites' when opening from leads list site click)
+            // so we don't jump to overview after navigating to a site
+            const shouldUseInitialTab = initialTab && initialTab !== 'overview';
             
             if (shouldUseInitialTab) {
                 // URL explicitly requested a tab - respect it
@@ -1671,12 +1669,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [client?.id, optimisticSites]);
     
+    // Resolve lead sites persistence another way: when user opens Sites tab for a lead,
+    // always load from GET /api/sites/client/:id so we show sites even if the lead was loaded from cache/list
+    useEffect(() => {
+        if (activeTab === 'sites' && isLead && (formData?.id || client?.id) && window.api?.getSites) {
+            const id = formData?.id || client?.id;
+            loadSitesFromDatabase(id);
+        }
+    }, [activeTab, isLead, formData?.id, client?.id, loadSitesFromDatabase]);
+
     // REMOVED: Tab-specific job cards loading
     // Job cards are now loaded immediately when client opens (in the main client load useEffect)
-    // This prevents reloading when clicking tabs and ensures counts appear immediately
-    
-    // REMOVED: Tab-specific sites loading
-    // Sites are now loaded immediately when client opens (in the main client load useEffect)
     // This prevents reloading when clicking tabs and ensures counts appear immediately
 
     // Handle job card click - navigate to full job card detail page
@@ -2043,6 +2046,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Removed else block with empty body
         }
     }, [client?.id]); // Only depend on client.id, not entire client object to prevent infinite loops
+    
+    // When lead is updated from list (e.g. site Stage/AIDA changed), sync client.sites into formData so Sites section reflects changes
+    const lastSyncedSitesFromClientRef = useRef(null);
+    useEffect(() => {
+        if (entityType !== 'lead' || !client?.id) return;
+        const sites = client.sites || client.clientSites;
+        if (!Array.isArray(sites) || sites.length === 0) return;
+        const key = JSON.stringify(sites.map(s => ({ id: s?.id, stage: s?.stage, aidaStatus: s?.aidaStatus })));
+        if (lastSyncedSitesFromClientRef.current === key) return;
+        lastSyncedSitesFromClientRef.current = key;
+        setFormData(prev => ({ ...prev, sites }));
+    }, [entityType, client?.id, client?.sites, client?.clientSites]);
     
     // Load full client data from database to get latest comments, followUps, activityLog
     const loadClientFromDatabase = async (clientId) => {
@@ -3359,6 +3374,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         });
         setShowSiteForm(true);
     };
+
+    const openedInitialSiteIdRef = useRef(null);
+    useEffect(() => {
+        if (client?.id != null) openedInitialSiteIdRef.current = null;
+    }, [client?.id]);
+    useEffect(() => {
+        if (!initialSiteId || openedInitialSiteIdRef.current === initialSiteId) return;
+        const sites = formData?.sites || [];
+        const site = sites.find(s => String(s.id) === String(initialSiteId));
+        if (!site) return;
+        openedInitialSiteIdRef.current = initialSiteId;
+        if (activeTabRef.current !== 'sites') {
+            if (typeof onTabChange === 'function') onTabChange('sites');
+            setActiveTab('sites');
+            activeTabRef.current = 'sites';
+        }
+        handleEditSite(site);
+        if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
+    }, [initialSiteId, formData?.sites]);
 
     const handleUpdateSite = () => {
         // Build site payload with API-expected fields

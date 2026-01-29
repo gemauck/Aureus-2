@@ -47,6 +47,22 @@ const formatProjectDateRange = (startDate, dueDate) => {
     return formattedStart || formattedEnd || 'No dates';
 };
 
+// Deduplicate projects by (name, client), keeping the row with latest updatedAt
+const dedupeProjectsByIdentity = (list) => {
+    if (!Array.isArray(list) || list.length === 0) return list;
+    const byKey = new Map();
+    for (const p of list) {
+        const key = `${(p.name || '').trim()}\0${(p.clientName || p.client || '').trim()}`;
+        const existing = byKey.get(key);
+        const pTime = new Date(p.updatedAt || p.createdAt || 0).getTime();
+        const existingTime = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : 0;
+        if (!existing || pTime > existingTime) {
+            byKey.set(key, p);
+        }
+    }
+    return Array.from(byKey.values());
+};
+
 // Create a fallback context that always exists to ensure consistent hook calls
 // This prevents React error #300 by ensuring useContext is always called with a valid context
 const createFallbackAuthContext = () => {
@@ -405,8 +421,16 @@ const Projects = () => {
                     setViewingProject(project);
                     setShowModal(false);
                     
-                    // Update URL with project ID and any options
-                    updateProjectUrl(entityId, options);
+                    // Preserve hash when URL has tracker deep-link params (document collection, weekly FMS, monthly FMS)
+                    // so links from email open the right tab and comment
+                    const urlHash = window.location.hash || '';
+                    const hasDocCollectionParams = urlHash.includes('docSectionId=') ||
+                        (urlHash.includes('docDocumentId=') && (urlHash.includes('docMonth=') || urlHash.includes('docWeek=')));
+                    const hasWeeklyFMSParams = urlHash.includes('weeklySectionId=') || urlHash.includes('docWeek=');
+                    const hasTrackerParams = hasDocCollectionParams || hasWeeklyFMSParams;
+                    if (!hasTrackerParams) {
+                        updateProjectUrl(entityId, options);
+                    }
                     
                     // Refresh from API so hasTimeProcess and other module flags are correct (list cache can be stale)
                     if (window.DatabaseAPI?.getProject) {
@@ -461,8 +485,14 @@ const Projects = () => {
                                 setViewingProject(projectData);
                                 setShowModal(false);
                                 
-                                // Update URL with project ID and any options
-                                updateProjectUrl(entityId, options);
+                                // Preserve hash when URL has tracker deep-link params (doc collection, weekly/monthly FMS)
+                                const urlHash = window.location.hash || '';
+                                const hasDocCollectionParams = urlHash.includes('docSectionId=') ||
+                                    (urlHash.includes('docDocumentId=') && (urlHash.includes('docMonth=') || urlHash.includes('docWeek=')));
+                                const hasWeeklyFMSParams = urlHash.includes('weeklySectionId=') || urlHash.includes('docWeek=');
+                                if (!hasDocCollectionParams && !hasWeeklyFMSParams) {
+                                    updateProjectUrl(entityId, options);
+                                }
                                 
                                 // Handle task opening if specified
                                 if (options?.task) {
@@ -1203,11 +1233,13 @@ const Projects = () => {
                         return p; // Return original if normalization fails
                     }
                 });
-                
+
+                // Deduplicate by (name, client) so duplicate DB rows don't show as "3 copies"
+                const projectsToSet = dedupeProjectsByIdentity(normalizedProjects);
                 
                 // Ensure we always set an array (only if component is still mounted)
                 if (isMounted) {
-                    setProjects(normalizedProjects);
+                    setProjects(projectsToSet);
                     // Track load timestamps for performance optimization
                     const now = Date.now();
                     normalizedProjects.forEach(project => {
@@ -1218,7 +1250,7 @@ const Projects = () => {
                     setIsLoading(false);
                     
                     // Sync existing projects with clients (non-blocking, won't crash on failure)
-                    syncProjectsWithClients(apiProjects).catch(err => {
+                    syncProjectsWithClients(projectsToSet).catch(err => {
                         console.warn('⚠️ Projects: Client sync failed, but continuing anyway:', err.message);
                     });
                     
@@ -1234,7 +1266,7 @@ const Projects = () => {
                     const taskFocusInputToOpen = sessionStorage.getItem('openTaskFocusInput');
                     if (projectIdToOpen && shouldOpenFromStorage) {
                         console.log('🔍 Projects: Checking sessionStorage for project to open:', projectIdToOpen);
-                        let project = apiProjects.find(p => String(p.id) === String(projectIdToOpen));
+                        let project = projectsToSet.find(p => String(p.id) === String(projectIdToOpen));
                         
                         // If project not found in loaded projects, try to fetch it from API
                         if (!project && window.DatabaseAPI?.getProject) {
@@ -1447,20 +1479,18 @@ const Projects = () => {
                             setSelectedProject(fetchedProject);
                             setShowModal(false);
                             
-                            // Update URL - preserve hash if it contains document collection tracker parameters
+                            // Update URL - preserve hash if it contains any tracker deep-link params (doc collection, weekly/monthly FMS)
                             const hasDocCollectionParams = hashParams && (
                                 hashParams.has('docSectionId') || 
                                 hashParams.has('docDocumentId') || 
                                 hashParams.has('docMonth')
                             );
+                            const hasWeeklyFMSParams = hashParams && (hashParams.has('weeklySectionId') || hashParams.has('docWeek'));
+                            const hasTrackerParams = hasDocCollectionParams || hasWeeklyFMSParams;
                             
-                            if (hasDocCollectionParams) {
-                                // For document collection tracker, DON'T call RouteState.navigate() 
-                                // as it converts hash URLs to pathname URLs, losing the hash
-                                // The hash is already correct (#/projects/{id}?docSectionId=...), 
-                                // we just opened the project, so leave the hash alone
-                                // ProjectDetail and MonthlyDocumentCollectionTracker will detect the hash params
-                                console.log('✅ Projects: Preserving hash with document collection parameters:', urlHash);
+                            if (hasTrackerParams) {
+                                // Don't call RouteState.navigate() – it would strip the hash. Leave hash so ProjectDetail and trackers open the right tab/comment.
+                                console.log('✅ Projects: Preserving hash with tracker parameters:', urlHash);
                             } else if (window.RouteState) {
                                 try {
                                     if (taskId) {
@@ -2730,7 +2760,8 @@ const Projects = () => {
                     if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                     return false;
                 })(),
-                weeklyFMSReviewSections: Array.isArray(fullProject.weeklyFMSReviewSections) ? fullProject.weeklyFMSReviewSections : []
+                // API returns year-map object { "2024": [...], "2025": [...] }; preserve it so Weekly FMS comments/status survive refresh
+                weeklyFMSReviewSections: (fullProject.weeklyFMSReviewSections != null && typeof fullProject.weeklyFMSReviewSections === 'object') ? fullProject.weeklyFMSReviewSections : {}
             };
             
             // Expose a function to update viewingProject from child components
@@ -2779,7 +2810,8 @@ const Projects = () => {
                         if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                         return false;
                     })(),
-                    weeklyFMSReviewSections: Array.isArray(updatedProject.weeklyFMSReviewSections) ? updatedProject.weeklyFMSReviewSections : []
+                    // Preserve year-map object so Weekly FMS comments/status persist
+                    weeklyFMSReviewSections: (updatedProject.weeklyFMSReviewSections != null && typeof updatedProject.weeklyFMSReviewSections === 'object') ? updatedProject.weeklyFMSReviewSections : {}
                 };
                 
                 // Use smart comparison to prevent unnecessary re-renders
@@ -3270,7 +3302,7 @@ const Projects = () => {
                         ...p,
                         client: p.clientName || p.client || ''
                     }));
-                    setProjects(normalizedProjects);
+                    setProjects(dedupeProjectsByIdentity(normalizedProjects));
                 } catch (reloadError) {
                     console.error('❌ Error reloading projects:', reloadError);
                 }

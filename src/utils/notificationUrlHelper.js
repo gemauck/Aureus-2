@@ -199,25 +199,26 @@
      * @returns {string} Valid URL for the notification
      */
     const ensureUrl = (link, metadata = null) => {
-        // If link is already valid and contains document collection params, preserve it as-is
-        const hasDocumentCollectionParams = link && (
+        // If link is already valid and contains tracker deep-link params, preserve it as-is
+        const hasDocCollectionParams = link && (
             link.includes('docSectionId=') || 
             link.includes('docDocumentId=') || 
             link.includes('docMonth=')
         );
+        const hasWeeklyFMSParams = link && (
+            link.includes('weeklySectionId=') || link.includes('docWeek=') ||
+            link.includes('weeklyDocumentId=') || link.includes('weeklyWeek=')
+        );
+        const hasTrackerParams = hasDocCollectionParams || hasWeeklyFMSParams;
         
-        // If link is already valid, return it (preserve hash-based URLs and document collection params)
+        // If link is already valid, return it (preserve hash-based URLs and all tracker params)
         if (link && typeof link === 'string' && link.trim() && link !== '') {
-            // Ensure it starts with / or #
             const normalizedLink = link.startsWith('/') || link.startsWith('#') 
                 ? link 
                 : `/${link}`;
-            
-            // If it has document collection params or is hash-based, return as-is
-            if (hasDocumentCollectionParams || normalizedLink.startsWith('#')) {
+            if (hasTrackerParams || normalizedLink.startsWith('#')) {
                 return normalizedLink;
             }
-            
             return normalizedLink;
         }
 
@@ -232,20 +233,34 @@
                     return '/dashboard';
                 }
                 
-                // PRIORITY 1: Check if metadata contains document collection tracker parameters
-                // Build hash-based URL with all params to preserve deep linking
-                if (metadataObj.sectionId || metadataObj.documentId || metadataObj.month !== undefined) {
-                    if (metadataObj.projectId) {
-                        const queryParams = [];
-                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
-                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
-                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
-                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                        
-                        const hashUrl = `#/projects/${metadataObj.projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
-                        console.log('📧 NotificationUrlHelper: Built hash-based URL for doc collection from metadata:', hashUrl);
-                        return hashUrl;
-                    }
+                // PRIORITY 1: Weekly FMS – build hash URL with docSectionId, docDocumentId, docWeek, docYear, commentId
+                const weekLabel = metadataObj.weeklyWeek ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
+                if (metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.sectionId || metadataObj.weeklyDocumentId || metadataObj.documentId) && weekLabel != null) {
+                    const queryParams = [];
+                    const sectionId = metadataObj.weeklySectionId || metadataObj.sectionId;
+                    const documentId = metadataObj.weeklyDocumentId || metadataObj.documentId;
+                    if (sectionId) queryParams.push(`docSectionId=${encodeURIComponent(sectionId)}`);
+                    if (documentId) queryParams.push(`docDocumentId=${encodeURIComponent(documentId)}`);
+                    queryParams.push(`docWeek=${encodeURIComponent(weekLabel)}`);
+                    if (metadataObj.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
+                    if (metadataObj.year != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
+                    if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                    if (sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(sectionId)}`);
+                    const hashUrl = `#/projects/${metadataObj.projectId}?${queryParams.join('&')}`;
+                    return hashUrl;
+                }
+                // PRIORITY 2: Document collection / Monthly FMS – build hash URL with all params
+                if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.month !== undefined || metadataObj.commentId)) {
+                    const queryParams = [];
+                    if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
+                    if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
+                    if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
+                    if (metadataObj.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
+                    if (metadataObj.year != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
+                    if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                    if (metadataObj.source === 'monthlyFMSReview') queryParams.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
+                    const hashUrl = `#/projects/${metadataObj.projectId}?${queryParams.join('&')}`;
+                    return hashUrl;
                 }
 
                 // Try to find entity information in metadata
@@ -255,23 +270,6 @@
                     'productionorderId', 'bomId', 'inventoryitemId', 'supplierId',
                     'leaveapplicationId', 'timeentryId'
                 ];
-
-                // Check if metadata contains document collection tracker parameters
-                // If so, build hash-based URL with all params instead of using getUrlForEntity
-                if (metadataObj.sectionId || metadataObj.documentId || metadataObj.month !== undefined) {
-                    // Document collection tracker - build hash-based URL with all params
-                    if (metadataObj.projectId) {
-                        const queryParams = [];
-                        if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
-                        if (metadataObj.documentId) queryParams.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
-                        if (metadataObj.month !== undefined && metadataObj.month !== null) queryParams.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
-                        if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                        
-                        const hashUrl = `#/projects/${metadataObj.projectId}${queryParams.length > 0 ? '?' + queryParams.join('&') : ''}`;
-                        console.log('📧 NotificationUrlHelper: Building hash-based URL for doc collection:', hashUrl);
-                        return hashUrl;
-                    }
-                }
                 
                 for (const entityTypeKey of entityTypes) {
                     if (metadataObj[entityTypeKey]) {

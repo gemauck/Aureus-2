@@ -5,6 +5,7 @@ import { badRequest, ok, serverError, forbidden } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
+import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js'
 
 // Department definitions
 const DEPARTMENTS = [
@@ -787,6 +788,29 @@ async function handler(req, res) {
           }
         }
       })
+
+      // Notify participants: prior commenters, @mentioned (in-app + email per preferences)
+      try {
+        const authorId = req.user?.sub || req.user?.id
+        const threadWhere = monthlyNotesId ? { monthlyNotesId } : departmentNotesId ? { departmentNotesId } : actionItemId ? { actionItemId } : {}
+        const priorComments = Object.keys(threadWhere).length
+          ? await prisma.meetingComment.findMany({ where: threadWhere, select: { authorId: true } })
+          : []
+        const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))]
+        const authorName = comment.author?.name || comment.author?.email || 'Someone'
+        await notifyCommentParticipants({
+          commentAuthorId: authorId,
+          commentText: content,
+          entityAuthorId: null,
+          priorCommentAuthorIds: priorAuthorIds,
+          authorName,
+          contextTitle: 'Meeting notes',
+          link: '#/teams/meeting-notes',
+          metadata: { monthlyNotesId, departmentNotesId, actionItemId, commentId: comment.id, commentText: content }
+        })
+      } catch (notifyErr) {
+        console.error('Notify comment participants failed (meeting notes):', notifyErr)
+      }
 
       return ok(res, { comment })
     } catch (error) {

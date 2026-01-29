@@ -200,6 +200,8 @@ const NotificationCenter = () => {
             const isDatabaseError = errorMessage.includes('Database connection failed') ||
                                   errorMessage.includes('unreachable') ||
                                   errorMessage.includes('ECONNREFUSED') ||
+                                  errorMessage.includes('connection refused') ||
+                                  errorMessage.includes('econnrefused') ||
                                   errorMessage.includes('ETIMEDOUT');
             const isServerError = errorMessage.includes('500') || 
                                  errorMessage.includes('502') || 
@@ -388,15 +390,16 @@ const NotificationCenter = () => {
                 linkForParsing = normalizedLink.substring(1); // Remove # for EntityUrl parsing
             }
             
-            // Navigate to the link FIRST
-            // Use entity URL navigation if available, otherwise fall back to hash navigation
+            // Links with tracker params (docSectionId, docWeek, commentId, etc.) must use full hash navigation
+            // so the app opens the right tab and comment; EntityUrl would strip hash query params
+            const hasTrackerParams = normalizedLink.includes('docSectionId=') || normalizedLink.includes('docWeek=') ||
+                normalizedLink.includes('commentId=') || normalizedLink.includes('weeklySectionId=') || normalizedLink.includes('docMonth=');
             let navigationSuccessful = false;
             
-            if (window.EntityUrl && linkForParsing) {
+            if (!hasTrackerParams && window.EntityUrl && linkForParsing) {
                 try {
                     const parsed = window.EntityUrl.parseEntityUrl(linkForParsing);
                     if (parsed) {
-                        // Use entity navigation
                         window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
                         navigationSuccessful = true;
                     }
@@ -407,12 +410,13 @@ const NotificationCenter = () => {
             
             // Fall back to hash navigation if EntityUrl navigation didn't work
             if (!navigationSuccessful) {
-                // Handle query parameters
-                if (normalizedLink.includes('?')) {
+                // Hash-based links (e.g. #/projects/xxx?docSectionId=...&commentId=...) must keep the full hash including query
+                // so the app opens the right tab and comment. Set the entire normalizedLink as the hash.
+                if (normalizedLink.startsWith('#')) {
+                    window.location.hash = normalizedLink;
+                } else if (normalizedLink.includes('?')) {
                     const [hash, query] = normalizedLink.split('?');
-                    // Set hash navigation
                     window.location.hash = hash;
-                    // Update URL with query parameters
                     try {
                         const url = new URL(window.location);
                         const params = new URLSearchParams(query);
@@ -422,11 +426,9 @@ const NotificationCenter = () => {
                         window.history.replaceState({}, '', url);
                     } catch (e) {
                         console.warn('Failed to update URL with query params:', e);
-                        // Still navigate using hash with query string
                         window.location.hash = normalizedLink;
                     }
                 } else {
-                    // Simple hash navigation - ALWAYS navigate if EntityUrl didn't work
                     window.location.hash = normalizedLink;
                 }
             } else {
@@ -755,11 +757,25 @@ const NotificationCenter = () => {
                 }
             }
             
-            // Try to construct a link from metadata
+            // Try to construct a link from metadata (direct to comment when we have tracker params)
             if (metadata) {
                 let constructedLink = null;
-                
-                if (metadata.projectId) {
+                const hasTrackerMeta = metadata.sectionId || metadata.documentId || metadata.commentId || metadata.month != null ||
+                    metadata.weeklySectionId || metadata.weeklyDocumentId || metadata.docWeek != null || metadata.weekNumber != null;
+                if (metadata.projectId && hasTrackerMeta) {
+                    const q = [];
+                    if (metadata.sectionId) q.push(`docSectionId=${encodeURIComponent(metadata.sectionId)}`);
+                    if (metadata.documentId) q.push(`docDocumentId=${encodeURIComponent(metadata.documentId)}`);
+                    if (metadata.month != null) q.push(`docMonth=${encodeURIComponent(metadata.month)}`);
+                    if (metadata.docYear != null) q.push(`docYear=${encodeURIComponent(metadata.docYear)}`);
+                    if (metadata.year != null) q.push(`docYear=${encodeURIComponent(metadata.year)}`);
+                    if (metadata.commentId) q.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
+                    if (metadata.source === 'monthlyFMSReview') q.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
+                    const weekLabel = metadata.docWeek ?? metadata.weekNumber ?? metadata.weeklyWeek ?? metadata.weeklyMonth ?? metadata.month;
+                    if (weekLabel != null) q.push(`docWeek=${encodeURIComponent(weekLabel)}`);
+                    if (metadata.weeklySectionId || metadata.sectionId) q.push(`weeklySectionId=${encodeURIComponent(metadata.weeklySectionId || metadata.sectionId)}`);
+                    constructedLink = q.length ? `#/projects/${metadata.projectId}?${q.join('&')}` : `#/projects/${metadata.projectId}`;
+                } else if (metadata.projectId) {
                     if (metadata.taskId) {
                         constructedLink = `#/projects/${metadata.projectId}?task=${metadata.taskId}`;
                     } else {
@@ -774,20 +790,21 @@ const NotificationCenter = () => {
                 }
                 
                 if (constructedLink) {
-                    // Try EntityUrl navigation first
-                    let navigationSuccessful = false;
-                    if (window.EntityUrl) {
-                        const linkForParsing = constructedLink.startsWith('#') ? constructedLink.substring(1) : constructedLink;
-                        const parsed = window.EntityUrl.parseEntityUrl(linkForParsing);
-                        if (parsed) {
-                            window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
-                            navigationSuccessful = true;
-                        }
-                    }
-                    
-                    // Fall back to hash navigation
-                    if (!navigationSuccessful) {
+                    const hasTrackerInLink = constructedLink.includes('docSectionId=') || constructedLink.includes('docWeek=') ||
+                        constructedLink.includes('commentId=') || constructedLink.includes('weeklySectionId=');
+                    if (hasTrackerInLink) {
                         window.location.hash = constructedLink;
+                    } else {
+                        let navigationSuccessful = false;
+                        if (window.EntityUrl) {
+                            const linkForParsing = constructedLink.startsWith('#') ? constructedLink.substring(1) : constructedLink;
+                            const parsed = window.EntityUrl.parseEntityUrl(linkForParsing);
+                            if (parsed) {
+                                window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
+                                navigationSuccessful = true;
+                            }
+                        }
+                        if (!navigationSuccessful) window.location.hash = constructedLink;
                     }
                 }
             }

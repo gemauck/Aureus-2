@@ -170,10 +170,7 @@ async function handler(req, res) {
                   isPrimary: true,
                   notes: true
                 },
-                orderBy: [
-                  { isPrimary: 'desc' },
-                  { createdAt: 'asc' }
-                ]
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }]
               },
               clientComments: {
                 select: {
@@ -256,10 +253,7 @@ async function handler(req, res) {
                         isPrimary: true,
                         notes: true
                       },
-                      orderBy: [
-                        { isPrimary: 'desc' },
-                        { createdAt: 'asc' }
-                      ]
+                      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }]
                     },
                     clientComments: {
                       select: {
@@ -272,6 +266,12 @@ async function handler(req, res) {
                       },
                       orderBy: [{ createdAt: 'desc' }]
                     },
+                    // Phase 6: Include sites and other normalized tables so list shows site rows
+                    clientSites: true,
+                    clientContracts: true,
+                    clientProposals: true,
+                    clientFollowUps: true,
+                    clientServices: true,
                     // Phase 4: Include projects relation to derive projectIds
                     projects: {
                       select: {
@@ -290,32 +290,47 @@ async function handler(req, res) {
                   ...(!hasGroupMembershipsTable ? { groupMemberships: [] } : {})
                 }))
               } catch (fallbackError) {
-                // If that also fails, try minimal query
+                // If that also fails, try minimal query (still include sites for list children)
                 console.warn('⚠️ Query with tags failed, trying minimal query:', fallbackError.message)
                 leads = await prisma.client.findMany({ 
                   where: { 
                     type: 'lead'
                   },
+                  include: { clientSites: true, clientContacts: true },
                   orderBy: { createdAt: 'desc' } 
                 })
                 // Add null externalAgent and empty groupMemberships to each lead
                 leads = leads.map(l => ({ 
                   ...l, 
                   externalAgent: null,
-                  groupMemberships: []
+                  groupMemberships: l.groupMemberships || []
                 }))
               }
             } else {
-              // Other relation errors - try query without relations
-              console.warn('⚠️ Query with relations failed, trying without relations:', relationError.message)
+              // Other relation errors - try query with minimal relations (at least sites for list children)
+              console.warn('⚠️ Query with relations failed, trying with minimal relations:', relationError.message)
               leads = await prisma.client.findMany({ 
                 where: { 
                   type: 'lead'
                 },
+                include: {
+                  clientSites: true,
+                  clientContacts: true
+                },
                 orderBy: { createdAt: 'desc' } 
               })
-              // Add null externalAgent to each lead
-              leads = leads.map(l => ({ ...l, externalAgent: null }))
+              // Add null externalAgent and empty arrays for missing relations
+              leads = leads.map(l => ({
+                ...l,
+                externalAgent: null,
+                clientComments: l.clientComments || [],
+                clientContracts: l.clientContracts || [],
+                clientProposals: l.clientProposals || [],
+                clientFollowUps: l.clientFollowUps || [],
+                clientServices: l.clientServices || [],
+                groupMemberships: l.groupMemberships || [],
+                projects: l.projects || []
+              }))
             }
           }
           
@@ -1021,8 +1036,6 @@ async function handler(req, res) {
           // Sync sites if provided
           if (sitesToSync && Array.isArray(sitesToSync) && sitesToSync.length > 0) {
             for (const site of sitesToSync) {
-              const stageVal = (site.stage != null && String(site.stage).trim() !== '') ? String(site.stage).trim() : 'Potential'
-              const aidaVal = (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus).trim() : 'Awareness'
               const siteData = {
                 clientId: lead.id,
                 name: site.name || '',
@@ -1031,9 +1044,9 @@ async function handler(req, res) {
                 contactPhone: site.contactPhone || '',
                 contactEmail: site.contactEmail || '',
                 notes: site.notes || '',
-                siteLead: site.siteLead ?? '',
-                stage: stageVal,
-                aidaStatus: aidaVal
+                siteLead: site.siteLead != null ? String(site.siteLead) : '',
+                stage: site.stage != null ? String(site.stage) : '',
+                aidaStatus: site.aidaStatus != null ? String(site.aidaStatus) : ''
               }
               
               if (site.id) {
@@ -1263,10 +1276,7 @@ async function handler(req, res) {
                   isPrimary: true,
                   notes: true
                 },
-                orderBy: [
-                  { isPrimary: 'desc' },
-                  { createdAt: 'asc' }
-                ]
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }]
               },
               clientComments: {
                 select: {

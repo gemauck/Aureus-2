@@ -20,7 +20,7 @@ async function handler(req, res) {
     const siteId = (req.params && req.params.siteId) || siteIdFromUrl
     
     
-    // GET /api/sites/client/:clientId - Get all sites for a client
+    // GET /api/sites/client/:clientId - Get all sites for a client (or lead; leads are Client rows with type=lead)
     if (req.method === 'GET' && clientId && !siteId) {
       if (!clientId) return badRequest(res, 'clientId required')
       
@@ -29,20 +29,26 @@ async function handler(req, res) {
         if (typeof clientId !== 'string' || clientId.trim().length === 0) {
           return badRequest(res, 'Invalid clientId format')
         }
-        
-        // Phase 6: Use normalized ClientSite table
-        const sites = await prisma.clientSite.findMany({
-          where: { clientId: clientId.trim() },
-          orderBy: { createdAt: 'asc' }
-        })
-        
+        const tid = clientId.trim()
+
+        let sites = []
+        try {
+          // Phase 6: Use normalized ClientSite table
+          sites = await prisma.clientSite.findMany({
+            where: { clientId: tid },
+            orderBy: { createdAt: 'asc' }
+          })
+        } catch (findErr) {
+          console.warn('⚠️ ClientSite.findMany failed for', tid, findErr.message)
+          sites = []
+        }
+
         // Fallback: If no sites in normalized table, try JSON field (backward compatibility)
         if (sites.length === 0) {
           try {
             const result = await prisma.$queryRaw`
-              SELECT sites, sitesJsonb FROM "Client" WHERE id = ${clientId.trim()}
+              SELECT sites, sitesJsonb FROM "Client" WHERE id = ${tid}
             `
-            
             if (result && result[0]) {
               let jsonSites = []
               if (result[0].sitesJsonb && Array.isArray(result[0].sitesJsonb) && result[0].sitesJsonb.length > 0) {
@@ -54,33 +60,19 @@ async function handler(req, res) {
                   jsonSites = []
                 }
               }
-              
-              // Return JSON sites for backward compatibility
               return ok(res, { sites: jsonSites })
             }
           } catch (fallbackError) {
-            // If fallback query fails, just return empty array instead of error
             console.warn('⚠️ Fallback query for sites failed:', fallbackError.message)
-            return ok(res, { sites: [] })
           }
         }
-        
+
         return ok(res, { sites })
-      } catch (dbError) {
-        console.error('❌ Database error getting sites:', dbError)
-        console.error('❌ ClientId:', clientId)
-        console.error('❌ Error code:', dbError.code)
-        console.error('❌ Error message:', dbError.message)
-        
-        // FIXED: Return empty array instead of error for invalid client IDs
-        if (dbError.code === 'P2025' || dbError.message?.includes('Record to find does not exist')) {
-          return ok(res, { sites: [] })
-        }
-        
-        if (isConnectionError(dbError)) {
-          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
-        }
-        return serverError(res, 'Failed to get sites', dbError.message)
+      } catch (err) {
+        // Never 500 on GET: return empty sites so UI does not retry and hit rate limits
+        console.error('❌ Sites GET error (returning empty):', err.message)
+        console.error('❌ ClientId:', clientId, 'Code:', err.code)
+        return ok(res, { sites: [] })
       }
     }
     
@@ -287,6 +279,11 @@ async function handler(req, res) {
     return badRequest(res, 'Invalid sites endpoint')
   } catch (e) {
     console.error('❌ Sites handler error:', e)
+    // GET /sites/client/:id must never 500: return empty sites so UI does not retry/rate-limit
+    const isGetSites = req.method === 'GET' && (req.url || '').includes('/sites/client/') && !(req.url || '').match(/\/sites\/client\/[^/]+\/[^/]/)
+    if (isGetSites && res && !res.headersSent) {
+      return ok(res, { sites: [] })
+    }
     return serverError(res, 'Sites handler failed', e.message)
   }
 }
