@@ -211,12 +211,21 @@ async function handler(req, res) {
             aidaStatus: body.aidaStatus != null && String(body.aidaStatus).trim() !== '' ? String(body.aidaStatus).trim() : 'Awareness',
             siteType: siteTypeVal
           }
+          const enrich = (row) => ({
+            ...row,
+            siteLead: row.siteLead ?? createData.siteLead,
+            stage: row.stage ?? createData.stage,
+            aidaStatus: row.aidaStatus ?? createData.aidaStatus,
+            siteType: row.siteType ?? createData.siteType
+          })
           let newSite
           try {
             newSite = await prisma.clientSite.create({ data: createData })
           } catch (createErr) {
             const m = String(createErr?.message || '')
-            if (m.includes('siteLead') && (m.includes('does not exist') || m.includes('column'))) {
+            const isMissingColumn = /column.*does not exist|does not exist|Unknown column/i.test(m) ||
+              m.includes('siteLead') || m.includes('stage') || m.includes('aidaStatus') || m.includes('siteType')
+            if (isMissingColumn) {
               const id = randomUUID()
               const rows = await prisma.$queryRawUnsafe(
                 `INSERT INTO "ClientSite" ("id","clientId","name","address","contactPerson","contactPhone","contactEmail","notes","createdAt","updatedAt")
@@ -226,7 +235,8 @@ async function handler(req, res) {
                 createData.contactPerson || '', createData.contactPhone || '', createData.contactEmail || '', createData.notes || ''
               )
               newSite = Array.isArray(rows) ? rows[0] : rows
-              if (newSite) newSite = { ...newSite, siteLead: createData.siteLead, stage: createData.stage, aidaStatus: createData.aidaStatus, siteType: createData.siteType }
+              if (!newSite) throw createErr
+              newSite = enrich(newSite)
             } else {
               throw createErr
             }
