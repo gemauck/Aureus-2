@@ -1324,10 +1324,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const normalized = STAGE_OPTIONS.find(s => s.toLowerCase() === (newStage || '').toLowerCase()) || 'Awareness';
         try {
             if (item.type === 'lead') {
-                if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
-                    await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { stage: normalized });
-                }
                 updateLeadStageOptimistically(item.id, normalized);
+                if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
+                    try {
+                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { stage: normalized });
+                    } catch (apiErr) {
+                        schedulePipelineRefresh();
+                        console.error('❌ Pipeline: Failed to save lead stage:', apiErr);
+                        alert('Failed to save stage. The list will refresh. Please try again.');
+                        return;
+                    }
+                }
             } else if (item.type === 'site') {
                 const clientId = item.leadId || item.lead?.id || item.clientId;
                 const siteId = item.siteId ?? item.site?.id ?? item.raw?.site?.id ?? null;
@@ -1335,18 +1342,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 const hasIndexFallback = typeof item.siteIndex === 'number' && clientId && token;
 
                 const applySiteStageOptimistic = () => {
+                    const matchSite = (s, i) =>
+                        (typeof item.siteIndex === 'number' && i === item.siteIndex) ||
+                        (siteId != null && (String(s.id) === String(siteId) || s.id === siteId));
                     if (item.leadId || item.lead?.id) {
                         setLeads(prev => {
                             const parentId = item.leadId || item.lead?.id;
                             const updated = prev.map(lead => {
                                 if (String(lead.id) !== String(parentId)) return lead;
                                 const sites = lead.clientSites || lead.sites || [];
-                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                                const newSites = sites.map((s, i) => {
-                                    if (matchByIndex && i === item.siteIndex) return { ...s, aidaStatus: normalized };
-                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, aidaStatus: normalized };
-                                    return s;
-                                });
+                                const newSites = sites.map((s, i) => matchSite(s, i) ? { ...s, aidaStatus: normalized } : s);
                                 return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
                             });
                             if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
@@ -1358,12 +1363,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const updated = prev.map(client => {
                                 if (String(client.id) !== String(item.clientId)) return client;
                                 const sites = client.clientSites || client.sites || [];
-                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                                const newSites = sites.map((s, i) => {
-                                    if (matchByIndex && i === item.siteIndex) return { ...s, aidaStatus: normalized };
-                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, aidaStatus: normalized };
-                                    return s;
-                                });
+                                const newSites = sites.map((s, i) => matchSite(s, i) ? { ...s, aidaStatus: normalized } : s);
                                 return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
                             });
                             if (typeof storage?.setClients === 'function') storage.setClients(updated);
@@ -1408,10 +1408,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     return;
                 }
             } else if (item.type === 'opportunity') {
-                if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
-                    await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { stage: normalized });
-                }
                 updateOpportunityStageOptimistically(item.clientId, item.id, normalized);
+                if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
+                    try {
+                        await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { stage: normalized });
+                    } catch (apiErr) {
+                        schedulePipelineRefresh();
+                        console.error('❌ Pipeline: Failed to save opportunity stage:', apiErr);
+                        alert('Failed to save stage. The list will refresh. Please try again.');
+                        return;
+                    }
+                }
             }
         } catch (err) {
             console.error('❌ Pipeline: Failed to save stage:', err);
@@ -1425,21 +1432,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const normalized = normalizeLifecycleStage(newStatus) || 'Potential';
         try {
             if (item.type === 'lead') {
-                if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
-                    await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { status: normalized });
-                }
                 setLeads(prev => {
-                    const updated = prev.map(lead => lead.id === item.id ? { ...lead, status: normalized } : lead);
+                    const updated = prev.map(lead => (String(lead.id) === String(item.id) ? { ...lead, status: normalized } : lead));
                     if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
                     try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
                     return updated;
                 });
+                if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
+                    try {
+                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { status: normalized });
+                    } catch (apiErr) {
+                        schedulePipelineRefresh();
+                        console.error('❌ Pipeline: Failed to save lead status:', apiErr);
+                        alert('Failed to save status. The list will refresh. Please try again.');
+                        return;
+                    }
+                }
             } else if (item.type === 'site') {
                 const clientId = item.leadId || item.lead?.id || item.clientId;
                 const siteId = item.siteId ?? item.site?.id ?? item.raw?.site?.id ?? null;
                 const hasSiteId = clientId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest);
                 const hasIndexFallback = typeof item.siteIndex === 'number' && clientId && token;
 
+                const matchSiteForStatus = (s, i) =>
+                    (typeof item.siteIndex === 'number' && i === item.siteIndex) ||
+                    (siteId != null && (String(s.id) === String(siteId) || s.id === siteId));
                 const applySiteStatusOptimistic = () => {
                     if (item.leadId || item.lead?.id) {
                         setLeads(prev => {
@@ -1447,12 +1464,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const updated = prev.map(lead => {
                                 if (String(lead.id) !== String(parentId)) return lead;
                                 const sites = lead.clientSites || lead.sites || [];
-                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                                const newSites = sites.map((s, i) => {
-                                    if (matchByIndex && i === item.siteIndex) return { ...s, stage: normalized };
-                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, stage: normalized };
-                                    return s;
-                                });
+                                const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, stage: normalized } : s);
                                 return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
                             });
                             if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
@@ -1464,12 +1476,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const updated = prev.map(client => {
                                 if (String(client.id) !== String(item.clientId)) return client;
                                 const sites = client.clientSites || client.sites || [];
-                                const matchByIndex = typeof item.siteIndex === 'number' && (siteId == null || siteId === '');
-                                const newSites = sites.map((s, i) => {
-                                    if (matchByIndex && i === item.siteIndex) return { ...s, stage: normalized };
-                                    if (siteId != null && (String(s.id) === String(siteId) || s.id === siteId)) return { ...s, stage: normalized };
-                                    return s;
-                                });
+                                const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, stage: normalized } : s);
                                 return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
                             });
                             if (typeof storage?.setClients === 'function') storage.setClients(updated);
@@ -1514,19 +1521,26 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     return;
                 }
             } else if (item.type === 'opportunity') {
-                if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
-                    await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { status: normalized });
-                }
                 setClients(prev => {
                     const updated = prev.map(client => {
-                        if (client.id !== item.clientId) return client;
-                        const opps = (client.opportunities || []).map(opp => opp.id === item.id ? { ...opp, status: normalized } : opp);
+                        if (String(client.id) !== String(item.clientId)) return client;
+                        const opps = (client.opportunities || []).map(opp => (String(opp.id) === String(item.id) ? { ...opp, status: normalized } : opp));
                         return { ...client, opportunities: opps };
                     });
                     if (typeof storage?.setClients === 'function') storage.setClients(updated);
                     try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { clients: updated } })); } catch (_) {}
                     return updated;
                 });
+                if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
+                    try {
+                        await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { status: normalized });
+                    } catch (apiErr) {
+                        schedulePipelineRefresh();
+                        console.error('❌ Pipeline: Failed to save opportunity status:', apiErr);
+                        alert('Failed to save status. The list will refresh. Please try again.');
+                        return;
+                    }
+                }
             }
         } catch (err) {
             console.error('❌ Pipeline: Failed to save status:', err);
