@@ -2435,7 +2435,6 @@ function initializeProjectDetail() {
         normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
     );
     const [forceDocumentCollectionDeepLink, setForceDocumentCollectionDeepLink] = useState(false);
-    const [monthlyDataReviewReady, setMonthlyDataReviewReady] = useState(() => typeof window.MonthlyDataReview === 'function');
     // Track if hasDocumentCollectionProcess was explicitly changed by user
     const hasDocumentCollectionProcessChangedRef = useRef(false);
     
@@ -2476,20 +2475,6 @@ function initializeProjectDetail() {
                 });
         }
     }, [hasDocumentCollectionProcess, forceDocumentCollectionDeepLink, project.id]);
-
-    // Preload MonthlyDataReview when project has Monthly Data Review process enabled
-    useEffect(() => {
-        if (!hasMonthlyDataReviewProcess) return;
-        if (window.MonthlyDataReview && typeof window.MonthlyDataReview === 'function') {
-            setMonthlyDataReviewReady(true);
-            return;
-        }
-        if (window.loadComponent && typeof window.loadComponent === 'function') {
-            window.loadComponent('./src/components/projects/MonthlyDataReview.jsx')
-                .then(() => setMonthlyDataReviewReady(true))
-                .catch(() => {});
-        }
-    }, [hasMonthlyDataReviewProcess, project.id]);
 
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
@@ -6078,7 +6063,7 @@ function initializeProjectDetail() {
             setShowDocumentProcessDropdown(false);
             const updatePayload = {
                 hasMonthlyDataReviewProcess: true,
-                monthlyDataReviewChecklist: '[]'
+                monthlyDataReviewSections: '{}'
             };
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
             if (!apiResponse) throw new Error('API returned no response');
@@ -6087,7 +6072,7 @@ function initializeProjectDetail() {
                 throw new Error(typeof msg === 'string' ? msg : msg.message || 'API error');
             }
             if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                window.updateViewingProject({ ...project, hasMonthlyDataReviewProcess: true, monthlyDataReviewChecklist: '[]' });
+                window.updateViewingProject({ ...project, hasMonthlyDataReviewProcess: true, monthlyDataReviewSections: '{}' });
             }
             if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
                 const keysToDelete = [];
@@ -7594,15 +7579,16 @@ function initializeProjectDetail() {
                 />
             )}
 
-            {/* Monthly Data Review tab - checklist (same structure as Document Collection Checklist) */}
+            {/* Monthly Data Review tab - same functionality as Document Collection (tracker with year, sections, documents, status, comments) */}
             {activeSection === 'monthlyDataReview' && hasMonthlyDataReviewProcess && (() => {
-                const MonthlyDataReviewComponent = window.MonthlyDataReview;
-                if (MonthlyDataReviewComponent && typeof MonthlyDataReviewComponent === 'function') {
+                const TrackerComponent = window.MonthlyDocumentCollectionTracker;
+                if (TrackerComponent && typeof TrackerComponent === 'function') {
                     return (
                         <div key={`monthly-data-review-${project?.id || 'default'}`}>
-                            {window.React.createElement(MonthlyDataReviewComponent, {
+                            {window.React.createElement(TrackerComponent, {
                                 project: project,
-                                onBack: handleBackToOverview
+                                onBack: handleBackToOverview,
+                                dataSource: 'monthlyDataReview'
                             })}
                         </div>
                     );

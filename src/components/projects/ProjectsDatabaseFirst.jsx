@@ -127,6 +127,7 @@ const normalizeProject = (project) => {
         hasMonthlyFMSReviewProcess: hasMonthlyFMSReview,
         hasMonthlyDataReviewProcess: hasMonthlyDataReview,
         monthlyDataReviewChecklist: project.monthlyDataReviewChecklist != null ? project.monthlyDataReviewChecklist : '[]',
+        monthlyDataReviewSections: project.monthlyDataReviewSections != null ? project.monthlyDataReviewSections : '{}',
         monthlyProgress: typeof project.monthlyProgress === 'string'
             ? project.monthlyProgress
             : JSON.stringify(project.monthlyProgress || {}),

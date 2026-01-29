@@ -134,7 +134,9 @@ const truncateDescription = (text, maxLength = 60) => {
     return { truncated: text.substring(0, cutPoint), isLong: true };
 };
 
-const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
+const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'documentCollection' }) => {
+    // dataSource: 'documentCollection' | 'monthlyDataReview' - same UI, different storage (documentSections vs monthlyDataReviewSections)
+    const isMonthlyDataReview = dataSource === 'monthlyDataReview';
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
@@ -159,7 +161,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     
-    const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
+    const getSnapshotKey = (projectId) => projectId
+        ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
+        : null;
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -168,7 +172,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
     // Year selection with persistence
-    const YEAR_STORAGE_PREFIX = 'documentCollectionSelectedYear_';
+    const YEAR_STORAGE_PREFIX = isMonthlyDataReview ? 'monthlyDataReviewSelectedYear_' : 'documentCollectionSelectedYear_';
     const getInitialSelectedYear = () => {
         if (typeof window !== 'undefined') {
             // Deep link: prefer docYear from URL so the comment opens on the correct year
@@ -526,16 +530,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (apiRef.current) {
                 console.log('📥 Loading from database...', { projectId: project.id });
                 const freshProject = await apiRef.current.fetchProject(project.id);
+                const sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
                 console.log('📥 Loaded project from database:', { 
-                    hasDocumentSections: !!freshProject?.documentSections,
-                    documentSectionsType: typeof freshProject?.documentSections,
-                    documentSectionsLength: typeof freshProject?.documentSections === 'string' 
-                        ? freshProject.documentSections.length 
-                        : 'N/A'
+                    hasSections: !!sectionsField,
+                    sectionsType: typeof sectionsField,
+                    dataSource: dataSource
                 });
                 
-                if (freshProject?.documentSections) {
-                    const normalized = normalizeSectionsByYear(freshProject.documentSections);
+                if (sectionsField) {
+                    const normalized = normalizeSectionsByYear(sectionsField);
                     console.log('📥 Normalized sections:', { 
                         yearKeys: Object.keys(normalized),
                         sectionsCount: normalized[selectedYear]?.length || 0
@@ -550,8 +553,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Fallback to prop data (only if database load failed)
             console.log('⚠️ Falling back to prop data');
-            if (project?.documentSections) {
-                const normalized = normalizeSectionsByYear(project.documentSections);
+            const propSections = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
+            if (propSections) {
+                const normalized = normalizeSectionsByYear(propSections);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -574,7 +578,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.documentSections, selectedYear]);
+    }, [project?.id, project?.documentSections, project?.monthlyDataReviewSections, selectedYear, isMonthlyDataReview, dataSource]);
     
     // Load data on mount and when project/year changes
     useEffect(() => {
@@ -711,18 +715,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         isSavingRef.current = true;
         
         try {
-            // Use DocumentCollectionAPI if available, fallback to DatabaseAPI
             let result;
-            if (apiRef.current?.saveDocumentSections) {
-                result = await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
-                console.log('✅ Saved via DocumentCollectionAPI:', result);
-            } else if (window.DatabaseAPI?.updateProject) {
-                result = await window.DatabaseAPI.updateProject(project.id, {
-                    documentSections: serialized
-                });
-                console.log('✅ Saved via DatabaseAPI:', result);
+            if (isMonthlyDataReview) {
+                // Monthly Data Review: save to JSON field only (no DocumentSection table)
+                if (window.DatabaseAPI?.updateProject) {
+                    result = await window.DatabaseAPI.updateProject(project.id, {
+                        monthlyDataReviewSections: serialized
+                    });
+                    console.log('✅ Saved monthlyDataReviewSections via DatabaseAPI:', result);
+                } else {
+                    throw new Error('DatabaseAPI.updateProject not available');
+                }
             } else {
-                throw new Error('No available API for saving document sections');
+                // Document Collection: use DocumentCollectionAPI or DatabaseAPI with documentSections
+                if (apiRef.current?.saveDocumentSections) {
+                    result = await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
+                    console.log('✅ Saved via DocumentCollectionAPI:', result);
+                } else if (window.DatabaseAPI?.updateProject) {
+                    result = await window.DatabaseAPI.updateProject(project.id, {
+                        documentSections: serialized
+                    });
+                    console.log('✅ Saved via DatabaseAPI:', result);
+                } else {
+                    throw new Error('No available API for saving document sections');
+                }
             }
             
             // Mark as saved
@@ -1243,13 +1259,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             try {
                 const payload = sectionsRef.current || {};
                 
-                if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                if (isMonthlyDataReview) {
+                    if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        await window.DatabaseAPI.updateProject(project.id, {
+                            monthlyDataReviewSections: serializeSections(payload)
+                        });
+                    } else {
+                        throw new Error('DatabaseAPI.updateProject not available');
+                    }
+                } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
                     await apiRef.current.saveDocumentSections(project.id, payload, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    const updatePayload = {
+                    await window.DatabaseAPI.updateProject(project.id, {
                         documentSections: serializeSections(payload)
-                    };
-                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    });
                 } else {
                     throw new Error('No available API for saving document sections');
                 }
@@ -3880,12 +3903,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <i className="fas fa-arrow-left"></i>
                             </button>
                             <div>
-                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Monthly Document Collection Tracker</h1>
+                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
+                                    {isMonthlyDataReview ? 'Monthly Data Review' : 'Monthly Document Collection Tracker'}
+                                </h1>
                                 <p className="text-sm text-gray-500 mt-0.5">
                                     {project?.name}
                                     {project?.client && ` • ${project.client}`}
-                                    {' • Facilities: '}
-                                    <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                                    {!isMonthlyDataReview && (
+                                        <>
+                                            {' • Facilities: '}
+                                            <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                                        </>
+                                    )}
+                                    {isMonthlyDataReview && ' • Same functionality as Document Collection'}
                                 </p>
                             </div>
                         </div>

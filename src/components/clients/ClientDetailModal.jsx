@@ -5444,6 +5444,45 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 </select>
                                                 <p className="text-xs text-gray-500 mt-0.5">Lead sites appear in the Pipeline until marked as Client.</p>
                                             </div>
+                                            {!isLead && (
+                                                <>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                                                        <select
+                                                            value={newSite.stage ?? 'Potential'}
+                                                            onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
+                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                            title="Lifecycle status – matches Pipeline Status column"
+                                                        >
+                                                            <option value="Potential">Potential</option>
+                                                            <option value="Active">Active</option>
+                                                            <option value="Inactive">Inactive</option>
+                                                            <option value="On Hold">On Hold</option>
+                                                            <option value="Qualified">Qualified</option>
+                                                            <option value="Disinterested">Disinterested</option>
+                                                            <option value="Proposal">Proposal</option>
+                                                            <option value="Tender">Tender</option>
+                                                        </select>
+                                                        <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with Pipeline.</p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Stage</label>
+                                                        <select
+                                                            value={newSite.aidaStatus ?? 'Awareness'}
+                                                            onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
+                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                            title="AIDA stage – matches Pipeline Stage column"
+                                                        >
+                                                            <option value="No Engagement">No Engagement</option>
+                                                            <option value="Awareness">Awareness</option>
+                                                            <option value="Interest">Interest</option>
+                                                            <option value="Desire">Desire</option>
+                                                            <option value="Action">Action</option>
+                                                        </select>
+                                                        <p className="text-xs text-gray-500 mt-0.5">AIDA stage – syncs with Pipeline.</p>
+                                                    </div>
+                                                </>
+                                            )}
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Site Contact</label>
                                                 <input

@@ -427,6 +427,7 @@ model Project {
   hasMonthlyFMSReviewProcess   Boolean                  @default(false)
   hasMonthlyDataReviewProcess  Boolean                  @default(false)
   monthlyDataReviewChecklist   String                   @default("[]")
+  monthlyDataReviewSections    String                   @default("{}") // Same shape as documentSections (year -> sections with documents, status, comments)
   ownerId                      String?
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt

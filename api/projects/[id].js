@@ -34,7 +34,8 @@ async function loadProjectWithRelations(projectId) {
         hasWeeklyFMSReviewProcess: false,
         hasMonthlyFMSReviewProcess: false,
         hasMonthlyDataReviewProcess: false,
-        monthlyDataReviewChecklist: '[]'
+        monthlyDataReviewChecklist: '[]',
+        monthlyDataReviewSections: '{}'
       };
     } catch (rawErr) {
       console.error('❌ Project raw query also failed:', rawErr.message);
@@ -746,6 +747,7 @@ async function handler(req, res) {
         if (transformedProject.hasMonthlyFMSReviewProcess === undefined) transformedProject.hasMonthlyFMSReviewProcess = false;
         if (transformedProject.hasMonthlyDataReviewProcess === undefined) transformedProject.hasMonthlyDataReviewProcess = false;
         if (transformedProject.monthlyDataReviewChecklist === undefined) transformedProject.monthlyDataReviewChecklist = '[]';
+        if (transformedProject.monthlyDataReviewSections === undefined) transformedProject.monthlyDataReviewSections = '{}';
 
         return ok(res, { project: transformedProject })
       } catch (dbError) {
@@ -776,7 +778,8 @@ async function handler(req, res) {
         ['hasWeeklyFMSReviewProcess', 'BOOLEAN DEFAULT false'],
         ['hasMonthlyFMSReviewProcess', 'BOOLEAN DEFAULT false'],
         ['hasMonthlyDataReviewProcess', 'BOOLEAN DEFAULT false'],
-        ['monthlyDataReviewChecklist', "TEXT DEFAULT '[]'"]
+        ['monthlyDataReviewChecklist', "TEXT DEFAULT '[]'"],
+        ['monthlyDataReviewSections', "TEXT DEFAULT '{}'"]
       ];
       for (const [col, def] of optionalColumns) {
         try {
@@ -1029,6 +1032,24 @@ async function handler(req, res) {
         } catch (e) {
           console.warn('Invalid monthlyDataReviewChecklist:', e);
           updateData.monthlyDataReviewChecklist = '[]';
+        }
+      }
+
+      // Handle monthlyDataReviewSections separately if provided - same shape as documentSections (year -> sections)
+      if (body.monthlyDataReviewSections !== undefined && body.monthlyDataReviewSections !== null) {
+        try {
+          const val = body.monthlyDataReviewSections;
+          if (typeof val === 'string') {
+            const trimmed = val.trim();
+            updateData.monthlyDataReviewSections = trimmed === '' ? '{}' : trimmed;
+          } else if (typeof val === 'object') {
+            updateData.monthlyDataReviewSections = JSON.stringify(val);
+          } else {
+            updateData.monthlyDataReviewSections = '{}';
+          }
+        } catch (e) {
+          console.warn('Invalid monthlyDataReviewSections:', e);
+          updateData.monthlyDataReviewSections = '{}';
         }
       }
       

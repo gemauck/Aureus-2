@@ -58,6 +58,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
         './src/components/projects/WeeklyFMSReviewTracker.jsx', // Added as fallback if vite-projects fails
         './src/components/projects/MonthlyFMSReviewTracker.jsx', // Monthly FMS Review tracker
+        './src/components/projects/MonthlyDataReview.jsx', // Monthly Data Review checklist
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
         // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler
@@ -296,6 +297,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                                      src.includes('ProjectProgressTracker') || 
                                      src.includes('ProjectDetail') || 
                                      src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') ||
+                                     src.includes('MonthlyDataReview') ||
                                      src.includes('WeeklyFMSReviewTracker') ||
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates 
@@ -305,6 +307,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
                                      scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') ||
+                                     scriptSrc.includes('MonthlyDataReview') ||
                                      scriptSrc.includes('WeeklyFMSReviewTracker') ||
                                      scriptSrc.includes('Users.jsx') || scriptSrc.includes('Users.js') || 
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
