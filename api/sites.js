@@ -177,11 +177,12 @@ async function handler(req, res) {
       }
     }
     
-    // PATCH /api/sites/client/:clientId/:siteId - Update a site
+    // PATCH /api/sites/client/:clientId/:siteId - Update a site (or create if siteId is a client-generated temp id)
     if (req.method === 'PATCH' && clientId && siteId) {
       if (!clientId || !siteId) return badRequest(res, 'clientId and siteId required')
       
       const body = req.body || {}
+      const isTempSiteId = /^site-\d+-/.test(String(siteId).trim())
       
       try {
         // Phase 6: Update site in normalized ClientSite table
@@ -189,6 +190,47 @@ async function handler(req, res) {
         const existingSite = await prisma.clientSite.findFirst({
           where: { id: siteId, clientId }
         })
+        
+        // If no row found and siteId looks like a temp id (e.g. site-1764469968084-fei35c5io), create new site instead
+        if (!existingSite && isTempSiteId) {
+          const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } })
+          if (!client) return notFound(res, 'Client not found')
+          const siteTypeVal = body.siteType === 'client' ? 'client' : 'lead'
+          const createData = {
+            clientId,
+            name: (body.name != null && String(body.name).trim() !== '') ? String(body.name).trim() : 'Unnamed Site',
+            address: typeof body.address === 'string' ? body.address : '',
+            contactPerson: typeof body.contactPerson === 'string' ? body.contactPerson : '',
+            contactPhone: typeof body.contactPhone === 'string' ? body.contactPhone : '',
+            contactEmail: typeof body.contactEmail === 'string' ? body.contactEmail : '',
+            notes: typeof body.notes === 'string' ? body.notes : '',
+            siteLead: body.siteLead != null ? String(body.siteLead) : '',
+            stage: body.stage != null && String(body.stage).trim() !== '' ? String(body.stage).trim() : 'Potential',
+            aidaStatus: body.aidaStatus != null && String(body.aidaStatus).trim() !== '' ? String(body.aidaStatus).trim() : 'Awareness',
+            siteType: siteTypeVal
+          }
+          let newSite
+          try {
+            newSite = await prisma.clientSite.create({ data: createData })
+          } catch (createErr) {
+            const m = String(createErr?.message || '')
+            if (m.includes('siteLead') && (m.includes('does not exist') || m.includes('column'))) {
+              const id = randomUUID()
+              const rows = await prisma.$queryRawUnsafe(
+                `INSERT INTO "ClientSite" ("id","clientId","name","address","contactPerson","contactPhone","contactEmail","notes","createdAt","updatedAt")
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
+                 RETURNING *`,
+                id, createData.clientId, createData.name, createData.address,
+                createData.contactPerson || '', createData.contactPhone || '', createData.contactEmail || '', createData.notes || ''
+              )
+              newSite = Array.isArray(rows) ? rows[0] : rows
+              if (newSite) newSite = { ...newSite, siteLead: createData.siteLead, stage: createData.stage, aidaStatus: createData.aidaStatus, siteType: createData.siteType }
+            } else {
+              throw createErr
+            }
+          }
+          return ok(res, { site: newSite })
+        }
         
         if (!existingSite) return notFound(res, 'Site not found')
         

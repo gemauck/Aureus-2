@@ -285,6 +285,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Track which client ID we've already loaded sites for to prevent infinite loops
     const sitesLoadedForClientIdRef = useRef(null);
+    const optimisticSitesRef = useRef(optimisticSites);
+    useEffect(() => { optimisticSitesRef.current = optimisticSites; }, [optimisticSites]);
     
     // Track initial loading state to prevent jittery progressive rendering
     // Only render full content once all initial data loads are complete
@@ -1620,12 +1622,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             try {
                 const currentFormData = formDataRef.current || {};
                 const existingSites = currentFormData.sites || [];
-                            const mergedSites = mergeUniqueById([...sites, ...existingSites, ...optimisticSites]);
+                            const mergedSites = mergeUniqueById([...sites, ...existingSites, ...(optimisticSitesRef.current || [])]);
                             const updated = {
                     ...currentFormData,
                                 sites: mergedSites
                             };
-                            console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${optimisticSites.length} optimistic)`);
+                            console.log(`✅ Merged sites: ${mergedSites.length} total (${sites.length} from DB, ${existingSites.length} existing, ${(optimisticSitesRef.current || []).length} optimistic)`);
                 
                 // CRITICAL: Use functional update to ensure React detects the change
                 console.log(`🔧🔧🔧 CALLING setFormData with functional update for sites (sites: ${mergedSites.length})`);
@@ -1667,7 +1669,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } finally {
             isLoadingSitesRef.current = false;
         }
-    }, [client?.id, optimisticSites]);
+    }, [client?.id]);
     
     // Resolve lead sites persistence another way: when user opens Sites tab for a lead,
     // always load from GET /api/sites/client/:id so we show sites even if the lead was loaded from cache/list
@@ -3427,6 +3429,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // For leads: persist site via direct site API first (same as clients use for add).
         // This guarantees DB write even if the lead PATCH path doesn't process body.sites.
         const runSave = async () => {
+            let dataToSave = finalFormData;
             if (isLead && formData.id && editingSite.id && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
                 const payload = {
                     name: sitePayload.name ?? '',
@@ -3441,13 +3444,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     aidaStatus: sitePayload.aidaStatus ?? ''
                 };
                 try {
+                    let response;
                     if (window.api?.updateSite) {
-                        await window.api.updateSite(formData.id, editingSite.id, payload);
+                        response = await window.api.updateSite(formData.id, editingSite.id, payload);
                     } else if (window.DatabaseAPI?.makeRequest) {
-                        await window.DatabaseAPI.makeRequest(`/sites/client/${formData.id}/${editingSite.id}`, {
+                        response = await window.DatabaseAPI.makeRequest(`/sites/client/${formData.id}/${editingSite.id}`, {
                             method: 'PATCH',
                             body: JSON.stringify(payload)
                         });
+                    }
+                    const savedSite = response?.data?.site || response?.site;
+                    if (savedSite?.id && savedSite.id !== editingSite.id) {
+                        const updatedSitesList = (updatedFormData.sites || []).map(s => s.id === editingSite.id ? savedSite : s);
+                        setFormData(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === editingSite.id ? savedSite : s) }));
+                        setOptimisticSites(prev => prev.map(s => s.id === editingSite.id ? savedSite : s));
+                        dataToSave = { ...finalFormData, sites: updatedSitesList };
                     }
                 } catch (err) {
                     console.error('❌ Lead site update (direct API) failed:', err);
@@ -3456,7 +3467,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }
             }
             try {
-                await onSave(finalFormData, true);
+                await onSave(dataToSave, true);
             } catch (e) {
                 console.error('❌ Error in onSave after site update:', e);
             }
