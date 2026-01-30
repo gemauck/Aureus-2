@@ -2432,15 +2432,13 @@ const TaskDetailModal = ({
 
                                 {/* Attachments List */}
                                 <div className="space-y-1.5">
-                                    {(() => {
-                                        const safeAttachments = Array.isArray(attachments) ? attachments : [];
-                                        return safeAttachments.length === 0 ? (
+                                    {(Array.isArray(attachments) ? attachments : []).length === 0 ? (
                                         <div className="text-center py-6 text-gray-500">
                                             <i className="fas fa-paperclip text-3xl mb-1.5"></i>
                                             <p className="text-sm">No attachments yet</p>
                                         </div>
                                     ) : (
-                                        safeAttachments.map(attachment => (
+                                        (Array.isArray(attachments) ? attachments : []).map(attachment => (
                                             <div key={attachment.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2.5 border border-gray-200">
                                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                                     <div className="w-8 h-8 bg-primary-100 rounded flex items-center justify-center flex-shrink-0">
@@ -2471,8 +2469,8 @@ const TaskDetailModal = ({
                                                     </button>
                                                 </div>
                                             </div>
-                                        ));
-                                    })()}
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         )}
