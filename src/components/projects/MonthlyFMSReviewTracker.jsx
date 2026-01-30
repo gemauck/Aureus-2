@@ -1728,14 +1728,17 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         [];
                     
                     const contextTitle = `Monthly FMS Review - ${project?.name || 'Project'}`;
-                    // Deep-link directly to the monthly FMS review cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+                    // Deep-link with docMonth, docYear and tab so email links open Monthly FMS Review tab (not Document Collection)
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
                         sectionId,
                         documentId,
                         month,
+                        docYear: selectedYear,
+                        year: selectedYear,
+                        source: 'monthlyFMSReview',
                         commentId: newCommentId
                     };
                     
@@ -2496,7 +2499,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                     // Update URL with deep link when opening popup
                                     const [sectionId, documentId, month] = cellKey.split('-');
                                     if (sectionId && documentId && month && project?.id) {
-                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}`;
+                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview`;
                                         
                                         if (window.RouteState && window.RouteState.navigate) {
                                             window.RouteState.navigate({
@@ -3249,7 +3252,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                 }
                                                 // Update URL when clicking on a comment to enable sharing
                                                 if (section && doc && comment.id) {
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(comment.id)}`;
                                                     
                                                     // Update URL using RouteState if available, otherwise use hash
                                                     if (window.RouteState && window.RouteState.navigate) {
@@ -3368,7 +3371,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
                                                     if (!section || !doc || !comment.id) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(comment.id)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard

@@ -2002,14 +2002,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     
                     const weekLabel = typeof week === 'object' ? week.label : week;
                     const contextTitle = `Weekly FMS Review - ${project?.name || 'Project'}`;
-                    // Deep-link directly to the weekly FMS review cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docWeek=${encodeURIComponent(weekLabel)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+                    // Deep-link with docWeek and docYear so email links open Weekly tab and correct cell (not Document Collection)
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docWeek=${encodeURIComponent(weekLabel)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
                         sectionId,
                         documentId,
                         week: weekLabel,
+                        docYear: selectedYear,
+                        year: selectedYear,
                         commentId: newCommentId
                     };
                     

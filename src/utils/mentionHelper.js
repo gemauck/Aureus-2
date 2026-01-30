@@ -292,7 +292,6 @@ const MentionHelper = {
                         if (metadata.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadata.docYear)}`);
                         if (metadata.year != null) queryParams.push(`docYear=${encodeURIComponent(metadata.year)}`);
                         if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
-                        if (sectionId) queryParams.push(`weeklySectionId=${encodeURIComponent(sectionId)}`);
                         entityUrl = `#/projects/${projectId}?${queryParams.join('&')}`;
                         console.log('📧 MentionHelper: Rebuilt entityUrl from weekly FMS review metadata:', entityUrl);
                     }

@@ -47,24 +47,24 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     // Always build a direct-to-comment link from metadata when we have tracker params, so in-app and email both open the comment
     const hasTrackerMetadata = metadataObj.projectId && (
         metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null ||
-        metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weekNumber != null
+        metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.week != null || metadataObj.weekNumber != null
     );
     if (hasTrackerMetadata || !validLink || !validLink.trim()) {
         try {
-            const isWeeklyFMS = metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weeklyMonth != null || (metadataObj.sectionId && metadataObj.weekNumber != null));
+            const weekLabelFromMeta = metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
+            const isWeeklyFMS = metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weeklyMonth != null || (metadataObj.sectionId && (metadataObj.weekNumber != null || metadataObj.week != null)));
             if (isWeeklyFMS) {
                 validLink = `#/projects/${metadataObj.projectId}`;
                 const q = [];
                 const sectionId = metadataObj.weeklySectionId || metadataObj.sectionId;
                 const documentId = metadataObj.weeklyDocumentId || metadataObj.documentId;
-                const weekLabel = metadataObj.weeklyWeek ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
+                const weekLabel = weekLabelFromMeta;
                 if (sectionId) q.push(`docSectionId=${encodeURIComponent(sectionId)}`);
                 if (documentId) q.push(`docDocumentId=${encodeURIComponent(documentId)}`);
                 if (weekLabel != null) q.push(`docWeek=${encodeURIComponent(weekLabel)}`);
                 if (metadataObj.docYear != null) q.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
                 if (metadataObj.year != null) q.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
                 if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                if (sectionId) q.push(`weeklySectionId=${encodeURIComponent(sectionId)}`);
                 if (q.length) validLink += `?${q.join('&')}`;
             } else if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null)) {
                 validLink = `#/projects/${metadataObj.projectId}`;
