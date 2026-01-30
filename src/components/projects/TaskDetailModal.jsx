@@ -321,10 +321,11 @@ const TaskDetailModal = ({
             const url = '/task-comments?taskId=' + encodeURIComponent(taskId) + '&projectId=' + encodeURIComponent(projectId);
             // CRITICAL: DatabaseAPI.makeRequest already returns parsed JSON, don't call .json()
             const data = await window.DatabaseAPI.makeRequest(url);
-            
-            if (data.comments && Array.isArray(data.comments)) {
+            // API wraps response in { data: { comments } }
+            const commentsList = data?.data?.comments ?? data?.comments;
+            if (commentsList && Array.isArray(commentsList)) {
                 // Transform API comments to match expected format
-                const formattedComments = data.comments.map(c => ({
+                const formattedComments = commentsList.map(c => ({
                     id: c.id,
                     text: c.text,
                     author: c.author,
@@ -1219,15 +1220,16 @@ const TaskDetailModal = ({
                         userName: comment.userName || comment.authorEmail || currentUser.email
                     })
                 });
-                
-                if (commentData.comment) {
+                // API wraps response in { data: { comment } }
+                const savedCommentFromApi = commentData?.data?.comment ?? commentData?.comment;
+                if (savedCommentFromApi) {
                     // Update local comment with the saved comment from API (includes generated ID)
                     const savedComment = {
                         ...comment,
-                        id: commentData.comment.id,
-                        createdAt: commentData.comment.createdAt,
-                        timestamp: commentData.comment.createdAt,
-                        date: new Date(commentData.comment.createdAt).toLocaleString()
+                        id: savedCommentFromApi.id,
+                        createdAt: savedCommentFromApi.createdAt,
+                        timestamp: savedCommentFromApi.createdAt,
+                        date: new Date(savedCommentFromApi.createdAt).toLocaleString()
                     };
                     
                     // Update comments state with the saved comment
@@ -1248,7 +1250,7 @@ const TaskDetailModal = ({
                         console.warn('⚠️ TaskDetailModal: Failed to persist task subscribers:', subErr?.message);
                     }
                 } else {
-                    throw new Error('Comment save response missing comment data');
+                    throw new Error('Comment save response missing comment data (check response.data.comment)');
                 }
             } catch (apiError) {
                 console.error('❌ TaskDetailModal: Failed to save comment to TaskComment API:', {
