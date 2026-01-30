@@ -4022,9 +4022,10 @@ Abcotronics`;
                                 </div>
                             </div>
                         )}
-                        {comments.length > 0 && (
-                            <div className="mb-3">
-                                <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
+                        {/* Always show Comments section so the popup is clearly the comments modal, not just "Add Comment" */}
+                        <div className="mb-3">
+                            <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
+                            {comments.length > 0 ? (
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
@@ -4216,8 +4217,13 @@ Abcotronics`;
                                         ))}
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="py-3 px-2 rounded bg-gray-50 border border-gray-100 text-center">
+                                    <p className="text-[11px] text-gray-500">No comments yet</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Add one below</p>
+                                </div>
+                            )}
+                        </div>
                         
                         <div>
                             <div className="flex items-center justify-between mb-1">
