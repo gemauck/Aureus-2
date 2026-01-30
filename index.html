@@ -80,14 +80,14 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1769757772938'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1769766188894'; // Bumped to force reload and clear cache
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1769757772938';
+            var APP_VERSION = '1769766188894';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -265,8 +265,11 @@
             
             function checkBuildVersion() {
                 try {
-                    fetch('/dist/build-version.json?v=' + Date.now(), { cache: 'no-store' })
+                    var controller = new AbortController();
+                    var timeoutId = setTimeout(function() { controller.abort(); }, 8000);
+                    fetch('/dist/build-version.json?v=' + Date.now(), { cache: 'no-store', signal: controller.signal })
                         .then(function(response) {
+                            clearTimeout(timeoutId);
                             if (!response.ok) return;
                             return response.json();
                         })
@@ -284,8 +287,9 @@
                                 localStorage.setItem(BUILD_VERSION_KEY, currentVersion);
                             }
                         })
-                        .catch(function(error) {
-                            // Silently fail - don't spam console
+                        .catch(function() {
+                            clearTimeout(timeoutId);
+                            // Silently fail - network/unreachable already visible in DevTools
                         });
                 } catch (e) {
                     // Silently fail
@@ -928,33 +932,26 @@
             }
 
             async function fetchCurrentVersion() {
+                var controller = new AbortController();
+                var timeoutId = setTimeout(function() { controller.abort(); }, 8000);
                 try {
                     const res = await fetch(VERSION_ENDPOINT, {
                         cache: 'no-store',
-                        headers: {
-                            'Accept': 'application/json',
-                        },
+                        signal: controller.signal,
+                        headers: { 'Accept': 'application/json' },
                     });
-                    if (!res.ok) {
-                        console.warn('⚠️ Version endpoint returned non-OK status:', res.status, res.statusText);
-                        return null;
-                    }
+                    clearTimeout(timeoutId);
+                    if (!res.ok) return null;
                     const contentType = res.headers.get('content-type');
                     if (!contentType || !contentType.includes('application/json')) {
-                        console.warn('⚠️ Version endpoint returned non-JSON content:', contentType);
-                        // Try to parse as JSON anyway (some servers don't set content-type correctly)
+                        // Try to parse as JSON anyway
                     }
-                    const data = await res.json().catch((err) => {
-                        console.warn('⚠️ Failed to parse version endpoint response as JSON:', err);
-                        return null;
-                    });
-                    if (!data || typeof data.version !== 'string') {
-                        console.warn('⚠️ Version endpoint response missing or invalid version field:', data);
-                        return null;
-                    }
+                    const data = await res.json().catch(function() { return null; });
+                    if (!data || typeof data.version !== 'string') return null;
                     return data.version;
                 } catch (err) {
-                    console.warn('⚠️ Error fetching version from endpoint:', err);
+                    clearTimeout(timeoutId);
+                    // Network errors (ERR_ADDRESS_UNREACHABLE, timeout) - fail silently
                     return null;
                 }
             }
@@ -996,8 +993,7 @@
 
                 const latest = await fetchCurrentVersion();
                 if (!latest) {
-                    // Log errors to help debug
-                    console.warn('⚠️ Version check: Could not fetch current version from server');
+                    // Network unreachable / timeout - fail silently (browser already logs failed request)
                     return;
                 }
 
@@ -1105,8 +1101,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1769757772938" as="script">
-    <script defer src="/dist/core-bundle.js?v=1769757772938"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1769766188894" as="script">
+    <script defer src="/dist/core-bundle.js?v=1769766188894"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1459,8 +1455,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1769757772938" as="script">
-    <script defer src="/lazy-load-components.js?v=1769757772938"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1769766188894" as="script">
+    <script defer src="/lazy-load-components.js?v=1769766188894"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
