@@ -148,13 +148,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
-    // Calculate working months (previous month and current month)
-    const getWorkingMonths = () => {
-        const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
-        return [oneMonthBack, currentMonth];
-    };
-    
-    const workingMonths = getWorkingMonths();
+    // One month in arrears only (for column highlight)
+    const oneMonthArrearsYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    const oneMonthArrearsMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1;
+    const isOneMonthArrears = (year, monthIndex) =>
+        year === oneMonthArrearsYear && monthIndex === oneMonthArrearsMonthIndex;
     // Simplified refs - only essential ones for debouncing and API reference
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
@@ -2831,7 +2829,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
-        const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
+        const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
         let cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
             : (isWorkingMonth ? 'bg-primary-50' : '');
@@ -4660,7 +4658,7 @@ Abcotronics`;
                                                 <th
                                                     key={month}
                                                     className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
-                                                        workingMonths.includes(idx) && selectedYear === currentYear
+                                                        isOneMonthArrears(selectedYear, idx)
                                                             ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                             : 'text-gray-700'
                                                     }`}

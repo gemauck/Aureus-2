@@ -172,7 +172,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Generate weeks for the selected year (recalculate when year changes)
     const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     
-    // Calculate working weeks (2 weeks in arrears from current week)
+    // Calculate working week (1 week in arrears from current week only)
     const getWorkingWeeks = () => {
         const today = new Date();
         const currentWeekStart = new Date(today);
@@ -180,30 +180,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         currentWeekStart.setDate(currentWeekStart.getDate() + daysToMonday);
         
-        // Calculate 2 weeks ago
-        const twoWeeksAgo = new Date(currentWeekStart);
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-        
-        // Calculate 1 week ago
+        // One week in arrears only
         const oneWeekAgo = new Date(currentWeekStart);
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         
-        // Find corresponding week numbers in the weeks array
         const weekNumbers = [];
-        weeks.forEach((week, idx) => {
+        weeks.forEach((week) => {
             const weekStart = new Date(week.startDate);
             weekStart.setHours(0, 0, 0, 0);
-            const twoWeeksAgoStart = new Date(twoWeeksAgo);
-            twoWeeksAgoStart.setHours(0, 0, 0, 0);
             const oneWeekAgoStart = new Date(oneWeekAgo);
             oneWeekAgoStart.setHours(0, 0, 0, 0);
-            
-            if (weekStart.getTime() === twoWeeksAgoStart.getTime() || 
-                weekStart.getTime() === oneWeekAgoStart.getTime()) {
+            if (weekStart.getTime() === oneWeekAgoStart.getTime()) {
                 weekNumbers.push(week.number);
             }
         });
-        
         return weekNumbers;
     };
     
