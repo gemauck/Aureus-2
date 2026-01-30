@@ -810,19 +810,19 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     if (baseUrl && !baseUrl.endsWith('/')) {
         baseUrl = baseUrl + '/';
     }
-    // Handle hash-based routing links (starting with #) - they should be appended directly to base URL
-    // Regular paths (starting with /) need to be appended with a slash
+    // Build clickable link for email: support hash routes (#/...), paths (/...), and full URLs
     let fullCommentLink = null;
     if (commentLink) {
-        if (commentLink.startsWith('#')) {
-            // Hash-based routing - base URL already has trailing slash so link is https://domain.com/#/projects/123?params
-            fullCommentLink = `${baseUrl}${commentLink}`;
-        } else if (commentLink.startsWith('/')) {
-            // Regular path - append with slash
-            fullCommentLink = `${baseUrl}${commentLink}`;
+        const trimmed = String(commentLink).trim();
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            fullCommentLink = trimmed;
+        } else if (trimmed.startsWith('#')) {
+            // Hash-based routing - https://domain.com/#/projects/123?params
+            fullCommentLink = `${baseUrl}${trimmed}`;
+        } else if (trimmed.startsWith('/')) {
+            fullCommentLink = `${baseUrl}${trimmed}`;
         } else {
-            // Relative path - add leading slash
-            fullCommentLink = `${baseUrl}/${commentLink}`;
+            fullCommentLink = `${baseUrl}/${trimmed}`;
         }
     }
     
