@@ -207,7 +207,7 @@ async function handler(req, res) {
           } catch (_) { return false; }
         })();
         if (summaryOnly) {
-          const [projectRow, tasksRows] = await Promise.all([
+          const [projectRow, tasksRows, taskListsRows] = await Promise.all([
             prisma.project.findUnique({ where: { id } }),
             prisma.task.findMany({
               where: { projectId: id, parentTaskId: null },
@@ -216,16 +216,21 @@ async function handler(req, res) {
                 subtasks: { orderBy: { createdAt: 'asc' } },
                 assigneeUser: { select: { id: true, name: true, email: true } }
               }
-            }).catch(() => [])
+            }).catch(() => []),
+            prisma.projectTaskList?.findMany
+              ? prisma.projectTaskList.findMany({ where: { projectId: id }, orderBy: { order: 'asc' } }).catch(() => [])
+              : Promise.resolve([])
           ]);
           if (!projectRow) return notFound(res);
+          const taskLists = Array.isArray(taskListsRows) ? taskListsRows : [];
           const projectSummary = {
             ...projectRow,
             tasks: tasksRows || [],
+            tasksList: tasksRows || [], // alias so getTasksFromProject finds tasks when summary is used
             documentSections: {},
             weeklyFMSReviewSections: {},
             monthlyFMSReviewSections: {},
-            taskLists: [],
+            taskLists,
             comments: [],
             documents: [],
             team: [],

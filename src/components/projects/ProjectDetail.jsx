@@ -1749,17 +1749,19 @@ function initializeProjectDetail() {
             // Include comments so COMMENTS column and actions show correct counts in list view
             const url = `/tasks?projectId=${encodeURIComponent(projectId)}&includeComments=true`;
             const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
-            const data = response?.data || response;
-            
-            if (data?.tasks && Array.isArray(data.tasks)) {
+            const data = response?.data ?? response;
+            const taskArray = Array.isArray(data?.tasks) ? data.tasks : Array.isArray(data?.data?.tasks) ? data.data.tasks : Array.isArray(response?.tasks) ? response.tasks : null;
+
+            if (taskArray && taskArray.length > 0) {
                 console.log('✅ ProjectDetail: Loaded tasks from Task API:', {
                     projectId,
-                    taskCount: data.tasks.length
+                    taskCount: taskArray.length
                 });
-                return data.tasks;
+                return taskArray;
             }
-            
-            console.warn('⚠️ ProjectDetail: Task API returned no tasks');
+            if (taskArray && taskArray.length === 0) return [];
+
+            console.warn('⚠️ ProjectDetail: Task API returned no tasks (or unexpected shape)');
             return null;
         } catch (error) {
             console.warn('⚠️ ProjectDetail: Failed to load tasks from API, will use JSON fallback:', error);
@@ -1790,7 +1792,7 @@ function initializeProjectDetail() {
         } else {
             const loadTasks = async () => {
                 const apiTasks = await loadTasksFromAPI(project.id);
-                if (apiTasks && Array.isArray(apiTasks)) {
+                if (apiTasks != null && Array.isArray(apiTasks)) {
                     setTasks(prev => mergeTaskComments(prev, apiTasks));
                     tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
                     console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
@@ -4644,17 +4646,19 @@ function initializeProjectDetail() {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
         }
-        const newTask = { listId };
+        // When adding from status-based Kanban, listId can be null; use first list as default
+        const effectiveListId = listId ?? (taskLists && taskLists.length > 0 ? taskLists[0].id : null);
+        const newTask = { listId: effectiveListId };
         if (statusName) {
             newTask.status = statusName;
             setCreatingTaskWithStatus(statusName);
         }
         setViewingTask(newTask);
         setViewingTaskParent(null);
-        setCreatingTaskForList(listId);
+        setCreatingTaskForList(effectiveListId);
         setShowTaskDetailModal(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
+    }, [taskLists]);
 
     const handleAddSubtask = useCallback(async (parentTask) => {
         const ready = await ensureTaskDetailModalLoaded();
@@ -7487,24 +7491,6 @@ function initializeProjectDetail() {
                                     Kanban
                                 </button>
                             </div>
-                            {viewMode === 'kanban' && taskLists && taskLists.length > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <label htmlFor="kanban-list-select" className="text-xs font-medium text-gray-600 whitespace-nowrap">
-                                        Show list:
-                                    </label>
-                                    <select
-                                        id="kanban-list-select"
-                                        value={kanbanListFilter}
-                                        onChange={(e) => setKanbanListFilter(e.target.value)}
-                                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-800 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 min-w-[120px]"
-                                    >
-                                        <option value="all">All lists</option>
-                                        {taskLists.map(list => (
-                                            <option key={list.id} value={list.id}>{list.name || 'Unnamed'}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
                         </div>
                         
                         <div className="flex gap-2">
@@ -7532,8 +7518,8 @@ function initializeProjectDetail() {
                 KanbanViewComponent ? (
                     <KanbanViewComponent
                         tasks={filteredTopLevelTasks}
-                        statusColumns={kanbanListColumns}
-                        groupByList={true}
+                        statusColumns={kanbanColumns}
+                        groupByList={false}
                         onViewTaskDetail={handleViewTaskDetail}
                         onAddTask={handleAddTask}
                         onDeleteTask={handleDeleteTask}
