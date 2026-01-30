@@ -4,6 +4,14 @@ const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 const DEEPLINK_DEBUG = false; // Set true to log deep-link checks (noisy)
 const DEBUG_SCROLL_SYNC = false; // Log scroll-sync attach/scroll (set true to debug)
+// Delimiter for comment cell key: sectionId, documentId, month. IDs can contain hyphens (e.g. file1-doc1).
+const COMMENT_CELL_SEP = '\u0001';
+const buildCellKey = (sectionId, documentId, month) =>
+    `${String(sectionId)}${COMMENT_CELL_SEP}${String(documentId)}${COMMENT_CELL_SEP}${String(month)}`;
+const parseCellKey = (cellKey) => {
+    const p = String(cellKey).split(COMMENT_CELL_SEP);
+    return { sectionId: p[0], documentId: p[1], month: p[2] };
+};
 
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
@@ -1650,7 +1658,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (applyToSelected && currentSelectedCells.size > 0) {
             // Parse all selected cell keys
             cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
-                const [secId, docId, mon] = cellKey.split('-');
+                const { sectionId: secId, documentId: docId, month: mon } = parseCellKey(cellKey);
                 return { sectionId: secId, documentId: docId, month: mon };
             });
         } else {
@@ -2216,7 +2224,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 
                 // Only proceed if sections are loaded for the new year
                 if (sections && sections.length > 0) {
-                    const cellKey = `${pending.sectionId}-${pending.documentId}-${pending.month}`;
+                    const cellKey = buildCellKey(pending.sectionId, pending.documentId, pending.month);
                     if (deepLinkHandledRef.current === cellKey) return;
                     deepLinkHandledRef.current = cellKey;
                     
@@ -2537,7 +2545,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             if (commentIdInUrlButNotFound && !(deepSectionId && isValidDocumentId && deepMonth)) return;
             
             if (deepSectionId && isValidDocumentId && deepMonth) {
-                const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
+                const cellKey = buildCellKey(deepSectionId, deepDocumentId, deepMonth);
                 if (deepLinkHandledRef.current === cellKey) return;
                 deepLinkHandledRef.current = cellKey;
                 
@@ -2819,7 +2827,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(doc, month);
         const hasComments = comments.length > 0;
-        const cellKey = `${section.id}-${doc.id}-${month}`;
+        const cellKey = buildCellKey(section.id, doc.id, month);
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         
@@ -2982,7 +2990,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     setHoverCommentCell(cellKey);
                                     
                                     // Update URL with deep link when opening popup
-                                    const [sectionId, documentId, month] = cellKey.split('-');
+                                    const { sectionId, documentId, month } = parseCellKey(cellKey);
                                     if (sectionId && documentId && month && project?.id) {
                                         const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}`;
                                         
@@ -3998,8 +4006,8 @@ Abcotronics`;
             {/* Comment Popup */}
             {hoverCommentCell && (() => {
                 // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
-                // Never parseInt them – always compare as strings to ensure we find the right row.
-                const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
+                // Parse with safe delimiter – IDs may contain hyphens so we don't split on '-'.
+                const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
                 const comments = doc ? getDocumentComments(doc, month) : [];
