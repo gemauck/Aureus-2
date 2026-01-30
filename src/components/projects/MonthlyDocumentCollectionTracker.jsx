@@ -580,8 +580,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
             }
             
+            // Use docYear from URL when normalizing so deep-link year has data (avoids blank comment box)
+            let urlYearForNormalize = null;
+            if (typeof window !== 'undefined') {
+                const hash = window.location.hash || '';
+                const search = window.location.search || '';
+                let urlYear = null;
+                if (hash.includes('?')) {
+                    const p = new URLSearchParams(hash.split('?')[1] || '');
+                    urlYear = p.get('docYear') || p.get('year');
+                }
+                if (!urlYear && search) {
+                    const p = new URLSearchParams(search);
+                    urlYear = p.get('docYear') || p.get('year');
+                }
+                if (urlYear) {
+                    const y = parseInt(String(urlYear).trim(), 10);
+                    if (!Number.isNaN(y) && y > 1900 && y < 3000) urlYearForNormalize = y;
+                }
+            }
+            
             if (sectionsField != null && typeof sectionsField === 'object') {
-                const normalized = normalizeSectionsByYear(sectionsField);
+                const normalized = normalizeSectionsByYear(sectionsField, urlYearForNormalize);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -592,7 +612,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             // 3) Fallback to prop data
             const propSections = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
             if (propSections) {
-                const normalized = normalizeSectionsByYear(propSections);
+                const normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -2323,13 +2343,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     deepDocumentId.trim() !== '';
             
             if (normalizedDeepYear && normalizedDeepYear !== selectedYear && deepSectionId && isValidDocumentId && deepMonth) {
-                if (!deepCommentId) {
-                    pendingCommentOpenRef.current = {
-                        sectionId: deepSectionId,
-                        documentId: deepDocumentId,
-                        month: deepMonth
-                    };
-                }
+                // Always set pending so we open the popup after year switch (with or without commentId)
+                pendingCommentOpenRef.current = {
+                    sectionId: deepSectionId,
+                    documentId: deepDocumentId,
+                    month: deepMonth
+                };
                 handleYearChange(normalizedDeepYear);
                 return;
             }
