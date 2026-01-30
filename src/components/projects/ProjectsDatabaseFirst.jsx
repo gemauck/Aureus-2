@@ -2,9 +2,7 @@
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 const DEFAULT_TASK_LISTS = [
-    { id: 1, name: 'To Do', color: 'blue' },
-    { id: 2, name: 'In Progress', color: 'yellow' },
-    { id: 3, name: 'Done', color: 'green' }
+    { id: 1, name: 'To Do', color: 'blue' }
 ];
 
 const cloneDefaultValue = (value) => {
@@ -574,9 +572,7 @@ const ProjectsDatabaseFirst = () => {
                 actualCost: projectData.actualCost || 0,
                 tasks: projectData.tasks || [],
                 taskLists: projectData.taskLists || [
-                    { id: 1, name: 'To Do', color: 'blue' },
-                    { id: 2, name: 'In Progress', color: 'yellow' },
-                    { id: 3, name: 'Done', color: 'green' }
+                    { id: 1, name: 'To Do', color: 'blue' }
                 ],
                 customFieldDefinitions: projectData.customFieldDefinitions || [],
                 documents: projectData.documents || [],

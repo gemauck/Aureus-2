@@ -1645,12 +1645,10 @@ function initializeProjectDetail() {
     // Initialize taskLists with project-specific data
     // CRITICAL: If project.taskLists is empty array, use default lists to ensure tasks can be displayed
     const [taskLists, setTaskLists] = useState(
-        (project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0) 
-            ? project.taskLists 
+        (project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0)
+            ? project.taskLists
             : [
-                { id: 1, name: 'To Do', color: 'blue', description: '' },
-                { id: 2, name: 'In Progress', color: 'yellow', description: '' },
-                { id: 3, name: 'Done', color: 'green', description: '' }
+                { id: 1, name: 'To Do', color: 'blue', description: '' }
             ]
     );
 
@@ -1664,6 +1662,34 @@ function initializeProjectDetail() {
         const tasks = Array.isArray(proj.tasks) ? proj.tasks : null;
         return tasksList || tasks || [];
     };
+    // Preserve comments when merging new tasks with previous state (avoids COMMENTS column disappearing after refresh)
+    const mergeTaskComments = useCallback((prevTasks, nextTasks) => {
+        if (!Array.isArray(prevTasks) || !Array.isArray(nextTasks)) return nextTasks || [];
+        const prevById = new Map(prevTasks.map(t => [String(t?.id), t]));
+        return nextTasks.map(task => {
+            const prev = prevById.get(String(task?.id));
+            const hasComments = Array.isArray(task?.comments) && task.comments.length > 0;
+            const prevHasComments = prev && Array.isArray(prev.comments) && prev.comments.length > 0;
+            let merged = task;
+            if (!hasComments && prevHasComments) {
+                merged = { ...task, comments: prev.comments };
+            }
+            if (merged.subtasks && merged.subtasks.length > 0 && prev?.subtasks?.length) {
+                const prevSubById = new Map((prev.subtasks || []).map(st => [String(st?.id), st]));
+                merged = {
+                    ...merged,
+                    subtasks: merged.subtasks.map(st => {
+                        const prevSt = prevSubById.get(String(st?.id));
+                        const stHasComments = Array.isArray(st?.comments) && st.comments.length > 0;
+                        const prevStHasComments = prevSt && Array.isArray(prevSt.comments) && prevSt.comments.length > 0;
+                        if (!stHasComments && prevStHasComments) return { ...st, comments: prevSt.comments };
+                        return st;
+                    })
+                };
+            }
+            return merged;
+        });
+    }, []);
     const initialTasks = getTasksFromProject(project);
     // Safety check: ensure initialTasks is always an array
     const [tasks, setTasks] = useState(Array.isArray(initialTasks) ? initialTasks : []);
@@ -1688,25 +1714,21 @@ function initializeProjectDetail() {
         if (project?.id !== previousProjectIdRef.current) {
             previousProjectIdRef.current = project?.id;
             const newTasks = getTasksFromProject(project);
-            // Safety check: ensure newTasks is always an array
             const safeNewTasks = Array.isArray(newTasks) ? newTasks : [];
-            // Update immediately - no async operations
             setTasks(safeNewTasks);
             tasksRef.current = safeNewTasks;
             console.log('✅ ProjectDetail: Tasks updated from project prop (instant):', safeNewTasks.length);
         } else {
-            // Same project, but tasks might have changed in project prop
             const newTasks = getTasksFromProject(project);
-            // Safety check: ensure newTasks is always an array
             const safeNewTasks = Array.isArray(newTasks) ? newTasks : [];
             const currentTaskIds = (tasks || []).map(t => t?.id).filter(Boolean).sort().join(',');
             const newTaskIds = safeNewTasks.map(t => t?.id).filter(Boolean).sort().join(',');
             if (currentTaskIds !== newTaskIds || safeNewTasks.length !== (tasks || []).length) {
-                setTasks(safeNewTasks);
-                tasksRef.current = safeNewTasks;
+                setTasks(prev => mergeTaskComments(prev, safeNewTasks));
+                tasksRef.current = mergeTaskComments(tasksRef.current || [], safeNewTasks);
             }
         }
-    }, [project?.id, project?.tasksList, project?.tasks]); // Only depend on project data, not tasks state
+    }, [project?.id, project?.tasksList, project?.tasks, mergeTaskComments]); // Only depend on project data, not tasks state
     const [taskFilters, setTaskFilters] = useState({
         search: '',
         status: 'all',
@@ -1724,8 +1746,8 @@ function initializeProjectDetail() {
         }
 
         try {
-            // Use lightweight mode (skip comments) for faster refresh - comments already loaded from project prop
-            const url = `/tasks?projectId=${encodeURIComponent(projectId)}&includeComments=false`;
+            // Include comments so COMMENTS column and actions show correct counts in list view
+            const url = `/tasks?projectId=${encodeURIComponent(projectId)}&includeComments=true`;
             const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
             const data = response?.data || response;
             
@@ -1750,47 +1772,37 @@ function initializeProjectDetail() {
     useEffect(() => {
         if (!project?.id) return;
         
-        // Check if project prop already has tasks (from getProject API call)
-        if (project.tasks && Array.isArray(project.tasks) && project.tasks.length > 0) {
-            console.log('⚡ ProjectDetail: Using tasks from project prop (no API call needed):', project.tasks.length);
-            setTasks(project.tasks);
-            tasksRef.current = project.tasks;
-            // Still set up periodic refresh, but less frequently since we have initial data
+        // Check if project prop already has tasks (API returns tasksList; some code paths use tasks)
+        const projectTasks = getTasksFromProject(project);
+        if (Array.isArray(projectTasks) && projectTasks.length > 0) {
+            console.log('⚡ ProjectDetail: Using tasks from project prop (no API call needed):', projectTasks.length);
+            setTasks(prev => mergeTaskComments(prev, projectTasks));
+            tasksRef.current = mergeTaskComments(tasksRef.current || [], projectTasks);
             const refreshInterval = setInterval(() => {
                 loadTasksFromAPI(project.id).then(apiTasks => {
                     if (apiTasks && Array.isArray(apiTasks)) {
-                        setTasks(apiTasks);
-                        tasksRef.current = apiTasks;
+                        setTasks(prev => mergeTaskComments(prev, apiTasks));
+                        tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
                     }
-                }).catch(() => {
-                    // Silently fail - keep existing tasks
-                });
-            }, 60000); // Refresh every 60 seconds instead of 30
+                }).catch(() => {});
+            }, 60000);
             return () => clearInterval(refreshInterval);
         } else {
-            // No tasks in project prop, load from API
             const loadTasks = async () => {
                 const apiTasks = await loadTasksFromAPI(project.id);
                 if (apiTasks && Array.isArray(apiTasks)) {
-                    setTasks(apiTasks);
-                    tasksRef.current = apiTasks;
+                    setTasks(prev => mergeTaskComments(prev, apiTasks));
+                    tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
                     console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
                 } else {
                     console.log('⚠️ ProjectDetail: API returned no tasks, keeping existing tasks from project prop');
                 }
             };
-            
-            // Load immediately
             loadTasks();
-            
-            // Set up periodic refresh every 30 seconds
-            const refreshInterval = setInterval(() => {
-                loadTasks();
-            }, 30000);
-            
+            const refreshInterval = setInterval(() => loadTasks(), 30000);
             return () => clearInterval(refreshInterval);
         }
-    }, [project?.id, project?.tasks, loadTasksFromAPI]);
+    }, [project?.id, project?.tasksList, project?.tasks, loadTasksFromAPI, mergeTaskComments]);
     
     // CRITICAL: Initialize default taskLists when project loads with empty taskLists
     // This ensures default lists are shown even if project.taskLists is an empty array from the database
@@ -1806,11 +1818,9 @@ function initializeProjectDetail() {
             const hasTaskLists = project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0;
             
             if (!hasTaskLists) {
-                // Set default lists when project.taskLists is empty
+                // Set default lists when project.taskLists is empty (only "To Do")
                 const defaultLists = [
-                    { id: 1, name: 'To Do', color: 'blue', description: '' },
-                    { id: 2, name: 'In Progress', color: 'yellow', description: '' },
-                    { id: 3, name: 'Done', color: 'green', description: '' }
+                    { id: 1, name: 'To Do', color: 'blue', description: '' }
                 ];
                 console.log('✅ ProjectDetail: Initializing default taskLists for project:', project.id);
                 setTaskLists(defaultLists);
@@ -5784,14 +5794,14 @@ function initializeProjectDetail() {
             // Reload tasks from server to ensure consistency (subtasks will be included in parent task's subtasks array)
             if (project?.id && window.DatabaseAPI?.makeRequest) {
                 try {
-                    const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}`, {
+                    const tasksResponse = await window.DatabaseAPI.makeRequest(`/tasks?projectId=${encodeURIComponent(project.id)}&includeComments=true`, {
                         method: 'GET'
                     });
-                    const fetchedTasks = tasksResponse?.data?.tasks || [];
+                    const fetchedTasks = tasksResponse?.data?.tasks || tasksResponse?.tasks || [];
                     if (Array.isArray(fetchedTasks) && fetchedTasks.length >= 0) {
                         console.log('✅ Refreshed tasks from server after subtask deletion. Task count:', fetchedTasks.length);
-                        setTasks(fetchedTasks);
-                        tasksRef.current = fetchedTasks;
+                        setTasks(prev => mergeTaskComments(prev, fetchedTasks));
+                        tasksRef.current = mergeTaskComments(tasksRef.current || [], fetchedTasks);
                     }
                 } catch (refreshError) {
                     console.warn('⚠️ Failed to refresh tasks after subtask deletion, using local state:', refreshError);
@@ -6412,14 +6422,12 @@ function initializeProjectDetail() {
         }
     };
     
-    // Handler for updating task status when dragged in kanban
+    // Handler for updating task status when dragged in kanban (or list view)
     const handleUpdateTaskStatus = useCallback(async (taskId, newStatus, { isSubtask = false, parentId = null } = {}) => {
+        const prevTasks = tasksRef.current || [];
         
-        // Normalize status - KanbanView passes the column label, but we need to match the actual status value
-        // Try to find matching status from taskLists or use the provided status
+        // Normalize status - KanbanView passes the column label
         let normalizedStatus = newStatus;
-        
-        // Check if we have task lists with status definitions
         if (taskLists && taskLists.length > 0) {
             for (const list of taskLists) {
                 if (list.statuses && Array.isArray(list.statuses)) {
@@ -6437,73 +6445,60 @@ function initializeProjectDetail() {
             }
         }
         
-        // Update local state and get updated tasks for saving
-        let updatedTasks = null;
-        setTasks(prevTasks => {
-            if (isSubtask && parentId) {
-                updatedTasks = prevTasks.map(t => {
-                    if (t.id === parentId || String(t.id) === String(parentId)) {
-                        return {
-                            ...t,
-                            subtasks: (t.subtasks || []).map(st =>
-                                (st.id === taskId || String(st.id) === String(taskId)) ? { ...st, status: normalizedStatus } : st
-                            )
-                        };
-                    }
-                    return t;
-                });
-            } else {
-                updatedTasks = prevTasks.map(t =>
-                    (t.id === taskId || String(t.id) === String(taskId)) ? { ...t, status: normalizedStatus } : t
-                );
-            }
-            return updatedTasks;
+        // Find list whose name matches the new status so List view section stays in sync (listId drives list grouping)
+        const statusList = taskLists?.find(list => {
+            const name = String(list.name || '').toLowerCase();
+            const norm = String(normalizedStatus || '').toLowerCase().replace(/\s+/g, ' ');
+            return name === norm || name.replace(/\s+/g, '') === norm.replace(/\s+/g, '');
         });
+        const newListId = statusList?.id ?? undefined;
         
-        // Save task status update via Task API
-        if (updatedTasks && window.DatabaseAPI?.makeRequest) {
-            try {
-                const taskToUpdate = isSubtask 
-                    ? updatedTasks.find(t => t.id === parentId)?.subtasks?.find(st => st.id === taskId)
-                    : updatedTasks.find(t => t.id === taskId);
-                
-                if (taskToUpdate) {
-                    await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
-                        method: 'PUT',
-                        body: JSON.stringify({
-                            ...taskToUpdate,
-                            status: normalizedStatus,
-                            projectId: project?.id
-                        })
-                    });
-                    console.log('✅ Task status updated via Task API:', taskId);
+        // Compute new state (don't rely on setState callback - React may defer it)
+        let newTasks;
+        if (isSubtask && parentId) {
+            newTasks = prevTasks.map(t => {
+                if (t.id === parentId || String(t.id) === String(parentId)) {
+                    const updatedSubtasks = (t.subtasks || []).map(st =>
+                        (st.id === taskId || String(st.id) === String(taskId))
+                            ? { ...st, status: normalizedStatus }
+                            : st
+                    );
+                    return { ...t, subtasks: updatedSubtasks };
                 }
-            } catch (error) {
-                console.error('❌ Failed to save task status update via Task API:', error);
-                // Revert on error
-                setTasks(prevTasks => {
-                    if (isSubtask && parentId) {
-                        return prevTasks.map(t => {
-                            if (t.id === parentId || String(t.id) === String(parentId)) {
-                                return {
-                                    ...t,
-                                    subtasks: (t.subtasks || []).map(st =>
-                                        (st.id === taskId || String(st.id) === String(taskId)) ? { ...st, status: st.status } : st
-                                    )
-                                };
-                            }
-                            return t;
-                        });
-                    } else {
-                        return prevTasks.map(t =>
-                            (t.id === taskId || String(t.id) === String(taskId)) ? { ...t, status: t.status } : t
-                        );
-                    }
-                });
-                alert('Failed to save task status. Please try again.');
-            }
+                return t;
+            });
+        } else {
+            newTasks = prevTasks.map(t =>
+                (t.id === taskId || String(t.id) === String(taskId))
+                    ? { ...t, status: normalizedStatus, ...(newListId != null ? { listId: newListId } : {}) }
+                    : t
+            );
         }
-    }, [taskLists, persistProjectData]);
+        
+        setTasks(newTasks);
+        tasksRef.current = newTasks;
+        
+        if (!window.DatabaseAPI?.makeRequest) return;
+        
+        try {
+            const payload = {
+                status: normalizedStatus,
+                projectId: project?.id
+            };
+            if (!isSubtask && newListId != null) payload.listId = newListId;
+            
+            await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
+                method: 'PATCH',
+                body: JSON.stringify(payload)
+            });
+            console.log('✅ Task status updated via Task API:', taskId, normalizedStatus);
+        } catch (error) {
+            console.error('❌ Failed to save task status update via Task API:', error);
+            setTasks(prevTasks);
+            tasksRef.current = prevTasks;
+            alert('Failed to save task status. Please try again.');
+        }
+    }, [taskLists, project?.id]);
 
     // Format checklist progress helper
     const formatChecklistProgress = useCallback((checklist = []) => {
@@ -6807,9 +6802,23 @@ function initializeProjectDetail() {
                                                                         <div className="text-xs font-medium text-gray-900">{task.title || 'Untitled task'}</div>
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
-                                                                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
-                                                                            {task.status || 'To Do'}
-                                                                        </span>
+                                                                        <select
+                                                                            value={task.status || 'To Do'}
+                                                                            onChange={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const newStatus = e.target.value;
+                                                                                if (newStatus && newStatus !== (task.status || 'To Do')) {
+                                                                                    handleUpdateTaskStatus(task.id, newStatus);
+                                                                                }
+                                                                            }}
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-primary-500 ${getStatusColor(task.status || 'To Do')}`}
+                                                                            title="Change status"
+                                                                        >
+                                                                            {statusOptions.map(opt => (
+                                                                                <option key={opt.value} value={opt.label}>{opt.label}</option>
+                                                                            ))}
+                                                                        </select>
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
                                                                         {task.assignee ? (
@@ -7080,7 +7089,7 @@ function initializeProjectDetail() {
                 </div>
             </div>
             );
-    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
+    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, handleUpdateTaskStatus, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);
