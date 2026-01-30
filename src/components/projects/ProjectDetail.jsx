@@ -2599,10 +2599,10 @@ function initializeProjectDetail() {
                     const hashParts = hash.split('?');
                     if (hashParts.length > 1) {
                         params = new URLSearchParams(hashParts[1]);
-                        weeklySectionId = params.get('weeklySectionId');
-                        weeklyDocumentId = params.get('weeklyDocumentId');
+                        weeklySectionId = params.get('weeklySectionId') || params.get('docSectionId');
+                        weeklyDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
                         weeklyMonth = params.get('weeklyMonth');
-                        weeklyWeek = params.get('weeklyWeek');
+                        weeklyWeek = params.get('weeklyWeek') || params.get('docWeek');
                         commentId = params.get('commentId');
                     }
                 }
@@ -2612,10 +2612,10 @@ function initializeProjectDetail() {
                     const search = window.location.search || '';
                     if (search) {
                         params = new URLSearchParams(search);
-                        if (!weeklySectionId) weeklySectionId = params.get('weeklySectionId');
-                        if (!weeklyDocumentId) weeklyDocumentId = params.get('weeklyDocumentId');
+                        if (!weeklySectionId) weeklySectionId = params.get('weeklySectionId') || params.get('docSectionId');
+                        if (!weeklyDocumentId) weeklyDocumentId = params.get('weeklyDocumentId') || params.get('docDocumentId');
                         if (!weeklyMonth) weeklyMonth = params.get('weeklyMonth');
-                        if (!weeklyWeek) weeklyWeek = params.get('weeklyWeek');
+                        if (!weeklyWeek) weeklyWeek = params.get('weeklyWeek') || params.get('docWeek');
                         if (!commentId) commentId = params.get('commentId');
                     }
                 }
@@ -2992,8 +2992,17 @@ function initializeProjectDetail() {
             return 'list';
         }
     });
+    // Kanban: which list(s) to show as columns. 'all' = all lists; otherwise single list id
+    const [kanbanListFilter, setKanbanListFilter] = useState('all');
     const [editingDocument, setEditingDocument] = useState(null);
-    
+
+    // Reset Kanban list filter if the selected list was deleted
+    useEffect(() => {
+        if (kanbanListFilter === 'all' || !taskLists || !Array.isArray(taskLists)) return;
+        const exists = taskLists.some(l => String(l.id) === String(kanbanListFilter));
+        if (!exists) setKanbanListFilter('all');
+    }, [kanbanListFilter, taskLists]);
+
     // Track if task was manually closed to prevent deep-link from reopening it
     const taskManuallyClosedRef = useRef(false);
     // Track if close is in progress to prevent double-closing
@@ -4475,6 +4484,21 @@ function initializeProjectDetail() {
 
         return ordered;
     }, [statusOptions]);
+
+    // List-based columns for Kanban (filtered by kanbanListFilter)
+    const kanbanListColumns = useMemo(() => {
+        if (!taskLists || !Array.isArray(taskLists) || taskLists.length === 0) {
+            return [{ value: 1, label: 'To Do' }];
+        }
+        if (kanbanListFilter === 'all') {
+            return taskLists.map(l => ({ value: l.id, label: l.name || 'Unnamed' }));
+        }
+        const single = taskLists.find(l => String(l.id) === String(kanbanListFilter));
+        if (single) {
+            return [{ value: single.id, label: single.name || 'Unnamed' }];
+        }
+        return taskLists.map(l => ({ value: l.id, label: l.name || 'Unnamed' }));
+    }, [taskLists, kanbanListFilter]);
 
     const openTaskComments = useCallback(async (event, task, { parentTask = null, isSubtask = false, commentId = null } = {}) => {
         event.stopPropagation();
@@ -7462,6 +7486,24 @@ function initializeProjectDetail() {
                                     Kanban
                                 </button>
                             </div>
+                            {viewMode === 'kanban' && taskLists && taskLists.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="kanban-list-select" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                                        Show list:
+                                    </label>
+                                    <select
+                                        id="kanban-list-select"
+                                        value={kanbanListFilter}
+                                        onChange={(e) => setKanbanListFilter(e.target.value)}
+                                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-800 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 min-w-[120px]"
+                                    >
+                                        <option value="all">All lists</option>
+                                        {taskLists.map(list => (
+                                            <option key={list.id} value={list.id}>{list.name || 'Unnamed'}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                         
                         <div className="flex gap-2">
@@ -7489,7 +7531,8 @@ function initializeProjectDetail() {
                 KanbanViewComponent ? (
                     <KanbanViewComponent
                         tasks={filteredTopLevelTasks}
-                        statusColumns={kanbanColumns}
+                        statusColumns={kanbanListColumns}
+                        groupByList={true}
                         onViewTaskDetail={handleViewTaskDetail}
                         onAddTask={handleAddTask}
                         onDeleteTask={handleDeleteTask}

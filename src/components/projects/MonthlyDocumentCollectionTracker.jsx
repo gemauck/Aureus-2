@@ -2332,8 +2332,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 return;
             }
             
-            // Only proceed if sections are loaded
-            if (!sections || sections.length === 0) {
+            // Only proceed if we have data to work with: either current-year sections or (for commentId search) any year in sectionsByYear
+            const hasSectionsForCurrentYear = sections && sections.length > 0;
+            const hasAnyYearData = Object.keys(sectionsByYear || {}).some(y => Array.isArray(sectionsByYear[y]) && sectionsByYear[y].length > 0);
+            const canSearchByCommentId = deepCommentId && hasAnyYearData;
+            if (!hasSectionsForCurrentYear && !canSearchByCommentId) {
                 if (deepSectionId && isValidDocumentId && deepMonth) {
                     const yearsToSearch = Object.keys(sectionsByYear || {});
                     for (const year of yearsToSearch) {
@@ -2354,7 +2357,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         }
                     }
                 }
-                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: Sections not loaded yet, skipping deep link check');
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: No sections loaded yet, skipping deep link check');
                 return;
             }
             
@@ -2755,6 +2758,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return () => timers.forEach(clearTimeout);
         }
     }, [sections.length, checkAndOpenDeepLink]);
+    
+    // When sectionsByYear is first populated (e.g. after loadData), run deep link so comment links open popup
+    const sectionsByYearKeyCount = Object.keys(sectionsByYear || {}).length;
+    useEffect(() => {
+        if (sectionsByYearKeyCount > 0) {
+            const timer = setTimeout(() => {
+                if (DEEPLINK_DEBUG) console.log('🔍 MonthlyDocumentCollectionTracker: sectionsByYear populated, checking deep link');
+                checkAndOpenDeepLink();
+            }, 600);
+            return () => clearTimeout(timer);
+        }
+    }, [sectionsByYearKeyCount, checkAndOpenDeepLink]);
     
     // When year changes, check if we have a pending comment to open
     useEffect(() => {
