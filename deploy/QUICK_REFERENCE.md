@@ -1,5 +1,18 @@
 # 🚀 Quick Reference - Deployment Commands
 
+## Scheduled Jobs (Cron)
+
+**Document collection – scheduled “request documents” emails**
+
+- Set `CRON_SECRET` (or `DOCUMENT_COLLECTION_CRON_SECRET`) in `.env` on the server.
+- Call daily, e.g. 08:00:
+  ```bash
+  0 8 * * * curl -sS -X POST "https://YOUR_DOMAIN/api/cron/document-collection-scheduled-send?secret=YOUR_CRON_SECRET"
+  ```
+- Full setup: see [../docs/document-collection-scheduled-email-cron.md](../docs/document-collection-scheduled-email-cron.md).
+
+---
+
 ## Essential Commands
 
 ### On Local Machine

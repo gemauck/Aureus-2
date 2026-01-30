@@ -31,8 +31,8 @@ async function handler(req, res) {
     const body = await parseJsonBody(req)
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
-    const html = typeof body.html === 'string' ? body.html.trim() : ''
-    const text = typeof body.text === 'string' ? body.text.trim() : undefined
+    let html = typeof body.html === 'string' ? body.html.trim() : ''
+    let text = typeof body.text === 'string' ? body.text.trim() : undefined
 
     if (!subject) {
       return badRequest(res, 'Subject is required')
@@ -45,6 +45,22 @@ async function handler(req, res) {
       return badRequest(res, 'At least one valid recipient email is required')
     }
 
+    const user = req.user || {}
+    const userName = user.name || user.email || ''
+    const userEmail = user.email || ''
+    const sentByLine = userName && userEmail
+      ? `\n\n—\nSent by ${userName} (${userEmail})`
+      : userEmail
+        ? `\n\n—\nSent by ${userEmail}`
+        : ''
+    if (sentByLine) {
+      if (html) html = html + sentByLine.replace(/\n/g, '<br>')
+      if (text) text = text + sentByLine
+    }
+
+    const replyTo = userEmail && isValidEmail(userEmail) ? userEmail : undefined
+    const fromName = userName ? `Abcotronics (via ${userName})` : undefined
+
     const sent = []
     const failed = []
 
@@ -54,7 +70,9 @@ async function handler(req, res) {
           to: email.trim(),
           subject,
           html: html || undefined,
-          text: text || undefined
+          text: text || undefined,
+          replyTo,
+          fromName
         })
         sent.push(email.trim())
       } catch (err) {

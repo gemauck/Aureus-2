@@ -316,24 +316,30 @@ function checkEmailConfiguration() {
 /**
  * Send a simple email (raw subject/body). Used for document collection requests,
  * leave notifications, and other custom user-drafted emails.
- * @param {{ to: string, subject: string, html?: string, text?: string }} opts
+ * @param {{ to: string, subject: string, html?: string, text?: string, replyTo?: string, fromName?: string }} opts
  * @returns {{ success: boolean, messageId: string }}
  */
 export async function sendEmail(opts) {
-    const { to, subject, html, text } = opts;
+    const { to, subject, html, text, replyTo, fromName } = opts;
     if (!to || !subject) {
         throw new Error('sendEmail requires "to" and "subject"');
     }
     const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
-    const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
+    const fromDisplayName = fromName && typeof fromName === 'string' ? fromName : 'Abcotronics';
+    const fromEmailOnly = emailFrom.includes('<') ? (emailFrom.match(/<(.+)>/)?.[1] || emailFrom).trim() : emailFrom;
+    const fromAddress = `${fromDisplayName} <${fromEmailOnly}>`;
     const textContent = text || (html ? html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n') : '');
     const mailOptions = {
         from: fromAddress,
         to,
         subject,
+        ...(replyTo && { replyTo }),
         ...(html && { html }),
         ...(textContent && { text: textContent })
     };
+    if (fromName && typeof fromName === 'string') {
+        mailOptions.fromName = fromName;
+    }
 
     checkEmailConfiguration();
     const emailTransporter = getTransporter();
@@ -355,10 +361,10 @@ export async function sendEmail(opts) {
 
     let result;
     if (resendKey && resendKey.startsWith('re_')) {
-        mailOptions.fromName = 'Abcotronics';
+        if (!mailOptions.fromName) mailOptions.fromName = 'Abcotronics';
         result = await sendViaResendAPI(mailOptions, resendKey);
     } else if (sendGridKey && (useSendGridHTTP || emailTransporter?.provider === 'sendgrid')) {
-        mailOptions.fromName = 'Abcotronics';
+        if (!mailOptions.fromName) mailOptions.fromName = 'Abcotronics';
         const fromEmail = mailOptions.from.includes('<')
             ? (mailOptions.from.match(/<(.+)>/)?.[1] || mailOptions.from)
             : mailOptions.from;

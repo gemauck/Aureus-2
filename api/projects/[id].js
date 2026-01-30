@@ -525,6 +525,31 @@ async function handler(req, res) {
           if (!documentSectionsJson) {
             documentSectionsJson = {};
           }
+          // Merge emailRequestByMonth from saved blob (recipients, template, schedule per cell)
+          if (project.documentSections && documentSectionsJson && typeof documentSectionsJson === 'object') {
+            try {
+              const blob = typeof project.documentSections === 'string'
+                ? JSON.parse(project.documentSections) : project.documentSections;
+              if (blob && typeof blob === 'object' && !Array.isArray(blob)) {
+                for (const year of Object.keys(blob)) {
+                  const blobSections = blob[year];
+                  const outSections = documentSectionsJson[year];
+                  if (!Array.isArray(blobSections) || !Array.isArray(outSections)) continue;
+                  for (let si = 0; si < blobSections.length && si < outSections.length; si++) {
+                    const blobDocs = blobSections[si].documents || [];
+                    const outDocs = outSections[si].documents || [];
+                    for (let di = 0; di < blobDocs.length && di < outDocs.length; di++) {
+                      if (blobDocs[di].emailRequestByMonth && typeof blobDocs[di].emailRequestByMonth === 'object') {
+                        outDocs[di].emailRequestByMonth = blobDocs[di].emailRequestByMonth;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (mergeErr) {
+              console.warn('⚠️ Merge emailRequestByMonth from documentSections blob failed:', mergeErr.message);
+            }
+          }
         } catch (e) {
           console.error('❌ Failed to convert documentSections from table:', e);
           // Fallback to JSON field
