@@ -2352,6 +2352,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             
             // If we have commentId, search for the comment (even if we have some params, verify they're correct)
             // This handles cases where commentId is present but other params might be wrong or missing
+            let commentIdInUrlButNotFound = false; // when true, do not open popup (avoids blank box from email links)
             if (deepCommentId) {
                 // If we have all params, first verify the comment exists at that location
                 let commentFoundAtLocation = false;
@@ -2462,6 +2463,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                            deepDocumentId !== 'undefined' && 
                                            deepDocumentId.trim() !== '';
                     } else {
+                        // URL had commentId but comment not found (wrong section/doc in email, or data not loaded)
+                        commentIdInUrlButNotFound = true;
                         console.warn('⚠️ MonthlyDocumentCollectionTracker: Comment not found:', deepCommentId, {
                             searchedYears: yearsToSearch,
                             sectionsCount: sections.length,
@@ -2494,6 +2497,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     if (DEEPLINK_DEBUG) console.log('✅ MonthlyDocumentCollectionTracker: Comment found at specified location, using existing params');
                 }
             }
+            
+            // Do not open a cell when the URL had commentId but we couldn't find that comment (avoids blank popup from email links)
+            if (commentIdInUrlButNotFound) return;
             
             if (deepSectionId && isValidDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
@@ -2898,26 +2904,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    {/* Email in top right corner of cell */}
-                    {!isMonthlyDataReview && (
+                    {/* Right side: email above, comments below - stacked with gap so they never overlap */}
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
+                        {!isMonthlyDataReview && (
+                            <button
+                                type="button"
+                                data-email-cell={cellKey}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setEmailModalContext({ section, doc, month });
+                                }}
+                                className="text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
+                                title="Request documents via email"
+                                aria-label="Request documents via email"
+                            >
+                                <i className="fas fa-envelope text-[10px]"></i>
+                            </button>
+                        )}
                         <button
-                            type="button"
-                            data-email-cell={cellKey}
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setEmailModalContext({ section, doc, month });
-                            }}
-                            className="absolute top-1 right-1 z-10 text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
-                            title="Request documents via email"
-                            aria-label="Request documents via email"
-                        >
-                            <i className="fas fa-envelope text-[10px]"></i>
-                        </button>
-                    )}
-                    {/* Comments on right of cell */}
-                    <button
-                        data-comment-cell={cellKey}
+                            data-comment-cell={cellKey}
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -2999,7 +3005,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     }, 10);
                                 }
                             }}
-                            className="absolute right-1 bottom-1 z-10 text-gray-500 hover:text-gray-700 transition-colors p-1 rounded"
+                            className="relative text-gray-500 hover:text-gray-700 transition-colors p-1 rounded shrink-0"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
@@ -3010,6 +3016,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                 </span>
                             )}
                         </button>
+                    </div>
                 </div>
             </td>
         );
