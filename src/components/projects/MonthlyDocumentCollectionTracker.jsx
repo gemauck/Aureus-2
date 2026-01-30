@@ -1050,7 +1050,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 name: doc.name,
                 description: doc.description || '',
                 collectionStatus: {},
-                comments: {}
+                comments: {},
+                emailRequestByMonth: {}
             })) : []
         }));
         
@@ -1181,7 +1182,40 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             [monthKey]: newComments
         };
     };
-    
+
+    // Email request per document/month: saved recipients, subject, body, schedule (for "Request documents via email")
+    const getEmailRequestForYear = (doc, month, year = selectedYear) => {
+        if (!doc) return {};
+        const monthKey = getMonthKey(month, year);
+        return doc.emailRequestByMonth?.[monthKey] || {};
+    };
+
+    const saveEmailRequestForCell = (sectionId, documentId, month, data) => {
+        const monthKey = getMonthKey(month, selectedYear);
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: (section.documents || []).map(doc => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const byMonth = { ...(doc.emailRequestByMonth || {}), [monthKey]: data };
+                    return { ...doc, emailRequestByMonth: byMonth };
+                })
+            };
+        });
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+        lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase();
+    };
+
     // ============================================================
     // STATUS OPTIONS
     // ============================================================
@@ -2498,8 +2532,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 }
             }
             
-            // Do not open a cell when the URL had commentId but we couldn't find that comment (avoids blank popup from email links)
-            if (commentIdInUrlButNotFound) return;
+            // Only skip opening when URL had commentId but we couldn't find it AND we don't have a valid cell to open (avoids blank popup from wrong email links).
+            // If we have valid docSectionId/docDocumentId/docMonth, open the cell anyway so the comments modal opens (we may not scroll to the specific comment).
+            if (commentIdInUrlButNotFound && !(deepSectionId && isValidDocumentId && deepMonth)) return;
             
             if (deepSectionId && isValidDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
@@ -3122,16 +3157,22 @@ Abcotronics`;
         const [newContact, setNewContact] = useState('');
         const [subject, setSubject] = useState(defaultSubject);
         const [body, setBody] = useState(defaultBody);
+        const [scheduleFrequency, setScheduleFrequency] = useState('none');
+        const [scheduleStopStatus, setScheduleStopStatus] = useState('collected');
         const [sending, setSending] = useState(false);
+        const [savingTemplate, setSavingTemplate] = useState(false);
         const [result, setResult] = useState(null);
 
         useEffect(() => {
-            setSubject(defaultSubject);
-            setBody(defaultBody);
-            setContacts([]);
+            const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
+            setContacts(Array.isArray(s.recipients) && s.recipients.length > 0 ? s.recipients : []);
+            setSubject(typeof s.subject === 'string' && s.subject.trim() ? s.subject : defaultSubject);
+            setBody(typeof s.body === 'string' && s.body.trim() ? s.body : defaultBody);
+            setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
+            setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
             setNewContact('');
             setResult(null);
-        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear, project?.id, project?.name, defaultSubject, defaultBody]);
+        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
         const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const addContact = () => {
@@ -3142,6 +3183,26 @@ Abcotronics`;
             setNewContact('');
         };
         const removeContact = (email) => setContacts((c) => c.filter((e) => e !== email));
+
+        const handleSaveTemplate = () => {
+            if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
+            setSavingTemplate(true);
+            try {
+                saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, {
+                    recipients: [...contacts],
+                    subject: subject.trim() || defaultSubject,
+                    body: body.trim() || defaultBody,
+                    schedule: {
+                        frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
+                        stopWhenStatus: scheduleStopStatus || 'collected'
+                    }
+                });
+                setResult({ saved: true });
+                setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
+            } finally {
+                setSavingTemplate(false);
+            }
+        };
 
         const handleSend = async () => {
             if (contacts.length === 0) {
@@ -3296,7 +3357,48 @@ Abcotronics`;
                             />
                         </div>
 
+                        {/* Schedule: repeat until status */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-3">
+                                <i className="fas fa-calendar-alt text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">Schedule reminder</label>
+                            </div>
+                            <p className="text-xs text-gray-500 mb-3">Send this request automatically until the cell is marked with the chosen status. Your server cron should call <code className="text-[10px] bg-gray-100 px-1 rounded">/api/cron/document-collection-scheduled-send</code> (e.g. daily).</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
+                                    <select
+                                        value={scheduleFrequency}
+                                        onChange={(e) => setScheduleFrequency(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9]"
+                                    >
+                                        <option value="none">None</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Stop when status is</label>
+                                    <select
+                                        value={scheduleStopStatus}
+                                        onChange={(e) => setScheduleStopStatus(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9]"
+                                    >
+                                        {statusOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Result messages */}
+                        {result?.saved && (
+                            <div className="flex items-start gap-3 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
+                                <i className="fas fa-check-circle text-emerald-500 mt-0.5 shrink-0"></i>
+                                <p className="text-sm text-emerald-700">Saved for this document &amp; month. Recipients and email will load next time.</p>
+                            </div>
+                        )}
                         {result?.error && (
                             <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3">
                                 <i className="fas fa-exclamation-circle text-red-500 mt-0.5 shrink-0"></i>
@@ -3324,13 +3426,21 @@ Abcotronics`;
                     </div>
 
                     {/* Footer */}
-                    <div className="flex justify-end gap-3 px-5 py-4 bg-white border-t border-gray-100">
+                    <div className="flex flex-wrap justify-end gap-3 px-5 py-4 bg-white border-t border-gray-100">
                         <button
                             type="button"
                             onClick={() => setEmailModalContext(null)}
                             className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
                         >
                             Close
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSaveTemplate}
+                            disabled={savingTemplate || contacts.length === 0}
+                            className="px-4 py-2.5 text-sm font-medium text-[#0369a1] bg-[#e0f2fe] hover:bg-[#bae6fd] rounded-xl transition-colors border border-[#7dd3fc]"
+                        >
+                            {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document &amp; month</>}
                         </button>
                         <button
                             type="button"
