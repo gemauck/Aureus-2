@@ -44,11 +44,10 @@ export async function createNotificationForUser(targetUserId, type, title, messa
 
     const metadataObj = typeof metadata === 'string' ? (() => { try { return JSON.parse(metadata); } catch (_) { return {}; } })() : (metadata || {});
     let validLink = link || '';
-    // Prefer frontend-supplied link when it's already a full tracker deep link (correct section/document/cell)
-    const linkHasDocSectionId = validLink && validLink.includes('docSectionId=');
-    const linkHasDocDocumentId = validLink && validLink.includes('docDocumentId=');
-    const linkHasDocMonthOrWeek = validLink && (validLink.includes('docMonth=') || validLink.includes('docWeek='));
-    const linkIsFullTrackerDeepLink = linkHasDocSectionId && linkHasDocDocumentId && linkHasDocMonthOrWeek;
+    // Prefer frontend-supplied link whenever it has tracker section+document (correct cell; docMonth/docWeek may be in hash)
+    const linkHasDocSectionId = validLink && String(validLink).includes('docSectionId=');
+    const linkHasDocDocumentId = validLink && String(validLink).includes('docDocumentId=');
+    const linkIsFullTrackerDeepLink = linkHasDocSectionId && linkHasDocDocumentId;
     if (linkIsFullTrackerDeepLink) {
         // Strip duplicate query params (e.g. docYear=2026&docYear=2026) by normalizing to single docYear
         const hashPart = validLink.includes('#') ? validLink.slice(validLink.indexOf('#')) : validLink;
@@ -129,7 +128,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         (type === 'task' && settings.emailTasks) || (type === 'invoice' && settings.emailInvoices) || (type === 'system' && settings.emailSystem);
     if (shouldSendEmail && targetUser.email) {
         try {
-            let projectName = null, clientName = null, commentText = null, commentLink = link || null, taskTitle = null;
+            let projectName = null, clientName = null, commentText = null, commentLink = validLink || link || null, taskTitle = null;
             const metadataObj = metadata && (typeof metadata === 'string' ? JSON.parse(metadata) : metadata);
             if (metadataObj && (type === 'comment' || type === 'mention' || type === 'task')) {
                 commentText = metadataObj.commentText || metadataObj.fullComment || null;
@@ -139,9 +138,9 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                     if (p) {
                         projectName = p.name || null;
                         clientName = p.client?.name || null;
-                        // Use the same validLink we built (with docSectionId, commentId, etc.) so email goes to the comment
-                        commentLink = validLink && validLink.includes('?') ? validLink : (link || `#/projects/${metadataObj.projectId}`);
-                        if (metadataObj.taskId && !commentLink.includes('task=')) commentLink += (commentLink.includes('?') ? '&' : '?') + `task=${encodeURIComponent(metadataObj.taskId)}`;
+                        // Email must use the same validLink (tracker deep link or rebuilt) so link in email matches notification
+                        commentLink = validLink && validLink.trim() ? validLink : (link || `#/projects/${metadataObj.projectId}`);
+                        if (metadataObj.taskId && commentLink && !commentLink.includes('task=')) commentLink += (commentLink.includes('?') ? '&' : '?') + `task=${encodeURIComponent(metadataObj.taskId)}`;
                     }
                 } else if (metadataObj.clientId || metadataObj.leadId) {
                     const cid = metadataObj.clientId || metadataObj.leadId;

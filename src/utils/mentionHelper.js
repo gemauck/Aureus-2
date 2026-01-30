@@ -324,14 +324,18 @@ const MentionHelper = {
                 }
             }
             
-            console.log('📧 MentionHelper: Final notification payload link:', entityUrl, 'Metadata:', metadata);
+            // CRITICAL: For tracker deep links, email must use the exact contextLink (section/document/cell from the UI)
+            const finalLink = (contextLink && (contextLink.includes('docSectionId=') && contextLink.includes('docDocumentId=')))
+                ? contextLink
+                : entityUrl;
+            console.log('📧 MentionHelper: Final notification payload link:', finalLink, 'Metadata:', metadata);
             
             const notificationPayload = {
                 userId: mentionedUserId,
                 type: 'mention',
                 title: `${mentionedByName} mentioned you`,
                 message: `${mentionedByName} mentioned you in ${contextTitle}: "${previewText}"`,
-                link: entityUrl,
+                link: finalLink,
                 metadata: metadata
             };
             
