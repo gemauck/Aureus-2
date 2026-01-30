@@ -292,17 +292,24 @@
                 }
             }
             
-            // Check immediately when DOM is ready
+            // Check soon after DOM is ready
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', function() {
-                    setTimeout(checkBuildVersion, 2000); // Wait 2 seconds after page load
+                    setTimeout(checkBuildVersion, 1000);
                 });
             } else {
-                setTimeout(checkBuildVersion, 2000);
+                setTimeout(checkBuildVersion, 1000);
             }
             
             // Check every 60 seconds
             checkInterval = setInterval(checkBuildVersion, 60000);
+            
+            // Re-check when user returns to the tab (catches deploy while tab was in background)
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'visible') {
+                    checkBuildVersion();
+                }
+            });
             
             // Clean up on page unload
             window.addEventListener('beforeunload', function() {
