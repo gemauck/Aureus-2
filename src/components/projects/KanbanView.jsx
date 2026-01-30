@@ -3,11 +3,12 @@
 
 const KanbanView = ({ 
     tasks, 
-    statusColumns = [], // Array of { value, label } objects
+    statusColumns = [], // Array of { value, label } objects (value = list id when groupByList)
+    groupByList = false, // When true, columns are lists and tasks are grouped by task.listId
     onViewTaskDetail,
     onAddTask,
     onDeleteTask,
-    onUpdateTaskStatus, // Function to update task status when dragged
+    onUpdateTaskStatus, // Function to update task status/list when dragged (receives column label)
     getStatusColor, // Function to get status color class
     getPriorityColor, // Function to get priority color class
     getDueDateMeta // Function to get due date metadata
@@ -102,42 +103,54 @@ const KanbanView = ({
         return false;
     };
 
-    // Group tasks by status - improved matching with fallback for unmatched tasks
+    // Group tasks: by list (task.listId) when groupByList, else by status
     const taskAssignments = new Map(); // Track which tasks have been assigned
     const tasksByStatus = columns.map(column => {
-        const columnTasks = tasks.filter(t => {
-            if (taskAssignments.has(t.id)) return false; // Task already assigned to another column
-            
-            const taskStatus = String(t.status || 'To Do');
-            const columnValue = String(column.value || '');
-            const columnLabel = String(column.label || '');
-            
-            if (matchTaskToColumn(taskStatus, columnValue, columnLabel)) {
-                taskAssignments.set(t.id, true);
-                return true;
-            }
-            
-            return false;
-        });
-        
+        let columnTasks;
+        if (groupByList) {
+            const columnListId = column.value != null ? String(column.value) : '';
+            columnTasks = tasks.filter(t => {
+                const taskListId = t.listId != null ? String(t.listId) : '';
+                return taskListId === columnListId;
+            });
+            columnTasks.forEach(t => taskAssignments.set(t.id, true));
+        } else {
+            columnTasks = tasks.filter(t => {
+                if (taskAssignments.has(t.id)) return false;
+                const taskStatus = String(t.status || 'To Do');
+                const columnValue = String(column.value || '');
+                const columnLabel = String(column.label || '');
+                if (matchTaskToColumn(taskStatus, columnValue, columnLabel)) {
+                    taskAssignments.set(t.id, true);
+                    return true;
+                }
+                return false;
+            });
+        }
         return {
             column,
             tasks: columnTasks
         };
     });
 
-    // Add unmatched tasks to "To Do" column as fallback (if it exists)
-    const todoColumnIndex = tasksByStatus.findIndex(({ column }) => {
-        const normalized = normalizeStatus(column.value || column.label || '');
-        return normalized === 'to do' || normalized === 'todo';
-    });
-    
-    if (todoColumnIndex >= 0) {
+    // Add unmatched tasks to first column (list mode) or "To Do" column (status mode)
+    if (groupByList) {
         const unmatchedTasks = tasks.filter(t => !taskAssignments.has(t.id));
-        if (unmatchedTasks.length > 0) {
-            tasksByStatus[todoColumnIndex].tasks.push(...unmatchedTasks);
-            console.warn(`KanbanView: ${unmatchedTasks.length} task(s) with unmatched status added to "To Do" column. Task statuses:`, 
-                unmatchedTasks.map(t => t.status || 'undefined'));
+        if (unmatchedTasks.length > 0 && tasksByStatus.length > 0) {
+            tasksByStatus[0].tasks.push(...unmatchedTasks);
+        }
+    } else {
+        const todoColumnIndex = tasksByStatus.findIndex(({ column }) => {
+            const normalized = normalizeStatus(column.value || column.label || '');
+            return normalized === 'to do' || normalized === 'todo';
+        });
+        if (todoColumnIndex >= 0) {
+            const unmatchedTasks = tasks.filter(t => !taskAssignments.has(t.id));
+            if (unmatchedTasks.length > 0) {
+                tasksByStatus[todoColumnIndex].tasks.push(...unmatchedTasks);
+                console.warn(`KanbanView: ${unmatchedTasks.length} task(s) with unmatched status added to "To Do" column. Task statuses:`,
+                    unmatchedTasks.map(t => t.status || 'undefined'));
+            }
         }
     }
 

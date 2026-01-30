@@ -12,6 +12,8 @@ const NotificationCenter = () => {
     const pollingIntervalRef = useRef(null);
     const isPollingPausedRef = useRef(false);
     const pollingDelayRef = useRef(15000); // Start with 15 seconds for near real-time updates, will increase on rate limits
+    const lastLoadTimestampRef = useRef(0); // Throttle focus-triggered loads to avoid 429s
+    const FOCUS_LOAD_MIN_INTERVAL_MS = 20000; // Don't load on focus if we loaded in the last 20 seconds
     
     // Helper function to restart polling - will be defined after loadNotifications
     const restartPollingRef = useRef(null);
@@ -135,6 +137,8 @@ const NotificationCenter = () => {
                 setNotifications(responseData?.notifications || []);
                 setUnreadCount(responseData?.unreadCount || 0);
                 
+                // Track successful load time for focus throttling
+                lastLoadTimestampRef.current = Date.now();
                 // Reset failure counter on success
                 if (consecutiveFailuresRef.current > 0) {
                     consecutiveFailuresRef.current = 0;
@@ -253,10 +257,12 @@ const NotificationCenter = () => {
         }, 1000); // Small 1-second delay to avoid immediate requests on page load
         
         // Reload notifications when window regains focus (user returns to tab)
+        // Throttle: only load if we haven't loaded in the last FOCUS_LOAD_MIN_INTERVAL_MS to avoid 429s
         const handleFocus = () => {
-            if (!isPollingPausedRef.current) {
-                loadNotifications();
-            }
+            if (isPollingPausedRef.current) return;
+            const now = Date.now();
+            if (now - lastLoadTimestampRef.current < FOCUS_LOAD_MIN_INTERVAL_MS) return;
+            loadNotifications();
         };
         window.addEventListener('focus', handleFocus);
         

@@ -26,6 +26,7 @@ const DatabaseAPI = {
         '/time-entries': 30000, // 30 seconds
         '/inventory': 120000,   // 2 minutes - inventory changes less frequently
         '/locations': 300000,   // 5 minutes - locations rarely change
+        '/notifications': 15000, // 15 seconds - reduces focus/polling 429s
     },
 
     // Request throttling / rate limiting safeguards

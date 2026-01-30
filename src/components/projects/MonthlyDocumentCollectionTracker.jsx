@@ -1753,8 +1753,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return results;
     };
 
-    const handleAddComment = async (sectionId, documentId, month, commentText, attachments = []) => {
+    const handleAddComment = async (sectionId, documentId, month, commentText, attachments = [], cellKeyForLink = null) => {
         if (!commentText.trim()) return;
+        // Use cell key for notification link so the email deep link always matches the open cell (avoids wrong section/document from stale closure)
+        const { sectionId: linkSectionId, documentId: linkDocumentId, month: linkMonth } = cellKeyForLink != null ? parseCellKey(cellKeyForLink) : { sectionId, documentId, month };
         
         const currentUser = getCurrentUser();
         const newCommentId = Date.now();
@@ -1846,14 +1848,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         [];
                     
                     const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
-                    // Deep-link directly to the document collection cell & comment for email + in-app navigation
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+                    // Deep-link using link* IDs (from cellKey when provided) so email link matches the open cell
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
-                        sectionId,
-                        documentId,
-                        month,
+                        sectionId: linkSectionId,
+                        documentId: linkDocumentId,
+                        month: linkMonth,
                         commentId: newCommentId,
                         docYear: selectedYear,
                         year: selectedYear
@@ -4295,7 +4297,7 @@ Abcotronics`;
                                             }
                                             setUploadingCommentAttachments(false);
                                         }
-                                        handleAddComment(section.id, doc.id, month, commentText, atts);
+                                        handleAddComment(section.id, doc.id, month, commentText, atts, hoverCommentCell);
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
                                     rows={2}
@@ -4325,7 +4327,7 @@ Abcotronics`;
                                                         }
                                                         setUploadingCommentAttachments(false);
                                                     }
-                                                    handleAddComment(section.id, doc.id, month, quickComment, atts);
+                                                    handleAddComment(section.id, doc.id, month, quickComment, atts, hoverCommentCell);
                                                     setQuickComment('');
                                                 })();
                                             }
@@ -4350,7 +4352,7 @@ Abcotronics`;
                                                 }
                                                 setUploadingCommentAttachments(false);
                                             }
-                                            handleAddComment(section.id, doc.id, month, quickComment, atts);
+                                            handleAddComment(section.id, doc.id, month, quickComment, atts, hoverCommentCell);
                                             setQuickComment('');
                                         }}
                                         disabled={!quickComment.trim() || uploadingCommentAttachments}

@@ -174,6 +174,17 @@ const MentionHelper = {
                 if (projectInfo.year !== undefined && projectInfo.year !== null) {
                     metadata.year = projectInfo.year;
                 }
+                // Weekly FMS: week/weeklyWeek so API builds link with docWeek (not docMonth)
+                if (projectInfo.week !== undefined && projectInfo.week != null) {
+                    metadata.week = projectInfo.week;
+                }
+                if (projectInfo.weeklyWeek !== undefined && projectInfo.weeklyWeek != null) {
+                    metadata.weeklyWeek = projectInfo.weeklyWeek;
+                }
+                // Monthly FMS: source so API adds tab=monthlyFMSReview to link
+                if (projectInfo.source) {
+                    metadata.source = projectInfo.source;
+                }
             }
             
             // Generate entity URL if we have entity information

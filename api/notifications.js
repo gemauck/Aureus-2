@@ -44,13 +44,32 @@ export async function createNotificationForUser(targetUserId, type, title, messa
 
     const metadataObj = typeof metadata === 'string' ? (() => { try { return JSON.parse(metadata); } catch (_) { return {}; } })() : (metadata || {});
     let validLink = link || '';
-    // Always build a direct-to-comment link from metadata when we have tracker params, so in-app and email both open the comment
+    // Prefer frontend-supplied link when it's already a full tracker deep link (correct section/document/cell)
+    const linkHasDocSectionId = validLink && validLink.includes('docSectionId=');
+    const linkHasDocDocumentId = validLink && validLink.includes('docDocumentId=');
+    const linkHasDocMonthOrWeek = validLink && (validLink.includes('docMonth=') || validLink.includes('docWeek='));
+    const linkIsFullTrackerDeepLink = linkHasDocSectionId && linkHasDocDocumentId && linkHasDocMonthOrWeek;
+    if (linkIsFullTrackerDeepLink) {
+        // Strip duplicate query params (e.g. docYear=2026&docYear=2026) by normalizing to single docYear
+        const hashPart = validLink.includes('#') ? validLink.slice(validLink.indexOf('#')) : validLink;
+        const qIdx = hashPart.indexOf('?');
+        if (qIdx !== -1) {
+            const params = new URLSearchParams(hashPart.slice(qIdx + 1));
+            const singleYear = params.get('docYear') || params.get('year');
+            params.delete('docYear');
+            params.delete('year');
+            if (singleYear != null) params.set('docYear', singleYear);
+            validLink = (validLink.startsWith('#') ? '' : (validLink.split('#')[0] || '')) + hashPart.slice(0, qIdx + 1) + params.toString();
+        }
+    }
+    // Otherwise build from metadata when we have tracker params (or no link)
     const hasTrackerMetadata = metadataObj.projectId && (
         metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null ||
         metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.week != null || metadataObj.weekNumber != null
     );
-    if (hasTrackerMetadata || !validLink || !validLink.trim()) {
+    if (!linkIsFullTrackerDeepLink && (hasTrackerMetadata || !validLink || !validLink.trim())) {
         try {
+            const docYearVal = metadataObj.docYear != null ? metadataObj.docYear : metadataObj.year;
             const weekLabelFromMeta = metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
             const isWeeklyFMS = metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weeklyMonth != null || (metadataObj.sectionId && (metadataObj.weekNumber != null || metadataObj.week != null)));
             if (isWeeklyFMS) {
@@ -62,8 +81,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (sectionId) q.push(`docSectionId=${encodeURIComponent(sectionId)}`);
                 if (documentId) q.push(`docDocumentId=${encodeURIComponent(documentId)}`);
                 if (weekLabel != null) q.push(`docWeek=${encodeURIComponent(weekLabel)}`);
-                if (metadataObj.docYear != null) q.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
-                if (metadataObj.year != null) q.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
+                if (docYearVal != null) q.push(`docYear=${encodeURIComponent(docYearVal)}`);
                 if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
                 if (q.length) validLink += `?${q.join('&')}`;
             } else if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null)) {
@@ -72,8 +90,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (metadataObj.sectionId) q.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
                 if (metadataObj.documentId) q.push(`docDocumentId=${encodeURIComponent(metadataObj.documentId)}`);
                 if (metadataObj.month != null) q.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
-                if (metadataObj.docYear != null) q.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
-                if (metadataObj.year != null) q.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
+                if (docYearVal != null) q.push(`docYear=${encodeURIComponent(docYearVal)}`);
                 if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
                 if (metadataObj.source === 'monthlyFMSReview') q.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
                 if (q.length) validLink += `?${q.join('&')}`;
