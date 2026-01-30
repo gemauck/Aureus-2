@@ -2889,7 +2889,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-7 pr-7 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
+                        className={`w-full pl-2 pr-7 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2898,7 +2898,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    {/* Email on left of cell */}
+                    {/* Email in top right corner of cell */}
                     {!isMonthlyDataReview && (
                         <button
                             type="button"
@@ -2908,7 +2908,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                 e.stopPropagation();
                                 setEmailModalContext({ section, doc, month });
                             }}
-                            className="absolute left-1 top-1/2 -translate-y-1/2 z-10 text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
+                            className="absolute top-1 right-1 z-10 text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
                             title="Request documents via email"
                             aria-label="Request documents via email"
                         >
@@ -2999,7 +2999,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     }, 10);
                                 }
                             }}
-                            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 text-gray-500 hover:text-gray-700 transition-colors p-1 rounded"
+                            className="absolute right-1 bottom-1 z-10 text-gray-500 hover:text-gray-700 transition-colors p-1 rounded"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
