@@ -2620,8 +2620,9 @@ function initializeProjectDetail() {
                     }
                 }
                 
-                if (weeklySectionId && weeklyDocumentId) {
-                    // Only switch if not already on weekly FMS review tab
+                // Only switch to weekly when URL has docWeek/weeklyWeek (weekly link). Document collection
+                // links use docSectionId+docDocumentId+docMonth, so we must not switch on section+doc alone.
+                if (weeklySectionId && weeklyDocumentId && weeklyWeek) {
                     if (activeSection !== 'weeklyFMSReview') {
                         switchSection('weeklyFMSReview');
                     }
