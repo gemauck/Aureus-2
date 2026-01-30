@@ -4421,6 +4421,12 @@ function initializeProjectDetail() {
     const visibleTaskCount = filteredTopLevelTasks.length;
     const totalTaskCount = Array.isArray(tasks) ? tasks.length : 0;
 
+    // Tasks to show in Kanban: optionally filtered by selected list (status columns stay the same)
+    const kanbanTasks = useMemo(() => {
+        if (kanbanListFilter === 'all') return filteredTopLevelTasks;
+        return filteredTopLevelTasks.filter(t => String(t.listId) === String(kanbanListFilter));
+    }, [filteredTopLevelTasks, kanbanListFilter]);
+
     const resetTaskFilters = useCallback(() => {
         setTaskFilters({
             search: '',
@@ -7491,6 +7497,24 @@ function initializeProjectDetail() {
                                     Kanban
                                 </button>
                             </div>
+                            {viewMode === 'kanban' && taskLists && taskLists.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="kanban-list-select" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                                        Show list:
+                                    </label>
+                                    <select
+                                        id="kanban-list-select"
+                                        value={kanbanListFilter}
+                                        onChange={(e) => setKanbanListFilter(e.target.value)}
+                                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-gray-800 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 min-w-[120px]"
+                                    >
+                                        <option value="all">All lists</option>
+                                        {taskLists.map(list => (
+                                            <option key={list.id} value={list.id}>{list.name || 'Unnamed'}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                         
                         <div className="flex gap-2">
@@ -7517,7 +7541,7 @@ function initializeProjectDetail() {
             ) : (
                 KanbanViewComponent ? (
                     <KanbanViewComponent
-                        tasks={filteredTopLevelTasks}
+                        tasks={kanbanTasks}
                         statusColumns={kanbanColumns}
                         groupByList={false}
                         onViewTaskDetail={handleViewTaskDetail}
