@@ -489,6 +489,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const [draggedDocument, setDraggedDocument] = useState(null);
     const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
+    const [dragOverDocumentSectionId, setDragOverDocumentSectionId] = useState(null);
+    const documentDragRef = useRef(null);
     const [isExporting, setIsExporting] = useState(false);
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
@@ -1302,6 +1304,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // ============================================================
     
     const statusOptions = [
+        { value: 'requested', label: 'Requested', color: 'bg-sky-400 text-white font-semibold', cellColor: 'bg-sky-400 border-l-4 border-sky-600 shadow-sm' },
         { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
         { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
         { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
@@ -2060,6 +2063,64 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     const handleSectionDragLeave = (e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setDragOverIndex(null);
+    };
+
+    // Document drag-and-drop (reorder documents within a section)
+    const handleDocumentDragStart = (sectionId, docIndex, e) => {
+        documentDragRef.current = { sectionId, docIndex };
+        setDraggedDocument({ sectionId, docIndex });
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(sectionId));
+        setTimeout(() => { if (e.currentTarget) e.currentTarget.style.opacity = '0.5'; }, 0);
+    };
+
+    const handleDocumentDragEnd = (e) => {
+        if (e.currentTarget) e.currentTarget.style.opacity = '1';
+        documentDragRef.current = null;
+        setDraggedDocument(null);
+        setDragOverDocumentSectionId(null);
+        setDragOverDocumentIndex(null);
+    };
+
+    const handleDocumentDragOver = (e, sectionId, docIndex) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverDocumentSectionId(sectionId);
+        setDragOverDocumentIndex(docIndex);
+    };
+
+    const handleDocumentDragLeave = (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            setDragOverDocumentSectionId(null);
+            setDragOverDocumentIndex(null);
+        }
+    };
+
+    const handleDocumentDrop = (e, sectionId, dropDocIndex) => {
+        e.preventDefault();
+        const drag = documentDragRef.current;
+        if (!drag || String(drag.sectionId) !== String(sectionId) || drag.docIndex === dropDocIndex) {
+            setDragOverDocumentSectionId(null);
+            setDragOverDocumentIndex(null);
+            return;
+        }
+        setSections(prev => prev.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            const docs = [...(section.documents || [])];
+            const [removed] = docs.splice(drag.docIndex, 1);
+            docs.splice(dropDocIndex, 0, removed);
+            return { ...section, documents: docs };
+        }));
+        setDragOverDocumentSectionId(null);
+        setDragOverDocumentIndex(null);
+        documentDragRef.current = null;
+        setDraggedDocument(null);
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        saveToDatabase();
     };
     
     // ============================================================
@@ -3252,7 +3313,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const month = ctx?.month || '';
         const projectName = project?.name || 'Project';
         const currentPeriodText = `${month} ${selectedYear}`.trim();
-        const defaultSubject = `Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
+        const defaultSubject = `Abco Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
         const defaultBody = `Dear Sir/Madam,
 
 We kindly request the following document(s) / data for our records:
@@ -3422,6 +3483,31 @@ Abcotronics`;
                     return;
                 }
                 setResult({ sent: data.sent || [], failed: data.failed || [] });
+                // Mark this document/month as "Requested" when email is sent successfully
+                if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
+                    const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 ? sectionsRef.current : sectionsByYear;
+                    const currentYearSections = latestSectionsByYear[selectedYear] || [];
+                    const updated = currentYearSections.map(section => {
+                        if (String(section.id) !== String(ctx.section.id)) return section;
+                        return {
+                            ...section,
+                            documents: (section.documents || []).map(doc => {
+                                if (String(doc.id) !== String(ctx.doc.id)) return doc;
+                                const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, 'requested', selectedYear);
+                                return { ...doc, collectionStatus: updatedStatus };
+                            })
+                        };
+                    });
+                    const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+                    sectionsRef.current = updatedSectionsByYear;
+                    setSectionsByYear(updatedSectionsByYear);
+                    lastSavedDataRef.current = null;
+                    if (saveTimeoutRef.current) {
+                        clearTimeout(saveTimeoutRef.current);
+                        saveTimeoutRef.current = null;
+                    }
+                    saveToDatabase();
+                }
             } catch (err) {
                 setResult({ error: err.message || 'Request failed' });
             } finally {
@@ -3562,7 +3648,7 @@ Abcotronics`;
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
                                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 transition-shadow"
-                                placeholder="Document / Data request subject..."
+                                placeholder="Abco Document / Data request subject..."
                             />
                         </div>
 
@@ -4774,19 +4860,15 @@ Abcotronics`;
             <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm">
                 <div className="flex flex-wrap items-center gap-4">
                     <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status Legend:</span>
-                    {statusOptions.slice(0, 3).map((option, idx) => (
+                    {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
                             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
                                 <div className={`w-4 h-4 rounded-full ${option.cellColor} ring-2 ring-white shadow-sm`}></div>
                                 <span className="text-xs font-medium text-gray-700">{option.label}</span>
                             </div>
-                            {idx < 2 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
                         </React.Fragment>
                     ))}
-                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                        <div className={`w-4 h-4 rounded-full ${statusOptions[3].cellColor} ring-2 ring-white shadow-sm`}></div>
-                        <span className="text-xs font-medium text-gray-700">{statusOptions[3].label}</span>
-                    </div>
                 </div>
             </div>
             
@@ -4961,13 +5043,26 @@ Abcotronics`;
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((doc) => (
-                                                <tr key={doc.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
+                                            section.documents.map((doc, docIndex) => (
+                                                <tr
+                                                    key={doc.id}
+                                                    className={`transition-colors border-b border-gray-100 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
+                                                    draggable
+                                                    onDragStart={(e) => handleDocumentDragStart(section.id, docIndex, e)}
+                                                    onDragEnd={handleDocumentDragEnd}
+                                                    onDragOver={(e) => handleDocumentDragOver(e, section.id, docIndex)}
+                                                    onDragLeave={handleDocumentDragLeave}
+                                                    onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
+                                                >
                                                     <td
                                                         className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                                     >
-                                                        <div className="w-full">
+                                                        <div className="w-full flex items-start gap-2">
+                                                            <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
+                                                                <i className="fas fa-grip-vertical text-[10px]"></i>
+                                                            </span>
+                                                            <div className="flex-1 min-w-0">
                                                             <div className="text-sm font-semibold text-gray-900 mb-1">{doc.name}</div>
                                                             {doc.description && (() => {
                                                                 // Check if description contains ISO date strings and format them
@@ -5036,6 +5131,8 @@ Abcotronics`;
                                                                     </div>
                                                                 );
                                                             })()}
+                                                        </div>
+                                                            </div>
                                                         </div>
                                                     </td>
                                                     {months.map((month) => (
