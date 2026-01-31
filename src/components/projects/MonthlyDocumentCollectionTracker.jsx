@@ -3233,16 +3233,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const DocumentRequestEmailModal = () => {
         const ctx = emailModalContext;
         const docName = ctx?.doc?.name || 'Document';
-        const sectionName = ctx?.section?.name || '';
         const month = ctx?.month || '';
         const projectName = project?.name || 'Project';
-        const defaultSubject = `Document request: ${projectName} – ${docName} – ${month} ${selectedYear}`;
+        const currentPeriodText = `${month} ${selectedYear}`.trim();
+        const defaultSubject = `Document request: ${projectName} – ${docName} – ${currentPeriodText}`;
         const defaultBody = `Dear Sir/Madam,
 
 We kindly request the following document(s) for our records:
 
-• Document: ${docName}${sectionName ? `\n• Section: ${sectionName}` : ''}
-• Period: ${month} ${selectedYear}
+• Document: ${docName}
+• Period: ${currentPeriodText}
 • Project: ${projectName}
 
 Please send these at your earliest convenience.
@@ -3262,12 +3262,31 @@ Abcotronics`;
         const [savingTemplate, setSavingTemplate] = useState(false);
         const [result, setResult] = useState(null);
 
+        // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
+        const withCurrentPeriod = (text) => {
+            if (!text || typeof text !== 'string' || !currentPeriodText) return text;
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            let out = text;
+            monthNames.forEach((m) => {
+                const pattern = new RegExp(`${m}\\s+\\d{4}`, 'g');
+                out = out.replace(pattern, currentPeriodText);
+            });
+            return out;
+        };
+        // Remove section/file line from body (e.g. "• Section: File 1") so emails never show it
+        const withoutSectionLine = (text) => {
+            if (!text || typeof text !== 'string') return text;
+            return text.replace(/\n?\s*•\s*Section:\s*[^\n]*/g, '').replace(/\n?\s*Section:\s*[^\n]*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+        };
+
         useEffect(() => {
             const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
             setContacts(Array.isArray(s.recipients) && s.recipients.length > 0 ? s.recipients : []);
             setContactsCc(Array.isArray(s.cc) && s.cc.length > 0 ? s.cc : []);
-            setSubject(typeof s.subject === 'string' && s.subject.trim() ? s.subject : defaultSubject);
-            setBody(typeof s.body === 'string' && s.body.trim() ? s.body : defaultBody);
+            const savedSubject = typeof s.subject === 'string' && s.subject.trim() ? s.subject : null;
+            const savedBody = typeof s.body === 'string' && s.body.trim() ? s.body : null;
+            setSubject(savedSubject ? withCurrentPeriod(savedSubject) : defaultSubject);
+            setBody(savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody);
             setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
             setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
             setNewContact('');
