@@ -451,6 +451,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const [draggedDocument, setDraggedDocument] = useState(null);
     const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
+    const [dragOverDocumentSectionId, setDragOverDocumentSectionId] = useState(null);
+    const documentDragRef = useRef(null);
     const [isExporting, setIsExporting] = useState(false);
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
@@ -1878,6 +1880,64 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
 
     const handleSectionDragLeave = (e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setDragOverIndex(null);
+    };
+
+    // Document drag-and-drop (reorder documents within a section)
+    const handleDocumentDragStart = (sectionId, docIndex, e) => {
+        documentDragRef.current = { sectionId, docIndex };
+        setDraggedDocument({ sectionId, docIndex });
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(sectionId));
+        setTimeout(() => { if (e.currentTarget) e.currentTarget.style.opacity = '0.5'; }, 0);
+    };
+
+    const handleDocumentDragEnd = (e) => {
+        if (e.currentTarget) e.currentTarget.style.opacity = '1';
+        documentDragRef.current = null;
+        setDraggedDocument(null);
+        setDragOverDocumentSectionId(null);
+        setDragOverDocumentIndex(null);
+    };
+
+    const handleDocumentDragOver = (e, sectionId, docIndex) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverDocumentSectionId(sectionId);
+        setDragOverDocumentIndex(docIndex);
+    };
+
+    const handleDocumentDragLeave = (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            setDragOverDocumentSectionId(null);
+            setDragOverDocumentIndex(null);
+        }
+    };
+
+    const handleDocumentDrop = (e, sectionId, dropDocIndex) => {
+        e.preventDefault();
+        const drag = documentDragRef.current;
+        if (!drag || String(drag.sectionId) !== String(sectionId) || drag.docIndex === dropDocIndex) {
+            setDragOverDocumentSectionId(null);
+            setDragOverDocumentIndex(null);
+            return;
+        }
+        setSections(prev => prev.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            const docs = [...(section.documents || [])];
+            const [removed] = docs.splice(drag.docIndex, 1);
+            docs.splice(dropDocIndex, 0, removed);
+            return { ...section, documents: docs };
+        }));
+        setDragOverDocumentSectionId(null);
+        setDragOverDocumentIndex(null);
+        documentDragRef.current = null;
+        setDraggedDocument(null);
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        saveToDatabase();
     };
     
     // ============================================================
@@ -3870,13 +3930,26 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document) => (
-                                                <tr key={document.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
+                                            section.documents.map((document, docIndex) => (
+                                                <tr
+                                                    key={document.id}
+                                                    className={`transition-colors border-b border-gray-100 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
+                                                    draggable
+                                                    onDragStart={(e) => handleDocumentDragStart(section.id, docIndex, e)}
+                                                    onDragEnd={handleDocumentDragEnd}
+                                                    onDragOver={(e) => handleDocumentDragOver(e, section.id, docIndex)}
+                                                    onDragLeave={handleDocumentDragLeave}
+                                                    onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
+                                                >
                                                     <td
                                                         className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
                                                     >
-                                                        <div className="w-full">
+                                                        <div className="w-full flex items-start gap-2">
+                                                            <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
+                                                                <i className="fas fa-grip-vertical text-[10px]"></i>
+                                                            </span>
+                                                            <div className="flex-1 min-w-0">
                                                             <div className="text-sm font-semibold text-gray-900 mb-1">{document.name}</div>
                                                             {document.description && (() => {
                                                                 const { truncated, isLong } = truncateDescription(String(document.description));
@@ -3898,6 +3971,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                                 );
                                                             })()}
                                                         </div>
+                                                            </div>
                                                     </td>
                                                     {months.map((month) => (
                                                         <React.Fragment key={`${document.id}-${month}`}>

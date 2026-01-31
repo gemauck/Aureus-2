@@ -5133,7 +5133,6 @@ Abcotronics`;
                                                             })()}
                                                         </div>
                                                             </div>
-                                                        </div>
                                                     </td>
                                                     {months.map((month) => (
                                                         <React.Fragment key={`${doc.id}-${month}`}>

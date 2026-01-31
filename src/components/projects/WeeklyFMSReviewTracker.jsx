@@ -4305,7 +4305,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                             })()}
                                                         </div>
                                                             </div>
-                                                        </div>
                                                     </td>
                                                     {weeks.map((week) => (
                                                         <React.Fragment key={`${doc.id}-${week.label}`}>
