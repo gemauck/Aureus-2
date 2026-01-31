@@ -394,7 +394,9 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                             for (const comment of commentList) {
                               if (comment && (comment.text || comment)) {
                                 const atts = Array.isArray(comment.attachments) ? comment.attachments : []
+                                const commentId = comment.id != null ? String(comment.id) : undefined
                                 comments.push({
+                                  ...(commentId ? { id: commentId } : {}),
                                   year,
                                   month,
                                   text: comment.text || String(comment),
@@ -482,7 +484,9 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
                               const atts = Array.isArray(comment.attachments) ? comment.attachments : []
+                              const commentId = comment.id != null ? String(comment.id) : undefined
                               comments.push({
+                                ...(commentId ? { id: commentId } : {}),
                                 year,
                                 month,
                                 text: comment.text || String(comment),

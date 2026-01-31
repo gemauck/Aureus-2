@@ -1697,6 +1697,10 @@ function initializeProjectDetail() {
     const [viewingTaskParent, setViewingTaskParent] = useState(null);
     // Use a ref to store current tasks value to avoid TDZ issues in closures
     const tasksRef = useRef(initialTasks);
+    // Drag-and-drop reorder: source (listId, taskIndex)
+    const taskDragRef = useRef(null);
+    const taskJustDroppedRef = useRef(false);
+    const [dragOverTask, setDragOverTask] = useState(null); // { listId, taskIndex } or null
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
@@ -6613,6 +6617,79 @@ function initializeProjectDetail() {
         }
     }, []);
 
+    // Drag-and-drop reorder (same list only)
+    const handleTaskDragStart = useCallback((list, taskIndex, e) => {
+        taskDragRef.current = { listId: list.id, taskIndex };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', list.tasks[taskIndex]?.task?.id || '');
+        e.dataTransfer.setData('application/json', JSON.stringify({ listId: list.id, taskIndex }));
+        setTimeout(() => {
+            if (e.currentTarget) e.currentTarget.style.opacity = '0.5';
+        }, 0);
+    }, []);
+
+    const handleTaskDragEnd = useCallback((e) => {
+        if (e.currentTarget) e.currentTarget.style.opacity = '1';
+        taskDragRef.current = null;
+        setDragOverTask(null);
+    }, []);
+
+    const handleTaskDragOver = useCallback((e, list, taskIndex) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverTask(prev => {
+            if (prev?.listId === list.id && prev?.taskIndex === taskIndex) return prev;
+            return { listId: list.id, taskIndex };
+        });
+    }, []);
+
+    const handleTaskDragLeave = useCallback((e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setDragOverTask(null);
+    }, []);
+
+    const handleTaskDrop = useCallback(async (e, list, dropIndex) => {
+        e.preventDefault();
+        e.stopPropagation();
+        taskJustDroppedRef.current = true;
+        setTimeout(() => { taskJustDroppedRef.current = false; }, 100);
+        setDragOverTask(null);
+        const drag = taskDragRef.current;
+        if (!drag || String(drag.listId) !== String(list.id) || drag.taskIndex === dropIndex) return;
+        const items = list.tasks;
+        if (drag.taskIndex < 0 || drag.taskIndex >= items.length || dropIndex < 0 || dropIndex >= items.length) return;
+        const reordered = [...items];
+        const [removed] = reordered.splice(drag.taskIndex, 1);
+        reordered.splice(dropIndex, 0, removed);
+        const prevTasks = tasksRef.current || [];
+        const orderByTaskId = {};
+        reordered.forEach((item, idx) => { orderByTaskId[item.task.id] = idx; });
+        const newTasks = prevTasks.map(t => {
+            const newOrder = orderByTaskId[t.id];
+            if (newOrder === undefined) return t;
+            return { ...t, order: newOrder };
+        });
+        setTasks(newTasks);
+        tasksRef.current = newTasks;
+        taskDragRef.current = null;
+        if (window.DatabaseAPI?.makeRequest) {
+            try {
+                await Promise.all(
+                    reordered.map((item, idx) =>
+                        window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(item.task.id)}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ order: idx })
+                        })
+                    )
+                );
+            } catch (err) {
+                console.error('Failed to save task order:', err);
+                setTasks(prevTasks);
+                tasksRef.current = prevTasks;
+                alert('Failed to save order. Please try again.');
+            }
+        }
+    }, []);
+
     // Format checklist progress helper
     const formatChecklistProgress = useCallback((checklist = []) => {
                 if (!Array.isArray(checklist) || checklist.length === 0) {
@@ -6881,15 +6958,9 @@ function initializeProjectDetail() {
                                                             <Fragment key={task.id}>
                                                                 <tr
                                                                     onClick={(e) => {
+                                                                        if (taskJustDroppedRef.current) return;
                                                                         try {
-                                                                            console.log('🖱️ Table row clicked - event:', e);
-                                                                            console.log('🖱️ Table row clicked:', task.id);
-                                                                            console.log('🖱️ handleViewTaskDetail type:', typeof handleViewTaskDetail);
-                                                                            
-                                                                            // Don't prevent default - let the click work naturally
-                                                                            // e.preventDefault();
                                                                             e.stopPropagation();
-                                                                            
                                                                             if (typeof handleViewTaskDetail === 'function') {
                                                                                 console.log('✅ Calling handleViewTaskDetail with task:', task.id);
                                                                                 const result = handleViewTaskDetail(task);
@@ -6909,30 +6980,26 @@ function initializeProjectDetail() {
                                                                             alert('Failed to open task: ' + (error?.message || 'Unknown error'));
                                                                         }
                                                                     }}
-                                                                    className="hover:bg-gray-50 cursor-pointer transition"
+                                                                    className={`hover:bg-gray-50 cursor-pointer transition ${dragOverTask?.listId === list.id && dragOverTask?.taskIndex === taskIndex ? 'bg-primary-50 ring-1 ring-primary-200' : ''}`}
                                                                     style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                                                                    onDragOver={(e) => handleTaskDragOver(e, list, taskIndex)}
+                                                                    onDragLeave={handleTaskDragLeave}
+                                                                    onDrop={(e) => handleTaskDrop(e, list, taskIndex)}
                                                                 >
-                                                                    <td className="px-2 py-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
-                                                                        <div className="flex items-center justify-center gap-0.5">
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => handleMoveTaskUp(list, taskIndex)}
-                                                                                disabled={taskIndex === 0}
-                                                                                className="p-1 rounded text-gray-500 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                                                                title="Move up"
-                                                                            >
-                                                                                <i className="fas fa-chevron-up text-[10px]"></i>
-                                                                            </button>
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => handleMoveTaskDown(list, taskIndex)}
-                                                                                disabled={taskIndex === list.tasks.length - 1}
-                                                                                className="p-1 rounded text-gray-500 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                                                                title="Move down"
-                                                                            >
-                                                                                <i className="fas fa-chevron-down text-[10px]"></i>
-                                                                            </button>
-                                                                        </div>
+                                                                    <td
+                                                                        className="px-2 py-2 whitespace-nowrap text-center align-middle"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        draggable
+                                                                        onDragStart={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleTaskDragStart(list, taskIndex, e);
+                                                                        }}
+                                                                        onDragEnd={handleTaskDragEnd}
+                                                                        title="Drag to reorder"
+                                                                    >
+                                                                        <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 p-1 rounded">
+                                                                            <i className="fas fa-grip-vertical text-[10px]"></i>
+                                                                        </span>
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
                                                                         <div className="text-xs font-medium text-gray-900">{task.title || 'Untitled task'}</div>
@@ -7225,7 +7292,7 @@ function initializeProjectDetail() {
                 </div>
             </div>
             );
-    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, handleUpdateTaskStatus, handleMoveTaskUp, handleMoveTaskDown, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
+    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, handleUpdateTaskStatus, handleTaskDragStart, handleTaskDragEnd, handleTaskDragOver, handleTaskDragLeave, handleTaskDrop, dragOverTask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);
