@@ -3236,12 +3236,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const month = ctx?.month || '';
         const projectName = project?.name || 'Project';
         const currentPeriodText = `${month} ${selectedYear}`.trim();
-        const defaultSubject = `Document request: ${projectName} – ${docName} – ${currentPeriodText}`;
+        const defaultSubject = `Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
         const defaultBody = `Dear Sir/Madam,
 
-We kindly request the following document(s) for our records:
+We kindly request the following document(s) / data for our records:
 
-• Document: ${docName}
+• Document / Data: ${docName}
 • Period: ${currentPeriodText}
 • Project: ${projectName}
 
@@ -3351,7 +3351,7 @@ Abcotronics`;
     <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
       <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; font-weight: bold;">Context</div>
       <div style="font-size: 14px; color: #334155; line-height: 1.6;">
-        <strong>Document:</strong> ${escapeHtml(docName)}<br>
+        <strong>Document / Data:</strong> ${escapeHtml(docName)}<br>
         <strong>Period:</strong> ${escapeHtml(currentPeriodText)}<br>
         <strong>Project:</strong> ${escapeHtml(projectName)}
       </div>
@@ -3546,7 +3546,7 @@ Abcotronics`;
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
                                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 transition-shadow"
-                                placeholder="Document request subject..."
+                                placeholder="Document / Data request subject..."
                             />
                         </div>
 
