@@ -2,10 +2,13 @@
  * GET /api/projects/:id/document-sections
  * Returns only documentSections for the project. Used by Document Collection tab
  * so it never relies on cached full-project response. Always no-store.
+ * Merges emailRequestByMonth (recipients, CC, template, schedule) from Project.documentSections blob
+ * so saved request-email data persists when loading from this endpoint.
  */
 import { authRequired } from '../../_lib/authRequired.js'
 import { documentSectionsToJson } from '../../projects.js'
 import { ok, serverError } from '../../_lib/response.js'
+import { prisma } from '../../_lib/prisma.js'
 
 async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -26,9 +29,40 @@ async function handler(req, res) {
   res.setHeader('Expires', '0')
 
   try {
-    const documentSections = await documentSectionsToJson(id, { skipComments: false })
-    const data = documentSections != null ? documentSections : {}
-    return ok(res, { documentSections: data })
+    let documentSections = await documentSectionsToJson(id, { skipComments: false })
+    documentSections = documentSections != null ? documentSections : {}
+
+    // Merge emailRequestByMonth from Project.documentSections blob (recipients, CC, template, schedule)
+    try {
+      const project = await prisma.project.findUnique({
+        where: { id },
+        select: { documentSections: true }
+      })
+      if (project?.documentSections && typeof documentSections === 'object' && !Array.isArray(documentSections)) {
+        const blob = typeof project.documentSections === 'string'
+          ? JSON.parse(project.documentSections) : project.documentSections
+        if (blob && typeof blob === 'object' && !Array.isArray(blob)) {
+          for (const year of Object.keys(blob)) {
+            const blobSections = blob[year]
+            const outSections = documentSections[year]
+            if (!Array.isArray(blobSections) || !Array.isArray(outSections)) continue
+            for (let si = 0; si < blobSections.length && si < outSections.length; si++) {
+              const blobDocs = blobSections[si].documents || []
+              const outDocs = outSections[si].documents || []
+              for (let di = 0; di < blobDocs.length && di < outDocs.length; di++) {
+                if (blobDocs[di].emailRequestByMonth && typeof blobDocs[di].emailRequestByMonth === 'object') {
+                  outDocs[di].emailRequestByMonth = blobDocs[di].emailRequestByMonth
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (mergeErr) {
+      console.warn('⚠️ document-sections: merge emailRequestByMonth from blob failed:', mergeErr.message)
+    }
+
+    return ok(res, { documentSections })
   } catch (e) {
     console.error('GET /api/projects/:id/document-sections error:', e)
     return serverError(res, e.message || 'Failed to load document sections')

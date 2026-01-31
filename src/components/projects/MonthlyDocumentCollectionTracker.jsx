@@ -3333,14 +3333,13 @@ Abcotronics`;
             }
         };
 
-        const buildStyledEmailHtml = (subjectLine, bodyText, projectLink) => {
+        const buildStyledEmailHtml = (subjectLine, bodyText) => {
             const escapeHtml = (t) => {
                 if (!t) return '';
                 return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
             };
             const bodyHtml = bodyText.split('\n').map((l) => escapeHtml(l)).join('<br>');
             const bannerBlue = '#0369a1';
-            const buttonBlue = '#0ea5e9';
             const boxBg = '#f1f5f9';
             const boxBorder = '#e2e8f0';
             return `
@@ -3357,15 +3356,10 @@ Abcotronics`;
         <strong>Project:</strong> ${escapeHtml(projectName)}
       </div>
     </div>
-    <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+    <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px;">
       <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; font-weight: bold;">Message</div>
       <div style="font-size: 14px; color: #334155; line-height: 1.6;">${bodyHtml}</div>
     </div>
-    ${projectLink ? `
-    <div style="text-align: center;">
-      <a href="${projectLink}" style="display: inline-block; background: ${buttonBlue}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View in Project</a>
-    </div>
-    ` : ''}
   </div>
 </div>`;
         };
@@ -3387,9 +3381,8 @@ Abcotronics`;
             setResult(null);
             try {
                 const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-                const projectLink = project?.id ? `${base.replace(/\/$/, '')}/#/projects/${project.id}` : '';
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
-                const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim(), projectLink);
+                const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim());
                 const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
                     method: 'POST',
                     credentials: 'include',
