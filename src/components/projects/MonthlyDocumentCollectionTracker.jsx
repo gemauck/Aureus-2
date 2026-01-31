@@ -601,7 +601,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
             
             if (sectionsField != null && typeof sectionsField === 'object') {
-                const normalized = normalizeSectionsByYear(sectionsField, urlYearForNormalize);
+                let normalized = normalizeSectionsByYear(sectionsField, urlYearForNormalize);
+                // If URL has docYear but API returned year-keyed data without that year, copy from another year so popup has sections
+                if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
+                    const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
+                    if (otherYears.length > 0) {
+                        const sourceYear = otherYears[0];
+                        const cloned = cloneSectionsArray(normalized[sourceYear]);
+                        normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
+                    }
+                }
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -612,7 +621,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             // 3) Fallback to prop data
             const propSections = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
             if (propSections) {
-                const normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
+                let normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
+                if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
+                    const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
+                    if (otherYears.length > 0) {
+                        const sourceYear = otherYears[0];
+                        const cloned = cloneSectionsArray(normalized[sourceYear]);
+                        normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
+                    }
+                }
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -650,9 +667,39 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
     }, [project?.id, selectedYear, loadData]);
 
+    // Sync selectedYear from URL (docYear) so deep links open with correct year and popup shows comments
+    useEffect(() => {
+        const syncYearFromUrl = () => {
+            if (typeof window === 'undefined') return;
+            const hash = window.location.hash || '';
+            if (!hash.includes('?')) return;
+            const p = new URLSearchParams(hash.split('?')[1] || '');
+            const urlYear = p.get('docYear') || p.get('year');
+            if (!urlYear) return;
+            const y = parseInt(String(urlYear).trim(), 10);
+            if (Number.isNaN(y) || y < 1900 || y > 3000) return;
+            setSelectedYear(prev => (prev !== y ? y : prev));
+        };
+        syncYearFromUrl();
+        window.addEventListener('hashchange', syncYearFromUrl);
+        return () => window.removeEventListener('hashchange', syncYearFromUrl);
+    }, []);
+
     // When data is loaded, if the selected year has no sections but other years do, switch to the latest year that has data
+    // Skip when URL has docYear (deep link) so we don't overwrite the year the user opened from email
     useEffect(() => {
         if (isLoading || !project?.id || !sectionsByYear || typeof sectionsByYear !== 'object') return;
+        if (typeof window !== 'undefined') {
+            const hash = window.location.hash || '';
+            if (hash.includes('?')) {
+                const p = new URLSearchParams(hash.split('?')[1] || '');
+                const urlYear = p.get('docYear') || p.get('year');
+                if (urlYear) {
+                    const y = parseInt(String(urlYear).trim(), 10);
+                    if (!Number.isNaN(y) && y > 1900 && y < 3000) return; // keep selectedYear from URL
+                }
+            }
+        }
         const yearsWithData = Object.keys(sectionsByYear).filter((y) => {
             const arr = sectionsByYear[y];
             return Array.isArray(arr) && arr.length > 0;
