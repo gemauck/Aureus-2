@@ -88,7 +88,7 @@ async function handler(req, res) {
             if (schedule.frequency === 'monthly' && lastSentAt && sameMonth(data.lastSentAt, now.toISOString()))
               continue;
 
-            const subject = (typeof data.subject === 'string' && data.subject.trim()) || 'Document request';
+            const subject = (typeof data.subject === 'string' && data.subject.trim()) || 'Abco Document / Data request';
             const body = typeof data.body === 'string' ? data.body.trim() : '';
             const html = body ? htmlFromBody(body) : '';
             const text = body || '';

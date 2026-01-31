@@ -3355,6 +3355,13 @@ Abcotronics`;
             if (!text || typeof text !== 'string') return text;
             return text.replace(/\n?\s*•\s*Section:\s*[^\n]*/g, '').replace(/\n?\s*Section:\s*[^\n]*/g, '').replace(/\n{3,}/g, '\n\n').trim();
         };
+        // Ensure subject is preceded by "Abco " for document request emails (handles old saved templates)
+        const ensureAbcoSubject = (subjectLine) => {
+            if (!subjectLine || typeof subjectLine !== 'string') return subjectLine;
+            const t = subjectLine.trim();
+            if (t.toLowerCase().startsWith('abco ')) return t;
+            return `Abco ${t}`;
+        };
 
         useEffect(() => {
             const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
@@ -3362,7 +3369,7 @@ Abcotronics`;
             setContactsCc(Array.isArray(s.cc) && s.cc.length > 0 ? s.cc : []);
             const savedSubject = typeof s.subject === 'string' && s.subject.trim() ? s.subject : null;
             const savedBody = typeof s.body === 'string' && s.body.trim() ? s.body : null;
-            setSubject(savedSubject ? withCurrentPeriod(savedSubject) : defaultSubject);
+            setSubject(savedSubject ? ensureAbcoSubject(withCurrentPeriod(savedSubject)) : defaultSubject);
             setBody(savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody);
             setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
             setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
