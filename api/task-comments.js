@@ -3,7 +3,7 @@
 
 import { prisma } from './_lib/prisma.js';
 import { ok, serverError, badRequest, notFound } from './_lib/response.js';
-import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js';
+import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
 
 export default async function handler(req, res) {
   const { method } = req;
@@ -137,18 +137,28 @@ export default async function handler(req, res) {
         author: comment.author
       });
 
-      // Notify participants: task assignee, prior commenters, @mentioned (in-app + email per preferences)
+      // Notify participants: task assignee + all subscribers (prior commenters + previously @mentioned)
       try {
-        const [task, priorComments] = await Promise.all([
-          prisma.task.findUnique({ where: { id: String(taskId) }, select: { assigneeId: true, title: true } }),
-          prisma.taskComment.findMany({ where: { taskId: String(taskId) }, select: { authorId: true } })
+        const [task, priorComments, mentionedIdsResolved] = await Promise.all([
+          prisma.task.findUnique({ where: { id: String(taskId) }, select: { assigneeId: true, title: true, subscribers: true } }),
+          prisma.taskComment.findMany({ where: { taskId: String(taskId) }, select: { authorId: true } }),
+          resolveMentionedUserIds(text)
         ]);
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
+        const taskSubscribers = (() => {
+          try {
+            const raw = task?.subscribers;
+            if (raw == null) return [];
+            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+          } catch (_) { return []; }
+        })();
+        const subscriberIds = [...new Set([String(finalAuthorId), ...(mentionedIdsResolved || []), ...priorAuthorIds, ...taskSubscribers])].filter(Boolean);
         await notifyCommentParticipants({
           commentAuthorId: finalAuthorId,
           commentText: text,
           entityAuthorId: task?.assigneeId || null,
-          priorCommentAuthorIds: priorAuthorIds,
+          priorCommentAuthorIds: subscriberIds,
           authorName: finalAuthor,
           contextTitle: `Task: ${task?.title || taskId}`,
           link: `#/projects/${projectId}?task=${taskId}&commentId=${comment.id}`,

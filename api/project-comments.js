@@ -173,10 +173,15 @@ async function handler(req, res) {
           resolveMentionedUserIds(text)
         ]);
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
-        const subscriberIds = [...new Set([String(finalAuthorId), ...(mentionedIdsResolved || []), ...priorAuthorIds])].filter(Boolean);
         const threadId = (sectionId || weeklySectionId) && (documentId || weeklyDocumentId)
           ? `${projectId}:${sectionId || weeklySectionId}:${documentId || weeklyDocumentId}:${month ?? ''}:${year ?? docYear ?? ''}`
           : String(projectId);
+        const existingSubs = await prisma.commentThreadSubscription.findMany({
+          where: { threadType: 'project', threadId },
+          select: { userId: true }
+        });
+        const existingSubIds = (existingSubs || []).map((s) => s.userId).filter(Boolean);
+        const subscriberIds = [...new Set([String(finalAuthorId), ...(mentionedIdsResolved || []), ...priorAuthorIds, ...existingSubIds])].filter(Boolean);
         await Promise.all(
           subscriberIds.map((uid) =>
             prisma.commentThreadSubscription.upsert({
@@ -225,7 +230,7 @@ async function handler(req, res) {
           commentAuthorId: finalAuthorId,
           commentText: text,
           entityAuthorId: project?.ownerId || null,
-          priorCommentAuthorIds: priorAuthorIds,
+          priorCommentAuthorIds: subscriberList,
           authorName: finalAuthor,
           contextTitle: `Project: ${project?.name || projectId}`,
           link: linkWithComment,

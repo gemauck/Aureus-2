@@ -5,7 +5,7 @@ import { badRequest, ok, serverError, forbidden } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
-import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js'
+import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js'
 
 // Department definitions
 const DEPARTMENTS = [
@@ -789,20 +789,41 @@ async function handler(req, res) {
         }
       })
 
-      // Notify participants: prior commenters, @mentioned (in-app + email per preferences)
+      // Subscribe: comment author + @mentioned + prior commenters get email for all subsequent comments
+      // Notify participants: all subscribers (prior commenters + previously mentioned)
       try {
         const authorId = req.user?.sub || req.user?.id
         const threadWhere = monthlyNotesId ? { monthlyNotesId } : departmentNotesId ? { departmentNotesId } : actionItemId ? { actionItemId } : {}
-        const priorComments = Object.keys(threadWhere).length
-          ? await prisma.meetingComment.findMany({ where: threadWhere, select: { authorId: true } })
-          : []
+        const [priorComments, mentionedIdsResolved] = await Promise.all([
+          Object.keys(threadWhere).length
+            ? prisma.meetingComment.findMany({ where: threadWhere, select: { authorId: true } })
+            : [],
+          resolveMentionedUserIds(content)
+        ])
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))]
+        const threadId = monthlyNotesId || departmentNotesId || actionItemId || 'meeting-notes'
+        const subscriberIds = [...new Set([String(authorId), ...(mentionedIdsResolved || []), ...priorAuthorIds])].filter(Boolean)
+        await Promise.all(
+          subscriberIds.map((uid) =>
+            prisma.commentThreadSubscription.upsert({
+              where: {
+                threadType_threadId_userId: {
+                  threadType: 'meeting-notes',
+                  threadId: String(threadId),
+                  userId: String(uid)
+                }
+              },
+              create: { threadType: 'meeting-notes', threadId: String(threadId), userId: String(uid) },
+              update: {}
+            })
+          )
+        )
         const authorName = comment.author?.name || comment.author?.email || 'Someone'
         await notifyCommentParticipants({
           commentAuthorId: authorId,
           commentText: content,
           entityAuthorId: null,
-          priorCommentAuthorIds: priorAuthorIds,
+          priorCommentAuthorIds: subscriberIds,
           authorName,
           contextTitle: 'Meeting notes',
           link: (link && String(link).trim()) ? link : '#/teams/meeting-notes',

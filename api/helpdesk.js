@@ -4,7 +4,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
-import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js'
+import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js'
 
 // Helper function to parse JSON fields from database responses
 function parseTicketJsonFields(ticket) {
@@ -658,14 +658,32 @@ async function handler(req, res) {
 
         const parsedTicket = parseTicketJsonFields(updatedTicket)
 
-        // Notify participants: ticket creator, assignee, prior commenters, @mentioned (in-app + email per preferences)
+        // Subscribe: comment author + @mentioned + assignee + prior commenters get email for all subsequent comments
+        // Notify participants: ticket creator, assignee, all subscribers (prior commenters + previously mentioned)
         try {
           const priorUserIds = [ticket.assignedToId, ...currentComments.map((c) => c.userId)].filter(Boolean)
+          const mentionedIdsResolved = await resolveMentionedUserIds(body.message.trim())
+          const subscriberIds = [...new Set([String(userId), ...(mentionedIdsResolved || []), ...priorUserIds])].filter(Boolean)
+          await Promise.all(
+            subscriberIds.map((uid) =>
+              prisma.commentThreadSubscription.upsert({
+                where: {
+                  threadType_threadId_userId: {
+                    threadType: 'helpdesk',
+                    threadId: String(id),
+                    userId: String(uid)
+                  }
+                },
+                create: { threadType: 'helpdesk', threadId: String(id), userId: String(uid) },
+                update: {}
+              })
+            )
+          )
           await notifyCommentParticipants({
             commentAuthorId: userId,
             commentText: body.message.trim(),
             entityAuthorId: ticket.createdById || null,
-            priorCommentAuthorIds: priorUserIds,
+            priorCommentAuthorIds: subscriberIds,
             authorName: user.name || user.email || 'Someone',
             contextTitle: `Ticket #${ticket.ticketNumber}: ${ticket.title || 'Helpdesk'}`,
             link: `#/helpdesk/${id}`,
