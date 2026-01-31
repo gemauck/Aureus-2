@@ -2848,6 +2848,49 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             }
             return { name: '', description: '', sections: [] };
         });
+        const templateDocumentDragRef = useRef(null);
+        const [dragOverTemplateDoc, setDragOverTemplateDoc] = useState({ sectionIdx: null, docIdx: null });
+        
+        const handleTemplateDocDragStart = (sectionIdx, docIdx, e) => {
+            templateDocumentDragRef.current = { sectionIdx, docIdx };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', `${sectionIdx}-${docIdx}`);
+            setTimeout(() => { if (e.currentTarget) e.currentTarget.style.opacity = '0.5'; }, 0);
+        };
+        const handleTemplateDocDragEnd = (e) => {
+            if (e.currentTarget) e.currentTarget.style.opacity = '1';
+            templateDocumentDragRef.current = null;
+            setDragOverTemplateDoc({ sectionIdx: null, docIdx: null });
+        };
+        const handleTemplateDocDragOver = (e, sectionIdx, docIdx) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setDragOverTemplateDoc({ sectionIdx, docIdx });
+        };
+        const handleTemplateDocDragLeave = (e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setDragOverTemplateDoc({ sectionIdx: null, docIdx: null });
+        };
+        const handleTemplateDocDrop = (e, sectionIdx, dropDocIdx) => {
+            e.preventDefault();
+            const drag = templateDocumentDragRef.current;
+            if (!drag || drag.sectionIdx !== sectionIdx || drag.docIdx === dropDocIdx) {
+                setDragOverTemplateDoc({ sectionIdx: null, docIdx: null });
+                templateDocumentDragRef.current = null;
+                return;
+            }
+            setFormData(prev => {
+                const newSections = prev.sections.map((sec, i) => {
+                    if (i !== sectionIdx) return sec;
+                    const docs = [...(sec.documents || [])];
+                    const [removed] = docs.splice(drag.docIdx, 1);
+                    docs.splice(dropDocIdx, 0, removed);
+                    return { ...sec, documents: docs };
+                });
+                return { ...prev, sections: newSections };
+            });
+            setDragOverTemplateDoc({ sectionIdx: null, docIdx: null });
+            templateDocumentDragRef.current = null;
+        };
         
         useEffect(() => {
             if (editingTemplate) {
@@ -3091,7 +3134,19 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                         
                                         <div className="space-y-1 mt-1">
                                             {(section.documents || []).map((doc, docIdx) => (
-                                                <div key={docIdx} className="flex items-center gap-1 bg-white p-1.5 rounded border border-gray-200">
+                                                <div
+                                                    key={docIdx}
+                                                    draggable
+                                                    onDragStart={(e) => handleTemplateDocDragStart(idx, docIdx, e)}
+                                                    onDragEnd={handleTemplateDocDragEnd}
+                                                    onDragOver={(e) => handleTemplateDocDragOver(e, idx, docIdx)}
+                                                    onDragLeave={handleTemplateDocDragLeave}
+                                                    onDrop={(e) => handleTemplateDocDrop(e, idx, docIdx)}
+                                                    className={`flex items-center gap-1 bg-white p-1.5 rounded border transition-colors cursor-grab active:cursor-grabbing ${dragOverTemplateDoc.sectionIdx === idx && dragOverTemplateDoc.docIdx === docIdx ? 'border-primary-300 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200'}`}
+                                                >
+                                                    <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 flex-shrink-0" title="Drag to reorder">
+                                                        <i className="fas fa-grip-vertical text-[9px]"></i>
+                                                    </span>
                                                     <input
                                                         type="text"
                                                         value={doc.name}
@@ -3908,7 +3963,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
+                                    <tbody
+                                        className="bg-white divide-y divide-gray-200"
+                                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                    >
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={14} className="px-8 py-12 text-center">
