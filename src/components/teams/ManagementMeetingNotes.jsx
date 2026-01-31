@@ -3675,7 +3675,14 @@ const ManagementMeetingNotes = () => {
                   commentContext.type === 'department' ? 'departmentNotesId' : 
                   'actionItemId']: commentContext.id
             };
-            
+            // Deep link for email/in-app notifications (same format as mention contextLink)
+            if (commentContext.type === 'department') {
+                commentData.link = `#/teams?month=${selectedMonth || ''}&week=${selectedWeek || ''}&department=${commentContext.departmentId || ''}`;
+            } else if (commentContext.type === 'monthly') {
+                commentData.link = `#/teams?month=${selectedMonth || ''}`;
+            } else {
+                commentData.link = '#/teams/meeting-notes';
+            }
             const response = await window.DatabaseAPI.createComment(commentData);
             
             // Get the actual comment from response

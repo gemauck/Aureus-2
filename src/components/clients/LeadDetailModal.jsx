@@ -2684,13 +2684,14 @@ const LeadDetailModal = ({
         if (window.MentionHelper && window.MentionHelper.hasMentions(newComment) && allUsers.length) {
             try {
                 const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
-                const contextLink = `#/leads/${formData.id}`;
+                const contextLink = `#/leads/${formData.id}?tab=notes`;
                 await window.MentionHelper.processMentions(
                     newComment,
                     contextTitle,
                     contextLink,
                     currentUser.name || currentUser.email || 'Unknown',
-                    allUsers
+                    allUsers,
+                    { leadId: formData.id }
                 );
             } catch (error) {
                 console.error('❌ Error processing @mentions:', error);

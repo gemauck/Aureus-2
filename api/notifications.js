@@ -61,12 +61,18 @@ export async function createNotificationForUser(targetUserId, type, title, messa
             validLink = (validLink.startsWith('#') ? '' : (validLink.split('#')[0] || '')) + hashPart.slice(0, qIdx + 1) + params.toString();
         }
     }
+    // Prefer frontend-supplied link for client/lead/helpdesk/task/teams deep links (same logic as tracker links)
+    const linkIsEntityDeepLink = validLink && String(validLink).trim() && (
+        validLink.includes('#/clients/') || validLink.includes('#/leads/') ||
+        validLink.includes('#/helpdesk/') || validLink.includes('#/teams') ||
+        (validLink.includes('#/projects/') && validLink.includes('task='))
+    );
     // Otherwise build from metadata when we have tracker params (or no link)
     const hasTrackerMetadata = metadataObj.projectId && (
         metadataObj.sectionId || metadataObj.documentId || metadataObj.commentId || metadataObj.month != null ||
         metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.week != null || metadataObj.weekNumber != null
     );
-    if (!linkIsFullTrackerDeepLink && (hasTrackerMetadata || !validLink || !validLink.trim())) {
+    if (!linkIsFullTrackerDeepLink && !linkIsEntityDeepLink && (hasTrackerMetadata || !validLink || !validLink.trim())) {
         try {
             const docYearVal = metadataObj.docYear != null ? metadataObj.docYear : metadataObj.year;
             const weekLabelFromMeta = metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;

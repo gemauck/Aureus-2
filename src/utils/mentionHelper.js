@@ -185,6 +185,16 @@ const MentionHelper = {
                 if (projectInfo.source) {
                     metadata.source = projectInfo.source;
                 }
+                // Client/lead/helpdesk so API preserves or rebuilds entity deep link
+                if (projectInfo.clientId) {
+                    metadata.clientId = projectInfo.clientId;
+                }
+                if (projectInfo.leadId) {
+                    metadata.leadId = projectInfo.leadId;
+                }
+                if (projectInfo.ticketId) {
+                    metadata.ticketId = projectInfo.ticketId;
+                }
             }
             
             // Generate entity URL if we have entity information
@@ -324,10 +334,13 @@ const MentionHelper = {
                 }
             }
             
-            // CRITICAL: For tracker deep links, email must use the exact contextLink (section/document/cell from the UI)
-            const finalLink = (contextLink && (contextLink.includes('docSectionId=') && contextLink.includes('docDocumentId=')))
-                ? contextLink
-                : entityUrl;
+            // CRITICAL: Use contextLink when it's a full deep link (tracker or entity) so email and in-app open the same place
+            const contextLinkIsTracker = contextLink && contextLink.includes('docSectionId=') && contextLink.includes('docDocumentId=');
+            const contextLinkIsEntity = contextLink && (
+                contextLink.includes('#/clients/') || contextLink.includes('#/leads/') ||
+                contextLink.includes('#/helpdesk/') || (contextLink.includes('#/projects/') && contextLink.includes('task='))
+            );
+            const finalLink = (contextLink && (contextLinkIsTracker || contextLinkIsEntity)) ? contextLink : entityUrl;
             console.log('📧 MentionHelper: Final notification payload link:', finalLink, 'Metadata:', metadata);
             
             const notificationPayload = {

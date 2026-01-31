@@ -764,7 +764,7 @@ async function handler(req, res) {
   // Create comment
   if (req.method === 'POST' && action === 'comment') {
     try {
-      const { monthlyNotesId, departmentNotesId, actionItemId, content } = req.body
+      const { monthlyNotesId, departmentNotesId, actionItemId, content, link } = req.body
 
       if (!content) {
         return badRequest(res, 'content is required')
@@ -805,7 +805,7 @@ async function handler(req, res) {
           priorCommentAuthorIds: priorAuthorIds,
           authorName,
           contextTitle: 'Meeting notes',
-          link: '#/teams/meeting-notes',
+          link: (link && String(link).trim()) ? link : '#/teams/meeting-notes',
           metadata: { monthlyNotesId, departmentNotesId, actionItemId, commentId: comment.id, commentText: content }
         })
       } catch (notifyErr) {

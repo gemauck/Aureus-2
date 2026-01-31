@@ -2042,8 +2042,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 reordered.splice(dropIndex, 0, removed);
                 return reordered;
             });
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            lastSavedDataRef.current = null;
+            saveToDatabase();
         }
         setDragOverIndex(null);
+    };
+
+    const handleSectionDragOver = (e, sectionIndex) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverIndex(sectionIndex);
+    };
+
+    const handleSectionDragLeave = (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setDragOverIndex(null);
     };
     
     // ============================================================
@@ -4845,11 +4861,12 @@ Abcotronics`;
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                            className={`bg-white rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragOverIndex === sectionIndex ? 'ring-2 ring-primary-500 ring-offset-2 border-primary-300' : 'border-gray-200'}`}
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
-                            onDragOver={(e) => e.preventDefault()}
+                            onDragOver={(e) => handleSectionDragOver(e, sectionIndex)}
+                            onDragLeave={handleSectionDragLeave}
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}

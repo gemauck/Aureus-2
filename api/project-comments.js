@@ -6,7 +6,7 @@ import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
-import { notifyCommentParticipants } from './_lib/notifyCommentParticipants.js';
+import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
 
 async function handler(req, res) {
   const { method } = req;
@@ -161,22 +161,44 @@ async function handler(req, res) {
         author: comment.author
       });
 
-      // Notify participants: project owner, prior commenters, @mentioned (in-app + email per preferences)
+      // Subscribe: comment author + @mentioned + prior commenters get email for all subsequent comments
+      // Notify participants: project owner + all subscribers (prior commenters + previously mentioned)
       try {
-        const [project, priorComments] = await Promise.all([
+        const [project, priorComments, mentionedIdsResolved] = await Promise.all([
           prisma.project.findUnique({ where: { id: String(projectId) }, select: { ownerId: true, name: true } }),
           prisma.projectComment.findMany({
             where: { projectId: String(projectId) },
             select: { authorId: true }
-          })
+          }),
+          resolveMentionedUserIds(text)
         ]);
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
+        const subscriberIds = [...new Set([String(finalAuthorId), ...(mentionedIdsResolved || []), ...priorAuthorIds])].filter(Boolean);
+        const threadId = (sectionId || weeklySectionId) && (documentId || weeklyDocumentId)
+          ? `${projectId}:${sectionId || weeklySectionId}:${documentId || weeklyDocumentId}:${month ?? ''}:${year ?? docYear ?? ''}`
+          : String(projectId);
+        await Promise.all(
+          subscriberIds.map((uid) =>
+            prisma.commentThreadSubscription.upsert({
+              where: {
+                threadType_threadId_userId: {
+                  threadType: 'project',
+                  threadId,
+                  userId: String(uid)
+                }
+              },
+              create: { threadType: 'project', threadId, userId: String(uid) },
+              update: {}
+            })
+          )
+        );
+        const subscriberList = subscriberIds;
         const meta = {
           projectId,
           commentId: comment.id,
           commentText: text,
-          sectionId: sectionId || undefined,
-          documentId: documentId || undefined,
+          sectionId: sectionId || weeklySectionId || undefined,
+          documentId: documentId || weeklyDocumentId || undefined,
           month: month !== undefined && month !== null ? month : undefined,
           year: year !== undefined && year !== null ? year : undefined,
           docYear: docYear !== undefined && docYear !== null ? docYear : undefined,
@@ -186,14 +208,19 @@ async function handler(req, res) {
           docWeek: docWeek !== undefined && docWeek !== null ? docWeek : undefined,
           weekNumber: weekNumber !== undefined && weekNumber !== null ? weekNumber : undefined
         };
-        const linkWithComment = `#/projects/${projectId}?commentId=${encodeURIComponent(comment.id)}` +
-          (sectionId ? `&docSectionId=${encodeURIComponent(sectionId)}` : '') +
-          (documentId ? `&docDocumentId=${encodeURIComponent(documentId)}` : '') +
-          (month != null ? `&docMonth=${encodeURIComponent(month)}` : '') +
-          ((year != null || docYear != null) ? `&docYear=${encodeURIComponent(year ?? docYear)}` : '') +
-          (source === 'monthlyFMSReview' ? '&tab=monthlyFMSReview' : '') +
-          (weeklySectionId ? `&weeklySectionId=${encodeURIComponent(weeklySectionId)}` : '') +
-          (docWeek != null ? `&docWeek=${encodeURIComponent(docWeek)}` : '');
+        // Build one deep link (same format as trackers): docSectionId, docDocumentId, docMonth/docWeek, docYear, tab
+        const sid = sectionId || weeklySectionId;
+        const did = documentId || weeklyDocumentId;
+        const yearVal = year ?? docYear;
+        const weekVal = docWeek ?? weekNumber;
+        const linkParts = [`commentId=${encodeURIComponent(comment.id)}`];
+        if (sid) linkParts.push(`docSectionId=${encodeURIComponent(sid)}`);
+        if (did) linkParts.push(`docDocumentId=${encodeURIComponent(did)}`);
+        if (month != null) linkParts.push(`docMonth=${encodeURIComponent(month)}`);
+        if (weekVal != null) linkParts.push(`docWeek=${encodeURIComponent(weekVal)}`);
+        if (yearVal != null) linkParts.push(`docYear=${encodeURIComponent(yearVal)}`);
+        if (source === 'monthlyFMSReview') linkParts.push('tab=monthlyFMSReview');
+        const linkWithComment = `#/projects/${projectId}?${linkParts.join('&')}`;
         await notifyCommentParticipants({
           commentAuthorId: finalAuthorId,
           commentText: text,

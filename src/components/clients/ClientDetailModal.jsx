@@ -3018,13 +3018,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (window.MentionHelper && window.MentionHelper.hasMentions(newComment) && allUsers.length) {
             try {
                 const contextTitle = `${entityLabel}: ${formData.name || 'Unknown'}`;
-                const contextLink = isLead ? `#/leads/${formData.id}` : `#/clients/${formData.id}`;
+                const contextLink = (isLead ? `#/leads/${formData.id}` : `#/clients/${formData.id}`) + '?tab=notes';
                 await window.MentionHelper.processMentions(
                     newComment,
                     contextTitle,
                     contextLink,
                     currentUser.name || currentUser.email || 'Unknown',
-                    allUsers
+                    allUsers,
+                    isLead ? { leadId: formData.id } : { clientId: formData.id }
                 );
             } catch (error) {
                 console.error('❌ Error processing @mentions:', error);

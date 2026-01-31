@@ -1309,16 +1309,7 @@ const TaskDetailModal = ({
                     );
                     
                     if (assigneeUser && assigneeUser.id !== currentUser.id && !mentionedUsers.find(m => m.id === assigneeUser.id)) {
-                        // Generate entity URL for the task (nested under project)
-                        let entityUrl = taskLink; // Fallback to old format
-                        if (window.EntityUrl && taskId && project?.id) {
-                            entityUrl = window.EntityUrl.getEntityUrl('task', taskId, {
-                                parentId: project.id,
-                                parentType: 'project',
-                                tab: 'comments'
-                            });
-                        }
-                        
+                        // Use taskLink (includes commentId when replying) so email and in-app open the same comment
                         await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -1326,7 +1317,7 @@ const TaskDetailModal = ({
                                 type: 'comment',
                                 title: `New comment on task: ${taskTitle}`,
                                 message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                link: entityUrl,
+                                link: taskLink,
                                 metadata: {
                                     taskId: taskId,
                                     taskTitle: taskTitle,
@@ -1358,14 +1349,7 @@ const TaskDetailModal = ({
                     const subscriber = users.find(u => u.id === subscriberId);
                     if (subscriber) {
                         try {
-                            // Generate entity URL for the task
-                            let entityUrl = taskLink; // Fallback to old format
-                            if (window.EntityUrl && taskId) {
-                                entityUrl = window.EntityUrl.getEntityUrl('task', taskId, {
-                                    tab: 'comments'
-                                });
-                            }
-                            
+                            // Use taskLink (includes commentId when replying) so email and in-app open the same comment
                             await window.DatabaseAPI.makeRequest('/notifications', {
                                 method: 'POST',
                                 body: JSON.stringify({
@@ -1373,7 +1357,7 @@ const TaskDetailModal = ({
                                     type: 'comment',
                                     title: `New comment on task: ${taskTitle}`,
                                     message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                    link: entityUrl,
+                                    link: taskLink,
                                     metadata: {
                                         taskId: taskId,
                                         taskTitle: taskTitle,
