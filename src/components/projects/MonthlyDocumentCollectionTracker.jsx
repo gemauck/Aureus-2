@@ -3333,6 +3333,43 @@ Abcotronics`;
             }
         };
 
+        const buildStyledEmailHtml = (subjectLine, bodyText, projectLink) => {
+            const escapeHtml = (t) => {
+                if (!t) return '';
+                return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            };
+            const bodyHtml = bodyText.split('\n').map((l) => escapeHtml(l)).join('<br>');
+            const bannerBlue = '#0369a1';
+            const buttonBlue = '#0ea5e9';
+            const boxBg = '#f1f5f9';
+            const boxBorder = '#e2e8f0';
+            return `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <div style="background: ${bannerBlue}; padding: 20px; border-radius: 8px 8px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 18px; font-weight: bold;">${escapeHtml(subjectLine)}</h1>
+  </div>
+  <div style="padding: 20px; background: #f8fafc;">
+    <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+      <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; font-weight: bold;">Context</div>
+      <div style="font-size: 14px; color: #334155; line-height: 1.6;">
+        <strong>Document:</strong> ${escapeHtml(docName)}<br>
+        <strong>Period:</strong> ${escapeHtml(currentPeriodText)}<br>
+        <strong>Project:</strong> ${escapeHtml(projectName)}
+      </div>
+    </div>
+    <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+      <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; font-weight: bold;">Message</div>
+      <div style="font-size: 14px; color: #334155; line-height: 1.6;">${bodyHtml}</div>
+    </div>
+    ${projectLink ? `
+    <div style="text-align: center;">
+      <a href="${projectLink}" style="display: inline-block; background: ${buttonBlue}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">View in Project</a>
+    </div>
+    ` : ''}
+  </div>
+</div>`;
+        };
+
         const handleSend = async () => {
             if (contacts.length === 0) {
                 alert('Please add at least one recipient.');
@@ -3350,7 +3387,9 @@ Abcotronics`;
             setResult(null);
             try {
                 const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                const projectLink = project?.id ? `${base.replace(/\/$/, '')}/#/projects/${project.id}` : '';
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+                const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim(), projectLink);
                 const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
                     method: 'POST',
                     credentials: 'include',
@@ -3363,7 +3402,7 @@ Abcotronics`;
                         to: contacts,
                         cc: contactsCc.length > 0 ? contactsCc : undefined,
                         subject: subject.trim(),
-                        html: body.trim().split('\n').map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')).join('<br>'),
+                        html: htmlPayload,
                         text: body.trim()
                     })
                 });
@@ -4178,7 +4217,53 @@ Abcotronics`;
                 const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-                const comments = doc ? getDocumentComments(doc, month) : [];
+                let comments = doc ? getDocumentComments(doc, month) : [];
+                // Deep link fallback: if URL has commentId but comments are empty, find comment by id in current doc keys, then in any year's same section/doc (fixes empty box when year key or data from different year)
+                let urlCommentId = null;
+                if (typeof window !== 'undefined' && comments.length === 0) {
+                    const hash = window.location.hash || '';
+                    const search = window.location.search || '';
+                    if (hash.includes('?')) {
+                        const p = new URLSearchParams(hash.split('?')[1] || '');
+                        urlCommentId = p.get('commentId');
+                    }
+                    if (!urlCommentId && search) {
+                        const p = new URLSearchParams(search);
+                        urlCommentId = p.get('commentId');
+                    }
+                }
+                if (comments.length === 0 && urlCommentId) {
+                    const idStr = String(urlCommentId);
+                    const idNum = parseInt(urlCommentId, 10);
+                    const matchId = (c) => c && (String(c.id) === idStr || c.id === idNum || c.id === urlCommentId);
+                    if (doc?.comments && typeof doc.comments === 'object') {
+                        for (const key of Object.keys(doc.comments)) {
+                            const arr = Array.isArray(doc.comments[key]) ? doc.comments[key] : [];
+                            const found = arr.find(matchId);
+                            if (found) {
+                                comments = [found];
+                                break;
+                            }
+                        }
+                    }
+                    if (comments.length === 0 && sectionsByYear && typeof sectionsByYear === 'object') {
+                        for (const year of Object.keys(sectionsByYear)) {
+                            const secs = sectionsByYear[year] || [];
+                            const sec = secs.find(s => String(s.id) === String(rawSectionId));
+                            const d = sec?.documents?.find(dd => String(dd.id) === String(rawDocumentId));
+                            if (!d?.comments || typeof d.comments !== 'object') continue;
+                            for (const key of Object.keys(d.comments)) {
+                                const arr = Array.isArray(d.comments[key]) ? d.comments[key] : [];
+                                const found = arr.find(matchId);
+                                if (found) {
+                                    comments = [found];
+                                    break;
+                                }
+                            }
+                            if (comments.length > 0) break;
+                        }
+                    }
+                }
                 
                 return (
                     <>
