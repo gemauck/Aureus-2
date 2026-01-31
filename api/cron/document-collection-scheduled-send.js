@@ -92,23 +92,29 @@ async function handler(req, res) {
             const body = typeof data.body === 'string' ? data.body.trim() : '';
             const html = body ? htmlFromBody(body) : '';
             const text = body || '';
+            const cc = Array.isArray(data.cc) ? data.cc.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())) : [];
 
-            for (const to of recipients) {
-              if (!to || typeof to !== 'string') continue;
-              const email = to.trim();
-              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
-              try {
-                await sendEmail({ to: email, subject, html, text });
-                sent++;
-              } catch (err) {
+            const validTo = recipients.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()));
+            if (validTo.length === 0) continue;
+            try {
+              await sendEmail({
+                to: validTo,
+                cc: cc.length > 0 ? cc : undefined,
+                subject,
+                html,
+                text
+              });
+              sent += validTo.length + cc.length;
+            } catch (err) {
+              validTo.forEach((email) => {
                 errors.push({
                   projectId: project.id,
                   projectName: project.name,
                   monthKey,
-                  email,
+                  email: email.trim(),
                   error: err.message || 'Send failed'
                 });
-              }
+              });
             }
 
             data.lastSentAt = now.toISOString();

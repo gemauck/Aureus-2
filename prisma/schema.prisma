@@ -631,6 +631,7 @@ model Task {
   assignee       String    @default("") // Denormalized assignee name
   dueDate        DateTime?
   listId         Int? // Task list/column ID (for Kanban)
+  order          Int   @default(0) // Display order within list (for reordering)
   estimatedHours Float?
   actualHours    Float?
   blockedBy      String    @default("")

@@ -1263,17 +1263,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return doc.emailRequestByMonth?.[monthKey] || {};
     };
 
-    const saveEmailRequestForCell = (sectionId, documentId, month, data) => {
-        const monthKey = getMonthKey(month, selectedYear);
+    // Save email request template for this document across all months (selected year).
+    // Preserves existing lastSentAt per month so scheduled sends are not reset.
+    const saveEmailRequestForCell = (sectionId, documentId, _month, data) => {
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const byMonthTemplate = { recipients: data.recipients, cc: data.cc, subject: data.subject, body: data.body, schedule: data.schedule };
         const updated = currentYearSections.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
             return {
                 ...section,
                 documents: (section.documents || []).map(doc => {
                     if (String(doc.id) !== String(documentId)) return doc;
-                    const byMonth = { ...(doc.emailRequestByMonth || {}), [monthKey]: data };
+                    const existingByMonth = doc.emailRequestByMonth || {};
+                    const byMonth = {};
+                    months.forEach((m) => {
+                        const monthKey = getMonthKey(m, selectedYear);
+                        const existing = existingByMonth[monthKey];
+                        byMonth[monthKey] = { ...byMonthTemplate, ...(existing && existing.lastSentAt != null ? { lastSentAt: existing.lastSentAt } : {}) };
+                    });
                     return { ...doc, emailRequestByMonth: byMonth };
                 })
             };
@@ -3243,7 +3251,9 @@ Kind regards,
 Abcotronics`;
 
         const [contacts, setContacts] = useState([]);
+        const [contactsCc, setContactsCc] = useState([]);
         const [newContact, setNewContact] = useState('');
+        const [newContactCc, setNewContactCc] = useState('');
         const [subject, setSubject] = useState(defaultSubject);
         const [body, setBody] = useState(defaultBody);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
@@ -3255,11 +3265,13 @@ Abcotronics`;
         useEffect(() => {
             const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
             setContacts(Array.isArray(s.recipients) && s.recipients.length > 0 ? s.recipients : []);
+            setContactsCc(Array.isArray(s.cc) && s.cc.length > 0 ? s.cc : []);
             setSubject(typeof s.subject === 'string' && s.subject.trim() ? s.subject : defaultSubject);
             setBody(typeof s.body === 'string' && s.body.trim() ? s.body : defaultBody);
             setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
             setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
             setNewContact('');
+            setNewContactCc('');
             setResult(null);
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
@@ -3272,6 +3284,14 @@ Abcotronics`;
             setNewContact('');
         };
         const removeContact = (email) => setContacts((c) => c.filter((e) => e !== email));
+        const addContactCc = () => {
+            const t = newContactCc.trim();
+            if (!t || !emailRe.test(t)) return;
+            if (contactsCc.includes(t)) return;
+            setContactsCc((c) => [...c, t]);
+            setNewContactCc('');
+        };
+        const removeContactCc = (email) => setContactsCc((c) => c.filter((e) => e !== email));
 
         const handleSaveTemplate = () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
@@ -3279,6 +3299,7 @@ Abcotronics`;
             try {
                 saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, {
                     recipients: [...contacts],
+                    cc: [...contactsCc],
                     subject: subject.trim() || defaultSubject,
                     body: body.trim() || defaultBody,
                     schedule: {
@@ -3321,6 +3342,7 @@ Abcotronics`;
                     },
                     body: JSON.stringify({
                         to: contacts,
+                        cc: contactsCc.length > 0 ? contactsCc : undefined,
                         subject: subject.trim(),
                         html: body.trim().split('\n').map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')).join('<br>'),
                         text: body.trim()
@@ -3416,6 +3438,52 @@ Abcotronics`;
                             )}
                         </div>
 
+                        {/* CC */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-3">
+                                <i className="fas fa-copy text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">CC (optional)</label>
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="email"
+                                    value={newContactCc}
+                                    onChange={(e) => setNewContactCc(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addContactCc(); } }}
+                                    placeholder="cc@example.com"
+                                    className="flex-1 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 transition-shadow"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={addContactCc}
+                                    className="px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-[#0369a1] to-[#0ea5e9] rounded-xl hover:opacity-90 shadow-md hover:shadow-lg transition-all shrink-0"
+                                >
+                                    <i className="fas fa-plus mr-1.5"></i>Add
+                                </button>
+                            </div>
+                            {contactsCc.length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {contactsCc.map((email) => (
+                                        <span
+                                            key={email}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#f0fdf4] text-[#047857] border border-[#bbf7d0]"
+                                        >
+                                            <i className="fas fa-copy text-[10px] opacity-70"></i>
+                                            <span className="truncate max-w-[180px]">{email}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeContactCc(email)}
+                                                className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-[#0ea5e9] hover:text-white text-[#047857] transition-colors ml-0.5"
+                                                aria-label={`Remove CC ${email}`}
+                                            >
+                                                <i className="fas fa-times text-[10px]"></i>
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         {/* Subject */}
                         <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
                             <div className="flex items-center gap-2 mb-2">
@@ -3485,7 +3553,7 @@ Abcotronics`;
                         {result?.saved && (
                             <div className="flex items-start gap-3 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
                                 <i className="fas fa-check-circle text-emerald-500 mt-0.5 shrink-0"></i>
-                                <p className="text-sm text-emerald-700">Saved for this document &amp; month. Recipients and email will load next time.</p>
+                                <p className="text-sm text-emerald-700">Saved for this document (all months). Recipients, CC, and email will load next time.</p>
                             </div>
                         )}
                         {result?.error && (
@@ -3529,7 +3597,7 @@ Abcotronics`;
                             disabled={savingTemplate || contacts.length === 0}
                             className="px-4 py-2.5 text-sm font-medium text-[#0369a1] bg-[#e0f2fe] hover:bg-[#bae6fd] rounded-xl transition-colors border border-[#7dd3fc]"
                         >
-                            {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document &amp; month</>}
+                            {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
                         </button>
                         <button
                             type="button"

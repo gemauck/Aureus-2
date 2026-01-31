@@ -29,12 +29,16 @@ async function sendViaResendAPI(mailOptions, apiKey) {
         }
     }
     
-    // Resend API payload structure
+    // Resend API payload structure (to/cc can be string or array)
+    const toList = Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to];
     const payload = {
         from: `${fromName} <${fromEmail}>`,
-        to: [mailOptions.to],
+        to: toList,
         subject: mailOptions.subject
     };
+    if (mailOptions.cc && (Array.isArray(mailOptions.cc) ? mailOptions.cc.length : mailOptions.cc)) {
+        payload.cc = Array.isArray(mailOptions.cc) ? mailOptions.cc : [mailOptions.cc];
+    }
     
     // Add reply_to if provided
     if (mailOptions.replyTo) {
@@ -122,11 +126,17 @@ async function sendViaSendGridAPI(mailOptions, apiKey) {
         }
     }
     
+    const toList = Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to];
+    const personalization = {
+        to: toList.map((e) => ({ email: typeof e === 'string' ? e : e.email || e })),
+        subject: mailOptions.subject
+    };
+    if (mailOptions.cc && (Array.isArray(mailOptions.cc) ? mailOptions.cc.length : mailOptions.cc)) {
+        const ccList = Array.isArray(mailOptions.cc) ? mailOptions.cc : [mailOptions.cc];
+        personalization.cc = ccList.map((e) => ({ email: typeof e === 'string' ? e : e.email || e }));
+    }
     const payload = {
-        personalizations: [{
-            to: [{ email: mailOptions.to }],
-            subject: mailOptions.subject
-        }],
+        personalizations: [personalization],
         from: { email: fromEmail, name: fromName },
         content: []
     };
@@ -316,13 +326,17 @@ function checkEmailConfiguration() {
 /**
  * Send a simple email (raw subject/body). Used for document collection requests,
  * leave notifications, and other custom user-drafted emails.
- * @param {{ to: string, subject: string, html?: string, text?: string, replyTo?: string, fromName?: string }} opts
+ * @param {{ to: string|string[], cc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string }} opts
  * @returns {{ success: boolean, messageId: string }}
  */
 export async function sendEmail(opts) {
-    const { to, subject, html, text, replyTo, fromName } = opts;
+    const { to, cc, subject, html, text, replyTo, fromName } = opts;
     if (!to || !subject) {
         throw new Error('sendEmail requires "to" and "subject"');
+    }
+    const toNormalized = Array.isArray(to) ? to : [to];
+    if (toNormalized.length === 0) {
+        throw new Error('sendEmail requires at least one "to" address');
     }
     const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
     const fromDisplayName = fromName && typeof fromName === 'string' ? fromName : 'Abcotronics';
@@ -331,12 +345,15 @@ export async function sendEmail(opts) {
     const textContent = text || (html ? html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n') : '');
     const mailOptions = {
         from: fromAddress,
-        to,
+        to: toNormalized.length === 1 ? toNormalized[0] : toNormalized,
         subject,
         ...(replyTo && { replyTo }),
         ...(html && { html }),
         ...(textContent && { text: textContent })
     };
+    if (cc && (Array.isArray(cc) ? cc.length : cc)) {
+        mailOptions.cc = Array.isArray(cc) ? cc : [cc];
+    }
     if (fromName && typeof fromName === 'string') {
         mailOptions.fromName = fromName;
     }

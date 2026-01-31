@@ -8,6 +8,8 @@ import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMo
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
 let projectColumnsMigrated = false;
+/** Run Task order column migration at most once per process. */
+let taskOrderColumnMigrated = false;
 
 /**
  * Safely load project with all relations. Uses step-by-step loading so a missing
@@ -60,7 +62,7 @@ async function loadProjectWithRelations(projectId) {
   const [tasksResult, documentSectionsResult, weeklyFMSResult, monthlyFMSResult] = await Promise.all([
     prisma.task.findMany({
       where: { projectId, parentTaskId: null },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       include: {
         subtasks: { orderBy: { createdAt: 'asc' } },
         assigneeUser: { select: { id: true, name: true, email: true } }
@@ -171,6 +173,16 @@ async function handler(req, res) {
             }
           }
         }
+        if (!taskOrderColumnMigrated) {
+          try {
+            await prisma.$executeRaw`ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "order" INTEGER NOT NULL DEFAULT 0;`;
+            taskOrderColumnMigrated = true;
+          } catch (migrationError) {
+            if (!migrationError.message?.includes('already exists') && !migrationError.message?.includes('duplicate column')) {
+              console.log('⚠️ Task order column migration (non-critical):', migrationError.message?.substring(0, 100));
+            }
+          }
+        }
 
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();
@@ -211,7 +223,7 @@ async function handler(req, res) {
             prisma.project.findUnique({ where: { id } }),
             prisma.task.findMany({
               where: { projectId: id, parentTaskId: null },
-              orderBy: { createdAt: 'asc' },
+              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
               include: {
                 subtasks: { orderBy: { createdAt: 'asc' } },
                 assigneeUser: { select: { id: true, name: true, email: true } }

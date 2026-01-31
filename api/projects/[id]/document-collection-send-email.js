@@ -30,6 +30,7 @@ async function handler(req, res) {
   try {
     const body = await parseJsonBody(req)
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
+    const cc = Array.isArray(body.cc) ? body.cc : (typeof body.cc === 'string' ? [body.cc] : [])
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
@@ -44,6 +45,7 @@ async function handler(req, res) {
     if (validTo.length === 0) {
       return badRequest(res, 'At least one valid recipient email is required')
     }
+    const validCc = cc.filter((e) => isValidEmail(e))
 
     const user = req.user || {}
     const userName = user.name || user.email || ''
@@ -64,20 +66,21 @@ async function handler(req, res) {
     const sent = []
     const failed = []
 
-    for (const email of validTo) {
-      try {
-        await sendEmail({
-          to: email.trim(),
-          subject,
-          html: html || undefined,
-          text: text || undefined,
-          replyTo,
-          fromName
-        })
-        sent.push(email.trim())
-      } catch (err) {
-        failed.push({ email: email.trim(), error: err.message || 'Send failed' })
-      }
+    try {
+      await sendEmail({
+        to: validTo.map((e) => e.trim()),
+        cc: validCc.length > 0 ? validCc.map((e) => e.trim()) : undefined,
+        subject,
+        html: html || undefined,
+        text: text || undefined,
+        replyTo,
+        fromName
+      })
+      validTo.forEach((e) => sent.push(e.trim()))
+      validCc.forEach((e) => sent.push(e.trim()))
+    } catch (err) {
+      validTo.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
+      validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
     return ok(res, { sent, failed })

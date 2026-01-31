@@ -4318,6 +4318,14 @@ function initializeProjectDetail() {
                     })
                     .filter(Boolean);
 
+                // Sort by order then createdAt so reordering is respected
+                tasksForList.sort((a, b) => {
+                    const oa = a.task.order ?? 999999;
+                    const ob = b.task.order ?? 999999;
+                    if (oa !== ob) return oa - ob;
+                    return new Date(a.task.createdAt || 0).getTime() - new Date(b.task.createdAt || 0).getTime();
+                });
+
                 return {
                     ...list,
                     tasks: tasksForList
@@ -4357,9 +4365,16 @@ function initializeProjectDetail() {
                 .filter(Boolean);
             
             if (unmatchedTasksForList.length > 0) {
+                const merged = [...targetList.tasks, ...unmatchedTasksForList];
+                merged.sort((a, b) => {
+                    const oa = a.task.order ?? 999999;
+                    const ob = b.task.order ?? 999999;
+                    if (oa !== ob) return oa - ob;
+                    return new Date(a.task.createdAt || 0).getTime() - new Date(b.task.createdAt || 0).getTime();
+                });
                 result[targetListIndex] = {
                     ...targetList,
-                    tasks: [...targetList.tasks, ...unmatchedTasksForList]
+                    tasks: merged
                 };
                 if (TASK_LIST_DEBUG) console.warn(`ProjectDetail: ${unmatchedTasksForList.length} task(s) without matching listId assigned to "${targetList.name}" list. Task IDs:`, unmatchedTasksForList.map(item => item.task.id));
             }
@@ -6535,6 +6550,69 @@ function initializeProjectDetail() {
         }
     }, [taskLists, project?.id]);
 
+    // Reorder tasks within a list (swap order with previous/next task)
+    const handleMoveTaskUp = useCallback(async (list, taskIndex) => {
+        if (taskIndex <= 0 || !list?.tasks?.length) return;
+        const items = list.tasks;
+        const current = items[taskIndex];
+        const prev = items[taskIndex - 1];
+        if (!current?.task || !prev?.task) return;
+        const currentOrder = current.task.order ?? taskIndex;
+        const prevOrder = prev.task.order ?? taskIndex - 1;
+        const prevTasks = tasksRef.current || [];
+        const newTasks = prevTasks.map(t => {
+            if (t.id === current.task.id) return { ...t, order: prevOrder };
+            if (t.id === prev.task.id) return { ...t, order: currentOrder };
+            return t;
+        });
+        setTasks(newTasks);
+        tasksRef.current = newTasks;
+        if (window.DatabaseAPI?.makeRequest) {
+            try {
+                await Promise.all([
+                    window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(current.task.id)}`, { method: 'PATCH', body: JSON.stringify({ order: prevOrder }) }),
+                    window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(prev.task.id)}`, { method: 'PATCH', body: JSON.stringify({ order: currentOrder }) })
+                ]);
+            } catch (err) {
+                console.error('Failed to save task order:', err);
+                setTasks(prevTasks);
+                tasksRef.current = prevTasks;
+                alert('Failed to save order. Please try again.');
+            }
+        }
+    }, []);
+
+    const handleMoveTaskDown = useCallback(async (list, taskIndex) => {
+        if (taskIndex < 0 || !list?.tasks?.length || taskIndex >= list.tasks.length - 1) return;
+        const items = list.tasks;
+        const current = items[taskIndex];
+        const next = items[taskIndex + 1];
+        if (!current?.task || !next?.task) return;
+        const currentOrder = current.task.order ?? taskIndex;
+        const nextOrder = next.task.order ?? taskIndex + 1;
+        const prevTasks = tasksRef.current || [];
+        const newTasks = prevTasks.map(t => {
+            if (t.id === current.task.id) return { ...t, order: nextOrder };
+            if (t.id === next.task.id) return { ...t, order: currentOrder };
+            return t;
+        });
+        setTasks(newTasks);
+        tasksRef.current = newTasks;
+        if (window.DatabaseAPI?.makeRequest) {
+            try {
+                await Promise.all([
+                    window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(current.task.id)}`, { method: 'PATCH', body: JSON.stringify({ order: nextOrder }) }),
+                    window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(next.task.id)}`, { method: 'PATCH', body: JSON.stringify({ order: currentOrder }) })
+                ]);
+            } catch (err) {
+                console.error('Failed to save task order:', err);
+                setTasks(prevTasks);
+                tasksRef.current = prevTasks;
+                alert('Failed to save order. Please try again.');
+            }
+        }
+    }, []);
+
     // Format checklist progress helper
     const formatChecklistProgress = useCallback((checklist = []) => {
                 if (!Array.isArray(checklist) || checklist.length === 0) {
@@ -6737,6 +6815,7 @@ function initializeProjectDetail() {
                                             {list.tasks.length > 0 && (
                                                 <thead className="bg-gray-50">
                                                     <tr>
+                                                        <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Order</th>
                                                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
                                                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
@@ -6750,7 +6829,7 @@ function initializeProjectDetail() {
                                             <tbody className="bg-white divide-y divide-gray-200">
                                                 {list.tasks.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan="7" className="px-4 py-12 text-center">
+                                                        <td colSpan="8" className="px-4 py-12 text-center">
                                                             <div className="flex flex-col items-center justify-center text-center text-gray-400">
                                                                 <i className="fas fa-clipboard-list text-3xl mb-3"></i>
                                                                 <p className="text-sm font-medium">
@@ -6795,7 +6874,7 @@ function initializeProjectDetail() {
                                                         </td>
                                                     </tr>
                                                 ) : (
-                                                    list.tasks.map(({ task, matchingSubtasks, matchedBySubtasks }) => {
+                                                    list.tasks.map(({ task, matchingSubtasks, matchedBySubtasks }, taskIndex) => {
                                                         const dueMeta = getDueDateMeta(task.dueDate);
                                                         const subtasksForCard = matchingSubtasks || [];
                                                         return (
@@ -6833,6 +6912,28 @@ function initializeProjectDetail() {
                                                                     className="hover:bg-gray-50 cursor-pointer transition"
                                                                     style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                                                                 >
+                                                                    <td className="px-2 py-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                                                                        <div className="flex items-center justify-center gap-0.5">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleMoveTaskUp(list, taskIndex)}
+                                                                                disabled={taskIndex === 0}
+                                                                                className="p-1 rounded text-gray-500 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                                                title="Move up"
+                                                                            >
+                                                                                <i className="fas fa-chevron-up text-[10px]"></i>
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleMoveTaskDown(list, taskIndex)}
+                                                                                disabled={taskIndex === list.tasks.length - 1}
+                                                                                className="p-1 rounded text-gray-500 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                                                title="Move down"
+                                                                            >
+                                                                                <i className="fas fa-chevron-down text-[10px]"></i>
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
                                                                         <div className="text-xs font-medium text-gray-900">{task.title || 'Untitled task'}</div>
                                                                     </td>
@@ -7124,7 +7225,7 @@ function initializeProjectDetail() {
                 </div>
             </div>
             );
-    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, handleUpdateTaskStatus, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
+    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, handleUpdateTaskStatus, handleMoveTaskUp, handleMoveTaskDown, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);

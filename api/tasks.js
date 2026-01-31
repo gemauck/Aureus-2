@@ -66,6 +66,7 @@ function transformTask(task, options = {}) {
     assigneeId: task.assigneeId,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     listId: task.listId,
+    order: task.order != null ? task.order : 0,
     estimatedHours: task.estimatedHours,
     actualHours: task.actualHours,
     blockedBy: task.blockedBy || '',
@@ -514,6 +515,7 @@ async function handler(req, res) {
           assignee: assigneeName,
           dueDate: dueDate ? new Date(dueDate) : null,
           listId: listId ? parseInt(String(listId), 10) : null,
+          order: body.order != null ? parseInt(String(body.order), 10) : 0,
           estimatedHours: estimatedHours ? parseFloat(String(estimatedHours)) : null,
           actualHours: actualHours ? parseFloat(String(actualHours)) : null,
           blockedBy: String(blockedBy || ''),
@@ -575,6 +577,9 @@ async function handler(req, res) {
       }
       if (body.listId !== undefined) {
         updateData.listId = body.listId ? parseInt(String(body.listId), 10) : null;
+      }
+      if (body.order !== undefined) {
+        updateData.order = parseInt(String(body.order), 10);
       }
       if (body.estimatedHours !== undefined) {
         updateData.estimatedHours = body.estimatedHours ? parseFloat(String(body.estimatedHours)) : null;
