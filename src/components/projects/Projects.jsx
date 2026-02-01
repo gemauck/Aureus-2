@@ -1098,18 +1098,15 @@ const Projects = () => {
                 }
 
                 
-                // Wait for DatabaseAPI to be available (with timeout - max 2 seconds)
-                // Use exponential backoff instead of fixed 100ms polling for better performance
+                // Wait for DatabaseAPI to be available (with timeout - max ~1s)
                 if (!window.DatabaseAPI) {
                     let waitAttempts = 0;
-                    const maxWaitAttempts = 20; // Reduced from 50 to 20
-                    let delay = 50; // Start with 50ms
-                    
+                    const maxWaitAttempts = 15;
+                    let delay = 30;
                     while (!window.DatabaseAPI && waitAttempts < maxWaitAttempts) {
                         await new Promise(resolve => setTimeout(resolve, delay));
                         waitAttempts++;
-                        // Exponential backoff: 50ms, 100ms, 150ms, 200ms, etc. (max 500ms)
-                        delay = Math.min(50 + (waitAttempts * 50), 500);
+                        delay = Math.min(30 + (waitAttempts * 40), 400);
                     }
                 }
                 
@@ -1139,121 +1136,63 @@ const Projects = () => {
                     return;
                 }
                 
-                let response;
-                try {
-                    // Request only first 100 projects for faster initial load
-                    // Full list can be loaded on demand if needed
-                    response = await window.DatabaseAPI.getProjects({ limit: 100, page: 1 });
-                    
-                    // Validate response exists
-                    if (!response) {
-                        throw new Error('API returned null or undefined response');
-                    }
-                    
-                    // Check if response is an error response
-                    if (response.error) {
-                        const errorMsg = response.error.message || response.error || 'Unknown API error';
-                        throw new Error(`API returned error: ${errorMsg}`);
-                    }
-                    
-                } catch (apiError) {
-                    console.error('❌ Projects: DatabaseAPI.getProjects threw an error:', apiError);
-                    console.error('❌ API Error details:', {
-                        message: apiError.message,
-                        stack: apiError.stack,
-                        name: apiError.name
-                    });
-                    throw apiError; // Re-throw to be caught by outer catch
-                }
-                
-                // Handle different response structures - try all possible formats
-                let apiProjects = [];
-                
-                // Try response.data.projects first (most common format)
-                if (response?.data?.projects && Array.isArray(response.data.projects)) {
-                    apiProjects = response.data.projects;
-                } 
-                // Try response.data.data.projects (nested data wrapper)
-                else if (response?.data?.data?.projects && Array.isArray(response.data.data.projects)) {
-                    apiProjects = response.data.data.projects;
-                }
-                // Try response.projects (direct projects array)
-                else if (response?.projects && Array.isArray(response.projects)) {
-                    apiProjects = response.projects;
-                } 
-                // Try response.data as array
-                else if (Array.isArray(response?.data)) {
-                    apiProjects = response.data;
-                } 
-                // Try response as array
-                else if (Array.isArray(response)) {
-                    apiProjects = response;
-                } 
-                // Last resort: try to find any array in the response
-                else {
-                    console.warn('⚠️ No projects found in standard locations. Searching response structure...');
-                    console.warn('⚠️ Full response structure:', JSON.stringify(response, null, 2).substring(0, 500));
-                    
-                    // Try to find any array in the response that might be projects
+                const extractProjects = (response) => {
+                    if (response?.data?.projects && Array.isArray(response.data.projects)) return response.data.projects;
+                    if (response?.data?.data?.projects && Array.isArray(response.data.data.projects)) return response.data.data.projects;
+                    if (response?.projects && Array.isArray(response.projects)) return response.projects;
+                    if (Array.isArray(response?.data)) return response.data;
+                    if (Array.isArray(response)) return response;
                     const findProjectsInObject = (obj) => {
-                        if (Array.isArray(obj)) {
-                            return obj.length > 0 && obj[0]?.name ? obj : null;
-                        }
+                        if (Array.isArray(obj)) return obj.length > 0 && obj[0]?.name ? obj : null;
                         if (typeof obj === 'object' && obj !== null) {
-                            for (const key in obj) {
-                                const result = findProjectsInObject(obj[key]);
-                                if (result) return result;
-                            }
+                            for (const key in obj) { const r = findProjectsInObject(obj[key]); if (r) return r; }
                         }
                         return null;
                     };
-                    
-                    const foundProjects = findProjectsInObject(response);
-                    if (foundProjects) {
-                        apiProjects = foundProjects;
-                    } else {
-                        console.error('❌ Could not find projects array in response');
-                        console.error('❌ Full response structure:', JSON.stringify(response, null, 2).substring(0, 1000));
-                        apiProjects = [];
-                        // If we can't find projects but response exists, this might be an error response
-                        if (response?.error) {
-                            throw new Error(response.error.message || response.error || 'Unknown error from API');
-                        }
-                    }
-                }
-                
-                if (apiProjects.length > 0) {
-                } else if (response && !response.error) {
-                    console.warn('⚠️ Projects: API returned empty array (no projects found)');
-                }
-                
-                // Normalize projects: map clientName to client for frontend compatibility
-                const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => {
-                    try {
-                        return {
-                            ...p,
-                            client: p.clientName || p.client || ''
-                        };
-                    } catch (normalizeError) {
-                        console.error('❌ Error normalizing project:', p, normalizeError);
-                        return p; // Return original if normalization fails
-                    }
-                });
+                    return findProjectsInObject(response) || [];
+                };
 
-                // Deduplicate by (name, client) so duplicate DB rows don't show as "3 copies"
+                let response;
+                try {
+                    // Phase 1: Fast list without task counts for quicker first paint
+                    response = await window.DatabaseAPI.getProjects({ limit: 100, page: 1, includeTaskCount: false });
+                    if (!response) throw new Error('API returned null or undefined response');
+                    if (response.error) throw new Error(`API returned error: ${response.error.message || response.error || 'Unknown API error'}`);
+                } catch (apiError) {
+                    console.error('❌ Projects: DatabaseAPI.getProjects threw an error:', apiError);
+                    throw apiError;
+                }
+                
+                let apiProjects = extractProjects(response);
+                
+                // Normalize and deduplicate
+                const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => ({
+                    ...p,
+                    client: p.clientName || p.client || ''
+                }));
                 const projectsToSet = dedupeProjectsByIdentity(normalizedProjects);
                 
-                // Ensure we always set an array (only if component is still mounted)
                 if (isMounted) {
                     setProjects(projectsToSet);
-                    // Track load timestamps for performance optimization
                     const now = Date.now();
                     normalizedProjects.forEach(project => {
-                        if (project?.id) {
-                            projectLoadTimestampsRef.current.set(String(project.id), now);
-                        }
+                        if (project?.id) projectLoadTimestampsRef.current.set(String(project.id), now);
                     });
                     setIsLoading(false);
+                    
+                    // Phase 2: Load task counts in background so list shows quickly first
+                    window.DatabaseAPI.getProjects({ limit: 100, page: 1, includeTaskCount: true })
+                        .then(countResponse => {
+                            if (!isMounted) return;
+                            const withCounts = extractProjects(countResponse);
+                            if (withCounts.length === 0) return;
+                            const countById = Object.fromEntries(withCounts.map(p => [String(p.id), p.tasksCount ?? p._count?.tasks ?? 0]));
+                            setProjects(prev => prev.map(p => {
+                                const count = countById[String(p.id)];
+                                return count !== undefined ? { ...p, tasksCount: count } : p;
+                            }));
+                        })
+                        .catch(() => { /* non-blocking; list already shown */ });
                     
                     // Sync existing projects with clients (non-blocking, won't crash on failure)
                     syncProjectsWithClients(projectsToSet).catch(err => {

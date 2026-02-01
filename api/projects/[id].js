@@ -18,9 +18,36 @@ let taskOrderColumnMigrated = false;
 async function loadProjectWithRelations(projectId) {
   let project = null;
   try {
-    // 1. Load project row only (no includes) - never fails due to relation schema
+    // 1. Load project row without heavy legacy JSON columns (data comes from tables below)
     project = await prisma.project.findUnique({
-      where: { id: projectId }
+      where: { id: projectId },
+      select: {
+        id: true,
+        clientId: true,
+        name: true,
+        description: true,
+        clientName: true,
+        status: true,
+        startDate: true,
+        dueDate: true,
+        budget: true,
+        actualCost: true,
+        progress: true,
+        priority: true,
+        type: true,
+        assignedTo: true,
+        notes: true,
+        hasTimeProcess: true,
+        hasDocumentCollectionProcess: true,
+        hasWeeklyFMSReviewProcess: true,
+        hasMonthlyFMSReviewProcess: true,
+        hasMonthlyDataReviewProcess: true,
+        ownerId: true,
+        createdAt: true,
+        updatedAt: true
+        // Exclude: tasksList, documentSections, weeklyFMSReviewSections, monthlyFMSReviewSections,
+        // monthlyDataReviewChecklist, monthlyDataReviewSections, monthlyProgress (loaded from tables)
+      }
     });
   } catch (findErr) {
     console.warn('⚠️ Project findUnique failed, trying minimal raw query:', findErr.message);

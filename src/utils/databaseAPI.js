@@ -1316,11 +1316,12 @@ const DatabaseAPI = {
 
     // PROJECT OPERATIONS
     async getProjects(options = {}) {
-        const { limit = 100, page = 1, includeCount = false } = options;
+        const { limit = 100, page = 1, includeCount = false, includeTaskCount = false } = options;
         const params = new URLSearchParams();
         if (limit) params.set('limit', limit.toString());
         if (page > 1) params.set('page', page.toString());
         if (includeCount) params.set('includeCount', 'true');
+        if (includeTaskCount) params.set('includeTaskCount', 'true');
         
         const queryString = params.toString();
         const url = `/projects${queryString ? `?${queryString}` : ''}`;

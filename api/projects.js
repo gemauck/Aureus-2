@@ -1235,7 +1235,7 @@ async function handler(req, res) {
         const limit = Math.min(parseInt(req.query?.limit) || 100, 500); // Default 100, max 500
         const skip = (page - 1) * limit;
         const includeCount = req.query?.includeCount === 'true';
-        const includeTaskCount = req.query?.includeTaskCount !== 'false'; // Default true, can be disabled for speed
+        const includeTaskCount = req.query?.includeTaskCount === 'true'; // Default false for faster list load; pass ?includeTaskCount=true when needed
         
         // Build where clause
         let whereClause = {};
