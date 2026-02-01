@@ -1267,6 +1267,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     // Save email request template for this document across all months (selected year).
     // Preserves existing lastSentAt per month so scheduled sends are not reset.
+    // Returns Promise so caller can await persistence.
     const saveEmailRequestForCell = (sectionId, documentId, _month, data) => {
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
@@ -1296,7 +1297,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        saveToDatabase();
+        return saveToDatabase();
     };
 
     // ============================================================
@@ -3396,11 +3397,12 @@ Abcotronics`;
         };
         const removeContactCc = (email) => setContactsCc((c) => c.filter((e) => e !== email));
 
-        const handleSaveTemplate = () => {
+        const handleSaveTemplate = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
             setSavingTemplate(true);
+            setResult(null);
             try {
-                saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, {
+                await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, {
                     recipients: [...contacts],
                     cc: [...contactsCc],
                     subject: subject.trim() || defaultSubject,
@@ -3412,6 +3414,9 @@ Abcotronics`;
                 });
                 setResult({ saved: true });
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
+            } catch (err) {
+                console.error('Failed to save email template:', err);
+                setResult({ error: 'Save failed. Please try again.' });
             } finally {
                 setSavingTemplate(false);
             }

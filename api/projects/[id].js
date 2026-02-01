@@ -569,7 +569,7 @@ async function handler(req, res) {
           if (!documentSectionsJson) {
             documentSectionsJson = {};
           }
-          // Merge emailRequestByMonth from saved blob (recipients, template, schedule per cell)
+          // Merge emailRequestByMonth from saved blob (recipients, CC, template, schedule per cell)
           if (project.documentSections && documentSectionsJson && typeof documentSectionsJson === 'object') {
             try {
               const blob = typeof project.documentSections === 'string'
@@ -585,6 +585,16 @@ async function handler(req, res) {
                     for (let di = 0; di < blobDocs.length && di < outDocs.length; di++) {
                       if (blobDocs[di].emailRequestByMonth && typeof blobDocs[di].emailRequestByMonth === 'object') {
                         outDocs[di].emailRequestByMonth = blobDocs[di].emailRequestByMonth;
+                      }
+                    }
+                    // Fallback: match by document id/name when index might misalign
+                    for (let di = 0; di < outDocs.length; di++) {
+                      if (outDocs[di].emailRequestByMonth) continue;
+                      const outDocId = outDocs[di].id;
+                      const outDocName = outDocs[di].name;
+                      const blobDoc = blobDocs.find((d) => String(d.id) === String(outDocId) || (d.name && String(d.name) === String(outDocName)));
+                      if (blobDoc?.emailRequestByMonth && typeof blobDoc.emailRequestByMonth === 'object') {
+                        outDocs[di].emailRequestByMonth = blobDoc.emailRequestByMonth;
                       }
                     }
                   }

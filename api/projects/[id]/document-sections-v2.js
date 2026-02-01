@@ -30,37 +30,59 @@ async function handler(req, res) {
 
   try {
     let documentSections = await documentSectionsToJson(id, { skipComments: false })
-    documentSections = documentSections != null ? documentSections : {}
 
-    // Merge emailRequestByMonth from Project.documentSections blob (recipients, CC, template, schedule)
-    // so saved "Request documents via email" data persists when loading from this endpoint
+    // Fetch blob for merge (or as primary source when table is empty)
+    let blob = null
     try {
       const project = await prisma.project.findUnique({
         where: { id },
         select: { documentSections: true }
       })
-      if (project?.documentSections && typeof documentSections === 'object' && !Array.isArray(documentSections)) {
-        const blob = typeof project.documentSections === 'string'
+      if (project?.documentSections) {
+        blob = typeof project.documentSections === 'string'
           ? JSON.parse(project.documentSections) : project.documentSections
-        if (blob && typeof blob === 'object' && !Array.isArray(blob)) {
-          for (const year of Object.keys(blob)) {
-            const blobSections = blob[year]
-            const outSections = documentSections[year]
-            if (!Array.isArray(blobSections) || !Array.isArray(outSections)) continue
-            for (let si = 0; si < blobSections.length && si < outSections.length; si++) {
-              const blobDocs = blobSections[si].documents || []
-              const outDocs = outSections[si].documents || []
-              for (let di = 0; di < blobDocs.length && di < outDocs.length; di++) {
-                if (blobDocs[di].emailRequestByMonth && typeof blobDocs[di].emailRequestByMonth === 'object') {
-                  outDocs[di].emailRequestByMonth = blobDocs[di].emailRequestByMonth
-                }
+      }
+    } catch (blobErr) {
+      console.warn('⚠️ document-sections-v2: failed to parse blob:', blobErr.message)
+    }
+
+    // When table returns null/empty, use blob as primary source (preserves emailRequestByMonth)
+    if ((documentSections == null || (typeof documentSections === 'object' && Object.keys(documentSections).length === 0)) && blob && typeof blob === 'object' && !Array.isArray(blob)) {
+      documentSections = blob
+    } else {
+      documentSections = documentSections != null ? documentSections : {}
+    }
+
+    // Merge emailRequestByMonth from blob into table output (recipients, CC, template, schedule)
+    if (blob && typeof blob === 'object' && !Array.isArray(blob) && typeof documentSections === 'object' && !Array.isArray(documentSections)) {
+      try {
+        for (const year of Object.keys(blob)) {
+          const blobSections = blob[year]
+          const outSections = documentSections[year]
+          if (!Array.isArray(blobSections) || !Array.isArray(outSections)) continue
+          for (let si = 0; si < blobSections.length && si < outSections.length; si++) {
+            const blobDocs = blobSections[si].documents || []
+            const outDocs = outSections[si].documents || []
+            for (let di = 0; di < blobDocs.length && di < outDocs.length; di++) {
+              if (blobDocs[di].emailRequestByMonth && typeof blobDocs[di].emailRequestByMonth === 'object') {
+                outDocs[di].emailRequestByMonth = blobDocs[di].emailRequestByMonth
+              }
+            }
+            // Fallback: match by document id/name when index might misalign
+            for (let di = 0; di < outDocs.length; di++) {
+              if (outDocs[di].emailRequestByMonth) continue
+              const outDocId = outDocs[di].id
+              const outDocName = outDocs[di].name
+              const blobDoc = blobDocs.find((d) => String(d.id) === String(outDocId) || (d.name && String(d.name) === String(outDocName)))
+              if (blobDoc?.emailRequestByMonth && typeof blobDoc.emailRequestByMonth === 'object') {
+                outDocs[di].emailRequestByMonth = blobDoc.emailRequestByMonth
               }
             }
           }
         }
+      } catch (mergeErr) {
+        console.warn('⚠️ document-sections-v2: merge emailRequestByMonth from blob failed:', mergeErr.message)
       }
-    } catch (mergeErr) {
-      console.warn('⚠️ document-sections-v2: merge emailRequestByMonth from blob failed:', mergeErr.message)
     }
 
     return ok(res, { documentSections })
