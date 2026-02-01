@@ -61,9 +61,10 @@ function normalizeHeaders(headers) {
   if (Array.isArray(headers)) {
     const out = {}
     for (const h of headers) {
-      if (h && (h.name || h.key)) {
-        const k = (h.name || h.key || '').toLowerCase()
-        if (k) out[k] = h.value || h.val || ''
+      if (h && typeof h === 'object') {
+        const k = (h.name || h.key || h.headerName || '').toLowerCase().trim()
+        const v = h.value ?? h.val ?? h.headerValue ?? ''
+        if (k) out[k] = String(v)
       }
     }
     return out
@@ -102,6 +103,42 @@ function getFirstReference(headers) {
     if (match) {
       const first = match[1].trim().split(/\s+/)[0]
       return first ? normalizeMessageId(first) : null
+    }
+  }
+  return null
+}
+
+/** Extract In-Reply-To from full email object (headers, top-level, or raw body). */
+async function getInReplyToFromEmail(email, fetchRawUrl) {
+  const headers = email.headers || {}
+  let inReplyTo = getInReplyTo(headers) || getFirstReference(headers)
+  if (inReplyTo) return inReplyTo
+  if (email.in_reply_to && typeof email.in_reply_to === 'string') return normalizeMessageId(email.in_reply_to)
+  if (email.references && typeof email.references === 'string') {
+    const first = email.references.trim().split(/\s+/)[0]
+    if (first) return normalizeMessageId(first)
+  }
+  const text = (email.text || '').toString() + '\n' + (email.html || '').toString()
+  const match = text.match(/in-reply-to:\s*([^\r\n]+)/gi)
+  if (match && match[0]) {
+    const val = match[0].replace(/in-reply-to:\s*/i, '').trim()
+    if (val) return normalizeMessageId(val)
+  }
+  if (fetchRawUrl) {
+    try {
+      const res = await fetch(fetchRawUrl, { method: 'GET' })
+      if (res.ok) {
+        const raw = await res.text()
+        const m = raw.match(/in-reply-to:\s*([^\r\n]+)/i)
+        if (m && m[1]) return normalizeMessageId(m[1].trim())
+        const ref = raw.match(/references:\s*([^\r\n]+)/i)
+        if (ref && ref[1]) {
+          const first = ref[1].trim().split(/\s+/)[0]
+          if (first) return normalizeMessageId(first)
+        }
+      }
+    } catch (err) {
+      console.warn('document-request-reply: failed to fetch raw email for In-Reply-To', err.message)
     }
   }
   return null
@@ -199,6 +236,7 @@ async function handler(req, res) {
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET || process.env.WEBHOOK_SIGNING_SECRET
     if (webhookSecret) {
       if (!verifyWebhookSignature(rawBody, req.headers || {}, webhookSecret)) {
+        console.warn('document-request-reply: invalid webhook signature (401)')
         return res.status(401).json({ error: 'Invalid webhook signature' })
       }
     }
@@ -213,6 +251,7 @@ async function handler(req, res) {
     }
 
     const emailId = body.data.email_id
+    console.log('document-request-reply: webhook received', { type: body.type, email_id: emailId })
     const apiKey = process.env.RESEND_API_KEY
     if (!apiKey || !apiKey.startsWith('re_')) {
       console.warn('document-request-reply: RESEND_API_KEY not set, skipping')
@@ -220,10 +259,14 @@ async function handler(req, res) {
     }
 
     const email = await fetchReceivedEmail(emailId, apiKey)
-    const headers = email.headers || {}
-    const inReplyTo = getInReplyTo(headers) || getFirstReference(headers)
+    const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
+    const inReplyTo = await getInReplyToFromEmail(email, rawUrl)
     if (!inReplyTo) {
-      console.warn('document-request-reply: no In-Reply-To or References in headers', Object.keys(normalizeHeaders(headers)))
+      console.warn('document-request-reply: no In-Reply-To', {
+        emailId,
+        emailKeys: Object.keys(email),
+        headerKeys: email.headers ? Object.keys(normalizeHeaders(email.headers)) : []
+      })
       return ok(res, { processed: false, reason: 'no_in_reply_to_or_references' })
     }
 
