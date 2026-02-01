@@ -216,8 +216,26 @@ async function listReceivedAttachments(emailId, apiKey) {
     throw new Error(`Resend list attachments failed: ${res.status} ${text}`)
   }
   const data = await res.json()
-  const list = data.data != null ? data.data : (Array.isArray(data) ? data : [])
-  return list
+  const list = data.data != null ? data.data : (Array.isArray(data) ? data : (data.attachments || []))
+  return Array.isArray(list) ? list : []
+}
+
+async function getReceivedAttachment(emailId, attachmentId, apiKey) {
+  const res = await fetch(
+    `https://api.resend.com/emails/receiving/${emailId}/attachments/${attachmentId}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Resend get attachment failed: ${res.status} ${text}`)
+  }
+  return res.json()
 }
 
 function safeFilename(name) {
@@ -226,8 +244,17 @@ function safeFilename(name) {
 }
 
 async function downloadAndSaveAttachment(downloadUrl, filename, __dirname) {
-  const res = await fetch(downloadUrl, { method: 'GET' })
-  if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+  const res = await fetch(downloadUrl, {
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Abcotronics-ERP-Webhook/1.0',
+      Accept: '*/*'
+    }
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Download failed: ${res.status} ${text.slice(0, 200)}`)
+  }
   const buffer = Buffer.from(await res.arrayBuffer())
   if (buffer.length > MAX_ATTACHMENT_BYTES)
     throw new Error(`Attachment too large: ${buffer.length} bytes`)
@@ -347,17 +374,34 @@ async function handler(req, res) {
     const bodyText = emailBodyText(email)
     const fromStr = (email.from || '').toString().replace(/^.*<([^>]+)>.*$/, '$1').trim() || 'unknown'
 
-    const attachmentsList = await listReceivedAttachments(emailId, apiKey)
+    let attachmentsList = await listReceivedAttachments(emailId, apiKey)
+    if (!attachmentsList || attachmentsList.length === 0) {
+      const fromEmail = email.attachments
+      attachmentsList = Array.isArray(fromEmail) ? fromEmail : []
+    }
+    console.log('document-request-reply: attachments', { emailId, count: attachmentsList.length, firstKeys: attachmentsList[0] ? Object.keys(attachmentsList[0]) : [] })
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
     const uploaded = []
 
     for (const att of attachmentsList) {
-      const url = att.download_url || att.downloadUrl
+      let url = att.download_url || att.downloadUrl
       const name = att.filename || att.name || 'attachment'
-      if (!url) continue
+      if (!url && att.id) {
+        try {
+          const one = await getReceivedAttachment(emailId, att.id, apiKey)
+          url = one.download_url || one.downloadUrl
+        } catch (e) {
+          console.warn('document-request-reply: get attachment by id failed', att.id, e.message)
+        }
+      }
+      if (!url) {
+        console.warn('document-request-reply: attachment missing download_url', { name, attKeys: Object.keys(att) })
+        continue
+      }
       try {
         const publicUrl = await downloadAndSaveAttachment(url, name, __dirname)
         uploaded.push({ name, url: publicUrl })
+        console.log('document-request-reply: attachment saved', name, publicUrl)
       } catch (err) {
         console.warn('document-request-reply: failed to save attachment', name, err.message)
       }
