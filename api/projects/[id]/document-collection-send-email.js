@@ -3,8 +3,9 @@
  * Send document request emails to contacts. Used by Document Collection checklist
  * "Request documents" flow. Uses existing mail infrastructure (Resend/SendGrid/SMTP).
  * Optional body: sectionId, documentId, month, year — when provided, Reply-To is set
- * to the inbound address and the message ID is stored for routing reply attachments.
+ * to the inbound address and a custom Message-ID is set so reply In-Reply-To matches.
  */
+import crypto from 'crypto'
 import { authRequired } from '../../_lib/authRequired.js'
 import { parseJsonBody } from '../../_lib/body.js'
 import { sendEmail } from '../../_lib/email.js'
@@ -78,7 +79,13 @@ async function handler(req, res) {
 
     const sent = []
     const failed = []
-    let messageId = null
+    // For reply routing: use custom Message-ID so In-Reply-To on replies matches (Resend send response id is internal only)
+    let messageIdForReply = null
+    if (hasCellContext && inboundEmail) {
+      const domain = inboundEmail.includes('@') ? inboundEmail.split('@')[1] : 'abcoafrica.co.za'
+      const uniqueId = `docreq-${crypto.randomUUID()}@${domain}`
+      messageIdForReply = uniqueId
+    }
 
     try {
       const result = await sendEmail({
@@ -89,9 +96,13 @@ async function handler(req, res) {
         text: text || undefined,
         replyTo,
         fromName,
-        ...(fromAddress && { from: fromAddress })
+        ...(fromAddress && { from: fromAddress }),
+        ...(messageIdForReply && {
+          headers: {
+            'Message-ID': messageIdForReply.startsWith('<') ? messageIdForReply : `<${messageIdForReply}>`
+          }
+        })
       })
-      messageId = result && result.messageId ? String(result.messageId) : null
       validTo.forEach((e) => sent.push(e.trim()))
       validCc.forEach((e) => sent.push(e.trim()))
     } catch (err) {
@@ -99,12 +110,12 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
-    if (messageId && hasCellContext) {
+    if (messageIdForReply && hasCellContext) {
       try {
         await prisma.documentRequestEmailSent.upsert({
-          where: { messageId },
+          where: { messageId: messageIdForReply },
           create: {
-            messageId,
+            messageId: messageIdForReply,
             projectId,
             sectionId,
             documentId,
@@ -124,7 +135,7 @@ async function handler(req, res) {
       }
     }
 
-    return ok(res, { sent, failed, messageId: messageId || undefined })
+    return ok(res, { sent, failed, messageId: messageIdForReply || undefined })
   } catch (e) {
     console.error('POST /api/projects/:id/document-collection-send-email error:', e)
     return serverError(res, e.message || 'Failed to send document request emails')

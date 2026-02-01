@@ -57,6 +57,14 @@ Optional: enable **webhook signing** in Resend and verify the signature in the h
 
 ---
 
+## Troubleshooting: Replies not showing in comments
+
+- The app stores a **custom Message-ID** when you send a document request (so reply `In-Reply-To` can be matched). **After any deploy that changes this flow, send a new document request from the app** and reply to that email; replies to requests sent before the change may not match.
+- If replies still don’t show: check server logs (`pm2 logs abcotronics-erp`) for `document-request-reply:` messages. You’ll see either `no In-Reply-To`, `unknown_thread` (no matching sent request), or `matched thread` + comment created.
+- Ensure the webhook URL is correct and Resend can reach it (no firewall blocking). If you use **RESEND_WEBHOOK_SECRET**, the secret in Resend must match.
+
+---
+
 ## 4. Checklist
 
 - [ ] **DB**: Table `DocumentRequestEmailSent` exists (already applied via `npx prisma db push` or migration).

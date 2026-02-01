@@ -59,6 +59,10 @@ async function sendViaResendAPI(mailOptions, apiKey) {
         // If no text but we have HTML, create text version
         payload.text = mailOptions.html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n');
     }
+    // Custom headers (e.g. Message-ID for reply threading - reply In-Reply-To will match this)
+    if (mailOptions.headers && typeof mailOptions.headers === 'object') {
+        payload.headers = mailOptions.headers;
+    }
     
     console.log('📧 Resend API payload:', JSON.stringify({
         from: payload.from,
@@ -330,7 +334,7 @@ function checkEmailConfiguration() {
  * @returns {{ success: boolean, messageId: string }}
  */
 export async function sendEmail(opts) {
-    const { to, cc, subject, html, text, replyTo, fromName, from: fromOverride } = opts;
+    const { to, cc, subject, html, text, replyTo, fromName, from: fromOverride, headers: customHeaders } = opts;
     if (!to || !subject) {
         throw new Error('sendEmail requires "to" and "subject"');
     }
@@ -350,7 +354,8 @@ export async function sendEmail(opts) {
         subject,
         ...(replyTo && { replyTo }),
         ...(html && { html }),
-        ...(textContent && { text: textContent })
+        ...(textContent && { text: textContent }),
+        ...(customHeaders && typeof customHeaders === 'object' && { headers: customHeaders })
     };
     if (cc && (Array.isArray(cc) ? cc.length : cc)) {
         mailOptions.cc = Array.isArray(cc) ? cc : [cc];

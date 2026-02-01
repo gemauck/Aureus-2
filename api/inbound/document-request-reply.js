@@ -270,6 +270,7 @@ async function handler(req, res) {
       return ok(res, { processed: false, reason: 'no_in_reply_to_or_references' })
     }
 
+    // Stored messageId is without angle brackets (e.g. docreq-uuid@domain). In-Reply-To is normalized the same way.
     const localPart = inReplyTo.split('@')[0]
     const messageIdCandidates = [inReplyTo, localPart].filter(Boolean)
     let mapping = await prisma.documentRequestEmailSent.findFirst({
@@ -285,18 +286,31 @@ async function handler(req, res) {
           r.messageId === inReplyTo ||
           r.messageId === localPart ||
           inReplyTo.startsWith(r.messageId) ||
-          (inReplyTo.includes(r.messageId) && r.messageId.length >= 10)
+          (r.messageId.length >= 10 && inReplyTo.includes(r.messageId))
       ) || null
     }
     if (!mapping) {
-      console.warn('document-request-reply: unknown_thread', { inReplyTo: inReplyTo.slice(0, 80), localPart, tried: messageIdCandidates })
+      console.warn('document-request-reply: unknown_thread', {
+        inReplyTo: inReplyTo.slice(0, 120),
+        localPart,
+        tried: messageIdCandidates,
+        hint: 'Send a NEW document request from the app (after deploy), then reply to that email. Old requests used Resend internal id.'
+      })
       return ok(res, {
         processed: false,
         reason: 'unknown_thread',
-        inReplyTo: inReplyTo.slice(0, 80),
-        hint: 'Original request may have been sent before reply-by-email was enabled. Send a new document request from the app, then reply to that email.'
+        inReplyTo: inReplyTo.slice(0, 120),
+        hint: 'Send a new document request from the app, then reply to that email. Old requests may not match.'
       })
     }
+
+    console.log('document-request-reply: matched thread', {
+      projectId: mapping.projectId,
+      itemId: mapping.documentId,
+      year: mapping.year,
+      month: mapping.month,
+      inReplyTo: inReplyTo.slice(0, 60)
+    })
 
     const { projectId, sectionId, documentId: itemId, year, month } = mapping
     const bodyText = emailBodyText(email)
