@@ -774,6 +774,22 @@ model DocumentItemComment {
   @@index([createdAt])
 }
 
+// Maps sent document-request email message ID → cell for inbound reply routing
+model DocumentRequestEmailSent {
+  id          String   @id @default(cuid())
+  messageId   String   // Provider message ID (e.g. Resend email id); used to match In-Reply-To on replies
+  projectId   String
+  sectionId   String
+  documentId  String   // DocumentItem.id (itemId)
+  year        Int
+  month       Int
+  createdAt   DateTime @default(now())
+
+  @@unique([messageId])
+  @@index([projectId])
+  @@index([messageId])
+}
+
 // Weekly FMS Review Tables (duplicated from Monthly FMS Review)
 model WeeklyFMSReviewSection {
   id          String   @id @default(cuid())

@@ -2,11 +2,14 @@
  * POST /api/projects/:id/document-collection-send-email
  * Send document request emails to contacts. Used by Document Collection checklist
  * "Request documents" flow. Uses existing mail infrastructure (Resend/SendGrid/SMTP).
+ * Optional body: sectionId, documentId, month, year — when provided, Reply-To is set
+ * to the inbound address and the message ID is stored for routing reply attachments.
  */
 import { authRequired } from '../../_lib/authRequired.js'
 import { parseJsonBody } from '../../_lib/body.js'
 import { sendEmail } from '../../_lib/email.js'
 import { ok, badRequest, serverError } from '../../_lib/response.js'
+import { prisma } from '../../_lib/prisma.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -34,6 +37,10 @@ async function handler(req, res) {
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
+    const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
+    const documentId = body.documentId != null ? String(body.documentId).trim() : null
+    const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : null
+    const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : null
 
     if (!subject) {
       return badRequest(res, 'Subject is required')
@@ -60,22 +67,31 @@ async function handler(req, res) {
       if (text) text = text + sentByLine
     }
 
-    const replyTo = userEmail && isValidEmail(userEmail) ? userEmail : undefined
+    const inboundEmail = process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || ''
+    const hasCellContext = sectionId && documentId && month != null && !isNaN(month) && year != null && !isNaN(year)
+    const replyTo = hasCellContext && inboundEmail && isValidEmail(inboundEmail)
+      ? inboundEmail
+      : (userEmail && isValidEmail(userEmail) ? userEmail : undefined)
     const fromName = userName ? `Abcotronics (via ${userName})` : undefined
+    // Send from documents@abcoafrica.co.za when inbound address is set (so From and Reply-To match)
+    const fromAddress = inboundEmail && isValidEmail(inboundEmail) ? inboundEmail : undefined
 
     const sent = []
     const failed = []
+    let messageId = null
 
     try {
-      await sendEmail({
+      const result = await sendEmail({
         to: validTo.map((e) => e.trim()),
         cc: validCc.length > 0 ? validCc.map((e) => e.trim()) : undefined,
         subject,
         html: html || undefined,
         text: text || undefined,
         replyTo,
-        fromName
+        fromName,
+        ...(fromAddress && { from: fromAddress })
       })
+      messageId = result && result.messageId ? String(result.messageId) : null
       validTo.forEach((e) => sent.push(e.trim()))
       validCc.forEach((e) => sent.push(e.trim()))
     } catch (err) {
@@ -83,7 +99,32 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
-    return ok(res, { sent, failed })
+    if (messageId && hasCellContext) {
+      try {
+        await prisma.documentRequestEmailSent.upsert({
+          where: { messageId },
+          create: {
+            messageId,
+            projectId,
+            sectionId,
+            documentId,
+            year,
+            month
+          },
+          update: {
+            projectId,
+            sectionId,
+            documentId,
+            year,
+            month
+          }
+        })
+      } catch (dbErr) {
+        console.warn('document-collection-send-email: failed to store messageId mapping:', dbErr.message)
+      }
+    }
+
+    return ok(res, { sent, failed, messageId: messageId || undefined })
   } catch (e) {
     console.error('POST /api/projects/:id/document-collection-send-email error:', e)
     return serverError(res, e.message || 'Failed to send document request emails')

@@ -345,6 +345,28 @@ app.use('/api', apiLimiter)
 // Enable gzip compression for all responses to speed up loads
 app.use(compression({ threshold: 0 }))
 
+// Document request reply webhook MUST run before express.json() so we get raw body for signature verification
+app.post('/api/inbound/document-request-reply', express.text({ type: '*/*', limit: '1mb' }), async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'inbound', 'document-request-reply.js'))
+    if (!handler) {
+      console.error('❌ Document request reply webhook handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in document-request-reply webhook:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process webhook',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Increased limit to 100mb to support POA Review file uploads (50MB files + base64 encoding overhead)
 app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ extended: true, limit: '100mb' }))

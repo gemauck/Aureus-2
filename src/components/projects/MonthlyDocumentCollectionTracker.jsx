@@ -3467,6 +3467,8 @@ Abcotronics`;
                 const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
                 const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim());
+                const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
+                const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
                 const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
                     method: 'POST',
                     credentials: 'include',
@@ -3480,7 +3482,10 @@ Abcotronics`;
                         cc: contactsCc.length > 0 ? contactsCc : undefined,
                         subject: subject.trim(),
                         html: htmlPayload,
-                        text: body.trim()
+                        text: body.trim(),
+                        ...(ctx?.section?.id && ctx?.doc?.id && monthNum != null && yearNum != null
+                            ? { sectionId: ctx.section.id, documentId: ctx.doc.id, month: monthNum, year: yearNum }
+                            : {})
                     })
                 });
                 const json = await res.json().catch(() => ({}));

@@ -174,6 +174,9 @@ nano .env
 - [ ] `NODE_ENV=production`
 - [ ] `PORT=3000`
 - [ ] `CORS_ORIGINS` configured (if using domain)
+- [ ] `RESEND_API_KEY` set (for sending email)
+- [ ] `DOCUMENT_REQUEST_INBOUND_EMAIL` set (e.g. `documents@abcoafrica.co.za`) for reply-by-email
+- [ ] `RESEND_WEBHOOK_SECRET` set (from Resend webhook details) to verify inbound webhook
 
 **Generate secrets:**
 ```bash

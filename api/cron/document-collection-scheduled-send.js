@@ -96,13 +96,17 @@ async function handler(req, res) {
 
             const validTo = recipients.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()));
             if (validTo.length === 0) continue;
+            const inboundEmail = process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || '';
+            const fromAddress = inboundEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inboundEmail.trim()) ? inboundEmail.trim() : undefined;
             try {
               await sendEmail({
                 to: validTo,
                 cc: cc.length > 0 ? cc : undefined,
                 subject,
                 html,
-                text
+                text,
+                ...(fromAddress && { from: fromAddress }),
+                ...(fromAddress && { replyTo: fromAddress })
               });
               sent += validTo.length + cc.length;
             } catch (err) {

@@ -326,11 +326,11 @@ function checkEmailConfiguration() {
 /**
  * Send a simple email (raw subject/body). Used for document collection requests,
  * leave notifications, and other custom user-drafted emails.
- * @param {{ to: string|string[], cc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string }} opts
+ * @param {{ to: string|string[], cc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string, from?: string }} opts
  * @returns {{ success: boolean, messageId: string }}
  */
 export async function sendEmail(opts) {
-    const { to, cc, subject, html, text, replyTo, fromName } = opts;
+    const { to, cc, subject, html, text, replyTo, fromName, from: fromOverride } = opts;
     if (!to || !subject) {
         throw new Error('sendEmail requires "to" and "subject"');
     }
@@ -338,7 +338,8 @@ export async function sendEmail(opts) {
     if (toNormalized.length === 0) {
         throw new Error('sendEmail requires at least one "to" address');
     }
-    const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
+    const defaultFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
+    const emailFrom = fromOverride && typeof fromOverride === 'string' && fromOverride.trim() ? fromOverride.trim() : defaultFrom;
     const fromDisplayName = fromName && typeof fromName === 'string' ? fromName : 'Abcotronics';
     const fromEmailOnly = emailFrom.includes('<') ? (emailFrom.match(/<(.+)>/)?.[1] || emailFrom).trim() : emailFrom;
     const fromAddress = `${fromDisplayName} <${fromEmailOnly}>`;
