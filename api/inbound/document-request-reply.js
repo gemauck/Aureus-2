@@ -55,25 +55,56 @@ function normalizeMessageId(value) {
   return value.replace(/^<|>$/g, '').trim()
 }
 
+/** Normalize headers to a plain object with lowercase keys for consistent lookup. */
+function normalizeHeaders(headers) {
+  if (!headers) return {}
+  if (Array.isArray(headers)) {
+    const out = {}
+    for (const h of headers) {
+      if (h && (h.name || h.key)) {
+        const k = (h.name || h.key || '').toLowerCase()
+        if (k) out[k] = h.value || h.val || ''
+      }
+    }
+    return out
+  }
+  if (typeof headers === 'object' && !Array.isArray(headers)) {
+    const out = {}
+    for (const [k, v] of Object.entries(headers)) {
+      if (k && v != null) out[k.toLowerCase()] = String(v)
+    }
+    return out
+  }
+  return {}
+}
+
 function getInReplyTo(headers) {
-  if (!headers || typeof headers !== 'object') return null
-  const raw =
-    headers['in-reply-to'] ||
-    headers['In-Reply-To'] ||
-    headers.inReplyTo
-  return raw ? normalizeMessageId(raw) : null
+  const h = normalizeHeaders(headers)
+  let raw = h['in-reply-to'] || h['in_reply_to']
+  if (raw) return normalizeMessageId(raw)
+  if (typeof headers === 'string') {
+    const match = headers.match(/in-reply-to:\s*([^\r\n]+)/i)
+    if (match) return normalizeMessageId(match[1].trim())
+  }
+  return null
 }
 
 /** Get first message ID from References header (fallback when In-Reply-To missing). */
 function getFirstReference(headers) {
-  if (!headers || typeof headers !== 'object') return null
-  const raw =
-    headers['references'] ||
-    headers['References'] ||
-    headers.references
-  if (!raw || typeof raw !== 'string') return null
-  const first = raw.trim().split(/\s+/)[0]
-  return first ? normalizeMessageId(first) : null
+  const h = normalizeHeaders(headers)
+  let raw = h['references']
+  if (raw && typeof raw === 'string') {
+    const first = raw.trim().split(/\s+/)[0]
+    return first ? normalizeMessageId(first) : null
+  }
+  if (typeof headers === 'string') {
+    const match = headers.match(/references:\s*([^\r\n]+)/i)
+    if (match) {
+      const first = match[1].trim().split(/\s+/)[0]
+      return first ? normalizeMessageId(first) : null
+    }
+  }
+  return null
 }
 
 /** Extract plain text from email (text or html). */
@@ -192,17 +223,36 @@ async function handler(req, res) {
     const headers = email.headers || {}
     const inReplyTo = getInReplyTo(headers) || getFirstReference(headers)
     if (!inReplyTo) {
+      console.warn('document-request-reply: no In-Reply-To or References in headers', Object.keys(normalizeHeaders(headers)))
       return ok(res, { processed: false, reason: 'no_in_reply_to_or_references' })
     }
 
-    const messageIdCandidates = [inReplyTo, inReplyTo.split('@')[0]].filter(Boolean)
-    const mapping = await prisma.documentRequestEmailSent.findFirst({
-      where: {
-        messageId: { in: messageIdCandidates }
-      }
+    const localPart = inReplyTo.split('@')[0]
+    const messageIdCandidates = [inReplyTo, localPart].filter(Boolean)
+    let mapping = await prisma.documentRequestEmailSent.findFirst({
+      where: { messageId: { in: messageIdCandidates } }
     })
     if (!mapping) {
-      return ok(res, { processed: false, reason: 'unknown_thread', inReplyTo: inReplyTo.slice(0, 50) })
+      const recent = await prisma.documentRequestEmailSent.findMany({
+        take: 200,
+        orderBy: { createdAt: 'desc' }
+      })
+      mapping = recent.find(
+        (r) =>
+          r.messageId === inReplyTo ||
+          r.messageId === localPart ||
+          inReplyTo.startsWith(r.messageId) ||
+          (inReplyTo.includes(r.messageId) && r.messageId.length >= 10)
+      ) || null
+    }
+    if (!mapping) {
+      console.warn('document-request-reply: unknown_thread', { inReplyTo: inReplyTo.slice(0, 80), localPart, tried: messageIdCandidates })
+      return ok(res, {
+        processed: false,
+        reason: 'unknown_thread',
+        inReplyTo: inReplyTo.slice(0, 80),
+        hint: 'Original request may have been sent before reply-by-email was enabled. Send a new document request from the app, then reply to that email.'
+      })
     }
 
     const { projectId, sectionId, documentId: itemId, year, month } = mapping
