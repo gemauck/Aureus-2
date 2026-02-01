@@ -108,7 +108,20 @@ function getFirstReference(headers) {
   return null
 }
 
-/** Extract In-Reply-To from full email object (headers, top-level, or raw body). */
+/** Parse In-Reply-To and References from raw .eml text (headers section). */
+function parseInReplyToFromRaw(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null
+  const m = rawText.match(/in-reply-to:\s*([^\r\n]+)/i)
+  if (m && m[1]) return normalizeMessageId(m[1].trim())
+  const ref = rawText.match(/references:\s*([^\r\n]+)/i)
+  if (ref && ref[1]) {
+    const first = ref[1].trim().split(/\s+/)[0]
+    if (first) return normalizeMessageId(first)
+  }
+  return null
+}
+
+/** Extract In-Reply-To from full email object. Resend often omits In-Reply-To from JSON headers; use raw .eml first. */
 async function getInReplyToFromEmail(email, fetchRawUrl) {
   const headers = email.headers || {}
   let inReplyTo = getInReplyTo(headers) || getFirstReference(headers)
@@ -118,28 +131,33 @@ async function getInReplyToFromEmail(email, fetchRawUrl) {
     const first = email.references.trim().split(/\s+/)[0]
     if (first) return normalizeMessageId(first)
   }
+  // Resend JSON often does not include In-Reply-To in headers; fetch raw .eml (primary for replies)
+  if (fetchRawUrl) {
+    try {
+      const res = await fetch(fetchRawUrl, { method: 'GET' })
+      if (res.ok) {
+        const raw = await res.text()
+        inReplyTo = parseInReplyToFromRaw(raw)
+        if (inReplyTo) {
+          console.log('document-request-reply: in_reply_to from raw .eml', inReplyTo.slice(0, 60))
+          return inReplyTo
+        }
+      }
+    } catch (err) {
+      console.warn('document-request-reply: failed to fetch raw email for In-Reply-To', err.message)
+    }
+  }
+  // Fallback: parse from body (quoted original may contain Message-ID or In-Reply-To)
   const text = (email.text || '').toString() + '\n' + (email.html || '').toString()
   const match = text.match(/in-reply-to:\s*([^\r\n]+)/gi)
   if (match && match[0]) {
     const val = match[0].replace(/in-reply-to:\s*/i, '').trim()
     if (val) return normalizeMessageId(val)
   }
-  if (fetchRawUrl) {
-    try {
-      const res = await fetch(fetchRawUrl, { method: 'GET' })
-      if (res.ok) {
-        const raw = await res.text()
-        const m = raw.match(/in-reply-to:\s*([^\r\n]+)/i)
-        if (m && m[1]) return normalizeMessageId(m[1].trim())
-        const ref = raw.match(/references:\s*([^\r\n]+)/i)
-        if (ref && ref[1]) {
-          const first = ref[1].trim().split(/\s+/)[0]
-          if (first) return normalizeMessageId(first)
-        }
-      }
-    } catch (err) {
-      console.warn('document-request-reply: failed to fetch raw email for In-Reply-To', err.message)
-    }
+  const msgIdMatch = text.match(/message-id:\s*([^\r\n]+)/gi)
+  if (msgIdMatch && msgIdMatch[0]) {
+    const val = msgIdMatch[0].replace(/message-id:\s*/i, '').trim()
+    if (val) return normalizeMessageId(val)
   }
   return null
 }
@@ -262,10 +280,14 @@ async function handler(req, res) {
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
     const inReplyTo = await getInReplyToFromEmail(email, rawUrl)
     if (!inReplyTo) {
+      const headerKeys = email.headers ? Object.keys(normalizeHeaders(email.headers)) : []
+      const hasRaw = !!(email.raw && (email.raw.download_url || email.raw.downloadUrl))
       console.warn('document-request-reply: no In-Reply-To', {
         emailId,
-        emailKeys: Object.keys(email),
-        headerKeys: email.headers ? Object.keys(normalizeHeaders(email.headers)) : []
+        headerKeys,
+        hasRawUrl: hasRaw,
+        in_reply_to: email.in_reply_to || null,
+        references: email.references ? (typeof email.references === 'string' ? email.references.slice(0, 80) : 'present') : null
       })
       return ok(res, { processed: false, reason: 'no_in_reply_to_or_references' })
     }
