@@ -59,9 +59,28 @@ Optional: enable **webhook signing** in Resend and verify the signature in the h
 
 ## Troubleshooting: Replies not showing in comments
 
-- The app stores a **custom Message-ID** when you send a document request (so reply `In-Reply-To` can be matched). **After any deploy that changes this flow, send a new document request from the app** and reply to that email; replies to requests sent before the change may not match.
-- If replies still don’t show: check server logs (`pm2 logs abcotronics-erp`) for `document-request-reply:` messages. You’ll see either `no In-Reply-To`, `unknown_thread` (no matching sent request), or `matched thread` + comment created.
-- Ensure the webhook URL is correct and Resend can reach it (no firewall blocking). If you use **RESEND_WEBHOOK_SECRET**, the secret in Resend must match.
+1. **Refresh after replying**  
+   After you reply to a document-request email, **refresh the project page** (or re-open the Document Collection tab) so the app fetches the latest comments from the server.
+
+2. **Diagnostic endpoint**  
+   Call (while logged in or with cron secret):
+   ```text
+   GET https://YOUR_APP_DOMAIN/api/inbound/document-request-reply-debug?secret=YOUR_CRON_SECRET
+   ```
+   Response shows recent `recentSent` (stored message IDs) and `recentComments` (last document-item comments). If `recentComments` is empty after you reply, the webhook may not be running or thread matching failed.
+
+3. **Logs**  
+   On the server run `pm2 logs abcotronics-erp` and look for `document-request-reply:`:
+   - `webhook received` → webhook was called
+   - `in_reply_to from raw .eml` → In-Reply-To was found in the raw email
+   - `matched thread` → comment was created
+   - `no In-Reply-To` or `unknown_thread` → see log details (e.g. send a **new** document request from the app, then reply to that email)
+
+4. **Custom Message-ID**  
+   The app stores a custom Message-ID when you send a document request. After any deploy that changes this flow, **send a new document request from the app** and reply to that email; older requests may not match.
+
+5. **Webhook URL and secret**  
+   Ensure the Resend webhook URL is correct and reachable. If you use **RESEND_WEBHOOK_SECRET**, the secret in Resend must match.
 
 ---
 

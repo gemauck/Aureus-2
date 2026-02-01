@@ -264,12 +264,21 @@ async function handler(req, res) {
     } catch (_) {
       return res.status(400).json({ error: 'Invalid JSON body' })
     }
-    if (body.type !== 'email.received' || !body.data || !body.data.email_id) {
-      return ok(res, { processed: false, reason: 'not_email_received' })
+    const data = body.data || body.payload?.data || body
+    const emailId = data && (data.email_id || data.emailId)
+    const eventType = body.type || body.event_type
+    if (eventType !== 'email.received') {
+      return ok(res, { processed: false, reason: 'not_email_received', receivedType: eventType })
+    }
+    if (!data || !emailId) {
+      console.warn('document-request-reply: missing data.email_id', {
+        bodyKeys: Object.keys(body),
+        dataKeys: data ? Object.keys(data) : []
+      })
+      return ok(res, { processed: false, reason: 'missing_email_id' })
     }
 
-    const emailId = body.data.email_id
-    console.log('document-request-reply: webhook received', { type: body.type, email_id: emailId })
+    console.log('document-request-reply: webhook received', { type: body.type || body.event_type, email_id: emailId })
     const apiKey = process.env.RESEND_API_KEY
     if (!apiKey || !apiKey.startsWith('re_')) {
       console.warn('document-request-reply: RESEND_API_KEY not set, skipping')

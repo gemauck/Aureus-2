@@ -367,6 +367,23 @@ app.post('/api/inbound/document-request-reply', express.text({ type: '*/*', limi
   }
 })
 
+// Document request reply debug (diagnostic: recent sent + comments)
+app.get('/api/inbound/document-request-reply-debug', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'inbound', 'document-request-reply-debug.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('document-request-reply-debug error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: e.message || 'Failed' })
+    }
+    return next(e)
+  }
+})
+
 // Increased limit to 100mb to support POA Review file uploads (50MB files + base64 encoding overhead)
 app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ extended: true, limit: '100mb' }))
