@@ -10,7 +10,8 @@ const Tools = () => {
         UnitConverter: null,
         TankSizeCalculator: null,
         DieselRefundEvidenceEvaluator: null,
-        DocumentParser: null
+        DocumentParser: null,
+        SafetyCultureInspections: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
 
@@ -28,7 +29,8 @@ const Tools = () => {
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
-                DocumentParser: window.DocumentParser
+                DocumentParser: window.DocumentParser,
+                SafetyCultureInspections: window.SafetyCultureInspections
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -85,7 +87,8 @@ const Tools = () => {
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
-                DocumentParser: window.DocumentParser
+                DocumentParser: window.DocumentParser,
+                SafetyCultureInspections: window.SafetyCultureInspections
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -157,6 +160,14 @@ const Tools = () => {
                 icon: 'fa-file-invoice-dollar',
                 color: 'green',
                 component: toolComponents.DieselRefundEvidenceEvaluator
+            },
+            {
+                id: 'safety-culture-inspections',
+                name: 'Safety Culture Inspections',
+                description: 'View and manage iAuditor inspections and audit reports from Safety Culture',
+                icon: 'fa-clipboard-check',
+                color: 'teal',
+                component: toolComponents.SafetyCultureInspections
             }
         ];
         // Debug: Log when tools array is recalculated
