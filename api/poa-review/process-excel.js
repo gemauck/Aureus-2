@@ -130,25 +130,35 @@ output_csv = r'${tempCsvPath.replace(/\\/g, '/')}'
 try:
     print("Converting Excel to CSV (streaming for memory efficiency)...")
     
-    # Read Excel in chunks and write directly to CSV (no memory accumulation)
-    chunk_size = 100000  # Process 100k rows at a time (larger chunks = faster)
-    header_row = None
-    first_chunk = True
+    chunk_size = 100000
     total_rows = 0
     
-    # First, read just the header to get column names
+    # Get column count and names: first row may be merged (pandas then reports 1 col)
     print("Reading header row...")
     header_df = pd.read_excel(input_file, nrows=0)
     header_row = list(header_df.columns)
-    print(f"Found {len(header_row)} columns")
+    first_data = pd.read_excel(input_file, skiprows=1, nrows=1, header=None)
+    n_cols = first_data.shape[1]
+    used_first_data_as_header = False
+    if len(header_row) != n_cols:
+        # First row may be merged; use first data row as header if it has right column count
+        if first_data.shape[1] == n_cols:
+            header_row = [str(first_data.iloc[0, i]) for i in range(n_cols)]
+            used_first_data_as_header = True
+            print(f"Using first data row as header ({n_cols} columns)")
+        else:
+            header_row = [str(header_row[i]) if i < len(header_row) else f'Column_{i}' for i in range(n_cols)]
+            print(f"Header/data column mismatch - padded to {n_cols} columns")
+    else:
+        header_row = [str(h) for h in header_row]
+    print(f"Using {len(header_row)} columns")
     
-    # Open CSV file for writing
+    # Start reading data after the header (and after first data row if we used it as header)
+    skip_rows = 2 if used_first_data_as_header else 1
+    
     with open(output_csv, 'w', encoding='utf-8') as csv_file:
-        # Write header
         csv_file.write(','.join([f'"{h}"' if ',' in str(h) or '"' in str(h) else str(h) for h in header_row]) + '\\n')
         
-        # Read and write chunks directly (no memory accumulation)
-        skip_rows = 1  # Skip header row
         while True:
             print(f"Reading chunk starting at row {skip_rows}...")
             chunk = pd.read_excel(input_file, skiprows=skip_rows, nrows=chunk_size, header=None)
@@ -156,18 +166,18 @@ try:
             if len(chunk) == 0:
                 break
             
-            # Set column names
-            chunk.columns = header_row
+            # Match column count (chunk may have fewer cols on last rows or merged cells)
+            n = chunk.shape[1]
+            if n != len(header_row):
+                use_header = list(header_row[:n]) if n <= len(header_row) else list(header_row) + [f'Column_{i}' for i in range(len(header_row), n)]
+            else:
+                use_header = header_row
+            chunk.columns = use_header
             
-            # Write chunk directly to CSV (append mode)
             chunk.to_csv(csv_file, index=False, header=False, mode='a', lineterminator='\\n')
-            
             total_rows += len(chunk)
             skip_rows += chunk_size
-            
             print(f"Processed {total_rows} rows so far...")
-            
-            # If we got fewer rows than chunk_size, we're done
             if len(chunk) < chunk_size:
                 break
     
