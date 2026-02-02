@@ -201,9 +201,12 @@ except Exception as e:
             const errStr = String(errorMsg).substring(0, 1000);
             console.error('POA Review Excel API - Conversion error:', errStr);
             const noSuchFile = /no such file or directory|not found|ENOENT/i.test(errStr);
-            if (noSuchFile && venvPython === 'python3') {
-                const setup = 'From the project root run: ./scripts/poa-review/setup-venv.sh  (or: python3 -m venv venv-poareview && ./venv-poareview/bin/pip install pandas openpyxl)';
-                return serverError(res, `POA Review requires Python with pandas. Virtual env not found. ${setup}`);
+            const missingPandas = /ModuleNotFoundError|No module named\s+['"]?pandas['"]?/i.test(errStr);
+            const setup = 'From the project root run: ./scripts/poa-review/setup-venv.sh  (or: python3 -m venv venv-poareview && ./venv-poareview/bin/pip install pandas openpyxl)';
+            if (venvPython === 'python3' && (noSuchFile || missingPandas)) {
+                return serverError(res, missingPandas
+                    ? `POA Review requires Python with pandas. System Python has no pandas. Create the venv: ${setup}`
+                    : `POA Review requires Python with pandas. Virtual env not found. ${setup}`);
             }
             throw new Error(`Failed to convert Excel to CSV: ${errStr}`);
         }

@@ -223,17 +223,29 @@ async function resendApi(method, pathname, apiKey, options = {}) {
 
 /**
  * Get list of attachments for a received email.
- * Uses List Attachments API; falls back to email.attachments if list is empty.
+ * Uses List Attachments API; falls back to webhook payload data.attachments or email.attachments.
+ * Retries list once after 2s if empty (eventual consistency).
  */
-async function getAttachmentList(emailId, apiKey, emailObject = null) {
-  const res = await resendApi('GET', `/emails/receiving/${emailId}/attachments`, apiKey)
-  const data = await res.json()
-  let list = data.data != null ? data.data : (Array.isArray(data) ? data : [])
-  if (!Array.isArray(list)) list = []
-  if (list.length === 0 && emailObject && Array.isArray(emailObject.attachments)) {
-    list = emailObject.attachments
+async function getAttachmentList(emailId, apiKey, webhookAttachments = null, emailObject = null) {
+  for (const attempt of [1, 2]) {
+    const res = await resendApi('GET', `/emails/receiving/${emailId}/attachments`, apiKey)
+    const data = await res.json()
+    let list = data.data != null ? data.data : (Array.isArray(data) ? data : [])
+    if (!Array.isArray(list)) list = []
+    if (list.length > 0) return list
+    if (attempt === 1) {
+      console.log('document-request-reply: list attachments empty, retry in 2s', { emailId })
+      await new Promise((r) => setTimeout(r, 2000))
+    }
   }
-  return list
+  // Fallback: webhook payload data.attachments (has id, filename; no download_url)
+  if (webhookAttachments && Array.isArray(webhookAttachments) && webhookAttachments.length > 0) {
+    return webhookAttachments
+  }
+  if (emailObject && Array.isArray(emailObject.attachments) && emailObject.attachments.length > 0) {
+    return emailObject.attachments
+  }
+  return []
 }
 
 /**
@@ -246,21 +258,44 @@ async function getAttachmentMeta(emailId, attachmentId, apiKey) {
 }
 
 /**
+ * Fetch attachment bytes directly from Resend API (fallback when CDN download_url fails).
+ * Tries Accept: application/octet-stream; if API returns JSON (metadata), returns null.
+ */
+async function getAttachmentContentFromApi(emailId, attachmentId, apiKey) {
+  const url = `${RESEND_API_BASE}/emails/receiving/${emailId}/attachments/${attachmentId}`
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/octet-stream,*/*'
+    }
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Resend attachment content ${res.status}: ${text.slice(0, 150)}`)
+  }
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
+  if (contentType.includes('application/json')) return null
+  return Buffer.from(await res.arrayBuffer())
+}
+
+/**
  * Download attachment bytes from Resend's download_url (signed CDN URL).
- * Tries without Authorization first (signed URLs often work as-is), then with API key.
+ * Tries: (1) no custom headers, (2) browser-like User-Agent, (3) with API key.
  */
 async function downloadAttachmentBytes(downloadUrl, apiKey) {
   const attempts = [
+    { headers: {} },
     {
       headers: {
-        'User-Agent': 'Abcotronics-ERP-Webhook/1.0',
+        'User-Agent': 'Mozilla/5.0 (compatible; Abcotronics-ERP/1.0)',
         Accept: '*/*'
       }
     },
     {
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'User-Agent': 'Abcotronics-ERP-Webhook/1.0',
+        'User-Agent': 'Mozilla/5.0 (compatible; Abcotronics-ERP/1.0)',
         Accept: '*/*'
       }
     }
@@ -270,7 +305,8 @@ async function downloadAttachmentBytes(downloadUrl, apiKey) {
     try {
       const res = await fetch(downloadUrl, { method: 'GET', ...opts })
       if (!res.ok) {
-        lastError = new Error(`Download ${res.status}: ${(await res.text()).slice(0, 150)}`)
+        const text = (await res.text()).slice(0, 200)
+        lastError = new Error(`Download ${res.status}: ${text}`)
         continue
       }
       const buffer = Buffer.from(await res.arrayBuffer())
@@ -303,10 +339,11 @@ function saveAttachmentToUploads(buffer, filename, dirname) {
 
 /**
  * Pull all attachments from Resend for a received email and save to uploads.
+ * Uses webhook payload attachments (id, filename) when list API returns empty; fetches download_url per attachment.
  * Returns array of { name, url } for each saved file.
  */
-async function pullAttachmentsFromResendAndSave(emailId, apiKey, emailObject, dirname) {
-  const list = await getAttachmentList(emailId, apiKey, emailObject)
+async function pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, emailObject, dirname) {
+  const list = await getAttachmentList(emailId, apiKey, webhookAttachments, emailObject)
   if (list.length === 0) {
     console.log('document-request-reply: no attachments for email', emailId)
     return []
@@ -329,13 +366,28 @@ async function pullAttachmentsFromResendAndSave(emailId, apiKey, emailObject, di
       console.warn('document-request-reply: no download_url for attachment', { name, attKeys: Object.keys(att) })
       continue
     }
+    let buffer
     try {
-      const buffer = await downloadAttachmentBytes(downloadUrl, apiKey)
+      buffer = await downloadAttachmentBytes(downloadUrl, apiKey)
+    } catch (err) {
+      if (att.id) {
+        try {
+          buffer = await getAttachmentContentFromApi(emailId, att.id, apiKey)
+        } catch (e) {
+          console.warn('document-request-reply: API fallback failed', att.id, e.message)
+        }
+      }
+      if (!buffer) {
+        console.warn('document-request-reply: attachment save failed', name, err.message)
+        continue
+      }
+    }
+    try {
       const publicUrl = saveAttachmentToUploads(buffer, name, dirname)
       uploaded.push({ name, url: publicUrl })
       console.log('document-request-reply: attachment saved', name, publicUrl)
     } catch (err) {
-      console.warn('document-request-reply: attachment save failed', name, err.message)
+      console.warn('document-request-reply: save to uploads failed', name, err.message)
     }
   }
   return uploaded
@@ -445,7 +497,8 @@ async function handler(req, res) {
     const fromStr = (email.from || '').toString().replace(/^.*<([^>]+)>.*$/, '$1').trim() || 'unknown'
 
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
-    const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, email, __dirname)
+    const webhookAttachments = data.attachments && Array.isArray(data.attachments) ? data.attachments : null
+    const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
     console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
 
     const attachmentLine =
