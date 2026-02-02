@@ -95,11 +95,15 @@ if [ "$DB_TYPE" = "postgresql" ]; then
         echo -e "${YELLOW}⚠️  pg_dump not found. Skipping backup (not recommended)${NC}"
         echo "   Install with: brew install postgresql (macOS) or apt-get install postgresql-client (Linux)"
         
-        # Ask for confirmation to continue without backup
-        read -p "⚠️  Continue without backup? (type 'YES' to continue): " confirm
-        if [ "$confirm" != "YES" ]; then
-            echo "❌ Aborted. Backup is required for safety."
-            exit 1
+        # Ask for confirmation to continue without backup (skip in non-interactive/deploy)
+        if [ -n "${NON_INTERACTIVE:-}" ] || [ -n "${CI:-}" ]; then
+            echo "   Non-interactive mode: proceeding without backup"
+        else
+            read -p "⚠️  Continue without backup? (type 'YES' to continue): " confirm
+            if [ "$confirm" != "YES" ]; then
+                echo "❌ Aborted. Backup is required for safety."
+                exit 1
+            fi
         fi
     fi
 elif [ "$DB_TYPE" = "sqlite" ]; then
@@ -154,10 +158,14 @@ if [[ "$*" == *"--accept-data-loss"* ]]; then
     echo -e "${YELLOW}⚠️  WARNING: --accept-data-loss flag detected${NC}"
     echo "   This can cause data loss if schema changes conflict"
     echo ""
-    read -p "⚠️  Continue with --accept-data-loss? (type 'ACCEPT' to continue): " confirm
-    if [ "$confirm" != "ACCEPT" ]; then
-        echo "❌ Aborted."
-        exit 1
+    if [ -n "${NON_INTERACTIVE:-}" ] || [ -n "${CI:-}" ]; then
+        echo "   Non-interactive mode: proceeding (use with caution)"
+    else
+        read -p "⚠️  Continue with --accept-data-loss? (type 'ACCEPT' to continue): " confirm
+        if [ "$confirm" != "ACCEPT" ]; then
+            echo "❌ Aborted."
+            exit 1
+        fi
     fi
     echo ""
 fi

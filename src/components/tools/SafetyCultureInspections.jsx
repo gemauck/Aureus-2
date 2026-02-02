@@ -11,6 +11,9 @@ const SafetyCultureInspections = () => {
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [importing, setImporting] = useState(false);
+    const [importResult, setImportResult] = useState(null);
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -73,6 +76,39 @@ const SafetyCultureInspections = () => {
         }
     };
 
+    const searchLower = (searchQuery || '').trim().toLowerCase();
+    const filteredInspections = searchLower
+        ? inspections.filter((insp) => {
+            const name = (insp.name || '').toLowerCase();
+            const template = (insp.template_name || '').toLowerCase();
+            const owner = (insp.owner_name || '').toLowerCase();
+            const id = (insp.id || '').toLowerCase();
+            return name.includes(searchLower) || template.includes(searchLower) || owner.includes(searchLower) || id.includes(searchLower);
+        })
+        : inspections;
+
+    const runImport = async () => {
+        setImporting(true);
+        setImportResult(null);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture/import-job-cards`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ limit: 200 })
+            });
+            const json = await res.json().catch(() => ({}));
+            const data = json?.data ?? json;
+            setImportResult(data);
+            if (data?.imported > 0) {
+                setError(null);
+            }
+        } catch (e) {
+            setImportResult({ error: e.message || 'Import failed' });
+        } finally {
+            setImporting(false);
+        }
+    };
+
     const formatDate = (s) => {
         if (!s) return '-';
         try {
@@ -125,21 +161,79 @@ const SafetyCultureInspections = () => {
                         </span>
                     )}
                 </div>
-                <a
-                    href="https://app.safetyculture.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:underline"
-                >
-                    Open in Safety Culture →
-                </a>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={runImport}
+                        disabled={importing || !status?.connected}
+                        className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {importing ? (
+                            <>
+                                <i className="fas fa-spinner fa-spin"></i>
+                                Importing...
+                            </>
+                        ) : (
+                            <>
+                                <i className="fas fa-download"></i>
+                                Import as Job Cards
+                            </>
+                        )}
+                    </button>
+                    <a
+                        href="https://app.safetyculture.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline"
+                    >
+                        Open in Safety Culture →
+                    </a>
+                </div>
             </div>
+
+            {importResult && (
+                <div className={`mx-4 mt-3 p-3 rounded text-sm ${
+                    importResult.error ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200' :
+                    'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200'
+                }`}>
+                    {importResult.error ? (
+                        importResult.error
+                    ) : (
+                        <>
+                            <strong>{importResult.summary}</strong>
+                            {importResult.errors?.length > 0 && (
+                                <span className="block mt-1 text-amber-700 dark:text-amber-300">
+                                    {importResult.errors.length} error(s)
+                                </span>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
 
             {error && status?.configured && (
                 <div className="mx-4 mt-3 p-3 rounded bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
                     {error}
                 </div>
             )}
+
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <input
+                    type="text"
+                    placeholder="Search inspections, templates, owners..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`w-full max-w-md px-3 py-2 rounded-lg border text-sm placeholder-gray-400 ${
+                        isDark
+                            ? 'bg-gray-700 border-gray-600 text-gray-100 focus:ring-primary-500 focus:border-primary-500'
+                            : 'bg-white border-gray-300 text-gray-900 focus:ring-primary-500 focus:border-primary-500'
+                    }`}
+                />
+                {searchQuery && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                        Showing {filteredInspections.length} of {inspections.length} inspections
+                    </p>
+                )}
+            </div>
 
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -154,14 +248,14 @@ const SafetyCultureInspections = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {inspections.length === 0 ? (
+                        {filteredInspections.length === 0 ? (
                             <tr>
                                 <td colSpan={6} className="p-6 text-center text-gray-500">
-                                    No inspections found
+                                    {inspections.length === 0 ? 'No inspections found' : 'No inspections match your search'}
                                 </td>
                             </tr>
                         ) : (
-                            inspections.map((insp) => (
+                            filteredInspections.map((insp) => (
                                 <tr
                                     key={insp.id}
                                     className={`border-t ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}

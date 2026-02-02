@@ -57,6 +57,14 @@ echo "-> Building application..."
 npm run build
 
 echo
+echo "-> Applying database schema updates (if any)..."
+if [ -f scripts/safe-db-migration.sh ]; then
+  NON_INTERACTIVE=1 bash scripts/safe-db-migration.sh npx prisma db push 2>/dev/null || echo "  (schema already up to date or DB not configured)"
+else
+  npx prisma db push 2>/dev/null || echo "  (schema already up to date or DB not configured)"
+fi
+
+echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
   pm2 restart "${PM2_PROCESS_NAME}" || {

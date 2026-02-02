@@ -1547,6 +1547,7 @@ model JobCard {
   vehicleId           String?
   vehicle             Vehicle?              @relation(fields: [vehicleId], references: [id])
   serviceForms        ServiceFormInstance[]
+  safetyCultureAuditId String?              @unique // Links to Safety Culture inspection for import deduplication
 
   @@index([clientId])
   @@index([ownerId])

@@ -88,11 +88,24 @@ GET /api/safety-culture/groups
 
 Returns the groups and organizations your Safety Culture account belongs to.
 
+## Import inspections as job cards
+
+You can import Safety Culture inspections as ERP job cards:
+
+1. Go to **Tools** → **Safety Culture Inspections**
+2. Click **Import as Job Cards**
+3. Inspections are created as job cards with: template name, owner, location, dates, score, and report link
+
+Duplicate imports are skipped (tracked by `safetyCultureAuditId`). Imported job cards appear in **Manufacturing** → **Job Cards**.
+
+**API:** `POST /api/safety-culture/import-job-cards`  
+Body: `{ "limit": 200, "modified_after": "2025-01-01T00:00:00.000Z" }` (optional)
+
 ## Use cases in the ERP
 
 - **Projects** – Link inspections to project sites; show compliance status
 - **Teams** – Assign inspections to team members; schedule recurring audits
-- **Manufacturing / Job cards** – Attach inspection reports to job cards
+- **Manufacturing / Job cards** – Import inspections as job cards; attach reports
 - **Reports** – Compliance dashboards and audit trails
 - **Sites** – Map Safety Culture sites to ERP client sites
 
