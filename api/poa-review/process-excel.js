@@ -290,8 +290,8 @@ for expected_col, possible_names in required_columns.items():
 
 if missing_columns:
     available_cols = ", ".join([f"'{col}'" for col in data.columns])
-    error_msg = f"Missing required columns: {', '.join(missing_columns)}\n"
-    error_msg += f"Available columns: {available_cols}\n"
+    error_msg = f"Missing required columns: {', '.join(missing_columns)}\\\n"
+    error_msg += f"Available columns: {available_cols}\\\n"
     raise ValueError(error_msg)
 
 if column_mapping:
