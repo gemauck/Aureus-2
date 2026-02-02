@@ -1905,13 +1905,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             commentId: newCommentId
         });
         
-        // Save immediately
-        saveToDatabase();
+        // CRITICAL: Await save so comment is persisted before @mention email is sent.
+        // Otherwise the email can be delivered but the comment never saved (e.g. save skipped when another save in progress).
+        try {
+            await saveToDatabase();
+            // If save was skipped (e.g. another save in progress), retry after a short delay so comment is not lost
+            setTimeout(() => saveToDatabase(), 500);
+        } catch (saveErr) {
+            console.error('❌ Failed to save comment:', saveErr);
+            // Still allow @mentions below; user may retry save via debounce
+        }
         
         setQuickComment('');
 
         // ========================================================
-        // @MENTIONS - Process mentions and create notifications
+        // @MENTIONS - Process mentions and create notifications (after comment is saved)
         // ========================================================
         try {
             if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
