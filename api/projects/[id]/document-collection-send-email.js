@@ -79,12 +79,11 @@ async function handler(req, res) {
 
     const sent = []
     const failed = []
-    // For reply routing: use custom Message-ID so In-Reply-To on replies matches (Resend send response id is internal only)
+    // For reply routing: use custom Message-ID when inbound is set; otherwise generate one so we always persist for activity view
     let messageIdForReply = null
-    if (hasCellContext && inboundEmail) {
-      const domain = inboundEmail.includes('@') ? inboundEmail.split('@')[1] : 'abcoafrica.co.za'
-      const uniqueId = `docreq-${crypto.randomUUID()}@${domain}`
-      messageIdForReply = uniqueId
+    if (hasCellContext) {
+      const domain = inboundEmail && inboundEmail.includes('@') ? inboundEmail.split('@')[1] : 'local'
+      messageIdForReply = `docreq-${crypto.randomUUID()}@${domain}`
     }
 
     try {
@@ -110,6 +109,7 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
+    // Always persist sent record when we have cell context so "Email activity" shows sent items (even without inbound)
     if (messageIdForReply && hasCellContext) {
       try {
         await prisma.documentRequestEmailSent.upsert({
@@ -131,7 +131,7 @@ async function handler(req, res) {
           }
         })
       } catch (dbErr) {
-        console.warn('document-collection-send-email: failed to store messageId mapping:', dbErr.message)
+        console.error('document-collection-send-email: failed to store sent record:', dbErr.message)
       }
     }
 

@@ -3805,22 +3805,25 @@ Abcotronics`;
                                                             <i className="fas fa-reply text-emerald-600 text-xs"></i>
                                                             <span className="text-gray-600">{formatDateTime(r.createdAt)}</span>
                                                         </div>
-                                                        <div className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{r.text ? r.text.slice(0, 500) + (r.text.length > 500 ? '…' : '') : '—'}</div>
+                                                        <div className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-sm">{r.text && r.text.trim() ? r.text : '—'}</div>
                                                         {r.attachments && r.attachments.length > 0 && (
                                                             <div className="px-3 py-2 border-t border-gray-200 flex flex-wrap gap-2">
-                                                                {r.attachments.map((att, idx) => (
-                                                                    <a
-                                                                        key={idx}
-                                                                        href={att.url}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-gray-200 text-xs text-[#0369a1] hover:bg-[#e0f2fe]"
-                                                                        onClick={(e) => { e.preventDefault(); downloadCommentAttachment(att.url, att.name); }}
-                                                                    >
-                                                                        <i className="fas fa-paperclip text-[10px]"></i>
-                                                                        <span className="truncate max-w-[160px]">{att.name || 'Attachment'}</span>
-                                                                    </a>
-                                                                ))}
+                                                                {r.attachments.map((att, idx) => {
+                                                                    const attUrl = att.url && att.url.startsWith('http') ? att.url : (typeof window !== 'undefined' && window.location && att.url ? (window.location.origin + (att.url.startsWith('/') ? att.url : '/' + att.url)) : att.url);
+                                                                    return (
+                                                                        <a
+                                                                            key={idx}
+                                                                            href={attUrl}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-gray-200 text-xs text-[#0369a1] hover:bg-[#e0f2fe]"
+                                                                            onClick={(e) => { e.preventDefault(); downloadCommentAttachment(attUrl, att.name); }}
+                                                                        >
+                                                                            <i className="fas fa-paperclip text-[10px]"></i>
+                                                                            <span className="truncate max-w-[160px]">{att.name || 'Attachment'}</span>
+                                                                        </a>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
                                                     </li>
@@ -3835,20 +3838,23 @@ Abcotronics`;
                                             <div>
                                                 <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">All attachments</h4>
                                                 <ul className="flex flex-wrap gap-2">
-                                                    {allAttachments.map((att, idx) => (
-                                                        <li key={idx}>
-                                                            <a
-                                                                href={att.url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-sm text-[#0369a1] hover:bg-[#e0f2fe]"
-                                                                onClick={(e) => { e.preventDefault(); downloadCommentAttachment(att.url, att.name); }}
-                                                            >
-                                                                <i className="fas fa-file-alt text-xs"></i>
-                                                                <span className="truncate max-w-[180px]">{att.name || 'Attachment'}</span>
-                                                            </a>
-                                                        </li>
-                                                    ))}
+                                                    {allAttachments.map((att, idx) => {
+                                                        const attUrl = att.url && att.url.startsWith('http') ? att.url : (typeof window !== 'undefined' && window.location && att.url ? (window.location.origin + (att.url.startsWith('/') ? att.url : '/' + att.url)) : att.url);
+                                                        return (
+                                                            <li key={idx}>
+                                                                <a
+                                                                    href={attUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-sm text-[#0369a1] hover:bg-[#e0f2fe]"
+                                                                    onClick={(e) => { e.preventDefault(); downloadCommentAttachment(attUrl, att.name); }}
+                                                                >
+                                                                    <i className="fas fa-file-alt text-xs"></i>
+                                                                    <span className="truncate max-w-[180px]">{att.name || 'Attachment'}</span>
+                                                                </a>
+                                                            </li>
+                                                        );
+                                                    })}
                                                 </ul>
                                             </div>
                                         );

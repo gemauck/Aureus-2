@@ -40,14 +40,15 @@ async function handler(req, res) {
       where: { id: documentId },
       include: { section: { select: { projectId: true } } }
     })
-    if (!document || document.section?.projectId !== projectId) {
+    if (!document || String(document.section?.projectId) !== String(projectId)) {
       return ok(res, { sent: [], received: [] })
     }
 
     // Query sent by projectId + documentId + year + month (sectionId can differ per year, so don't filter by it)
+    const pid = String(projectId)
     const [sent, receivedRows] = await Promise.all([
       prisma.documentRequestEmailSent.findMany({
-        where: { projectId, documentId, year, month },
+        where: { projectId: pid, documentId, year, month },
         orderBy: { createdAt: 'asc' },
         select: { id: true, messageId: true, createdAt: true }
       }),
@@ -56,7 +57,10 @@ async function handler(req, res) {
           itemId: documentId,
           year,
           month,
-          author: 'Email from Client'
+          OR: [
+            { author: 'Email from Client' },
+            { text: { startsWith: 'Email from Client' } }
+          ]
         },
         orderBy: { createdAt: 'asc' },
         select: { id: true, text: true, attachments: true, createdAt: true }
