@@ -138,6 +138,21 @@ export async function createNotificationForUser(targetUserId, type, title, messa
             const metadataObj = metadata && (typeof metadata === 'string' ? JSON.parse(metadata) : metadata);
             if (metadataObj && (type === 'comment' || type === 'mention' || type === 'task')) {
                 commentText = metadataObj.commentText || metadataObj.fullComment || null;
+                // For mention emails, ensure the comment shown matches the notification: use the quoted preview from message if present.
+                // This fixes cases where metadata comment was missing or wrong (e.g. stale/cached), so the email always shows the comment that triggered the mention.
+                if (type === 'mention' && message && typeof message === 'string') {
+                    const prefix = ': "';
+                    const idx = message.indexOf(prefix);
+                    if (idx !== -1) {
+                        const start = idx + prefix.length;
+                        const after = message.slice(start);
+                        const endQuote = after.lastIndexOf('"');
+                        if (endQuote !== -1) {
+                            const fromMessage = after.slice(0, endQuote).trim();
+                            if (fromMessage) commentText = fromMessage;
+                        }
+                    }
+                }
                 taskTitle = metadataObj.taskTitle || null;
                 if (metadataObj.projectId) {
                     const p = await prisma.project.findUnique({ where: { id: metadataObj.projectId }, include: { client: true } });
