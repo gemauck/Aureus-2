@@ -124,6 +124,65 @@ function parseInReplyToFromRaw(rawText) {
   return null
 }
 
+/** Extract ALL message IDs from In-Reply-To and References (raw .eml). Resend often uses its own format in In-Reply-To; our docreq-xxx@domain may appear in References. */
+function parseAllMessageIdsFromRaw(rawText) {
+  if (!rawText || typeof rawText !== 'string') return []
+  const ids = new Set()
+  const add = (val) => {
+    const n = normalizeMessageId(val)
+    if (n && n.length > 5) ids.add(n)
+  }
+  const m = rawText.match(/in-reply-to:\s*([^\r\n]+)/i)
+  if (m && m[1]) {
+    const parts = m[1].trim().split(/\s+/)
+    parts.forEach(add)
+  }
+  const ref = rawText.match(/references:\s*([^\r\n]+)/i)
+  if (ref && ref[1]) {
+    ref[1].trim().split(/\s+/).forEach(add)
+  }
+  return [...ids]
+}
+
+/** Get all candidate message IDs from email (In-Reply-To + References). Try each when matching; Resend may put our docreq-xxx in References while In-Reply-To uses their format. */
+async function getAllMessageIdCandidates(email, fetchRawUrl, apiKey) {
+  const candidates = new Set()
+  const add = (val) => {
+    const n = val && typeof val === 'string' ? normalizeMessageId(val) : ''
+    if (n && n.length > 5) candidates.add(n)
+  }
+  const headers = email.headers || {}
+  const h = normalizeHeaders(headers)
+  const inReplyTo = h['in-reply-to'] || h['in_reply_to'] || email.in_reply_to
+  if (inReplyTo && typeof inReplyTo === 'string') {
+    inReplyTo.trim().split(/\s+/).forEach(add)
+  }
+  const refs = h['references'] || email.references
+  if (refs && typeof refs === 'string') {
+    refs.trim().split(/\s+/).forEach(add)
+  }
+  if (fetchRawUrl) {
+    try {
+      const opts = { method: 'GET' }
+      if (apiKey) opts.headers = { Authorization: `Bearer ${apiKey}` }
+      const res = await fetch(fetchRawUrl, opts)
+      if (res.ok) {
+        const raw = await res.text()
+        const fromRaw = parseAllMessageIdsFromRaw(raw)
+        fromRaw.forEach((id) => candidates.add(id))
+      }
+    } catch (err) {
+      console.warn('document-request-reply: failed to fetch raw for candidates', err.message)
+    }
+  }
+  const text = (email.text || '').toString() + '\n' + (email.html || '').toString()
+  const inReplyMatch = text.match(/in-reply-to:\s*([^\r\n]+)/gi)
+  if (inReplyMatch) inReplyMatch.forEach((s) => add(s.replace(/in-reply-to:\s*/i, '').trim()))
+  const msgIdMatch = text.match(/message-id:\s*([^\r\n]+)/gi)
+  if (msgIdMatch) msgIdMatch.forEach((s) => add(s.replace(/message-id:\s*/i, '').trim()))
+  return [...candidates]
+}
+
 /** Extract In-Reply-To from full email object. Resend often omits In-Reply-To from JSON headers; use raw .eml first. */
 async function getInReplyToFromEmail(email, fetchRawUrl, apiKey) {
   const headers = email.headers || {}
@@ -461,11 +520,11 @@ async function handler(req, res) {
 
     const email = await fetchReceivedEmail(emailId, apiKey)
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
-    const inReplyTo = await getInReplyToFromEmail(email, rawUrl, apiKey)
-    if (!inReplyTo) {
+    const allCandidates = await getAllMessageIdCandidates(email, rawUrl, apiKey)
+    if (allCandidates.length === 0) {
       const headerKeys = email.headers ? Object.keys(normalizeHeaders(email.headers)) : []
       const hasRaw = !!(email.raw && (email.raw.download_url || email.raw.downloadUrl))
-      console.warn('document-request-reply: no In-Reply-To', {
+      console.warn('document-request-reply: no In-Reply-To or References', {
         emailId,
         headerKeys,
         hasRawUrl: hasRaw,
@@ -479,44 +538,88 @@ async function handler(req, res) {
       })
     }
 
-    // Stored messageId is without angle brackets (e.g. docreq-uuid@domain). In-Reply-To is normalized the same way.
-    const localPart = inReplyTo.split('@')[0]
-    const messageIdCandidates = [inReplyTo, localPart].filter(Boolean)
+    // Resend may put its own format (e.g. 0102019c24a3ef6e-...) in In-Reply-To; our docreq-uuid@domain may be in References. Try ALL candidates.
+    const messageIdCandidates = new Set(allCandidates)
+    allCandidates.forEach((c) => {
+      const lp = c.split('@')[0]
+      if (lp && lp.startsWith('docreq-')) messageIdCandidates.add(lp)
+    })
+    const candidatesArray = [...messageIdCandidates]
     let mapping = await prisma.documentRequestEmailSent.findFirst({
-      where: { messageId: { in: messageIdCandidates } }
+      where: { messageId: { in: candidatesArray } }
     })
     if (!mapping) {
       const recent = await prisma.documentRequestEmailSent.findMany({
-        take: 200,
+        take: 300,
         orderBy: { createdAt: 'desc' }
       })
-      mapping = recent.find(
-        (r) =>
-          r.messageId === inReplyTo ||
-          r.messageId === localPart ||
-          inReplyTo.startsWith(r.messageId) ||
-          (r.messageId.length >= 10 && inReplyTo.includes(r.messageId))
-      ) || null
-    }
-    // Fallback: match by local part only (e.g. docreq-uuid) in case reply used different domain
-    if (!mapping && localPart && localPart.startsWith('docreq-')) {
-      const byLocalPart = await prisma.documentRequestEmailSent.findFirst({
-        where: { messageId: { startsWith: localPart + '@' } }
-      })
-      if (byLocalPart) mapping = byLocalPart
+      for (const cand of candidatesArray) {
+        const lp = cand.split('@')[0]
+        mapping =
+          recent.find(
+            (r) =>
+              r.messageId === cand ||
+              r.messageId === lp ||
+              cand.startsWith(r.messageId) ||
+              (r.messageId.length >= 10 && cand.includes(r.messageId))
+          ) || null
+        if (mapping) break
+      }
     }
     if (!mapping) {
+      for (const cand of candidatesArray) {
+        const lp = cand.split('@')[0]
+        if (lp && lp.startsWith('docreq-')) {
+          const byLocalPart = await prisma.documentRequestEmailSent.findFirst({
+            where: { messageId: { startsWith: lp + '@' } }
+          })
+          if (byLocalPart) {
+            mapping = byLocalPart
+            break
+          }
+        }
+      }
+    }
+    // Last resort: match by subject. Our subject ends with " – Month Year" (e.g. " – February 2026").
+    if (!mapping) {
+      const subject = (email.subject || '').toString()
+      const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+      let fallbackMonth = null
+      let fallbackYear = null
+      for (let i = 0; i < monthNames.length; i++) {
+        const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
+        const m = subject.match(re)
+        if (m) {
+          fallbackMonth = i + 1
+          fallbackYear = parseInt(m[1], 10)
+          break
+        }
+      }
+      if (fallbackMonth && fallbackYear) {
+        mapping = await prisma.documentRequestEmailSent.findFirst({
+          where: { month: fallbackMonth, year: fallbackYear },
+          orderBy: { createdAt: 'desc' }
+        })
+        if (mapping) {
+          console.log('document-request-reply: matched by subject fallback', { month: fallbackMonth, year: fallbackYear, subject: subject.slice(0, 60) })
+        }
+      }
+    }
+    if (!mapping) {
+      const primaryId = allCandidates[0] || ''
       console.warn('document-request-reply: unknown_thread', {
-        inReplyTo: inReplyTo.slice(0, 120),
-        localPart,
-        tried: messageIdCandidates,
+        candidatesCount: allCandidates.length,
+        firstCandidate: primaryId.slice(0, 80),
+        tried: candidatesArray.slice(0, 10),
         recentCount: (await prisma.documentRequestEmailSent.count()).toString(),
-        hint: 'Send a NEW document request from the app (after deploy), then reply to that email. Ensure Resend webhook for email.received points to this URL.'
+        subject: (email.subject || '').slice(0, 80),
+        hint: 'Send a new document request from the app, then reply to that email. Resend may use a different In-Reply-To format.'
       })
       return ok(res, {
         processed: false,
         reason: 'unknown_thread',
-        inReplyTo: inReplyTo.slice(0, 120),
+        candidatesChecked: allCandidates.length,
+        firstCandidate: primaryId.slice(0, 100),
         hint: 'Send a new document request from the app, then reply to that email. Ensure Resend webhook for email.received is set.'
       })
     }
@@ -526,7 +629,7 @@ async function handler(req, res) {
       itemId: mapping.documentId,
       year: mapping.year,
       month: mapping.month,
-      inReplyTo: inReplyTo.slice(0, 60)
+      messageId: mapping.messageId.slice(0, 60)
     })
 
     const { projectId, sectionId, documentId: itemId, year, month } = mapping
