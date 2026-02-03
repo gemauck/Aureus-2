@@ -3525,6 +3525,7 @@ Abcotronics`;
                 const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim());
                 const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
+                const hasCellKeys = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
                 const hasCellContext = !!(ctx?.section?.id && ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum);
                 const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
                     method: 'POST',
@@ -3540,15 +3541,15 @@ Abcotronics`;
                         subject: subject.trim(),
                         html: htmlPayload,
                         text: body.trim(),
-                        ...(hasCellContext
+                        ...(hasCellKeys
                             ? {
-                                projectId: project?.id != null ? String(project.id).trim() : undefined,
-                                sectionId: String(ctx.section.id).trim(),
+                                projectId: String(project.id).trim(),
                                 documentId: String(ctx.doc.id).trim(),
                                 month: Number(monthNum),
                                 year: Number(yearNum)
                             }
-                            : {})
+                            : {}),
+                        ...(hasCellContext ? { sectionId: String(ctx.section.id).trim() } : {})
                     })
                 });
                 const json = await res.json().catch(() => ({}));

@@ -34,16 +34,7 @@ async function handler(req, res) {
   }
 
   try {
-    // Verify document exists and belongs to this project (via its section)
-    const document = await prisma.documentItem.findUnique({
-      where: { id: cell.documentId },
-      include: { section: { select: { projectId: true } } }
-    })
-    if (!document || String(document.section?.projectId) !== cell.projectId) {
-      return ok(res, { sent: [], received: [] })
-    }
-
-    // Sent items from dedicated log (exact cell match first, then fallback by project+year+month)
+    // Sent items from dedicated log first (so we always show sent even if document check fails)
     let sent = await prisma.documentCollectionEmailLog.findMany({
       where: { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month, kind: 'sent' },
       orderBy: { createdAt: 'asc' },
@@ -56,6 +47,15 @@ async function handler(req, res) {
         select: { id: true, createdAt: true, documentId: true }
       })
       sent = fallback.filter((row) => String(row.documentId) === String(cell.documentId)).map(({ id, createdAt }) => ({ id, createdAt }))
+    }
+
+    // Verify document exists and belongs to this project (for received comments and auth)
+    const document = await prisma.documentItem.findUnique({
+      where: { id: cell.documentId },
+      include: { section: { select: { projectId: true } } }
+    })
+    if (!document || String(document.section?.projectId) !== cell.projectId) {
+      return ok(res, { sent, received: [] })
     }
 
     const [receivedRows] = await Promise.all([
