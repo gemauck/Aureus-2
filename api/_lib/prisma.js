@@ -90,6 +90,7 @@ function initializePrisma() {
     // Check for valid database hostname (allow multiple valid hostnames)
     const validHostnames = [
       'nov-3-backup5-do-user-28031752-0',
+      'jan-29-backup-do-us',
       'dbaas-db-6934625-do-user-28031752-0',
       'ondigitalocean.com'
     ]

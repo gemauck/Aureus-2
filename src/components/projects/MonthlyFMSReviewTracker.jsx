@@ -104,6 +104,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
     const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
+    const loadRetryTimeoutRef = useRef(null);
+    const hasRetriedLoadRef = useRef(false);
     
     const getSnapshotKey = (projectId) => projectId ? `monthlyFMSReviewSnapshot_${projectId}` : null;
 
@@ -520,6 +522,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                 });
                 
                 if (freshProject?.monthlyFMSReviewSections) {
+                    hasRetriedLoadRef.current = false;
                     const normalized = normalizeSectionsByYear(freshProject.monthlyFMSReviewSections);
                     console.log('📥 Normalized sections:', { 
                         yearKeys: Object.keys(normalized),
@@ -536,6 +539,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             // Fallback to prop data (only if database load failed)
             console.log('⚠️ Falling back to prop data');
             if (project?.monthlyFMSReviewSections) {
+                hasRetriedLoadRef.current = false;
                 const normalized = normalizeSectionsByYear(project.monthlyFMSReviewSections);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
@@ -565,6 +569,18 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     }
                 }
                 
+                // No data - retry once after short delay (fixes "sometimes does not load" for some users)
+                if (loadRetryTimeoutRef.current) {
+                    clearTimeout(loadRetryTimeoutRef.current);
+                    loadRetryTimeoutRef.current = null;
+                }
+                if (!hasRetriedLoadRef.current) {
+                    hasRetriedLoadRef.current = true;
+                    loadRetryTimeoutRef.current = setTimeout(() => {
+                        loadRetryTimeoutRef.current = null;
+                        loadData();
+                    }, 800);
+                }
                 // No data - initialize empty
                 console.log('📭 No data found, initializing empty');
                 setSectionsByYear({});
@@ -580,6 +596,17 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             });
             setSectionsByYear({});
             sectionsRef.current = {};
+            if (loadRetryTimeoutRef.current) {
+                clearTimeout(loadRetryTimeoutRef.current);
+                loadRetryTimeoutRef.current = null;
+            }
+            if (!hasRetriedLoadRef.current) {
+                hasRetriedLoadRef.current = true;
+                loadRetryTimeoutRef.current = setTimeout(() => {
+                    loadRetryTimeoutRef.current = null;
+                    loadData();
+                }, 800);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -591,6 +618,29 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             loadData();
         }
     }, [project?.id, selectedYear, loadData]);
+
+    // When tab becomes visible and we have no sections, refetch (fixes "sometimes does not load" for some users)
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        const onVisibility = () => {
+            if (document.visibilityState !== 'visible' || !project?.id) return;
+            const years = sectionsByYear && typeof sectionsByYear === 'object' ? Object.keys(sectionsByYear) : [];
+            const hasAny = years.some((y) => Array.isArray(sectionsByYear[y]) && sectionsByYear[y].length > 0);
+            if (!hasAny) loadData();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => document.removeEventListener('visibilitychange', onVisibility);
+    }, [project?.id, sectionsByYear, loadData]);
+
+    // Clear retry timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (loadRetryTimeoutRef.current) {
+                clearTimeout(loadRetryTimeoutRef.current);
+                loadRetryTimeoutRef.current = null;
+            }
+        };
+    }, []);
     
     // Load users for reviewer assignment
     useEffect(() => {
@@ -3838,13 +3888,23 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                             <div>
                                 <p className="text-lg font-bold text-gray-900">No sections yet</p>
                                 <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                                <p className="text-xs text-amber-700 mt-2">Not loading? Try <strong>Retry load</strong> below or switch away and back to this tab.</p>
                             </div>
-                            <button
-                                onClick={handleAddSection}
-                                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-                            >
-                                <i className="fas fa-plus"></i><span>Add First Section</span>
-                            </button>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                                <button
+                                    onClick={() => { if (project?.id) loadData(); }}
+                                    disabled={isLoading}
+                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium disabled:opacity-50"
+                                >
+                                    {isLoading ? 'Loading…' : 'Retry load'}
+                                </button>
+                                <button
+                                    onClick={handleAddSection}
+                                    className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                                >
+                                    <i className="fas fa-plus"></i><span>Add First Section</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (

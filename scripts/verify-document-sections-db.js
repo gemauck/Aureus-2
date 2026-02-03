@@ -1,16 +1,42 @@
 /**
  * Verify Document Sections are saved to database
  * Run: node scripts/verify-document-sections-db.js [projectId]
+ *
+ * Which DB? Uses DATABASE_URL from environment. By default that comes from .env / .env.local
+ * (local dev = often localhost). Your LIVE site (e.g. abcoafrica.co.za) uses the PRODUCTION
+ * DB on the server. To check the same DB the live site uses, run on the server or:
+ *   DATABASE_URL="postgresql://...production..." node scripts/verify-document-sections-db.js [projectId]
  */
+
+import { config } from 'dotenv';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, '..');
+config({ path: join(root, '.env') });
+if (!process.env.USE_PROD && !process.env.PRODUCTION_DB) {
+  config({ path: join(root, '.env.local'), override: true });
+}
 
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
+
+function dbHostLabel() {
+  const u = process.env.DATABASE_URL || '';
+  if (!u) return 'NOT SET';
+  const host = u.replace(/^[^@]+@/, '').split(/[/?]/)[0].split(':')[0];
+  if (/localhost|127\.0\.0\.1/.test(host)) return 'localhost (local dev)';
+  return host.replace(/\./g, '.').substring(0, 50) + (host.length > 50 ? '...' : '');
+}
 
 async function verifyDocumentSections() {
   const projectId = process.argv[2] || 'cmhn2drtq001lqyu9bgfzzqx6'; // Default to Barberton Mines project
   
   console.log('🔍 Verifying Document Sections in Database\n');
   console.log('='.repeat(60));
+  console.log('📌 Database:', dbHostLabel());
+  console.log('   (Live site uses PRODUCTION DB; this script uses DATABASE_URL from .env / .env.local)\n');
   console.log(`Project ID: ${projectId}\n`);
   
   try {
