@@ -97,13 +97,19 @@ const SafetyCultureInspections = () => {
                 body: JSON.stringify({ limit: 200 })
             });
             const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const err = json?.error;
+                const errMsg = (typeof err === 'object' && err?.message) || (typeof err === 'string' ? err : null) || json?.error?.details || json?.details || json?.message || `Import failed (${res.status})`;
+                setImportResult({ error: String(errMsg) });
+                return;
+            }
             const data = json?.data ?? json;
             setImportResult(data);
             if (data?.imported > 0) {
                 setError(null);
             }
         } catch (e) {
-            setImportResult({ error: e.message || 'Import failed' });
+            setImportResult({ error: String(e.message || 'Import failed') });
         } finally {
             setImporting(false);
         }
@@ -196,7 +202,7 @@ const SafetyCultureInspections = () => {
                     'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200'
                 }`}>
                     {importResult.error ? (
-                        importResult.error
+                        typeof importResult.error === 'string' ? importResult.error : (importResult.error?.message || String(importResult.error))
                     ) : (
                         <>
                             <strong>{importResult.summary}</strong>
