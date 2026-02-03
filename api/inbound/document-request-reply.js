@@ -581,28 +581,52 @@ async function handler(req, res) {
         }
       }
     }
-    // Last resort: match by subject. Our subject ends with " – Month Year" (e.g. " – February 2026").
+    // Last resort: match by subject. Format: "... – DocumentName – Month Year" (e.g. " – Mining Right – February 2026").
     if (!mapping) {
       const subject = (email.subject || '').toString()
       const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
       let fallbackMonth = null
       let fallbackYear = null
+      let docNameFromSubject = null
       for (let i = 0; i < monthNames.length; i++) {
-        const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
+        const re = new RegExp(` – ([^–]+) – ${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
         const m = subject.match(re)
         if (m) {
+          docNameFromSubject = m[1].trim()
           fallbackMonth = i + 1
-          fallbackYear = parseInt(m[1], 10)
+          fallbackYear = parseInt(m[2], 10)
           break
         }
       }
+      if (!fallbackMonth || !fallbackYear) {
+        for (let i = 0; i < monthNames.length; i++) {
+          const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
+          const m = subject.match(re)
+          if (m) {
+            fallbackMonth = i + 1
+            fallbackYear = parseInt(m[1], 10)
+            break
+          }
+        }
+      }
       if (fallbackMonth && fallbackYear) {
+        let whereClause = { month: fallbackMonth, year: fallbackYear }
+        if (docNameFromSubject && docNameFromSubject.length > 1) {
+          const docsWithName = await prisma.documentItem.findMany({
+            where: { name: { equals: docNameFromSubject, mode: 'insensitive' } },
+            include: { section: { select: { projectId: true } } }
+          })
+          const matchingDocIds = docsWithName.map((d) => d.id)
+          if (matchingDocIds.length > 0) {
+            whereClause = { ...whereClause, documentId: { in: matchingDocIds } }
+          }
+        }
         mapping = await prisma.documentRequestEmailSent.findFirst({
-          where: { month: fallbackMonth, year: fallbackYear },
+          where: whereClause,
           orderBy: { createdAt: 'desc' }
         })
         if (mapping) {
-          console.log('document-request-reply: matched by subject fallback', { month: fallbackMonth, year: fallbackYear, subject: subject.slice(0, 60) })
+          console.log('document-request-reply: matched by subject fallback', { month: fallbackMonth, year: fallbackYear, docName: docNameFromSubject || 'any', subject: subject.slice(0, 60) })
         }
       }
     }
