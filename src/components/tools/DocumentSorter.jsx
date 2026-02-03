@@ -236,14 +236,10 @@ const DocumentSorter = () => {
             )}
             {result.baseUrl && (
               <p className="mt-2 text-sm">
-                <a
-                  href={result.baseUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary-600 hover:underline"
-                >
-                  Open sorted folder →
-                </a>
+                <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                  Output on server: <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-xs break-all">{result.baseUrl}</code>
+                </span>
+                <span className="block mt-1 text-xs opacity-80">Browse this path on the server or download the sorted folders from there. Links to directories are not opened in the browser.</span>
               </p>
             )}
           </div>
