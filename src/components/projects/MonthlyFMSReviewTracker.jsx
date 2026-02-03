@@ -1721,6 +1721,10 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             ? sectionsByYear 
             : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        // Capture prior participants for this cell so we can notify them (and so backend can notify @mentioned)
+        const priorSection = currentYearSections.find((s) => String(s.id) === String(sectionId));
+        const priorDoc = priorSection?.documents?.find((d) => String(d.id) === String(documentId));
+        const priorComments = priorDoc ? getCommentsForYear(priorDoc.comments, month, selectedYear) : [];
         
             const updated = currentYearSections.map(section => {
                 if (String(section.id) === String(sectionId)) {
@@ -1773,51 +1777,69 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         // ========================================================
         // @MENTIONS - Process mentions and create notifications (after comment is saved)
         // ========================================================
+        const contextTitle = `Monthly FMS Review - ${project?.name || 'Project'}`;
+        const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+        const metadata = {
+            projectId: project?.id,
+            projectName: project?.name,
+            sectionId,
+            documentId,
+            month,
+            docYear: selectedYear,
+            year: selectedYear,
+            source: 'monthlyFMSReview',
+            commentId: newCommentId
+        };
         try {
             if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
                 const token = window.storage?.getToken?.();
-                
                 if (token && window.DatabaseAPI?.getUsers) {
-                    // Fetch all users once for matching mentions
                     const usersResponse = await window.DatabaseAPI.getUsers();
                     const allUsers =
                         usersResponse?.data?.users ||
                         usersResponse?.data?.data?.users ||
                         usersResponse?.users ||
+                        (Array.isArray(usersResponse?.data) ? usersResponse.data : []) ||
                         [];
-                    
-                    const contextTitle = `Monthly FMS Review - ${project?.name || 'Project'}`;
-                    // Deep-link with docMonth, docYear and tab so email links open Monthly FMS Review tab (not Document Collection)
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
-                    const projectInfo = {
-                        projectId: project?.id,
-                        projectName: project?.name,
-                        sectionId,
-                        documentId,
-                        month,
-                        docYear: selectedYear,
-                        year: selectedYear,
-                        source: 'monthlyFMSReview',
-                        commentId: newCommentId
-                    };
-                    
-                    // Fire mention notifications (do not block UI on errors)
-                    window.MentionHelper.processMentions(
-                        commentText,
-                        contextTitle,
-                        contextLink,
-                        currentUser.name || currentUser.email || 'Unknown',
-                        allUsers,
-                        projectInfo
-                    ).then(() => {
-                    }).catch(error => {
-                        console.error('❌ Error processing @mentions for monthly FMS review comment:', error);
-                    });
+                    const projectInfo = { ...metadata };
+                    try {
+                        await window.MentionHelper.processMentions(
+                            commentText,
+                            contextTitle,
+                            contextLink,
+                            currentUser.name || currentUser.email || 'Unknown',
+                            allUsers,
+                            projectInfo
+                        );
+                    } catch (err) {
+                        console.error('❌ Error processing @mentions for monthly FMS review comment:', err);
+                    }
                 }
             }
         } catch (error) {
             console.error('❌ Unexpected error in handleAddComment @mentions processing:', error);
-            // Swallow errors so commenting UI never breaks due to notifications
+        }
+
+        // Notify prior participants (same as Document Collection) so emails trigger for replies and @mentions
+        if ((priorComments.length > 0 || (window.MentionHelper && window.MentionHelper.hasMentions(commentText))) && window.DatabaseAPI?.makeRequest) {
+            try {
+                await window.DatabaseAPI.makeRequest('/notifications/comment-participants', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        commentAuthorId: currentUser.id,
+                        commentText,
+                        entityAuthorId: null,
+                        priorCommentAuthorIds: priorComments.map((c) => c.authorId).filter(Boolean),
+                        priorCommentTexts: priorComments.map((c) => c.text).filter(Boolean),
+                        authorName: currentUser.name || currentUser.email || 'Unknown',
+                        contextTitle,
+                        link: contextLink,
+                        metadata
+                    })
+                });
+            } catch (err) {
+                console.error('❌ Error notifying prior participants for monthly FMS comment:', err);
+            }
         }
     };
     
