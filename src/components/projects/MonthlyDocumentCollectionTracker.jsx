@@ -3553,17 +3553,23 @@ Abcotronics`;
                 const res = await fetch(url, {
                     method: 'DELETE',
                     credentials: 'include',
-                    headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({ id, type })
                 });
                 const json = await res.json().catch(() => ({}));
-                if (res.ok && json.deleted) {
+                const data = json.data != null ? json.data : json;
+                if (res.ok && data.deleted) {
                     if (type === 'sent') setExpandedSentId((prev) => (prev === id ? null : prev));
                     setEmailActivity((prev) => ({
                         sent: prev.sent.filter((s) => s.id !== id),
                         received: prev.received.filter((r) => r.id !== id)
                     }));
                 } else {
-                    alert(json.error || 'Failed to delete')
+                    alert(data.error || json.error || 'Failed to delete');
                 }
             } catch (err) {
                 alert(err.message || 'Failed to delete')

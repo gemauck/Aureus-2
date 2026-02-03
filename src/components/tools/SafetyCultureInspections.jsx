@@ -89,6 +89,28 @@ const SafetyCultureInspections = () => {
         }
     };
 
+    const loadAllInspections = async () => {
+        setLoadingMore(true);
+        try {
+            let next = metadata?.next_page;
+            while (next) {
+                const url = `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
+                const res = await fetch(url, { headers: getHeaders() });
+                const json = await res.json().catch(() => ({}));
+                const data = json?.data ?? json;
+                const more = data.inspections ?? [];
+                setInspections(prev => [...prev, ...more]);
+                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
+                setMetadata(meta);
+                next = meta?.next_page || null;
+            }
+        } catch (e) {
+            setError(e.message || 'Failed to load all inspections');
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+
     const loadIssues = async () => {
         setIssuesLoading(true);
         try {
@@ -116,6 +138,26 @@ const SafetyCultureInspections = () => {
             setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
         } catch (e) {
             setError(e.message || 'Failed to load more issues');
+        } finally {
+            setIssuesLoadingMore(false);
+        }
+    };
+
+    const loadAllIssues = async () => {
+        setIssuesLoadingMore(true);
+        try {
+            let next = issuesMetadata?.next_page;
+            while (next) {
+                const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
+                const json = await res.json().catch(() => ({}));
+                const data = json?.data ?? json;
+                setIssues(prev => [...prev, ...(data.issues ?? [])]);
+                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
+                setIssuesMetadata(meta);
+                next = meta?.next_page || null;
+            }
+        } catch (e) {
+            setError(e.message || 'Failed to load all issues');
         } finally {
             setIssuesLoadingMore(false);
         }
@@ -526,23 +568,32 @@ const SafetyCultureInspections = () => {
                                     </button>
                                 </div>
                             {issuesMetadata?.next_page && (
-                                <button
-                                    onClick={loadMoreIssues}
-                                    disabled={issuesLoadingMore}
-                                    className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm flex items-center gap-2"
-                                >
-                                    {issuesLoadingMore ? (
-                                        <>
-                                            <i className="fas fa-spinner fa-spin"></i>
-                                            Loading...
-                                        </>
-                                    ) : (
-                                        <>
-                                            Load more
-                                            {issuesMetadata.remaining_records != null && ` (${issuesMetadata.remaining_records})`}
-                                        </>
-                                    )}
-                                </button>
+                                <>
+                                    <button
+                                        onClick={loadMoreIssues}
+                                        disabled={issuesLoadingMore}
+                                        className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                                    >
+                                        {issuesLoadingMore ? (
+                                            <>
+                                                <i className="fas fa-spinner fa-spin"></i>
+                                                Loading...
+                                            </>
+                                        ) : (
+                                            <>
+                                                Load more
+                                                {issuesMetadata.remaining_records != null && ` (${issuesMetadata.remaining_records})`}
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={loadAllIssues}
+                                        disabled={issuesLoadingMore}
+                                        className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                                    >
+                                        Load all
+                                    </button>
+                                </>
                             )}
                             </div>
                         </div>
@@ -703,23 +754,32 @@ const SafetyCultureInspections = () => {
                             </button>
                         </div>
                     {metadata?.next_page && (
-                        <button
-                            onClick={loadMore}
-                            disabled={loadingMore}
-                            className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm flex items-center gap-2"
-                        >
-                            {loadingMore ? (
-                                <>
-                                    <i className="fas fa-spinner fa-spin"></i>
-                                    Loading...
-                                </>
-                            ) : (
-                                <>
-                                    Load more
-                                    {metadata.remaining_records != null && ` (${metadata.remaining_records})`}
-                                </>
-                            )}
-                        </button>
+                        <>
+                            <button
+                                onClick={loadMore}
+                                disabled={loadingMore}
+                                className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                            >
+                                {loadingMore ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin"></i>
+                                        Loading...
+                                    </>
+                                ) : (
+                                    <>
+                                        Load more
+                                        {metadata.remaining_records != null && ` (${metadata.remaining_records})`}
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                onClick={loadAllInspections}
+                                disabled={loadingMore}
+                                className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                            >
+                                Load all
+                            </button>
+                        </>
                     )}
                     </div>
                 </div>

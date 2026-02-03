@@ -125,19 +125,22 @@ function parseInReplyToFromRaw(rawText) {
 }
 
 /** Extract In-Reply-To from full email object. Resend often omits In-Reply-To from JSON headers; use raw .eml first. */
-async function getInReplyToFromEmail(email, fetchRawUrl) {
+async function getInReplyToFromEmail(email, fetchRawUrl, apiKey) {
   const headers = email.headers || {}
   let inReplyTo = getInReplyTo(headers) || getFirstReference(headers)
   if (inReplyTo) return inReplyTo
+  // Resend API may return top-level (e.g. in_reply_to)
   if (email.in_reply_to && typeof email.in_reply_to === 'string') return normalizeMessageId(email.in_reply_to)
   if (email.references && typeof email.references === 'string') {
     const first = email.references.trim().split(/\s+/)[0]
     if (first) return normalizeMessageId(first)
   }
-  // Resend JSON often does not include In-Reply-To in headers; fetch raw .eml (primary for replies)
+  // Resend JSON often omits In-Reply-To in headers; fetch raw .eml (primary for replies)
   if (fetchRawUrl) {
     try {
-      const res = await fetch(fetchRawUrl, { method: 'GET' })
+      const opts = { method: 'GET' }
+      if (apiKey) opts.headers = { Authorization: `Bearer ${apiKey}` }
+      const res = await fetch(fetchRawUrl, opts)
       if (res.ok) {
         const raw = await res.text()
         inReplyTo = parseInReplyToFromRaw(raw)
@@ -145,6 +148,8 @@ async function getInReplyToFromEmail(email, fetchRawUrl) {
           console.log('document-request-reply: in_reply_to from raw .eml', inReplyTo.slice(0, 60))
           return inReplyTo
         }
+      } else if (apiKey && res.status === 403) {
+        console.warn('document-request-reply: raw .eml fetch 403, In-Reply-To may be in body only')
       }
     } catch (err) {
       console.warn('document-request-reply: failed to fetch raw email for In-Reply-To', err.message)
@@ -440,7 +445,7 @@ async function handler(req, res) {
 
     const email = await fetchReceivedEmail(emailId, apiKey)
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
-    const inReplyTo = await getInReplyToFromEmail(email, rawUrl)
+    const inReplyTo = await getInReplyToFromEmail(email, rawUrl, apiKey)
     if (!inReplyTo) {
       const headerKeys = email.headers ? Object.keys(normalizeHeaders(email.headers)) : []
       const hasRaw = !!(email.raw && (email.raw.download_url || email.raw.downloadUrl))
@@ -451,7 +456,11 @@ async function handler(req, res) {
         in_reply_to: email.in_reply_to || null,
         references: email.references ? (typeof email.references === 'string' ? email.references.slice(0, 80) : 'present') : null
       })
-      return ok(res, { processed: false, reason: 'no_in_reply_to_or_references' })
+      return ok(res, {
+        processed: false,
+        reason: 'no_in_reply_to_or_references',
+        hint: 'Ensure the client replies using "Reply" (not a new email) so In-Reply-To is set. Check Resend Dashboard that the webhook URL is correct and receiving events.'
+      })
     }
 
     // Stored messageId is without angle brackets (e.g. docreq-uuid@domain). In-Reply-To is normalized the same way.
@@ -473,18 +482,26 @@ async function handler(req, res) {
           (r.messageId.length >= 10 && inReplyTo.includes(r.messageId))
       ) || null
     }
+    // Fallback: match by local part only (e.g. docreq-uuid) in case reply used different domain
+    if (!mapping && localPart && localPart.startsWith('docreq-')) {
+      const byLocalPart = await prisma.documentRequestEmailSent.findFirst({
+        where: { messageId: { startsWith: localPart + '@' } }
+      })
+      if (byLocalPart) mapping = byLocalPart
+    }
     if (!mapping) {
       console.warn('document-request-reply: unknown_thread', {
         inReplyTo: inReplyTo.slice(0, 120),
         localPart,
         tried: messageIdCandidates,
-        hint: 'Send a NEW document request from the app (after deploy), then reply to that email. Old requests used Resend internal id.'
+        recentCount: (await prisma.documentRequestEmailSent.count()).toString(),
+        hint: 'Send a NEW document request from the app (after deploy), then reply to that email. Ensure Resend webhook for email.received points to this URL.'
       })
       return ok(res, {
         processed: false,
         reason: 'unknown_thread',
         inReplyTo: inReplyTo.slice(0, 120),
-        hint: 'Send a new document request from the app, then reply to that email. Old requests may not match.'
+        hint: 'Send a new document request from the app, then reply to that email. Ensure Resend webhook for email.received is set.'
       })
     }
 
