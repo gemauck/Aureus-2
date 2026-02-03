@@ -3347,6 +3347,8 @@ Abcotronics`;
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
         const [result, setResult] = useState(null);
+        const [emailActivity, setEmailActivity] = useState({ sent: [], received: [] });
+        const [loadingActivity, setLoadingActivity] = useState(false);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3386,6 +3388,35 @@ Abcotronics`;
             setNewContactCc('');
             setResult(null);
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
+
+        // Load email activity (sent/received) for this document and month
+        useEffect(() => {
+            if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month || project?.id == null || selectedYear == null) {
+                setEmailActivity({ sent: [], received: [] });
+                return;
+            }
+            const monthNum = months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
+            if (monthNum == null) return;
+            setLoadingActivity(true);
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            const q = new URLSearchParams({ sectionId: ctx.section.id, documentId: ctx.doc.id, month: monthNum, year: selectedYear });
+            fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
+                method: 'GET',
+                credentials: 'include',
+                headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+            })
+                .then((res) => res.json().catch(() => ({})))
+                .then((json) => {
+                    const data = json.data || json;
+                    setEmailActivity({
+                        sent: Array.isArray(data.sent) ? data.sent : [],
+                        received: Array.isArray(data.received) ? data.received : []
+                    });
+                })
+                .catch(() => setEmailActivity({ sent: [], received: [] }))
+                .finally(() => setLoadingActivity(false));
+        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear, project?.id, result?.sent]);
 
         const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const addContact = () => {
@@ -3725,6 +3756,95 @@ Abcotronics`;
                                     </select>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Email activity for this month: sent, received, attachments */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-3">
+                                <i className="fas fa-inbox text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">Email activity for this month</label>
+                            </div>
+                            {loadingActivity ? (
+                                <p className="text-sm text-gray-500 flex items-center gap-2">
+                                    <i className="fas fa-spinner fa-spin"></i> Loading…
+                                </p>
+                            ) : (emailActivity.sent.length === 0 && emailActivity.received.length === 0) ? (
+                                <p className="text-sm text-gray-500">No emails sent or received yet for this document and month.</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {emailActivity.sent.length > 0 && (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Sent</h4>
+                                            <ul className="space-y-1.5">
+                                                {emailActivity.sent.map((s) => (
+                                                    <li key={s.id} className="flex items-center gap-2 text-sm text-gray-700 py-1.5 px-2 rounded-lg bg-sky-50 border border-sky-100">
+                                                        <i className="fas fa-paper-plane text-sky-600 text-xs shrink-0"></i>
+                                                        <span>{formatDateTime(s.createdAt)}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {emailActivity.received.length > 0 && (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Received</h4>
+                                            <ul className="space-y-3">
+                                                {emailActivity.received.map((r) => (
+                                                    <li key={r.id} className="text-sm border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
+                                                        <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
+                                                            <i className="fas fa-reply text-emerald-600 text-xs"></i>
+                                                            <span className="text-gray-600">{formatDateTime(r.createdAt)}</span>
+                                                        </div>
+                                                        <div className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{r.text ? r.text.slice(0, 500) + (r.text.length > 500 ? '…' : '') : '—'}</div>
+                                                        {r.attachments && r.attachments.length > 0 && (
+                                                            <div className="px-3 py-2 border-t border-gray-200 flex flex-wrap gap-2">
+                                                                {r.attachments.map((att, idx) => (
+                                                                    <a
+                                                                        key={idx}
+                                                                        href={att.url}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-gray-200 text-xs text-[#0369a1] hover:bg-[#e0f2fe]"
+                                                                        onClick={(e) => { e.preventDefault(); downloadCommentAttachment(att.url, att.name); }}
+                                                                    >
+                                                                        <i className="fas fa-paperclip text-[10px]"></i>
+                                                                        <span className="truncate max-w-[160px]">{att.name || 'Attachment'}</span>
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {(() => {
+                                        const allAttachments = (emailActivity.received || []).flatMap((r) => (r.attachments || []).map((a) => ({ ...a, receivedAt: r.createdAt })));
+                                        if (allAttachments.length === 0) return null;
+                                        return (
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">All attachments</h4>
+                                                <ul className="flex flex-wrap gap-2">
+                                                    {allAttachments.map((att, idx) => (
+                                                        <li key={idx}>
+                                                            <a
+                                                                href={att.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-sm text-[#0369a1] hover:bg-[#e0f2fe]"
+                                                                onClick={(e) => { e.preventDefault(); downloadCommentAttachment(att.url, att.name); }}
+                                                            >
+                                                                <i className="fas fa-file-alt text-xs"></i>
+                                                                <span className="truncate max-w-[180px]">{att.name || 'Attachment'}</span>
+                                                            </a>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
                         </div>
 
                         {/* Result messages */}
