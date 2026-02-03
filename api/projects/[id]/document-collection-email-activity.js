@@ -22,9 +22,10 @@ async function handler(req, res) {
   const fullUrl = req.originalUrl || req.url || ''
   const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
   const params = new URLSearchParams(query)
-  const documentId = params.get('documentId')?.trim() || null
-  const monthParam = params.get('month')
-  const yearParam = params.get('year')
+  const q = req.query || {}
+  const documentId = (params.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null)
+  const monthParam = params.get('month') ?? q.month
+  const yearParam = params.get('year') ?? q.year
   const month = monthParam != null ? parseInt(String(monthParam), 10) : null
   const year = yearParam != null ? parseInt(String(yearParam), 10) : null
 

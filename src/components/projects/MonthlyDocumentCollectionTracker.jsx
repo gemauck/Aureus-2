@@ -3664,6 +3664,12 @@ Abcotronics`;
                         ...prev,
                         sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString() }]
                     }));
+                    // Persist selectedYear so after hard refresh the same year is used for activity fetch
+                    if (project?.id && selectedYear != null && typeof window !== 'undefined') {
+                        try {
+                            localStorage.setItem(YEAR_STORAGE_PREFIX + project.id, String(selectedYear));
+                        } catch (_) {}
+                    }
                 }
                 setTimeout(() => fetchEmailActivity(), 400);
                 setTimeout(() => fetchEmailActivity(), 1200);

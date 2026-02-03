@@ -37,15 +37,16 @@ async function handler(req, res) {
     const fullUrl = req.originalUrl || req.url || ''
     const queryString = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
     const query = new URLSearchParams(queryString)
+    const q = req.query || {}
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
     const cc = Array.isArray(body.cc) ? body.cc : (typeof body.cc === 'string' ? [body.cc] : [])
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
     const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
-    const documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || null
-    const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : null)
-    const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (query.get('year') != null ? parseInt(String(query.get('year')), 10) : null)
+    const documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null
+    const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : (q.month != null ? parseInt(String(q.month), 10) : null))
+    const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (query.get('year') != null ? parseInt(String(query.get('year')), 10) : (q.year != null ? parseInt(String(q.year), 10) : null))
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
     const hasCellContext = !!(sectionId && cell)
 
@@ -157,7 +158,7 @@ async function handler(req, res) {
       if (sent.length === 0) {
         console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId'), month: body.month ?? query.get('month'), year: body.year ?? query.get('year') })
       } else if (!cell) {
-        console.log('document-collection-send-email: skipping activity log (no cell: missing documentId/month/year)', { projectId, documentId: body.documentId ?? query.get('documentId'), month: body.month ?? query.get('month'), year: body.year ?? query.get('year') })
+        console.warn('document-collection-send-email: skipping activity log (no cell) — activity will not persist after refresh', { projectId, fromBody: { documentId: body.documentId, month: body.month, year: body.year }, fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') || q.month, year: query.get('year') || q.year }, parsed: { documentId, month, year } })
       }
     }
 

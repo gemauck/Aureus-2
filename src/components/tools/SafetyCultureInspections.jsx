@@ -18,6 +18,7 @@ const SafetyCultureInspections = () => {
     const [issues, setIssues] = useState([]);
     const [issuesMetadata, setIssuesMetadata] = useState({ next_page: null, remaining_records: 0 });
     const [issuesLoading, setIssuesLoading] = useState(false);
+    const [issuesLoadingMore, setIssuesLoadingMore] = useState(false);
     const [issuesSearchQuery, setIssuesSearchQuery] = useState('');
     const [selectedIssue, setSelectedIssue] = useState(null);
 
@@ -100,7 +101,7 @@ const SafetyCultureInspections = () => {
     const loadMoreIssues = async () => {
         const next = issuesMetadata?.next_page;
         if (!next) return;
-        setLoadingMore(true);
+        setIssuesLoadingMore(true);
         try {
             const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
@@ -110,7 +111,7 @@ const SafetyCultureInspections = () => {
         } catch (e) {
             setError(e.message || 'Failed to load more issues');
         } finally {
-            setLoadingMore(false);
+            setIssuesLoadingMore(false);
         }
     };
 
@@ -370,15 +371,33 @@ const SafetyCultureInspections = () => {
                             </table>
                         </div>
                     )}
-                    {!issuesLoading && issuesMetadata?.next_page && (
-                        <div className="mt-4 text-center">
-                            <button
-                                onClick={loadMoreIssues}
-                                disabled={loadingMore}
-                                className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm"
-                            >
-                                {loadingMore ? 'Loading...' : `Load more (${issuesMetadata.remaining_records} remaining)`}
-                            </button>
+                    {!issuesLoading && (filteredIssues.length > 0 || issues.length > 0) && (
+                        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
+                            <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Showing {filteredIssues.length} issue{filteredIssues.length !== 1 ? 's' : ''}
+                                {issuesMetadata?.next_page && issuesMetadata.remaining_records != null && (
+                                    <span> • {issuesMetadata.remaining_records} more available</span>
+                                )}
+                            </span>
+                            {issuesMetadata?.next_page && (
+                                <button
+                                    onClick={loadMoreIssues}
+                                    disabled={issuesLoadingMore}
+                                    className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                                >
+                                    {issuesLoadingMore ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin"></i>
+                                            Loading...
+                                        </>
+                                    ) : (
+                                        <>
+                                            Load more
+                                            {issuesMetadata.remaining_records != null && ` (${issuesMetadata.remaining_records})`}
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -511,15 +530,33 @@ const SafetyCultureInspections = () => {
                 </table>
             </div>
 
-            {metadata?.next_page && (
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700 text-center">
-                    <button
-                        onClick={loadMore}
-                        disabled={loadingMore}
-                        className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm"
-                    >
-                        {loadingMore ? 'Loading...' : `Load more (${metadata.remaining_records} remaining)`}
-                    </button>
+            {(filteredInspections.length > 0 || inspections.length > 0) && (
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
+                    <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Showing {filteredInspections.length} inspection{filteredInspections.length !== 1 ? 's' : ''}
+                        {metadata?.next_page && metadata.remaining_records != null && (
+                            <span> • {metadata.remaining_records} more available</span>
+                        )}
+                    </span>
+                    {metadata?.next_page && (
+                        <button
+                            onClick={loadMore}
+                            disabled={loadingMore}
+                            className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                        >
+                            {loadingMore ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                    Loading...
+                                </>
+                            ) : (
+                                <>
+                                    Load more
+                                    {metadata.remaining_records != null && ` (${metadata.remaining_records})`}
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
             )}
             </>
