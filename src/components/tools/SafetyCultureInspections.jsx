@@ -1,7 +1,8 @@
 // Safety Culture Inspections - View iAuditor inspections in ERP
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 
 const API_BASE = window.location.origin + '/api';
+const PAGE_SIZE = 20;
 
 const SafetyCultureInspections = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
@@ -22,6 +23,10 @@ const SafetyCultureInspections = () => {
     const [issuesLoadingMore, setIssuesLoadingMore] = useState(false);
     const [issuesSearchQuery, setIssuesSearchQuery] = useState('');
     const [selectedIssue, setSelectedIssue] = useState(null);
+    const [inspectionSort, setInspectionSort] = useState({ key: 'completed', dir: 'desc' }); // default: last at top
+    const [issuesSort, setIssuesSort] = useState({ key: 'created', dir: 'desc' });
+    const [inspectionPage, setInspectionPage] = useState(1);
+    const [issuesPage, setIssuesPage] = useState(1);
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -136,6 +141,76 @@ const SafetyCultureInspections = () => {
             return title.includes(issuesSearchLower) || status.includes(issuesSearchLower) || id.includes(issuesSearchLower);
         })
         : issues;
+
+    const sortInspection = (a, b, key, dir) => {
+        const mult = dir === 'asc' ? 1 : -1;
+        let va, vb;
+        switch (key) {
+            case 'name': va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); return mult * ((va < vb) ? -1 : (va > vb) ? 1 : 0);
+            case 'template': va = (a.template_name || '').toLowerCase(); vb = (b.template_name || '').toLowerCase(); return mult * ((va < vb) ? -1 : (va > vb) ? 1 : 0);
+            case 'score': va = a.score ?? -1; vb = b.score ?? -1; return mult * (va - vb);
+            case 'started': va = new Date(a.date_started || 0).getTime(); vb = new Date(b.date_started || 0).getTime(); return mult * (va - vb);
+            case 'completed': va = new Date(a.date_completed || a.date_started || 0).getTime(); vb = new Date(b.date_completed || b.date_started || 0).getTime(); return mult * (va - vb);
+            default: return 0;
+        }
+    };
+    const sortIssue = (a, b, key, dir) => {
+        const mult = dir === 'asc' ? 1 : -1;
+        let va, vb;
+        switch (key) {
+            case 'title': va = (a.title || a.name || '').toLowerCase(); vb = (b.title || b.name || '').toLowerCase(); return mult * ((va < vb) ? -1 : (va > vb) ? 1 : 0);
+            case 'status': va = (a.status || '').toLowerCase(); vb = (b.status || '').toLowerCase(); return mult * ((va < vb) ? -1 : (va > vb) ? 1 : 0);
+            case 'priority': va = (a.priority || '').toLowerCase(); vb = (b.priority || '').toLowerCase(); return mult * ((va < vb) ? -1 : (va > vb) ? 1 : 0);
+            case 'created': va = new Date(a.created_at || a.createdAt || 0).getTime(); vb = new Date(b.created_at || b.createdAt || 0).getTime(); return mult * (va - vb);
+            case 'due': va = new Date(a.due_date || a.dueDate || 0).getTime(); vb = new Date(b.due_date || b.dueDate || 0).getTime(); return mult * (va - vb);
+            case 'assignee': va = (a.assignee_name || a.assigneeName || '').toLowerCase(); vb = (b.assignee_name || b.assigneeName || '').toLowerCase(); return mult * ((va < vb) ? -1 : (va > vb) ? 1 : 0);
+            default: return 0;
+        }
+    };
+
+    const sortedInspections = useMemo(() => {
+        const arr = [...filteredInspections];
+        arr.sort((a, b) => sortInspection(a, b, inspectionSort.key, inspectionSort.dir));
+        return arr;
+    }, [filteredInspections, inspectionSort.key, inspectionSort.dir]);
+
+    const sortedIssues = useMemo(() => {
+        const arr = [...filteredIssues];
+        arr.sort((a, b) => sortIssue(a, b, issuesSort.key, issuesSort.dir));
+        return arr;
+    }, [filteredIssues, issuesSort.key, issuesSort.dir]);
+
+    const paginatedInspections = useMemo(() => {
+        const start = (inspectionPage - 1) * PAGE_SIZE;
+        return sortedInspections.slice(start, start + PAGE_SIZE);
+    }, [sortedInspections, inspectionPage]);
+
+    const paginatedIssues = useMemo(() => {
+        const start = (issuesPage - 1) * PAGE_SIZE;
+        return sortedIssues.slice(start, start + PAGE_SIZE);
+    }, [sortedIssues, issuesPage]);
+
+    const inspectionTotalPages = Math.max(1, Math.ceil(sortedInspections.length / PAGE_SIZE));
+    const issuesTotalPages = Math.max(1, Math.ceil(sortedIssues.length / PAGE_SIZE));
+
+    const SortableTh = ({ label, sortKey, currentSort, onSort, isDark, className = '' }) => {
+        const isActive = currentSort.key === sortKey;
+        return (
+            <th className={`text-left p-3 font-medium cursor-pointer select-none hover:opacity-80 ${className} ${isDark ? 'text-gray-300' : 'text-gray-600'}`} onClick={() => onSort(sortKey)}>
+                {label}
+                {isActive && <span className="ml-1">{currentSort.dir === 'asc' ? '↑' : '↓'}</span>}
+            </th>
+        );
+    };
+
+    const setInspectionSortKey = (key) => {
+        setInspectionSort(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }));
+        setInspectionPage(1);
+    };
+    const setIssuesSortKey = (key) => {
+        setIssuesSort(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }));
+        setIssuesPage(1);
+    };
 
     const runImport = async () => {
         setImporting(true);
@@ -346,7 +421,15 @@ const SafetyCultureInspections = () => {
                     type="text"
                     placeholder={activeTab === 'inspections' ? 'Search inspections, templates, owners...' : 'Search issues...'}
                     value={activeTab === 'inspections' ? searchQuery : issuesSearchQuery}
-                    onChange={(e) => activeTab === 'inspections' ? setSearchQuery(e.target.value) : setIssuesSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                        if (activeTab === 'inspections') {
+                            setSearchQuery(e.target.value);
+                            setInspectionPage(1);
+                        } else {
+                            setIssuesSearchQuery(e.target.value);
+                            setIssuesPage(1);
+                        }
+                    }}
                     className={`w-full max-w-md px-3 py-2 rounded-lg border text-sm placeholder-gray-400 ${
                         isDark
                             ? 'bg-gray-700 border-gray-600 text-gray-100 focus:ring-primary-500 focus:border-primary-500'
@@ -372,23 +455,23 @@ const SafetyCultureInspections = () => {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className={isDark ? 'bg-gray-700/50 text-gray-300' : 'bg-gray-50 text-gray-600'}>
-                                        <th className="text-left p-3 font-medium">Issue</th>
-                                        <th className="text-left p-3 font-medium">Status</th>
-                                        <th className="text-left p-3 font-medium">Priority</th>
-                                        <th className="text-left p-3 font-medium">Created</th>
-                                        <th className="text-left p-3 font-medium">Due</th>
-                                        <th className="text-left p-3 font-medium">Assignee</th>
+                                        <SortableTh label="Issue" sortKey="title" currentSort={issuesSort} onSort={setIssuesSortKey} isDark={isDark} />
+                                        <SortableTh label="Status" sortKey="status" currentSort={issuesSort} onSort={setIssuesSortKey} isDark={isDark} />
+                                        <SortableTh label="Priority" sortKey="priority" currentSort={issuesSort} onSort={setIssuesSortKey} isDark={isDark} />
+                                        <SortableTh label="Created" sortKey="created" currentSort={issuesSort} onSort={setIssuesSortKey} isDark={isDark} />
+                                        <SortableTh label="Due" sortKey="due" currentSort={issuesSort} onSort={setIssuesSortKey} isDark={isDark} />
+                                        <SortableTh label="Assignee" sortKey="assignee" currentSort={issuesSort} onSort={setIssuesSortKey} isDark={isDark} />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredIssues.length === 0 ? (
+                                    {sortedIssues.length === 0 ? (
                                         <tr>
                                             <td colSpan={6} className="p-6 text-center text-gray-500">
                                                 {issues.length === 0 ? 'No issues found' : 'No issues match your search'}
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredIssues.map((issue) => (
+                                        paginatedIssues.map((issue) => (
                                             <tr
                                                 key={issue.id}
                                                 onClick={() => setSelectedIssue(issue)}
@@ -417,14 +500,31 @@ const SafetyCultureInspections = () => {
                             </table>
                         </div>
                     )}
-                    {!issuesLoading && (filteredIssues.length > 0 || issues.length > 0) && (
+                    {!issuesLoading && (sortedIssues.length > 0 || issues.length > 0) && (
                         <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
                             <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Showing {filteredIssues.length} issue{filteredIssues.length !== 1 ? 's' : ''}
+                                Page {issuesPage} of {issuesTotalPages} • {sortedIssues.length} issue{sortedIssues.length !== 1 ? 's' : ''}
                                 {issuesMetadata?.next_page && issuesMetadata.remaining_records != null && (
-                                    <span> • {issuesMetadata.remaining_records} more available</span>
+                                    <span> • {issuesMetadata.remaining_records} more to load</span>
                                 )}
                             </span>
+                            <div className="flex items-center gap-2">
+                                <div className="flex gap-1">
+                                    <button
+                                        onClick={() => setIssuesPage(p => Math.max(1, p - 1))}
+                                        disabled={issuesPage <= 1}
+                                        className={`px-2 py-1 rounded border text-sm disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'}`}
+                                    >
+                                        Prev
+                                    </button>
+                                    <button
+                                        onClick={() => setIssuesPage(p => Math.min(issuesTotalPages, p + 1))}
+                                        disabled={issuesPage >= issuesTotalPages}
+                                        className={`px-2 py-1 rounded border text-sm disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'}`}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
                             {issuesMetadata?.next_page && (
                                 <button
                                     onClick={loadMoreIssues}
@@ -444,6 +544,7 @@ const SafetyCultureInspections = () => {
                                     )}
                                 </button>
                             )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -513,23 +614,23 @@ const SafetyCultureInspections = () => {
                 <table className="w-full text-sm">
                     <thead>
                         <tr className={isDark ? 'bg-gray-700/50 text-gray-300' : 'bg-gray-50 text-gray-600'}>
-                            <th className="text-left p-3 font-medium">Inspection</th>
-                            <th className="text-left p-3 font-medium">Template</th>
-                            <th className="text-left p-3 font-medium">Score</th>
-                            <th className="text-left p-3 font-medium">Started</th>
-                            <th className="text-left p-3 font-medium">Completed</th>
-                            <th className="text-left p-3 font-medium">Report</th>
+                            <SortableTh label="Inspection" sortKey="name" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
+                            <SortableTh label="Template" sortKey="template" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
+                            <SortableTh label="Score" sortKey="score" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
+                            <SortableTh label="Started" sortKey="started" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
+                            <SortableTh label="Completed" sortKey="completed" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
+                            <th className={`text-left p-3 font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Report</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredInspections.length === 0 ? (
+                        {sortedInspections.length === 0 ? (
                             <tr>
                                 <td colSpan={6} className="p-6 text-center text-gray-500">
                                     {inspections.length === 0 ? 'No inspections found' : 'No inspections match your search'}
                                 </td>
                             </tr>
                         ) : (
-                            filteredInspections.map((insp) => (
+                            paginatedInspections.map((insp) => (
                                 <tr
                                     key={insp.id}
                                     className={`border-t ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}
@@ -576,14 +677,31 @@ const SafetyCultureInspections = () => {
                 </table>
             </div>
 
-            {(filteredInspections.length > 0 || inspections.length > 0) && (
+            {(sortedInspections.length > 0 || inspections.length > 0) && (
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
                     <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Showing {filteredInspections.length} inspection{filteredInspections.length !== 1 ? 's' : ''}
+                        Page {inspectionPage} of {inspectionTotalPages} • {sortedInspections.length} inspection{sortedInspections.length !== 1 ? 's' : ''}
                         {metadata?.next_page && metadata.remaining_records != null && (
-                            <span> • {metadata.remaining_records} more available</span>
+                            <span> • {metadata.remaining_records} more to load</span>
                         )}
                     </span>
+                    <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => setInspectionPage(p => Math.max(1, p - 1))}
+                                disabled={inspectionPage <= 1}
+                                className={`px-2 py-1 rounded border text-sm disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'}`}
+                            >
+                                Prev
+                            </button>
+                            <button
+                                onClick={() => setInspectionPage(p => Math.min(inspectionTotalPages, p + 1))}
+                                disabled={inspectionPage >= inspectionTotalPages}
+                                className={`px-2 py-1 rounded border text-sm disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'}`}
+                            >
+                                Next
+                            </button>
+                        </div>
                     {metadata?.next_page && (
                         <button
                             onClick={loadMore}
@@ -603,6 +721,7 @@ const SafetyCultureInspections = () => {
                             )}
                         </button>
                     )}
+                    </div>
                 </div>
             )}
             </>

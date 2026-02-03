@@ -25,13 +25,21 @@ export async function safetyCultureRequest(path, options = {}) {
     ...options.headers
   }
 
+  let timeoutId
   try {
+    const controller = options.signal ? null : new AbortController()
+    if (controller) {
+      timeoutId = setTimeout(() => controller.abort(), options.timeout ?? 45000) // 45s default
+    }
+    const signal = options.signal || (controller && controller.signal)
+
     const res = await fetch(url, {
       method: options.method || 'GET',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: options.signal
+      signal
     })
+    if (timeoutId) clearTimeout(timeoutId) // clear on success
 
     const text = await res.text()
     let body
@@ -51,8 +59,10 @@ export async function safetyCultureRequest(path, options = {}) {
 
     return body
   } catch (err) {
+    if (timeoutId) clearTimeout(timeoutId)
+    const isTimeout = err.name === 'AbortError'
     return {
-      error: err.message || 'Failed to reach Safety Culture API',
+      error: isTimeout ? 'Safety Culture API request timed out' : (err.message || 'Failed to reach Safety Culture API'),
       cause: err.cause?.message
     }
   }

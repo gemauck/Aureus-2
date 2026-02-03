@@ -16,7 +16,12 @@ async function handler(req, res) {
     return badRequest(res, 'Method not allowed', { allowed: ['POST'] })
   }
 
-  const body = (await parseJsonBody(req)) || {}
+  let body = {}
+  try {
+    body = (await parseJsonBody(req)) || {}
+  } catch (e) {
+    return badRequest(res, 'Invalid request body', { details: e.message })
+  }
 
   const limit = Math.min(Math.max(parseInt(body.limit, 10) || 100, 1), 500)
   const modifiedAfter = body.modified_after || null
@@ -50,7 +55,14 @@ async function handler(req, res) {
         return serverError(res, result.error, result.details)
       }
 
-      const issues = result.data || []
+      // Safety Culture feed may return data in different structures
+      const issues = Array.isArray(result.data)
+        ? result.data
+        : Array.isArray(result.issues)
+          ? result.issues
+          : Array.isArray(result)
+            ? result
+            : []
       fetched += issues.length
 
       for (const issue of issues) {
@@ -118,7 +130,9 @@ async function handler(req, res) {
     })
   } catch (err) {
     console.error('Safety Culture issues import error:', err)
-    return serverError(res, 'Import failed', err.message)
+    if (!res.headersSent) {
+      return serverError(res, 'Import failed', err.message)
+    }
   }
 }
 
