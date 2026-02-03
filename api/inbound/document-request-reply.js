@@ -17,7 +17,8 @@ import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const UPLOAD_FOLDER = 'doc-collection-comments'
-const SIGNATURE_TOLERANCE_SEC = 300 // 5 minutes
+// 24h tolerance so Resend Replay works (replays send original timestamp); override via RESEND_WEBHOOK_TOLERANCE_SEC
+const SIGNATURE_TOLERANCE_SEC = parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_SEC || '86400', 10) || 86400
 
 /** Verify Resend/Svix webhook signature (raw body + svix-id, svix-timestamp, svix-signature). */
 function verifyWebhookSignature(rawBody, headers, secret) {
