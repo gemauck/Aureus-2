@@ -790,17 +790,21 @@ async function handler(req, res) {
       })
 
       // Subscribe: comment author + @mentioned + prior commenters get email for all subsequent comments
-      // Notify participants: all subscribers (prior commenters + previously mentioned)
+      // Notify participants: all subscribers (prior commenters + previously mentioned in any comment)
       try {
         const authorId = req.user?.sub || req.user?.id
         const threadWhere = monthlyNotesId ? { monthlyNotesId } : departmentNotesId ? { departmentNotesId } : actionItemId ? { actionItemId } : {}
+        const threadWhereExcludeSelf = Object.keys(threadWhere).length
+          ? { ...threadWhere, id: { not: comment.id } }
+          : {}
         const [priorComments, mentionedIdsResolved] = await Promise.all([
-          Object.keys(threadWhere).length
-            ? prisma.meetingComment.findMany({ where: threadWhere, select: { authorId: true } })
+          Object.keys(threadWhereExcludeSelf).length > 0
+            ? prisma.meetingComment.findMany({ where: threadWhereExcludeSelf, select: { authorId: true, content: true } })
             : [],
           resolveMentionedUserIds(content)
         ])
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))]
+        const priorCommentTexts = (priorComments || []).map((c) => c.content).filter(Boolean)
         const threadId = monthlyNotesId || departmentNotesId || actionItemId || 'meeting-notes'
         const subscriberIds = [...new Set([String(authorId), ...(mentionedIdsResolved || []), ...priorAuthorIds])].filter(Boolean)
         await Promise.all(
@@ -824,6 +828,7 @@ async function handler(req, res) {
           commentText: content,
           entityAuthorId: null,
           priorCommentAuthorIds: subscriberIds,
+          priorCommentTexts,
           authorName,
           contextTitle: 'Meeting notes',
           link: (link && String(link).trim()) ? link : '#/teams/meeting-notes',

@@ -162,17 +162,18 @@ async function handler(req, res) {
       });
 
       // Subscribe: comment author + @mentioned + prior commenters get email for all subsequent comments
-      // Notify participants: project owner + all subscribers (prior commenters + previously mentioned)
+      // Notify participants: project owner + all subscribers (prior commenters + previously mentioned in any comment)
       try {
         const [project, priorComments, mentionedIdsResolved] = await Promise.all([
           prisma.project.findUnique({ where: { id: String(projectId) }, select: { ownerId: true, name: true } }),
           prisma.projectComment.findMany({
-            where: { projectId: String(projectId) },
-            select: { authorId: true }
+            where: { projectId: String(projectId), id: { not: comment.id } },
+            select: { authorId: true, text: true }
           }),
           resolveMentionedUserIds(text)
         ]);
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
+        const priorCommentTexts = (priorComments || []).map((c) => c.text).filter(Boolean);
         const threadId = (sectionId || weeklySectionId) && (documentId || weeklyDocumentId)
           ? `${projectId}:${sectionId || weeklySectionId}:${documentId || weeklyDocumentId}:${month ?? ''}:${year ?? docYear ?? ''}`
           : String(projectId);
@@ -231,6 +232,7 @@ async function handler(req, res) {
           commentText: text,
           entityAuthorId: project?.ownerId || null,
           priorCommentAuthorIds: subscriberList,
+          priorCommentTexts,
           authorName: finalAuthor,
           contextTitle: `Project: ${project?.name || projectId}`,
           link: linkWithComment,

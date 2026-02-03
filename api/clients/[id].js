@@ -643,16 +643,21 @@ async function handler(req, res) {
               }
             }
 
-            // Notify participants for each new comment: client owner, prior commenters, @mentioned (in-app + email per preferences)
+            // Notify participants for each new comment: client owner, prior commenters, prior @mentioned (in-app + email per preferences)
             if (newCommentsForNotify.length > 0) {
               try {
                 const client = await prisma.client.findUnique({ where: { id }, select: { ownerId: true, name: true } })
+                const priorCommentTexts = commentsArray
+                  .filter((c) => c.id && existingCommentIds.has(c.id))
+                  .map((c) => c.text)
+                  .filter(Boolean)
                 for (const nc of newCommentsForNotify) {
                   await notifyCommentParticipants({
                     commentAuthorId: nc.authorId,
                     commentText: nc.text,
                     entityAuthorId: client?.ownerId || null,
                     priorCommentAuthorIds: existingAuthorIds,
+                    priorCommentTexts,
                     authorName: nc.author || 'Someone',
                     contextTitle: `Client: ${client?.name || id}`,
                     link: `#/clients/${id}?tab=notes`,

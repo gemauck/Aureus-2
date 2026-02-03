@@ -2637,30 +2637,62 @@ function initializeProjectDetail() {
                 console.warn('⚠️ ProjectDetail: failed to apply weekly FMS review deep-link:', error);
             }
         };
-        
+
+        // Switch to Monthly FMS tab when URL has tab=monthlyFMSReview (email/notification deep links)
+        const checkAndSwitchToMonthlyFMSReview = () => {
+            const projectHasMonthlyFMS = project?.hasMonthlyFMSReviewProcess === true ||
+                                       project?.hasMonthlyFMSReviewProcess === 'true' ||
+                                       project?.hasMonthlyFMSReviewProcess === 1 ||
+                                       (typeof project?.hasMonthlyFMSReviewProcess === 'string' && project?.hasMonthlyFMSReviewProcess?.toLowerCase() === 'true');
+            if (!project?.id || !projectHasMonthlyFMS) return;
+
+            try {
+                let params = null;
+                const hash = window.location.hash || '';
+                if (hash.includes('?')) {
+                    const hashParts = hash.split('?');
+                    if (hashParts.length > 1) params = new URLSearchParams(hashParts[1]);
+                }
+                if (!params) {
+                    const search = window.location.search || '';
+                    if (search) params = new URLSearchParams(search);
+                }
+                const tabFromUrl = params?.get('tab');
+                const hasMonthlyFMSDeepLink = tabFromUrl === 'monthlyFMSReview';
+                if (hasMonthlyFMSDeepLink && activeSection !== 'monthlyFMSReview') {
+                    switchSection('monthlyFMSReview');
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to apply monthly FMS review deep-link:', error);
+            }
+        };
+
         // Check immediately and again after a short delay so we catch the hash if it's set
         // after mount (e.g. by router or when opening project from URL)
         checkAndSwitchToDocumentCollection();
         checkAndSwitchToWeeklyFMSReview();
+        checkAndSwitchToMonthlyFMSReview();
         const delayedCheck = setTimeout(() => {
             checkAndSwitchToDocumentCollection();
             checkAndSwitchToWeeklyFMSReview();
+            checkAndSwitchToMonthlyFMSReview();
         }, 50);
-        
+
         // Also listen for hash changes
         const handleHashChange = () => {
             setTimeout(() => {
                 checkAndSwitchToDocumentCollection();
                 checkAndSwitchToWeeklyFMSReview();
+                checkAndSwitchToMonthlyFMSReview();
             }, 100);
         };
-        
+
         window.addEventListener('hashchange', handleHashChange);
         return () => {
             clearTimeout(delayedCheck);
             window.removeEventListener('hashchange', handleHashChange);
         };
-    }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess, forceDocumentCollectionDeepLink]);
+    }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess, project?.hasMonthlyFMSReviewProcess, forceDocumentCollectionDeepLink]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal

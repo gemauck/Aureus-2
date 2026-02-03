@@ -41,13 +41,14 @@ export async function resolveMentionedUserIds(commentText) {
 }
 
 /**
- * Notify all participants (entity author, prior commenters, @mentioned) when a new comment is added.
- * Skips the comment author. Uses type 'comment' so inAppComments/emailComments apply.
+ * Notify all participants (entity author, prior commenters, prior @mentioned, @mentioned in new comment)
+ * when a new comment is added. Skips the comment author. Uses type 'comment' so inAppComments/emailComments apply.
  * @param {Object} opts
  * @param {string} opts.commentAuthorId - current comment author (excluded from recipients)
  * @param {string} opts.commentText - text of the new comment
  * @param {string|null} opts.entityAuthorId - task assignee / project owner / ticket creator / etc.
  * @param {string[]} opts.priorCommentAuthorIds - user IDs of everyone who commented before
+ * @param {string[]} [opts.priorCommentTexts] - text of prior comments (resolved @mentions also get notified)
  * @param {string} opts.authorName - display name of comment author
  * @param {string} opts.contextTitle - e.g. "Task: Fix bug", "Project: ABC", "Ticket #123"
  * @param {string} opts.link - deep link to the comment/thread
@@ -59,16 +60,23 @@ export async function notifyCommentParticipants(opts) {
         commentText,
         entityAuthorId,
         priorCommentAuthorIds = [],
+        priorCommentTexts = [],
         authorName,
         contextTitle,
         link,
         metadata = {}
     } = opts;
     const mentionedIds = await resolveMentionedUserIds(commentText);
+    const priorTexts = Array.isArray(priorCommentTexts) ? priorCommentTexts : [];
+    const priorMentionedArrays = await Promise.all(
+        priorTexts.filter((t) => t != null && typeof t === 'string' && String(t).trim()).map(resolveMentionedUserIds)
+    );
+    const priorMentionedIds = [...new Set(priorMentionedArrays.flat())].filter(Boolean);
     const recipientIds = new Set([
         entityAuthorId,
         ...priorCommentAuthorIds,
-        ...mentionedIds
+        ...mentionedIds,
+        ...priorMentionedIds
     ].filter(Boolean));
     const authorIdStr = commentAuthorId ? String(commentAuthorId) : null;
     const toNotify = [...recipientIds].filter((id) => authorIdStr !== String(id));

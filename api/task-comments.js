@@ -137,14 +137,18 @@ export default async function handler(req, res) {
         author: comment.author
       });
 
-      // Notify participants: task assignee + all subscribers (prior commenters + previously @mentioned)
+      // Notify participants: task assignee + all subscribers (prior commenters + previously @mentioned in any comment)
       try {
         const [task, priorComments, mentionedIdsResolved] = await Promise.all([
           prisma.task.findUnique({ where: { id: String(taskId) }, select: { assigneeId: true, title: true, subscribers: true } }),
-          prisma.taskComment.findMany({ where: { taskId: String(taskId) }, select: { authorId: true } }),
+          prisma.taskComment.findMany({
+            where: { taskId: String(taskId), id: { not: comment.id } },
+            select: { authorId: true, text: true }
+          }),
           resolveMentionedUserIds(text)
         ]);
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
+        const priorCommentTexts = (priorComments || []).map((c) => c.text).filter(Boolean);
         const taskSubscribers = (() => {
           try {
             const raw = task?.subscribers;
@@ -159,6 +163,7 @@ export default async function handler(req, res) {
           commentText: text,
           entityAuthorId: task?.assigneeId || null,
           priorCommentAuthorIds: subscriberIds,
+          priorCommentTexts,
           authorName: finalAuthor,
           contextTitle: `Task: ${task?.title || taskId}`,
           link: `#/projects/${projectId}?task=${taskId}&commentId=${comment.id}`,

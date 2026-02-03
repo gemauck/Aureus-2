@@ -2273,17 +2273,55 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             
             // If year is specified and different from current, switch to that year first
             if (normalizedDeepYear && normalizedDeepYear !== selectedYear && deepSectionId && isValidDocumentId && deepMonth) {
-                if (!deepCommentId) {
-                    // Store pending comment open for after year change
-                    pendingCommentOpenRef.current = {
-                        sectionId: deepSectionId,
-                        documentId: deepDocumentId,
-                        month: deepMonth
-                    };
-                }
+                // Store pending comment open for after year change (include commentId so we scroll to it)
+                pendingCommentOpenRef.current = {
+                    sectionId: deepSectionId,
+                    documentId: deepDocumentId,
+                    month: deepMonth
+                };
                 handleYearChange(normalizedDeepYear);
                 // Return early - will retry after year changes
                 return;
+            }
+
+            // If we have commentId, search for the comment (like Document Collection) when not found at specified location
+            if (deepCommentId && sections && sections.length > 0 && months && months.length > 0) {
+                const commentIdToFind = String(deepCommentId);
+                const commentIdNum = parseInt(deepCommentId, 10);
+                const matchId = (c) => {
+                    const cId = c.id;
+                    return String(cId) === commentIdToFind || (typeof cId === 'number' && cId === commentIdNum) || (typeof commentIdNum === 'number' && !isNaN(commentIdNum) && cId === commentIdNum);
+                };
+                let found = false;
+                if (deepSectionId && isValidDocumentId && deepMonth) {
+                    const section = sections.find(s => String(s.id) === String(deepSectionId));
+                    const doc = section?.documents?.find(d => String(d.id) === String(deepDocumentId));
+                    if (doc) {
+                        const comments = getCommentsForYear(doc.comments, deepMonth, selectedYear);
+                        if (comments.some(matchId)) found = true;
+                    }
+                }
+                if (!found) {
+                    for (const section of sections) {
+                        if (!section.documents) continue;
+                        for (const doc of section.documents) {
+                            if (!doc.comments) continue;
+                            for (const month of months) {
+                                const comments = getCommentsForYear(doc.comments, month, selectedYear);
+                                if (comments.some(matchId)) {
+                                    deepSectionId = section.id;
+                                    deepDocumentId = doc.id;
+                                    deepMonth = month;
+                                    isValidDocumentId = true;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (found) break;
+                        }
+                        if (found) break;
+                    }
+                }
             }
             
             if (deepSectionId && deepDocumentId && deepMonth) {
@@ -2295,13 +2333,19 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                     left: Math.max(window.innerWidth / 2 - 180, 20)
                 });
                 
-                // Open the popup immediately
+                // Open the popup immediately and clear pending so we don't re-run after year change
+                pendingCommentOpenRef.current = null;
                 setHoverCommentCell(cellKey);
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
                 const positionPopup = () => {
                     const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
                     if (commentButton) {
+                        try {
+                            commentButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                        } catch (_) {
+                            commentButton.scrollIntoView(true);
+                        }
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
                         const viewportHeight = window.innerHeight;

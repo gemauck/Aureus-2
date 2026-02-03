@@ -659,9 +659,10 @@ async function handler(req, res) {
         const parsedTicket = parseTicketJsonFields(updatedTicket)
 
         // Subscribe: comment author + @mentioned + assignee + prior commenters get email for all subsequent comments
-        // Notify participants: ticket creator, assignee, all subscribers (prior commenters + previously mentioned)
+        // Notify participants: ticket creator, assignee, all subscribers (prior commenters + previously mentioned in any comment)
         try {
           const priorUserIds = [ticket.assignedToId, ...currentComments.map((c) => c.userId)].filter(Boolean)
+          const priorCommentTexts = (currentComments || []).map((c) => c.message || c.body || c.text).filter(Boolean)
           const mentionedIdsResolved = await resolveMentionedUserIds(body.message.trim())
           const subscriberIds = [...new Set([String(userId), ...(mentionedIdsResolved || []), ...priorUserIds])].filter(Boolean)
           await Promise.all(
@@ -684,6 +685,7 @@ async function handler(req, res) {
             commentText: body.message.trim(),
             entityAuthorId: ticket.createdById || null,
             priorCommentAuthorIds: subscriberIds,
+            priorCommentTexts,
             authorName: user.name || user.email || 'Someone',
             contextTitle: `Ticket #${ticket.ticketNumber}: ${ticket.title || 'Helpdesk'}`,
             link: `#/helpdesk/${id}`,
