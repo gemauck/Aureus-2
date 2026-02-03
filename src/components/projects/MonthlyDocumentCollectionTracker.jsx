@@ -3967,6 +3967,7 @@ Abcotronics`;
                                                                     disabled={deletingActivityId === s.id}
                                                                     className="shrink-0 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
                                                                     title="Remove sent email from list"
+                                                                    aria-label="Remove sent email from list"
                                                                 >
                                                                     {deletingActivityId === s.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
                                                                 </button>
@@ -4007,6 +4008,7 @@ Abcotronics`;
                                                                 disabled={deletingActivityId === r.id}
                                                                 className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
                                                                 title="Remove received email from list"
+                                                                aria-label="Remove received email from list"
                                                             >
                                                                 {deletingActivityId === r.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
                                                             </button>
