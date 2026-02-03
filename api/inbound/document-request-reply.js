@@ -519,6 +519,19 @@ async function handler(req, res) {
       return ok(res, { processed: false, reason: 'no_resend_api_key' })
     }
 
+    // Respond immediately to avoid Resend timeout (10–30s); process in background
+    res.status(200).json({ received: true, processing: 'async' })
+    const dataCopy = data ? JSON.parse(JSON.stringify(data)) : {}
+    setImmediate(() => processReceivedEmail(emailId, apiKey, dataCopy).catch((e) => console.error('document-request-reply: background error', e)))
+    return
+  } catch (e) {
+    console.error('POST /api/inbound/document-request-reply error:', e)
+    return serverError(res, e.message || 'Failed to process document request reply')
+  }
+}
+
+async function processReceivedEmail(emailId, apiKey, data) {
+  try {
     const email = await fetchReceivedEmail(emailId, apiKey)
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
     const allCandidates = await getAllMessageIdCandidates(email, rawUrl, apiKey)
@@ -532,11 +545,7 @@ async function handler(req, res) {
         in_reply_to: email.in_reply_to || null,
         references: email.references ? (typeof email.references === 'string' ? email.references.slice(0, 80) : 'present') : null
       })
-      return ok(res, {
-        processed: false,
-        reason: 'no_in_reply_to_or_references',
-        hint: 'Ensure the client replies using "Reply" (not a new email) so In-Reply-To is set. Check Resend Dashboard that the webhook URL is correct and receiving events.'
-      })
+      return
     }
 
     // Resend may put its own format (e.g. 0102019c24a3ef6e-...) in In-Reply-To; our docreq-uuid@domain may be in References. Try ALL candidates.
@@ -652,13 +661,7 @@ async function handler(req, res) {
         subject: (email.subject || '').slice(0, 80),
         hint: 'Send a new document request from the app, then reply to that email. Resend may use a different In-Reply-To format.'
       })
-      return ok(res, {
-        processed: false,
-        reason: 'unknown_thread',
-        candidatesChecked: allCandidates.length,
-        firstCandidate: primaryId.slice(0, 100),
-        hint: 'Send a new document request from the app, then reply to that email. Ensure Resend webhook for email.received is set.'
-      })
+      return
     }
 
     console.log('document-request-reply: matched thread', {
@@ -702,18 +705,9 @@ async function handler(req, res) {
       }
     })
 
-    return ok(res, {
-      processed: true,
-      projectId,
-      itemId,
-      year,
-      month,
-      attachmentsAdded: uploaded.length,
-      commentCreated: true
-    })
+    console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
   } catch (e) {
-    console.error('POST /api/inbound/document-request-reply error:', e)
-    return serverError(res, e.message || 'Failed to process document request reply')
+    console.error('document-request-reply: background process error', e)
   }
 }
 
