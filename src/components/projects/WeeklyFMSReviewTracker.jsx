@@ -2049,6 +2049,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         commentText,
                         entityAuthorId: null,
                         priorCommentAuthorIds: priorComments.map((c) => c.authorId).filter(Boolean),
+                        priorCommentAuthorNames: priorComments.filter((c) => !c.authorId && (c.author || c.authorEmail)).map((c) => c.author || c.authorEmail).filter(Boolean),
                         priorCommentTexts: priorComments.map((c) => c.text).filter(Boolean),
                         authorName: currentUser.name || currentUser.email || 'Unknown',
                         contextTitle,

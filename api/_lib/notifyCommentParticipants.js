@@ -13,6 +13,35 @@ function normalize(s) {
 }
 
 /**
+ * Resolve one or more display names (e.g. prior comment authors) to user IDs.
+ * Used when document collection comments only have author name, not authorId.
+ * @param {string[]} authorNames - display names or email local parts
+ * @returns {Promise<string[]>} user IDs of matched users
+ */
+export async function resolveAuthorNamesToUserIds(authorNames) {
+    const names = Array.isArray(authorNames) ? authorNames : [];
+    const trimmed = [...new Set(names.map((n) => (n != null && typeof n === 'string' ? n.trim() : '')).filter(Boolean))];
+    if (trimmed.length === 0) return [];
+
+    const users = await prisma.user.findMany({
+        where: { status: { not: 'inactive' } },
+        select: { id: true, name: true, email: true }
+    });
+    const ids = [];
+    for (const raw of trimmed) {
+        const norm = normalize(raw);
+        const user = users.find((u) => {
+            const n = normalize(u.name || '');
+            const e = normalize((u.email || '').split('@')[0]);
+            const fullEmail = normalize((u.email || '').replace('@', ''));
+            return n === norm || e === norm || fullEmail === norm || n.includes(norm) || norm.includes(n) || (e && e.includes(norm));
+        });
+        if (user && !ids.includes(user.id)) ids.push(user.id);
+    }
+    return ids;
+}
+
+/**
  * Resolve @mentions in comment text to user IDs by matching name/email.
  * @param {string} commentText
  * @returns {Promise<string[]>} user IDs of matched users
@@ -48,6 +77,7 @@ export async function resolveMentionedUserIds(commentText) {
  * @param {string} opts.commentText - text of the new comment
  * @param {string|null} opts.entityAuthorId - task assignee / project owner / ticket creator / etc.
  * @param {string[]} opts.priorCommentAuthorIds - user IDs of everyone who commented before
+ * @param {string[]} [opts.priorCommentAuthorNames] - display names of prior commenters (resolved to IDs when authorId missing)
  * @param {string[]} [opts.priorCommentTexts] - text of prior comments (resolved @mentions also get notified)
  * @param {string} opts.authorName - display name of comment author
  * @param {string} opts.contextTitle - e.g. "Task: Fix bug", "Project: ABC", "Ticket #123"
@@ -60,6 +90,7 @@ export async function notifyCommentParticipants(opts) {
         commentText,
         entityAuthorId,
         priorCommentAuthorIds = [],
+        priorCommentAuthorNames = [],
         priorCommentTexts = [],
         authorName,
         contextTitle,
@@ -72,9 +103,15 @@ export async function notifyCommentParticipants(opts) {
         priorTexts.filter((t) => t != null && typeof t === 'string' && String(t).trim()).map(resolveMentionedUserIds)
     );
     const priorMentionedIds = [...new Set(priorMentionedArrays.flat())].filter(Boolean);
+    // Resolve prior comment author names to IDs (document collection often has author name only, not authorId)
+    const priorAuthorNames = Array.isArray(priorCommentAuthorNames) ? priorCommentAuthorNames : [];
+    const priorAuthorIdsFromNames = priorAuthorNames.length > 0
+        ? await resolveAuthorNamesToUserIds(priorAuthorNames)
+        : [];
     const recipientIds = new Set([
         entityAuthorId,
         ...priorCommentAuthorIds,
+        ...priorAuthorIdsFromNames,
         ...mentionedIds,
         ...priorMentionedIds
     ].filter(Boolean));
