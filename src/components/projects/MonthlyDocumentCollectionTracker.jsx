@@ -3389,9 +3389,9 @@ Abcotronics`;
             setResult(null);
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
-        // Load email activity (sent/received) for this document and month
-        useEffect(() => {
-            if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month || project?.id == null || selectedYear == null) {
+        // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send
+        const fetchEmailActivity = useCallback(() => {
+            if (!ctx?.doc?.id || !ctx?.month || project?.id == null || selectedYear == null) {
                 setEmailActivity({ sent: [], received: [] });
                 return;
             }
@@ -3400,7 +3400,7 @@ Abcotronics`;
             setLoadingActivity(true);
             const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
             const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
-            const q = new URLSearchParams({ sectionId: ctx.section.id, documentId: ctx.doc.id, month: monthNum, year: selectedYear });
+            const q = new URLSearchParams({ documentId: ctx.doc.id, month: monthNum, year: selectedYear });
             fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
                 credentials: 'include',
@@ -3416,7 +3416,15 @@ Abcotronics`;
                 })
                 .catch(() => setEmailActivity({ sent: [], received: [] }))
                 .finally(() => setLoadingActivity(false));
-        }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear, project?.id, result?.sent]);
+        }, [ctx?.doc?.id, ctx?.month, selectedYear, project?.id]);
+
+        useEffect(() => {
+            if (!ctx?.doc?.id || !ctx?.month) {
+                setEmailActivity({ sent: [], received: [] });
+                return;
+            }
+            fetchEmailActivity();
+        }, [ctx?.doc?.id, ctx?.month, selectedYear, project?.id, fetchEmailActivity]);
 
         const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const addContact = () => {
@@ -3539,6 +3547,8 @@ Abcotronics`;
                     return;
                 }
                 setResult({ sent: data.sent || [], failed: data.failed || [] });
+                // Refetch email activity after a short delay so the server has committed the sent record
+                setTimeout(() => fetchEmailActivity(), 500);
                 // Mark this document/month as "Requested" when email is sent successfully
                 if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
                     const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 ? sectionsRef.current : sectionsByYear;

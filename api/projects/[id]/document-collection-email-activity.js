@@ -30,25 +30,24 @@ async function handler(req, res) {
   const month = monthParam != null ? parseInt(String(monthParam), 10) : null
   const year = yearParam != null ? parseInt(String(yearParam), 10) : null
 
-  if (!sectionId || !documentId || month == null || isNaN(month) || month < 1 || month > 12 || year == null || isNaN(year)) {
-    return badRequest(res, 'Query parameters sectionId, documentId, month (1-12), and year are required')
+  if (!documentId || month == null || isNaN(month) || month < 1 || month > 12 || year == null || isNaN(year)) {
+    return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
 
   try {
-    // Optional: verify section and document belong to project
-    const section = await prisma.documentSection.findFirst({
-      where: { id: sectionId, projectId },
-      include: {
-        documents: { where: { id: documentId }, select: { id: true } }
-      }
+    // Verify document exists and belongs to this project (via its section)
+    const document = await prisma.documentItem.findUnique({
+      where: { id: documentId },
+      include: { section: { select: { projectId: true } } }
     })
-    if (!section || !section.documents?.length) {
+    if (!document || document.section?.projectId !== projectId) {
       return ok(res, { sent: [], received: [] })
     }
 
+    // Query sent by projectId + documentId + year + month (sectionId can differ per year, so don't filter by it)
     const [sent, receivedRows] = await Promise.all([
       prisma.documentRequestEmailSent.findMany({
-        where: { projectId, sectionId, documentId, year, month },
+        where: { projectId, documentId, year, month },
         orderBy: { createdAt: 'asc' },
         select: { id: true, messageId: true, createdAt: true }
       }),
