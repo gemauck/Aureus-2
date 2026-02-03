@@ -53,14 +53,23 @@ const SafetyCultureInspections = () => {
                 if (!data?.connected) {
                     setError('Unable to connect to Safety Culture. Check your API key.');
                 }
-                // Fetch initial inspections
-                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=20`, {
-                    headers: getHeaders()
-                });
-                const inspJson = await inspRes.json().catch(() => ({}));
-                const inspData = inspJson?.data ?? inspJson;
-                setInspections(inspData.inspections ?? []);
-                setMetadata(inspData.metadata ?? { next_page: null, remaining_records: 0 });
+                // Fetch all inspections (load all pages)
+                let allInspections = [];
+                let nextPage = null;
+                do {
+                    const url = nextPage
+                        ? `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(nextPage)}`
+                        : `${API_BASE}/safety-culture/inspections?limit=50`;
+                    const inspRes = await fetch(url, { headers: getHeaders() });
+                    const inspJson = await inspRes.json().catch(() => ({}));
+                    const inspData = inspJson?.data ?? inspJson;
+                    const batch = inspData.inspections ?? [];
+                    allInspections = [...allInspections, ...batch];
+                    const meta = inspData.metadata ?? { next_page: null };
+                    setMetadata(meta);
+                    nextPage = meta?.next_page || null;
+                } while (nextPage);
+                setInspections(allInspections);
             } catch (e) {
                 setError(e.message || 'Failed to load Safety Culture data');
             } finally {
@@ -114,11 +123,22 @@ const SafetyCultureInspections = () => {
     const loadIssues = async () => {
         setIssuesLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=50`, { headers: getHeaders() });
-            const json = await res.json().catch(() => ({}));
-            const data = json?.data ?? json;
-            setIssues(data.issues ?? []);
-            setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
+            let allIssues = [];
+            let nextPage = null;
+            do {
+                const url = nextPage
+                    ? `${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(nextPage)}`
+                    : `${API_BASE}/safety-culture/issues?limit=50`;
+                const res = await fetch(url, { headers: getHeaders() });
+                const json = await res.json().catch(() => ({}));
+                const data = json?.data ?? json;
+                const batch = data.issues ?? [];
+                allIssues = [...allIssues, ...batch];
+                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
+                setIssuesMetadata(meta);
+                nextPage = meta?.next_page || null;
+            } while (nextPage);
+            setIssues(allIssues);
         } catch (e) {
             setError(e.message || 'Failed to load issues');
         } finally {

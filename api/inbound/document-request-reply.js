@@ -402,9 +402,25 @@ async function pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachme
 }
 
 async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).setHeader('Allow', 'POST').json({ error: 'Method not allowed' })
+  // Allow OPTIONS (CORS preflight) and GET (reachability check)
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS')
+    return res.status(204).end()
   }
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      ok: true,
+      endpoint: 'Resend email.received webhook',
+      method: 'POST',
+      hint: 'In Resend Dashboard add a webhook for event "email.received" with this URL (change to your domain).'
+    })
+  }
+  if (req.method !== 'POST') {
+    return res.status(405).setHeader('Allow', 'GET, POST, OPTIONS').json({ error: 'Method not allowed' })
+  }
+
+  // Log every POST immediately so we can confirm webhook is being called
+  console.log('document-request-reply: POST received', { contentType: req.headers?.['content-type'] || 'none' })
 
   try {
     const rawBody = typeof req.body === 'string' ? req.body : (req.body ? JSON.stringify(req.body) : '{}')

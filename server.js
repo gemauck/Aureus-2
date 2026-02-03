@@ -346,7 +346,8 @@ app.use('/api', apiLimiter)
 app.use(compression({ threshold: 0 }))
 
 // Document request reply webhook MUST run before express.json() so we get raw body for signature verification
-app.post('/api/inbound/document-request-reply', express.text({ type: '*/*', limit: '1mb' }), async (req, res, next) => {
+// Use app.all so GET (reachability check) and POST (Resend webhook) both hit the handler
+app.all('/api/inbound/document-request-reply', express.text({ type: '*/*', limit: '1mb' }), async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'inbound', 'document-request-reply.js'))
     if (!handler) {
