@@ -11,7 +11,8 @@ const Tools = () => {
         TankSizeCalculator: null,
         DieselRefundEvidenceEvaluator: null,
         DocumentParser: null,
-        SafetyCultureInspections: null
+        SafetyCultureInspections: null,
+        DocumentSorter: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
 
@@ -30,7 +31,8 @@ const Tools = () => {
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
                 DocumentParser: window.DocumentParser,
-                SafetyCultureInspections: window.SafetyCultureInspections
+                SafetyCultureInspections: window.SafetyCultureInspections,
+                DocumentSorter: window.DocumentSorter
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -88,7 +90,8 @@ const Tools = () => {
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
                 DocumentParser: window.DocumentParser,
-                SafetyCultureInspections: window.SafetyCultureInspections
+                SafetyCultureInspections: window.SafetyCultureInspections,
+                DocumentSorter: window.DocumentSorter
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -168,6 +171,14 @@ const Tools = () => {
                 icon: 'fa-clipboard-check',
                 color: 'teal',
                 component: toolComponents.SafetyCultureInspections
+            },
+            {
+                id: 'document-sorter',
+                name: 'Diesel Refund Document Sorter',
+                description: 'Upload a large zipped folder (10+ GB) and sort documents into File 1–7 categories',
+                icon: 'fa-folder-tree',
+                color: 'amber',
+                component: toolComponents.DocumentSorter
             }
         ];
         // Debug: Log when tools array is recalculated

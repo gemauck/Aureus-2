@@ -196,6 +196,7 @@
         'components/tools/DieselRefundEvidenceEvaluator.jsx',
         'components/tools/DocumentParser.jsx',
         'components/tools/SafetyCultureInspections.jsx',
+        'components/tools/DocumentSorter.jsx',
         'components/tools/Tools.jsx',
         
         // Reports

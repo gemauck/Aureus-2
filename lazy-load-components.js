@@ -150,6 +150,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/tools/DieselRefundEvidenceEvaluator.jsx',
         './src/components/tools/DocumentParser.jsx',
         './src/components/tools/SafetyCultureInspections.jsx',
+        './src/components/tools/DocumentSorter.jsx',
         './src/components/tools/Tools.jsx',
         
         // Tasks and Notes
