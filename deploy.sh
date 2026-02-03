@@ -67,12 +67,22 @@ fi
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart "${PM2_PROCESS_NAME}" || {
+  pm2 restart "${PM2_PROCESS_NAME}" --update-env || {
     echo "WARNING: pm2 restart failed. Check that the process name '${PM2_PROCESS_NAME}' is correct."
+    exit 1
   }
+  pm2 save 2>/dev/null || true
 else
   echo "NOTE: pm2 not found. If you use systemd, try:"
   echo "  sudo systemctl restart abcotronics-erp.service"
+fi
+
+echo
+echo "-> Reloading nginx..."
+if command -v nginx >/dev/null 2>&1; then
+  nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || true
+elif systemctl is-active nginx >/dev/null 2>&1; then
+  systemctl reload nginx 2>/dev/null || true
 fi
 
 echo
