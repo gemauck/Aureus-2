@@ -2,8 +2,11 @@
  * POST /api/inbound/document-request-reply
  * Resend email.received webhook: when a reply is received at the document-request inbound
  * address, look up the original sent message (In-Reply-To → DocumentRequestEmailSent),
- * download attachments, upload to uploads/doc-collection-comments, and append to the
- * latest DocumentItemComment for that project/section/document/month (or create one).
+ * download attachments, upload to uploads/doc-collection-comments, and create a
+ * DocumentItemComment for that project/document/month.
+ *
+ * Resend setup: In Resend Dashboard enable "Receive" for your domain, then add a webhook
+ * for event "email.received" pointing to: https://your-domain/api/inbound/document-request-reply
  * No auth - webhook is validated by Resend/Svix signing when RESEND_WEBHOOK_SECRET is set.
  */
 import crypto from 'crypto'
