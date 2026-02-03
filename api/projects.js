@@ -285,6 +285,61 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
 }
 
 /**
+ * Merge comments from existing (server) sections into incoming payload so we never wipe
+ * comments when a client saves without them (e.g. another tab or status-only update).
+ * Matches by year + section name + document name so reorders don't attach wrong comments.
+ */
+function mergeExistingCommentsIntoPayload(existingByYear, incomingSections) {
+  if (!existingByYear || typeof existingByYear !== 'object' || !incomingSections || typeof incomingSections !== 'object') {
+    return incomingSections;
+  }
+  const merged = {}
+  for (const [yearStr, yearSections] of Object.entries(incomingSections)) {
+    if (!Array.isArray(yearSections)) {
+      merged[yearStr] = yearSections
+      continue
+    }
+    const existingForYear = existingByYear[yearStr]
+    const existingSectionList = Array.isArray(existingForYear) ? existingForYear : []
+    const existingBySectionName = new Map()
+    for (const s of existingSectionList) {
+      const name = (s && s.name != null) ? String(s.name) : ''
+      existingBySectionName.set(name, s)
+    }
+    merged[yearStr] = yearSections.map((section) => {
+      if (!section.documents || !Array.isArray(section.documents)) {
+        return section
+      }
+      const existingSection = existingBySectionName.get((section.name != null) ? String(section.name) : '')
+      const existingDocsByName = new Map()
+      if (existingSection && Array.isArray(existingSection.documents)) {
+        for (const d of existingSection.documents) {
+          const docName = (d && d.name != null) ? String(d.name) : ''
+          existingDocsByName.set(docName, d)
+        }
+      }
+      return {
+        ...section,
+        documents: section.documents.map((doc) => {
+          const existingDoc = existingDocsByName.get((doc.name != null) ? String(doc.name) : '')
+          const existingComments = (existingDoc && existingDoc.comments && typeof existingDoc.comments === 'object') ? existingDoc.comments : {}
+          const incomingComments = (doc.comments && typeof doc.comments === 'object') ? doc.comments : {}
+          const mergedComments = { ...existingComments }
+          for (const [key, arr] of Object.entries(incomingComments)) {
+            const list = Array.isArray(arr) ? arr : (arr != null ? [arr] : [])
+            if (list.length > 0) {
+              mergedComments[key] = list
+            }
+          }
+          return { ...doc, comments: mergedComments }
+        })
+      }
+    })
+  }
+  return merged
+}
+
+/**
  * Save documentSections JSON to table structure
  */
 async function saveDocumentSectionsToTable(projectId, jsonData) {
@@ -310,6 +365,15 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
       } catch (parseError) {
         console.error('❌ Error parsing documentSections JSON string:', parseError);
         throw new Error(`Invalid JSON in documentSections: ${parseError.message}`);
+      }
+    }
+
+    // Preserve comments that exist on the server but are missing from the payload (e.g. another tab or status-only save)
+    const yearBased = typeof sections === 'object' && !Array.isArray(sections)
+    if (yearBased) {
+      const existing = await documentSectionsToJson(projectId, { skipComments: false })
+      if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) {
+        sections = mergeExistingCommentsIntoPayload(existing, sections)
       }
     }
 
