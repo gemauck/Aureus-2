@@ -5,6 +5,7 @@
  * Query: sectionId, documentId, month (1-12), year.
  */
 import { authRequired } from '../../_lib/authRequired.js'
+import { normalizeDocumentCollectionCell, normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
 import { ok, badRequest, serverError } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
 
@@ -13,10 +14,7 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'GET').json({ error: 'Method not allowed' })
   }
 
-  const pathOrUrl = (req.originalUrl || req.url || req.path || '').split('?')[0].split('#')[0]
-  const match = pathOrUrl.match(/(?:\/api)?\/projects\/([^/]+)\/document-collection-email-activity/)
-  const rawId = (req.params && req.params.id) || (match ? match[1] : null)
-  const projectId = rawId ? String(rawId).trim() : null
+  const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
   if (!projectId) {
     return badRequest(res, 'Project ID required')
   }
@@ -30,46 +28,34 @@ async function handler(req, res) {
   const month = monthParam != null ? parseInt(String(monthParam), 10) : null
   const year = yearParam != null ? parseInt(String(yearParam), 10) : null
 
-  if (!documentId || month == null || isNaN(month) || month < 1 || month > 12 || year == null || isNaN(year)) {
+  const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
+  if (!cell) {
     return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
-
-  const pid = String(projectId).trim()
-  const docId = String(documentId).trim()
-  const yearNum = Number(year)
-  const monthNum = Number(month)
 
   try {
     // Verify document exists and belongs to this project (via its section)
     const document = await prisma.documentItem.findUnique({
-      where: { id: docId },
+      where: { id: cell.documentId },
       include: { section: { select: { projectId: true } } }
     })
-    if (!document || String(document.section?.projectId) !== pid) {
+    if (!document || String(document.section?.projectId) !== cell.projectId) {
       return ok(res, { sent: [], received: [] })
     }
 
-    // Query sent by projectId + documentId + year + month (exact match). Fallback: same project/year/month, filter by documentId in code.
-    let sent = await prisma.documentRequestEmailSent.findMany({
-      where: { projectId: pid, documentId: docId, year: yearNum, month: monthNum },
+    // Sent items from dedicated log (same keys as send API writes)
+    const sent = await prisma.documentCollectionEmailLog.findMany({
+      where: { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month, kind: 'sent' },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, messageId: true, createdAt: true }
+      select: { id: true, createdAt: true }
     })
-    if (sent.length === 0) {
-      const fallback = await prisma.documentRequestEmailSent.findMany({
-        where: { projectId: pid, year: yearNum, month: monthNum },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, messageId: true, createdAt: true, documentId: true }
-      })
-      sent = fallback.filter((s) => String(s.documentId || '').trim() === docId).map(({ id, messageId, createdAt }) => ({ id, messageId, createdAt }))
-    }
 
     const [receivedRows] = await Promise.all([
       prisma.documentItemComment.findMany({
         where: {
-          itemId: docId,
-          year: yearNum,
-          month: monthNum,
+          itemId: cell.documentId,
+          year: cell.year,
+          month: cell.month,
           OR: [
             { author: 'Email from Client' },
             { text: { startsWith: 'Email from Client' } }

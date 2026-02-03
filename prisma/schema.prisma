@@ -790,6 +790,19 @@ model DocumentRequestEmailSent {
   @@index([messageId])
 }
 
+// Dedicated log for "Email activity" in document request modal (one row per sent event; read path is simple and reliable)
+model DocumentCollectionEmailLog {
+  id         String   @id @default(cuid())
+  projectId  String
+  documentId String   // DocumentItem.id
+  year       Int
+  month      Int
+  kind       String   @default("sent") // 'sent' for now
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, documentId, year, month])
+}
+
 // Weekly FMS Review Tables (duplicated from Monthly FMS Review)
 model WeeklyFMSReviewSection {
   id          String   @id @default(cuid())

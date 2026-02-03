@@ -3547,13 +3547,18 @@ Abcotronics`;
                 });
                 const json = await res.json().catch(() => ({}));
                 const data = json.data || json;
-                if (!res.ok) {
+                const sentList = data.sent || json.sent || [];
+                const failedList = data.failed || json.failed || [];
+                if (!res.ok && res.status !== 503) {
                     setResult({ error: data.error || json.error || 'Failed to send' });
                     return;
                 }
-                setResult({ sent: data.sent || [], failed: data.failed || [] });
-                // Refetch email activity after a short delay so the server has committed the sent record
-                setTimeout(() => fetchEmailActivity(), 500);
+                setResult({
+                    sent: sentList,
+                    failed: failedList,
+                    ...(res.status === 503 ? { warning: data.error || json.error || 'Activity could not be saved.' } : {})
+                });
+                setTimeout(() => fetchEmailActivity(), 400);
                 // Mark this document/month as "Requested" when email is sent successfully
                 if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
                     const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 ? sectionsRef.current : sectionsByYear;
