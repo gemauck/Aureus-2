@@ -23,10 +23,10 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'POST').json({ error: 'Method not allowed' })
   }
 
-  const pathOrUrl = (req.url || req.path || '').split('?')[0].split('#')[0]
+  const pathOrUrl = (req.originalUrl || req.url || req.path || '').split('?')[0].split('#')[0]
   const match = pathOrUrl.match(/(?:\/api)?\/projects\/([^/]+)\/document-collection-send-email/)
-  const rawId = match ? match[1] : (req.params && req.params.id)
-  const projectId = rawId ? String(rawId).split('?')[0].split('&')[0].trim() : null
+  const rawId = (req.params && req.params.id) || (match ? match[1] : null)
+  const projectId = rawId ? String(rawId).trim() : null
   if (!projectId) {
     return badRequest(res, 'Project ID required')
   }
@@ -42,6 +42,7 @@ async function handler(req, res) {
     const documentId = body.documentId != null ? String(body.documentId).trim() : null
     const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : null
     const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : null
+    const normalizedProjectId = projectId ? String(projectId).trim() : null
 
     if (!subject) {
       return badRequest(res, 'Subject is required')
@@ -109,29 +110,21 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
-    // Always persist sent record when we have cell context so "Email activity" shows sent items (even without inbound)
-    if (messageIdForReply && hasCellContext) {
+    // Persist sent record only when email was actually sent, so "Email activity" shows sent items after refresh
+    if (sent.length > 0 && messageIdForReply && hasCellContext && normalizedProjectId && sectionId && documentId && month >= 1 && month <= 12 && year) {
       try {
-        await prisma.documentRequestEmailSent.upsert({
-          where: { messageId: messageIdForReply },
-          create: {
+        await prisma.documentRequestEmailSent.create({
+          data: {
             messageId: messageIdForReply,
-            projectId,
+            projectId: normalizedProjectId,
             sectionId,
             documentId,
-            year,
-            month
-          },
-          update: {
-            projectId,
-            sectionId,
-            documentId,
-            year,
-            month
+            year: Number(year),
+            month: Number(month)
           }
         })
       } catch (dbErr) {
-        console.error('document-collection-send-email: failed to store sent record:', dbErr.message)
+        console.error('document-collection-send-email: failed to store sent record:', dbErr.message, { projectId: normalizedProjectId, documentId, year, month })
       }
     }
 

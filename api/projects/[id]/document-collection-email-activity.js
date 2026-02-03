@@ -13,17 +13,17 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'GET').json({ error: 'Method not allowed' })
   }
 
-  const pathOrUrl = (req.url || req.path || '').split('?')[0].split('#')[0]
+  const pathOrUrl = (req.originalUrl || req.url || req.path || '').split('?')[0].split('#')[0]
   const match = pathOrUrl.match(/(?:\/api)?\/projects\/([^/]+)\/document-collection-email-activity/)
-  const rawId = match ? match[1] : (req.params && req.params.id)
-  const projectId = rawId ? String(rawId).split('?')[0].split('&')[0].trim() : null
+  const rawId = (req.params && req.params.id) || (match ? match[1] : null)
+  const projectId = rawId ? String(rawId).trim() : null
   if (!projectId) {
     return badRequest(res, 'Project ID required')
   }
 
-  const query = (req.url || '').split('?')[1] || ''
+  const fullUrl = req.originalUrl || req.url || ''
+  const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
   const params = new URLSearchParams(query)
-  const sectionId = params.get('sectionId')?.trim() || null
   const documentId = params.get('documentId')?.trim() || null
   const monthParam = params.get('month')
   const yearParam = params.get('year')
@@ -34,29 +34,42 @@ async function handler(req, res) {
     return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
 
+  const pid = String(projectId).trim()
+  const docId = String(documentId).trim()
+  const yearNum = Number(year)
+  const monthNum = Number(month)
+
   try {
     // Verify document exists and belongs to this project (via its section)
     const document = await prisma.documentItem.findUnique({
-      where: { id: documentId },
+      where: { id: docId },
       include: { section: { select: { projectId: true } } }
     })
-    if (!document || String(document.section?.projectId) !== String(projectId)) {
+    if (!document || String(document.section?.projectId) !== pid) {
       return ok(res, { sent: [], received: [] })
     }
 
-    // Query sent by projectId + documentId + year + month (sectionId can differ per year, so don't filter by it)
-    const pid = String(projectId)
-    const [sent, receivedRows] = await Promise.all([
-      prisma.documentRequestEmailSent.findMany({
-        where: { projectId: pid, documentId, year, month },
+    // Query sent by projectId + documentId + year + month (exact match). Fallback: same project/year/month, filter by documentId in code.
+    let sent = await prisma.documentRequestEmailSent.findMany({
+      where: { projectId: pid, documentId: docId, year: yearNum, month: monthNum },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, messageId: true, createdAt: true }
+    })
+    if (sent.length === 0) {
+      const fallback = await prisma.documentRequestEmailSent.findMany({
+        where: { projectId: pid, year: yearNum, month: monthNum },
         orderBy: { createdAt: 'asc' },
-        select: { id: true, messageId: true, createdAt: true }
-      }),
+        select: { id: true, messageId: true, createdAt: true, documentId: true }
+      })
+      sent = fallback.filter((s) => String(s.documentId || '').trim() === docId).map(({ id, messageId, createdAt }) => ({ id, messageId, createdAt }))
+    }
+
+    const [receivedRows] = await Promise.all([
       prisma.documentItemComment.findMany({
         where: {
-          itemId: documentId,
-          year,
-          month,
+          itemId: docId,
+          year: yearNum,
+          month: monthNum,
           OR: [
             { author: 'Email from Client' },
             { text: { startsWith: 'Email from Client' } }

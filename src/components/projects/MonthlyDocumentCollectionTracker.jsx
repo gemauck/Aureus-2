@@ -3400,7 +3400,11 @@ Abcotronics`;
             setLoadingActivity(true);
             const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
             const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
-            const q = new URLSearchParams({ documentId: ctx.doc.id, month: monthNum, year: selectedYear });
+            const q = new URLSearchParams({
+                documentId: String(ctx.doc.id).trim(),
+                month: String(monthNum),
+                year: String(selectedYear)
+            });
             fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
                 credentials: 'include',
@@ -3521,6 +3525,7 @@ Abcotronics`;
                 const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim());
                 const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
+                const hasCellContext = !!(ctx?.section?.id && ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum);
                 const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
                     method: 'POST',
                     credentials: 'include',
@@ -3535,8 +3540,8 @@ Abcotronics`;
                         subject: subject.trim(),
                         html: htmlPayload,
                         text: body.trim(),
-                        ...(ctx?.section?.id && ctx?.doc?.id && monthNum != null && yearNum != null
-                            ? { sectionId: ctx.section.id, documentId: ctx.doc.id, month: monthNum, year: yearNum }
+                        ...(hasCellContext
+                            ? { sectionId: String(ctx.section.id).trim(), documentId: String(ctx.doc.id).trim(), month: Number(monthNum), year: Number(yearNum) }
                             : {})
                     })
                 });
