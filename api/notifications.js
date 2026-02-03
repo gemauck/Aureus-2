@@ -25,14 +25,16 @@ function escapeHtml(text) {
  * @returns {{ notification, created } | null} null if user not found
  */
 export async function createNotificationForUser(targetUserId, type, title, message, link, metadata) {
-    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    const id = targetUserId != null ? String(targetUserId) : null;
+    if (!id) return null;
+    const targetUser = await prisma.user.findUnique({ where: { id } });
     if (!targetUser) return null;
 
-    let settings = await prisma.notificationSetting.findUnique({ where: { userId: targetUserId } });
+    let settings = await prisma.notificationSetting.findUnique({ where: { userId: id } });
     if (!settings) {
         settings = await prisma.notificationSetting.create({
             data: {
-                userId: targetUserId,
+                userId: id,
                 emailTasks: true, emailMentions: true, emailComments: true, emailInvoices: true, emailSystem: true,
                 inAppTasks: true, inAppMentions: true, inAppComments: true, inAppInvoices: true, inAppSystem: true
             }
@@ -118,7 +120,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         try {
             notification = await prisma.notification.create({
                 data: {
-                    userId: targetUserId,
+                    userId: id,
                     type, title, message,
                     link: validLink || '/dashboard',
                     metadata: metadata ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : '{}',
@@ -135,7 +137,15 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     if (shouldSendEmail && targetUser.email) {
         try {
             let projectName = null, clientName = null, commentText = null, commentLink = validLink || link || null, taskTitle = null;
-            const metadataObj = metadata && (typeof metadata === 'string' ? JSON.parse(metadata) : metadata);
+            let metadataForEmail = {};
+            try {
+                metadataForEmail = metadata != null
+                    ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata)
+                    : {};
+            } catch (_) {
+                metadataForEmail = typeof metadata === 'object' && metadata !== null ? metadata : {};
+            }
+            const metadataObj = metadataForEmail;
             if (metadataObj && (type === 'comment' || type === 'mention' || type === 'task')) {
                 commentText = metadataObj.commentText || metadataObj.fullComment || null;
                 // For mention emails, ensure the comment shown matches the notification: use the quoted preview from message if present.
@@ -192,7 +202,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 skipNotificationCreation: true
             });
         } catch (e) {
-            console.error('Failed to send email notification to', targetUserId, e);
+            console.error('Failed to send email notification to', id, e);
         }
     }
     return { notification, created: !!notification };
@@ -273,13 +283,16 @@ async function handler(req, res) {
     
     if (req.method === 'POST') {
         try {
-            const body = req.body || await parseJsonBody(req);
-            const { userId: targetUserId, type, title, message, link, metadata } = body;
+            let body = req.body || await parseJsonBody(req);
+            if (body && typeof body === 'object' && body.data && !body.userId && !body.type) {
+                body = body.data;
+            }
+            const { userId: targetUserId, type, title, message, link, metadata } = body || {};
             if (!targetUserId || !type || !title || !message) {
                 console.error('❌ POST /notifications - Missing required fields:', { hasUserId: !!targetUserId, hasType: !!type, hasTitle: !!title, hasMessage: !!message });
                 return badRequest(res, 'Missing required fields: userId, type, title, message');
             }
-            const result = await createNotificationForUser(targetUserId, type, title, message, link, metadata);
+            const result = await createNotificationForUser(targetUserId, type, title, message, link ?? null, metadata ?? null);
             if (!result) return badRequest(res, 'User not found');
             return ok(res, result);
         } catch (error) {
