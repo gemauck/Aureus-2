@@ -123,10 +123,11 @@ async function handler(req, res) {
             documentId: cell.documentId,
             year: cell.year,
             month: cell.month,
-            kind: 'sent'
+            kind: 'sent',
+            ...(sectionId ? { sectionId } : {})
           }
         })
-        console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
+        console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, sectionId: sectionId || null, documentId: cell.documentId, month: cell.month, year: cell.year })
       } catch (logErr) {
         const code = logErr.code || logErr.meta?.code || ''
         console.error('document-collection-send-email: log create failed:', logErr.message, code ? { code } : {}, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })

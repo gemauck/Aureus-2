@@ -22,6 +22,7 @@ async function handler(req, res) {
   const fullUrl = req.originalUrl || req.url || ''
   const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
   const params = new URLSearchParams(query)
+  const sectionId = params.get('sectionId')?.trim() || null
   const documentId = params.get('documentId')?.trim() || null
   const monthParam = params.get('month')
   const yearParam = params.get('year')
@@ -33,17 +34,34 @@ async function handler(req, res) {
     return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
 
+  // When sectionId is provided, match that cell exactly (or legacy rows with null sectionId) so activity survives hard refresh
+  const sentWhere = {
+    projectId: cell.projectId,
+    documentId: cell.documentId,
+    year: cell.year,
+    month: cell.month,
+    kind: 'sent',
+    ...(sectionId ? { OR: [{ sectionId }, { sectionId: null }] } : {})
+  }
+
   let sent = []
   try {
     if (prisma.documentCollectionEmailLog) {
       sent = await prisma.documentCollectionEmailLog.findMany({
-        where: { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month, kind: 'sent' },
+        where: sentWhere,
         orderBy: { createdAt: 'asc' },
         select: { id: true, createdAt: true }
       })
       if (sent.length === 0) {
+        const fallbackWhere = {
+          projectId: cell.projectId,
+          year: cell.year,
+          month: cell.month,
+          kind: 'sent',
+          ...(sectionId ? { OR: [{ sectionId }, { sectionId: null }] } : {})
+        }
         const fallback = await prisma.documentCollectionEmailLog.findMany({
-          where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+          where: fallbackWhere,
           orderBy: { createdAt: 'asc' },
           select: { id: true, createdAt: true, documentId: true }
         })

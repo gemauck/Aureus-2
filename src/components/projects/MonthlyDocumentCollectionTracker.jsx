@@ -3457,6 +3457,7 @@ Abcotronics`;
                 month: String(monthNum),
                 year: String(selectedYear)
             });
+            if (ctx?.section?.id) q.set('sectionId', String(ctx.section.id).trim());
             fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
                 credentials: 'include',

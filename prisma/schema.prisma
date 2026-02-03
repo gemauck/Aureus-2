@@ -794,6 +794,7 @@ model DocumentRequestEmailSent {
 model DocumentCollectionEmailLog {
   id         String   @id @default(cuid())
   projectId  String
+  sectionId  String?  // DocumentSection.id — disambiguates cell after hard refresh when multiple sections have similar docs
   documentId String   // DocumentItem.id
   year       Int
   month      Int
@@ -801,6 +802,7 @@ model DocumentCollectionEmailLog {
   createdAt  DateTime @default(now())
 
   @@index([projectId, documentId, year, month])
+  @@index([projectId, sectionId, documentId, year, month])
 }
 
 // Weekly FMS Review Tables (duplicated from Monthly FMS Review)
