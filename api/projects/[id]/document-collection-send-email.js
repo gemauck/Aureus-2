@@ -128,8 +128,12 @@ async function handler(req, res) {
         })
         console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
       } catch (logErr) {
-        console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })
-        return ok(res, { sent, failed, warning: 'Email sent but activity log could not be saved. It may not appear under Email activity.' })
+        const code = logErr.code || logErr.meta?.code || ''
+        console.error('document-collection-send-email: log create failed:', logErr.message, code ? { code } : {}, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })
+        const hint = code === 'P2021' || /does not exist|relation.*does not exist/i.test(logErr.message || '')
+          ? ' The DocumentCollectionEmailLog table may be missing — run: npx prisma migrate deploy'
+          : ''
+        return ok(res, { sent, failed, warning: 'Email sent but activity log could not be saved.' + hint + ' Sent items may not appear under Email activity.' })
       }
       // 2) Store messageId for reply routing (inbound webhook)
       if (messageIdForReply && sectionId) {

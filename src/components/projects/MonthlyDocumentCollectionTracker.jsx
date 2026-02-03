@@ -3974,6 +3974,12 @@ Abcotronics`;
                                 </div>
                             </div>
                         )}
+                        {result?.warning && (
+                            <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                                <i className="fas fa-info-circle text-amber-600 mt-0.5 shrink-0"></i>
+                                <p className="text-sm text-amber-800">{result.warning}</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Footer */}
