@@ -24,6 +24,7 @@ const DocumentSorter = () => {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [downloading, setDownloading] = useState(false);
   const fileInputRef = useRef(null);
 
   const getHeaders = (json = true) => {
@@ -114,6 +115,33 @@ const DocumentSorter = () => {
       setError(e.message || 'Process failed');
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const downloadZip = async () => {
+    if (!result?.uploadId) return;
+    setError(null);
+    setDownloading(true);
+    try {
+      const res = await fetch(`${API_BASE}/download?uploadId=${encodeURIComponent(result.uploadId)}`, {
+        method: 'GET',
+        headers: getHeaders(false),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sorted-output.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e.message || 'Download failed');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -234,12 +262,23 @@ const DocumentSorter = () => {
                 )}
               </ul>
             )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={downloadZip}
+                disabled={downloading}
+                className="px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {downloading ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-file-archive" />}
+                {downloading ? 'Preparing…' : 'Download as ZIP'}
+              </button>
+            </div>
             {result.baseUrl && (
               <p className="mt-2 text-sm">
                 <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                   Output on server: <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-xs break-all">{result.baseUrl}</code>
                 </span>
-                <span className="block mt-1 text-xs opacity-80">Browse this path on the server or download the sorted folders from there. Links to directories are not opened in the browser.</span>
+                <span className="block mt-1 text-xs opacity-80">Or browse this path on the server.</span>
               </p>
             )}
           </div>

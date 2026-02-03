@@ -53,23 +53,14 @@ const SafetyCultureInspections = () => {
                 if (!data?.connected) {
                     setError('Unable to connect to Safety Culture. Check your API key.');
                 }
-                // Fetch all inspections (load all pages)
-                let allInspections = [];
-                let nextPage = null;
-                do {
-                    const url = nextPage
-                        ? `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(nextPage)}`
-                        : `${API_BASE}/safety-culture/inspections?limit=50`;
-                    const inspRes = await fetch(url, { headers: getHeaders() });
-                    const inspJson = await inspRes.json().catch(() => ({}));
-                    const inspData = inspJson?.data ?? inspJson;
-                    const batch = inspData.inspections ?? [];
-                    allInspections = [...allInspections, ...batch];
-                    const meta = inspData.metadata ?? { next_page: null };
-                    setMetadata(meta);
-                    nextPage = meta?.next_page || null;
-                } while (nextPage);
-                setInspections(allInspections);
+                // Fetch latest 100 inspections
+                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=100`, {
+                    headers: getHeaders()
+                });
+                const inspJson = await inspRes.json().catch(() => ({}));
+                const inspData = inspJson?.data ?? inspJson;
+                setInspections(inspData.inspections ?? []);
+                setMetadata(inspData.metadata ?? { next_page: null, remaining_records: 0 });
             } catch (e) {
                 setError(e.message || 'Failed to load Safety Culture data');
             } finally {
@@ -123,22 +114,11 @@ const SafetyCultureInspections = () => {
     const loadIssues = async () => {
         setIssuesLoading(true);
         try {
-            let allIssues = [];
-            let nextPage = null;
-            do {
-                const url = nextPage
-                    ? `${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(nextPage)}`
-                    : `${API_BASE}/safety-culture/issues?limit=50`;
-                const res = await fetch(url, { headers: getHeaders() });
-                const json = await res.json().catch(() => ({}));
-                const data = json?.data ?? json;
-                const batch = data.issues ?? [];
-                allIssues = [...allIssues, ...batch];
-                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
-                setIssuesMetadata(meta);
-                nextPage = meta?.next_page || null;
-            } while (nextPage);
-            setIssues(allIssues);
+            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=100`, { headers: getHeaders() });
+            const json = await res.json().catch(() => ({}));
+            const data = json?.data ?? json;
+            setIssues(data.issues ?? []);
+            setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
         } catch (e) {
             setError(e.message || 'Failed to load issues');
         } finally {
@@ -565,10 +545,9 @@ const SafetyCultureInspections = () => {
                     {!issuesLoading && (sortedIssues.length > 0 || issues.length > 0) && (
                         <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
                             <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Page {issuesPage} of {issuesTotalPages} • {sortedIssues.length} issue{sortedIssues.length !== 1 ? 's' : ''}
-                                {issuesMetadata?.next_page && issuesMetadata.remaining_records != null && (
-                                    <span> • {issuesMetadata.remaining_records} more to load</span>
-                                )}
+                                Page {issuesPage} of {issuesTotalPages} • Showing {sortedIssues.length} of {(issuesMetadata?.next_page && issuesMetadata.remaining_records != null)
+                                    ? sortedIssues.length + issuesMetadata.remaining_records
+                                    : sortedIssues.length} issues
                             </span>
                             <div className="flex items-center gap-2">
                                 <div className="flex gap-1">
@@ -751,10 +730,9 @@ const SafetyCultureInspections = () => {
             {(sortedInspections.length > 0 || inspections.length > 0) && (
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
                     <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Page {inspectionPage} of {inspectionTotalPages} • {sortedInspections.length} inspection{sortedInspections.length !== 1 ? 's' : ''}
-                        {metadata?.next_page && metadata.remaining_records != null && (
-                            <span> • {metadata.remaining_records} more to load</span>
-                        )}
+                        Page {inspectionPage} of {inspectionTotalPages} • Showing {sortedInspections.length} of {(metadata?.next_page && metadata.remaining_records != null)
+                            ? sortedInspections.length + metadata.remaining_records
+                            : sortedInspections.length} inspections
                     </span>
                     <div className="flex items-center gap-2">
                         <div className="flex gap-1">

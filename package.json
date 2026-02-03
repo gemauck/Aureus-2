@@ -64,6 +64,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
+    "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "busboy": "^1.6.0",
     "compression": "^1.7.4",
