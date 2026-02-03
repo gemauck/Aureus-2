@@ -47,6 +47,16 @@ const showAttachmentToast = (message) => {
   setTimeout(() => { el.remove(); }, 4000);
 };
 
+// Success toast: "Email sent" pop-up when document request email is sent.
+const showEmailSentToast = () => {
+  const el = document.createElement('div');
+  el.setAttribute('role', 'status');
+  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:14px 24px;background:linear-gradient(135deg,#047857 0%,#059669 100%);color:#fff;border-radius:12px;font-size:14px;font-weight:500;z-index:99999;box-shadow:0 4px 14px rgba(4,120,87,0.4);display:flex;align-items:center;gap:10px;';
+  el.innerHTML = '<i class="fas fa-check-circle" style="font-size:18px;opacity:0.95;"></i><span>Email sent successfully</span>';
+  document.body.appendChild(el);
+  setTimeout(() => { el.remove(); }, 3500);
+};
+
 // Download comment attachment to disk (no new tab). Fetches file and triggers browser download.
 const downloadCommentAttachment = (url, filename) => {
   if (!url) return;
@@ -3568,7 +3578,15 @@ Abcotronics`;
                     failed: failedList,
                     ...(res.status === 503 ? { warning: data.error || json.error || 'Activity could not be saved.' } : {})
                 });
+                if (sentList.length > 0) {
+                    showEmailSentToast();
+                    setEmailActivity((prev) => ({
+                        ...prev,
+                        sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString() }]
+                    }));
+                }
                 setTimeout(() => fetchEmailActivity(), 400);
+                setTimeout(() => fetchEmailActivity(), 1200);
                 // Mark this document/month as "Requested" when email is sent successfully
                 if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
                     const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 ? sectionsRef.current : sectionsByYear;
