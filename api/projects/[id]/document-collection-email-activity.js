@@ -47,23 +47,25 @@ async function handler(req, res) {
   let sent = []
   try {
     if (prisma.documentCollectionEmailLog) {
+      const sentSelect = { id: true, createdAt: true, subject: true, bodyText: true }
       sent = await prisma.documentCollectionEmailLog.findMany({
         where: sentWhere,
         orderBy: { createdAt: 'asc' },
-        select: { id: true, createdAt: true }
+        select: sentSelect
       })
       if (sent.length === 0) {
+        const fallbackSelect = { id: true, createdAt: true, documentId: true, subject: true, bodyText: true }
         const fallback = await prisma.documentCollectionEmailLog.findMany({
           where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
           orderBy: { createdAt: 'asc' },
-          select: { id: true, createdAt: true, documentId: true }
+          select: fallbackSelect
         })
-        const exactMatch = fallback.filter((row) => String(row.documentId).trim() === String(cell.documentId).trim()).map(({ id, createdAt }) => ({ id, createdAt }))
+        const exactMatch = fallback.filter((row) => String(row.documentId).trim() === String(cell.documentId).trim()).map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
         if (exactMatch.length > 0) {
           sent = exactMatch
         } else if (fallback.length > 0) {
           // No exact documentId match (e.g. different section/doc after refresh) — return all sent for this project+month so activity still shows
-          sent = fallback.map(({ id, createdAt }) => ({ id, createdAt }))
+          sent = fallback.map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
           console.log('document-collection-email-activity: using project+month fallback so sent persists after refresh', { requestedDocumentId: cell.documentId, returnedCount: sent.length })
         }
       }

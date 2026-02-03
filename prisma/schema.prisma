@@ -800,6 +800,8 @@ model DocumentCollectionEmailLog {
   month      Int
   kind       String   @default("sent") // 'sent' for now
   createdAt  DateTime @default(now())
+  subject    String?  // Email subject — so user can expand and see what was sent
+  bodyText   String?  @db.Text // Plain-text body (or stripped HTML) for expandable view
 
   @@index([projectId, documentId, year, month])
   @@index([projectId, sectionId, documentId, year, month])
@@ -1563,6 +1565,7 @@ model JobCard {
   vehicle             Vehicle?              @relation(fields: [vehicleId], references: [id])
   serviceForms        ServiceFormInstance[]
   safetyCultureAuditId String?              @unique // Links to Safety Culture inspection for import deduplication
+  safetyCultureIssueId String?              @unique // Links to Safety Culture issue for import deduplication
 
   @@index([clientId])
   @@index([ownerId])

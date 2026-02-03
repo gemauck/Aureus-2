@@ -117,6 +117,11 @@ async function handler(req, res) {
 
     // Log for activity view whenever we have a valid cell and at least one send (do not require sectionId)
     if (sent.length > 0 && cell) {
+      const bodyForLog = typeof text === 'string' && text.trim()
+        ? text.trim().slice(0, 50000)
+        : typeof html === 'string' && html
+          ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
+          : null
       try {
         await prisma.documentCollectionEmailLog.create({
           data: {
@@ -125,7 +130,9 @@ async function handler(req, res) {
             year: cell.year,
             month: cell.month,
             kind: 'sent',
-            ...(sectionId ? { sectionId } : {})
+            ...(sectionId ? { sectionId } : {}),
+            ...(subject ? { subject: subject.slice(0, 1000) } : {}),
+            ...(bodyForLog ? { bodyText: bodyForLog } : {})
           }
         })
         console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, sectionId: sectionId || null, documentId: cell.documentId, month: cell.month, year: cell.year })

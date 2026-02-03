@@ -2035,6 +2035,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         commentText,
                         entityAuthorId: null,
                         priorCommentAuthorIds: priorComments.map((c) => c.authorId).filter(Boolean),
+                        priorCommentAuthorNames: priorComments.filter((c) => !c.authorId && (c.author || c.authorEmail)).map((c) => c.author || c.authorEmail).filter(Boolean),
                         priorCommentTexts: priorComments.map((c) => c.text).filter(Boolean),
                         authorName: currentUser.name || currentUser.email || 'Unknown',
                         contextTitle,
@@ -3438,6 +3439,7 @@ Abcotronics`;
         const [result, setResult] = useState(null);
         const [emailActivity, setEmailActivity] = useState({ sent: [], received: [] });
         const [loadingActivity, setLoadingActivity] = useState(false);
+        const [expandedSentId, setExpandedSentId] = useState(null);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3910,12 +3912,36 @@ Abcotronics`;
                                         <div>
                                             <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Sent</h4>
                                             <ul className="space-y-1.5">
-                                                {emailActivity.sent.map((s) => (
-                                                    <li key={s.id} className="flex items-center gap-2 text-sm text-gray-700 py-1.5 px-2 rounded-lg bg-sky-50 border border-sky-100">
-                                                        <i className="fas fa-paper-plane text-sky-600 text-xs shrink-0"></i>
-                                                        <span>{formatDateTime(s.createdAt)}</span>
-                                                    </li>
-                                                ))}
+                                                {emailActivity.sent.map((s) => {
+                                                    const isExpanded = expandedSentId === s.id;
+                                                    return (
+                                                        <li key={s.id} className="rounded-lg bg-sky-50 border border-sky-100 overflow-hidden">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpandedSentId((prev) => (prev === s.id ? null : s.id))}
+                                                                className="w-full flex items-center gap-2 text-sm text-gray-700 py-1.5 px-2 text-left hover:bg-sky-100/80 transition-colors"
+                                                            >
+                                                                <i className={`fas fa-paper-plane text-sky-600 text-xs shrink-0 ${isExpanded ? 'rotate-90' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
+                                                                <span className="flex-1">{formatDateTime(s.createdAt)}</span>
+                                                                <i className={`fas fa-chevron-down text-sky-500 text-xs shrink-0 ${isExpanded ? 'rotate-180' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
+                                                            </button>
+                                                            {isExpanded && (
+                                                                <div className="px-3 py-2 border-t border-sky-100 bg-white/80">
+                                                                    <div className="mb-2">
+                                                                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subject</span>
+                                                                        <p className="text-sm font-medium text-gray-800 mt-0.5">{s.subject && s.subject.trim() ? s.subject : '—'}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Message</span>
+                                                                        <div className="mt-0.5 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-y-auto rounded border border-gray-100 p-2 bg-gray-50/50">
+                                                                            {s.bodyText && s.bodyText.trim() ? s.bodyText : '—'}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </li>
+                                                    );
+                                                })}
                                             </ul>
                                         </div>
                                     )}
