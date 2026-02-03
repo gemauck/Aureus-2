@@ -2,7 +2,7 @@
  * GET /api/projects/:id/document-collection-email-activity
  * Returns sent and received emails for a document/month cell so the "Request documents via email"
  * modal can show email activity (sent items, received replies, and attachments).
- * Query: sectionId, documentId, month (1-12), year.
+ * Query: documentId, month (1-12), year. (sectionId optional, not used for filtering so activity survives hard refresh.)
  */
 import { authRequired } from '../../_lib/authRequired.js'
 import { normalizeDocumentCollectionCell, normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
@@ -22,7 +22,6 @@ async function handler(req, res) {
   const fullUrl = req.originalUrl || req.url || ''
   const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
   const params = new URLSearchParams(query)
-  const sectionId = params.get('sectionId')?.trim() || null
   const documentId = params.get('documentId')?.trim() || null
   const monthParam = params.get('month')
   const yearParam = params.get('year')
@@ -34,14 +33,14 @@ async function handler(req, res) {
     return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
 
-  // When sectionId is provided, match that cell exactly (or legacy rows with null sectionId) so activity survives hard refresh
+  // Query by projectId + documentId + month + year only (no sectionId filter) so activity survives hard refresh
+  // regardless of which section the user opens after reload (same document id = same sent history)
   const sentWhere = {
     projectId: cell.projectId,
     documentId: cell.documentId,
     year: cell.year,
     month: cell.month,
-    kind: 'sent',
-    ...(sectionId ? { OR: [{ sectionId }, { sectionId: null }] } : {})
+    kind: 'sent'
   }
 
   let sent = []
@@ -53,15 +52,8 @@ async function handler(req, res) {
         select: { id: true, createdAt: true }
       })
       if (sent.length === 0) {
-        const fallbackWhere = {
-          projectId: cell.projectId,
-          year: cell.year,
-          month: cell.month,
-          kind: 'sent',
-          ...(sectionId ? { OR: [{ sectionId }, { sectionId: null }] } : {})
-        }
         const fallback = await prisma.documentCollectionEmailLog.findMany({
-          where: fallbackWhere,
+          where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
           orderBy: { createdAt: 'asc' },
           select: { id: true, createdAt: true, documentId: true }
         })
