@@ -19,6 +19,7 @@ const SafetyCultureInspections = () => {
     const [issuesMetadata, setIssuesMetadata] = useState({ next_page: null, remaining_records: 0 });
     const [issuesLoading, setIssuesLoading] = useState(false);
     const [issuesSearchQuery, setIssuesSearchQuery] = useState('');
+    const [selectedIssue, setSelectedIssue] = useState(null);
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -160,6 +161,13 @@ const SafetyCultureInspections = () => {
         } finally {
             setImporting(false);
         }
+    };
+
+    const renderIssueDetailValue = (val) => {
+        if (val == null) return '-';
+        if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+        if (typeof val === 'object') return <pre className="text-xs overflow-auto max-h-32 p-2 bg-gray-100 dark:bg-gray-700 rounded">{JSON.stringify(val, null, 2)}</pre>;
+        return String(val);
     };
 
     const formatDate = (s) => {
@@ -334,7 +342,11 @@ const SafetyCultureInspections = () => {
                                         </tr>
                                     ) : (
                                         filteredIssues.map((issue) => (
-                                            <tr key={issue.id} className={`border-t ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}>
+                                            <tr
+                                                key={issue.id}
+                                                onClick={() => setSelectedIssue(issue)}
+                                                className={`border-t cursor-pointer ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}
+                                            >
                                                 <td className="p-3 font-medium text-gray-900 dark:text-gray-100">
                                                     {issue.title || issue.name || issue.description || issue.id}
                                                 </td>
@@ -369,6 +381,64 @@ const SafetyCultureInspections = () => {
                             </button>
                         </div>
                     )}
+                </div>
+            )}
+
+            {selectedIssue && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+                    onClick={() => setSelectedIssue(null)}
+                >
+                    <div
+                        className={`max-w-2xl w-full max-h-[90vh] overflow-auto rounded-lg shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit">
+                            <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                                Issue: {selectedIssue.title || selectedIssue.name || selectedIssue.description || selectedIssue.id}
+                            </h4>
+                            <div className="flex items-center gap-2">
+                                {(selectedIssue.url || selectedIssue.web_url || selectedIssue.link) && (
+                                    <a
+                                        href={selectedIssue.url || selectedIssue.web_url || selectedIssue.link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 hover:underline"
+                                    >
+                                        Open in Safety Culture →
+                                    </a>
+                                )}
+                                <button
+                                    onClick={() => setSelectedIssue(null)}
+                                    className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-4 space-y-3 text-sm">
+                            {Object.entries(selectedIssue)
+                                .sort(([a], [b]) => {
+                                    const order = ['id', 'title', 'name', 'description', 'status', 'priority', 'created_at', 'createdAt', 'due_date', 'dueDate', 'assignee_name', 'assigneeName', 'modified_at', 'modifiedAt'];
+                                    const ai = order.indexOf(a);
+                                    const bi = order.indexOf(b);
+                                    if (ai >= 0 && bi >= 0) return ai - bi;
+                                    if (ai >= 0) return -1;
+                                    if (bi >= 0) return 1;
+                                    return a.localeCompare(b);
+                                })
+                                .map(([key, val]) => (
+                                <div key={key} className="flex gap-3">
+                                    <span className={`font-medium min-w-[140px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {key.replace(/_/g, ' ')}
+                                    </span>
+                                    <span className={`flex-1 break-words ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {renderIssueDetailValue(val)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
 
