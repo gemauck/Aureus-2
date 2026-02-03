@@ -47,9 +47,18 @@ async function handler(req, res) {
           orderBy: { createdAt: 'asc' },
           select: { id: true, createdAt: true, documentId: true }
         })
-        sent = fallback.filter((row) => String(row.documentId) === String(cell.documentId)).map(({ id, createdAt }) => ({ id, createdAt }))
+        sent = fallback.filter((row) => String(row.documentId).trim() === String(cell.documentId).trim()).map(({ id, createdAt }) => ({ id, createdAt }))
         if (sent.length === 0 && fallback.length > 0) {
-          console.log('document-collection-email-activity: exact documentId match missed, fallback had', fallback.length, 'rows')
+          console.log('document-collection-email-activity: exact documentId match missed, fallback had', fallback.length, 'rows', 'query documentId:', cell.documentId, 'stored:', fallback.map((r) => r.documentId))
+        }
+      }
+      if (sent.length === 0) {
+        const anyForCell = await prisma.documentCollectionEmailLog.findMany({
+          where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+          select: { documentId: true }
+        })
+        if (anyForCell.length > 0) {
+          console.log('document-collection-email-activity: no match for documentId', cell.documentId, 'but', anyForCell.length, 'logs exist for project/month/year; stored documentIds:', [...new Set(anyForCell.map((r) => r.documentId))])
         }
       }
     }
