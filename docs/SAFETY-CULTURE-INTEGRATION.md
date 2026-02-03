@@ -42,6 +42,8 @@ All endpoints require a valid JWT (ERP login). Base path: `/api/safety-culture`.
 | `/api/safety-culture/inspections` | GET | Inspections feed (paginated) |
 | `/api/safety-culture/issues` | GET | Issues feed (paginated) |
 | `/api/safety-culture/groups` | GET | Groups/organizations |
+| `/api/safety-culture/import-job-cards` | POST | Import inspections as job cards |
+| `/api/safety-culture/import-issues-as-job-cards` | POST | Import issues as job cards |
 
 ### Inspections feed
 
@@ -100,6 +102,19 @@ You can import Safety Culture inspections as ERP job cards:
 Duplicate imports are skipped (tracked by `safetyCultureAuditId`). Imported job cards appear in **Manufacturing** → **Job Cards**.
 
 **API:** `POST /api/safety-culture/import-job-cards`  
+Body: `{ "limit": 200, "modified_after": "2025-01-01T00:00:00.000Z" }` (optional)
+
+### Import issues as job cards
+
+You can also import Safety Culture **issues** as ERP job cards:
+
+1. Go to **Tools** → **Safety Culture Inspections**
+2. Open the **Issues** tab
+3. Click **Import Issues as Job Cards**
+
+Duplicate imports are skipped (tracked by `safetyCultureIssueId`). Each issue is created as a job card with: title, status, priority, assignee, dates, and link to the issue in Safety Culture.
+
+**API:** `POST /api/safety-culture/import-issues-as-job-cards`  
 Body: `{ "limit": 200, "modified_after": "2025-01-01T00:00:00.000Z" }` (optional)
 
 ## Use cases in the ERP

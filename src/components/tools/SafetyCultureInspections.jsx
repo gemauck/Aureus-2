@@ -13,6 +13,7 @@ const SafetyCultureInspections = () => {
     const [error, setError] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [importing, setImporting] = useState(false);
+    const [importingIssues, setImportingIssues] = useState(false);
     const [importResult, setImportResult] = useState(null);
     const [activeTab, setActiveTab] = useState('inspections');
     const [issues, setIssues] = useState([]);
@@ -164,6 +165,34 @@ const SafetyCultureInspections = () => {
         }
     };
 
+    const runImportIssues = async () => {
+        setImportingIssues(true);
+        setImportResult(null);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture/import-issues-as-job-cards`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ limit: 200 })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const err = json?.error;
+                const errMsg = (typeof err === 'object' && err?.message) || (typeof err === 'string' ? err : null) || json?.error?.details || json?.details || json?.message || `Import failed (${res.status})`;
+                setImportResult({ error: String(errMsg) });
+                return;
+            }
+            const data = json?.data ?? json;
+            setImportResult(data);
+            if (data?.imported > 0) {
+                setError(null);
+            }
+        } catch (e) {
+            setImportResult({ error: String(e.message || 'Import failed') });
+        } finally {
+            setImportingIssues(false);
+        }
+    };
+
     const renderIssueDetailValue = (val) => {
         if (val == null) return '-';
         if (typeof val === 'boolean') return val ? 'Yes' : 'No';
@@ -223,10 +252,10 @@ const SafetyCultureInspections = () => {
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                     <button
                         onClick={runImport}
-                        disabled={importing || !status?.connected}
+                        disabled={importing || importingIssues || !status?.connected}
                         className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         {importing ? (
@@ -237,7 +266,24 @@ const SafetyCultureInspections = () => {
                         ) : (
                             <>
                                 <i className="fas fa-download"></i>
-                                Import as Job Cards
+                                Import Inspections as Job Cards
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={runImportIssues}
+                        disabled={importing || importingIssues || !status?.connected}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {importingIssues ? (
+                            <>
+                                <i className="fas fa-spinner fa-spin"></i>
+                                Importing...
+                            </>
+                        ) : (
+                            <>
+                                <i className="fas fa-exclamation-circle"></i>
+                                Import Issues as Job Cards
                             </>
                         )}
                     </button>

@@ -85,7 +85,7 @@ async function handler(req, res) {
 
     const sent = []
     const failed = []
-    // For reply routing: use custom Message-ID when inbound is set; otherwise generate one so we always persist for activity view
+    // For reply routing: use custom Message-ID when inbound is set so reply In-Reply-To can be matched
     let messageIdForReply = null
     if (hasCellContext) {
       const domain = inboundEmail && inboundEmail.includes('@') ? inboundEmail.split('@')[1] : 'local'
@@ -144,14 +144,14 @@ async function handler(req, res) {
           : ''
         return ok(res, { sent, failed, warning: 'Email sent but activity log could not be saved.' + hint + ' Sent items may not appear under Email activity.' })
       }
-      // 2) Store messageId for reply routing (inbound webhook)
-      if (messageIdForReply && sectionId) {
+      // 2) Store messageId for reply routing (inbound webhook) — always when we have custom Message-ID so replies can be matched
+      if (messageIdForReply) {
         try {
           await prisma.documentRequestEmailSent.create({
             data: {
               messageId: messageIdForReply,
               projectId: cell.projectId,
-              sectionId,
+              ...(sectionId ? { sectionId } : {}),
               documentId: cell.documentId,
               year: cell.year,
               month: cell.month

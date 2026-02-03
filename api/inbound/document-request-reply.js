@@ -415,8 +415,9 @@ async function handler(req, res) {
     }
     const data = body.data || body.payload?.data || body
     const emailId = data && (data.email_id || data.emailId)
-    const eventType = body.type || body.event_type
+    const eventType = body.type || body.event_type || (data && (data.type || data.event_type))
     if (eventType !== 'email.received') {
+      console.warn('document-request-reply: ignored event (expected email.received)', { receivedType: eventType, bodyKeys: Object.keys(body) })
       return ok(res, { processed: false, reason: 'not_email_received', receivedType: eventType })
     }
     if (!data || !emailId) {
