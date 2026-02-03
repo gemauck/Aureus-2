@@ -27,22 +27,25 @@ async function handler(req, res) {
   let projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
 
   try {
-    const body = await parseJsonBody(req)
+    const body = await parseJsonBody(req).catch(() => ({})) || {}
     if (!projectId && body.projectId != null) {
       projectId = String(body.projectId).trim() || null
     }
     if (!projectId) {
       return badRequest(res, 'Project ID required')
     }
+    const fullUrl = req.originalUrl || req.url || ''
+    const queryString = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
+    const query = new URLSearchParams(queryString)
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
     const cc = Array.isArray(body.cc) ? body.cc : (typeof body.cc === 'string' ? [body.cc] : [])
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
     const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
-    const documentId = body.documentId != null ? String(body.documentId).trim() : null
-    const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : null
-    const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : null
+    const documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || null
+    const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : null)
+    const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (query.get('year') != null ? parseInt(String(query.get('year')), 10) : null)
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
     const hasCellContext = !!(sectionId && cell)
 
@@ -123,6 +126,7 @@ async function handler(req, res) {
             kind: 'sent'
           }
         })
+        console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
       } catch (logErr) {
         console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })
         return res.status(503).setHeader('Content-Type', 'application/json').end(
@@ -150,6 +154,12 @@ async function handler(req, res) {
         } catch (dbErr) {
           console.warn('document-collection-send-email: reply routing record failed (non-blocking):', dbErr.message)
         }
+      }
+    } else {
+      if (sent.length === 0) {
+        console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId'), month: body.month ?? query.get('month'), year: body.year ?? query.get('year') })
+      } else if (!cell) {
+        console.log('document-collection-send-email: skipping activity log (no cell: missing documentId/month/year)', { projectId, documentId: body.documentId ?? query.get('documentId'), month: body.month ?? query.get('month'), year: body.year ?? query.get('year') })
       }
     }
 

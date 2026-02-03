@@ -3527,7 +3527,10 @@ Abcotronics`;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
                 const hasCellKeys = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
                 const hasCellContext = !!(ctx?.section?.id && ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum);
-                const res = await fetch(`${base}/api/projects/${project.id}/document-collection-send-email`, {
+                const sendUrl = hasCellKeys
+                    ? `${base}/api/projects/${project.id}/document-collection-send-email?documentId=${encodeURIComponent(String(ctx.doc.id))}&month=${Number(monthNum)}&year=${Number(yearNum)}`
+                    : `${base}/api/projects/${project.id}/document-collection-send-email`;
+                const res = await fetch(sendUrl, {
                     method: 'POST',
                     credentials: 'include',
                     headers: {

@@ -47,6 +47,12 @@ async function handler(req, res) {
         select: { id: true, createdAt: true, documentId: true }
       })
       sent = fallback.filter((row) => String(row.documentId) === String(cell.documentId)).map(({ id, createdAt }) => ({ id, createdAt }))
+      if (sent.length === 0 && fallback.length > 0) {
+        console.log('document-collection-email-activity: exact documentId match missed, fallback had', fallback.length, 'rows for project/month/year', { projectId: cell.projectId, year: cell.year, month: cell.month, requestedDocumentId: cell.documentId, fallbackDocumentIds: fallback.map((r) => r.documentId) })
+      }
+    }
+    if (sent.length === 0) {
+      console.log('document-collection-email-activity: no sent items for cell', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
     }
 
     // Verify document exists and belongs to this project (for received comments and auth)
