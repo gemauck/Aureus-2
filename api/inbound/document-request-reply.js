@@ -254,18 +254,39 @@ function emailBodyText(email) {
 }
 
 async function fetchReceivedEmail(emailId, apiKey) {
-  const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+  const url = `https://api.resend.com/emails/receiving/${emailId}`
+  const opts = {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     }
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Resend get received email failed: ${res.status} ${text}`)
   }
-  return res.json()
+  const isRetryable = (err) => {
+    const c = err?.cause?.code || err?.code
+    return c === 'ECONNRESET' || c === 'ETIMEDOUT' || c === 'ENOTFOUND' || c === 'ECONNREFUSED' || (err?.message && err.message.includes('fetch failed'))
+  }
+  let lastErr
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, opts)
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`Resend get received email failed: ${res.status} ${text}`)
+      }
+      return await res.json()
+    } catch (err) {
+      lastErr = err
+      if (attempt < 3 && isRetryable(err)) {
+        const delay = attempt * 1000
+        console.log('document-request-reply: fetchReceivedEmail retry', { attempt, delayMs: delay, err: err?.cause?.code || err?.message?.slice(0, 60) })
+        await new Promise((r) => setTimeout(r, delay))
+      } else {
+        throw err
+      }
+    }
+  }
+  throw lastErr
 }
 
 const RESEND_API_BASE = 'https://api.resend.com'
