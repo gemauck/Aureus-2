@@ -2506,6 +2506,8 @@ function initializeProjectDetail() {
                 let deepDocumentId = null;
                 let deepMonth = null;
                 let deepCommentId = null;
+                let deepDocWeek = null;
+                let tabFromUrl = null;
                 
                 // First check hash query params (for hash-based routing like #/projects/123?docSectionId=...)
                 const hash = window.location.hash || '';
@@ -2517,6 +2519,8 @@ function initializeProjectDetail() {
                         deepDocumentId = params.get('docDocumentId');
                         deepMonth = params.get('docMonth');
                         deepCommentId = params.get('commentId');
+                        deepDocWeek = params.get('docWeek');
+                        tabFromUrl = params.get('tab');
                     }
                 }
                 
@@ -2529,6 +2533,19 @@ function initializeProjectDetail() {
                     if (!deepDocumentId) deepDocumentId = searchParams.get('docDocumentId');
                     if (!deepMonth) deepMonth = searchParams.get('docMonth');
                     if (!deepCommentId) deepCommentId = searchParams.get('commentId');
+                    if (!deepDocWeek) deepDocWeek = searchParams.get('docWeek');
+                    if (!tabFromUrl) tabFromUrl = searchParams.get('tab');
+                }
+                // Hash params take precedence for SPA links (e.g. #/projects/...?docWeek=...)
+                if (hash.includes('?')) {
+                    const hashParams = new URLSearchParams(hash.split('?')[1]);
+                    if (!deepDocWeek) deepDocWeek = hashParams.get('docWeek');
+                    if (!tabFromUrl) tabFromUrl = hashParams.get('tab');
+                }
+                
+                // Do NOT switch to Document Collection when this is a Weekly or Monthly FMS link (prevents tab flipping)
+                if (deepDocWeek || tabFromUrl === 'monthlyFMSReview') {
+                    return;
                 }
                 
                 // Normalize docDocumentId - treat "undefined" string, null, or empty as invalid
