@@ -43,12 +43,20 @@ async function handler(req, res) {
       return ok(res, { sent: [], received: [] })
     }
 
-    // Sent items from dedicated log (same keys as send API writes)
-    const sent = await prisma.documentCollectionEmailLog.findMany({
+    // Sent items from dedicated log (exact cell match first, then fallback by project+year+month)
+    let sent = await prisma.documentCollectionEmailLog.findMany({
       where: { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month, kind: 'sent' },
       orderBy: { createdAt: 'asc' },
       select: { id: true, createdAt: true }
     })
+    if (sent.length === 0) {
+      const fallback = await prisma.documentCollectionEmailLog.findMany({
+        where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, createdAt: true, documentId: true }
+      })
+      sent = fallback.filter((row) => String(row.documentId) === String(cell.documentId)).map(({ id, createdAt }) => ({ id, createdAt }))
+    }
 
     const [receivedRows] = await Promise.all([
       prisma.documentItemComment.findMany({

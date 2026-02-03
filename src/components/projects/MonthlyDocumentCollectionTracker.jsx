@@ -3541,7 +3541,13 @@ Abcotronics`;
                         html: htmlPayload,
                         text: body.trim(),
                         ...(hasCellContext
-                            ? { sectionId: String(ctx.section.id).trim(), documentId: String(ctx.doc.id).trim(), month: Number(monthNum), year: Number(yearNum) }
+                            ? {
+                                projectId: project?.id != null ? String(project.id).trim() : undefined,
+                                sectionId: String(ctx.section.id).trim(),
+                                documentId: String(ctx.doc.id).trim(),
+                                month: Number(monthNum),
+                                year: Number(yearNum)
+                            }
                             : {})
                     })
                 });

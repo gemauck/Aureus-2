@@ -24,13 +24,16 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'POST').json({ error: 'Method not allowed' })
   }
 
-  const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
-  if (!projectId) {
-    return badRequest(res, 'Project ID required')
-  }
+  let projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
 
   try {
     const body = await parseJsonBody(req)
+    if (!projectId && body.projectId != null) {
+      projectId = String(body.projectId).trim() || null
+    }
+    if (!projectId) {
+      return badRequest(res, 'Project ID required')
+    }
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
     const cc = Array.isArray(body.cc) ? body.cc : (typeof body.cc === 'string' ? [body.cc] : [])
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
@@ -108,8 +111,8 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
-    if (sent.length > 0 && hasCellContext && cell) {
-      // 1) Log for activity view (same keys as activity API uses to read)
+    // Log for activity view whenever we have a valid cell and at least one send (do not require sectionId)
+    if (sent.length > 0 && cell) {
       try {
         await prisma.documentCollectionEmailLog.create({
           data: {
