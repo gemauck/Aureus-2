@@ -3440,6 +3440,7 @@ Abcotronics`;
         const [emailActivity, setEmailActivity] = useState({ sent: [], received: [] });
         const [loadingActivity, setLoadingActivity] = useState(false);
         const [expandedSentId, setExpandedSentId] = useState(null);
+        const [deletingActivityId, setDeletingActivityId] = useState(null);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3539,6 +3540,37 @@ Abcotronics`;
             setNewContactCc('');
         };
         const removeContactCc = (email) => setContactsCc((c) => c.filter((e) => e !== email));
+
+        const handleDeleteEmailActivity = async (id, type) => {
+            if (!project?.id || !id || !type) return;
+            const label = type === 'sent' ? 'this sent email' : 'this received email';
+            if (!confirm(`Remove ${label} from the list? This cannot be undone.`)) return;
+            setDeletingActivityId(id);
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            try {
+                const url = `${base}/api/projects/${project.id}/document-collection-email-activity?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}`;
+                const res = await fetch(url, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+                });
+                const json = await res.json().catch(() => ({}));
+                if (res.ok && json.deleted) {
+                    if (type === 'sent') setExpandedSentId((prev) => (prev === id ? null : prev));
+                    setEmailActivity((prev) => ({
+                        sent: prev.sent.filter((s) => s.id !== id),
+                        received: prev.received.filter((r) => r.id !== id)
+                    }));
+                } else {
+                    alert(json.error || 'Failed to delete')
+                }
+            } catch (err) {
+                alert(err.message || 'Failed to delete')
+            } finally {
+                setDeletingActivityId(null);
+            }
+        };
 
         const handleSaveTemplate = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
@@ -3923,6 +3955,15 @@ Abcotronics`;
                                                             >
                                                                 <i className={`fas fa-paper-plane text-sky-600 text-xs shrink-0 ${isExpanded ? 'rotate-90' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
                                                                 <span className="flex-1">{formatDateTime(s.createdAt)}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteEmailActivity(s.id, 'sent'); }}
+                                                                    disabled={deletingActivityId === s.id}
+                                                                    className="shrink-0 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                                    title="Remove sent email from list"
+                                                                >
+                                                                    {deletingActivityId === s.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
+                                                                </button>
                                                                 <i className={`fas fa-chevron-down text-sky-500 text-xs shrink-0 ${isExpanded ? 'rotate-180' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
                                                             </button>
                                                             {isExpanded && (
@@ -3953,7 +3994,16 @@ Abcotronics`;
                                                     <li key={r.id} className="text-sm border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
                                                         <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
                                                             <i className="fas fa-reply text-emerald-600 text-xs"></i>
-                                                            <span className="text-gray-600">{formatDateTime(r.createdAt)}</span>
+                                                            <span className="flex-1 text-gray-600">{formatDateTime(r.createdAt)}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteEmailActivity(r.id, 'received')}
+                                                                disabled={deletingActivityId === r.id}
+                                                                className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                                title="Remove received email from list"
+                                                            >
+                                                                {deletingActivityId === r.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
+                                                            </button>
                                                         </div>
                                                         <div className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-sm">{r.text && r.text.trim() ? r.text : '—'}</div>
                                                         {r.attachments && r.attachments.length > 0 && (

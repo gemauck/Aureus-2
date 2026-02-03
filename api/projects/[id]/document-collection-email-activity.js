@@ -1,22 +1,60 @@
 /**
  * GET /api/projects/:id/document-collection-email-activity
- * Returns sent and received emails for a document/month cell so the "Request documents via email"
- * modal can show email activity (sent items, received replies, and attachments).
- * Query: documentId, month (1-12), year. (sectionId optional, not used for filtering so activity survives hard refresh.)
+ * Returns sent and received emails for a document/month cell.
+ * DELETE: body or query id + type (sent|received) to remove one item.
  */
 import { authRequired } from '../../_lib/authRequired.js'
+import { parseJsonBody } from '../../_lib/body.js'
 import { normalizeDocumentCollectionCell, normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
 import { ok, badRequest, serverError } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
 
 async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).setHeader('Allow', 'GET').json({ error: 'Method not allowed' })
-  }
-
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
   if (!projectId) {
     return badRequest(res, 'Project ID required')
+  }
+
+  if (req.method === 'DELETE') {
+    try {
+      const body = await parseJsonBody(req).catch(() => ({})) || {}
+      const q = req.query || {}
+      const id = (body.id ?? q.id) != null ? String(body.id ?? q.id).trim() : null
+      const type = (body.type ?? q.type) === 'received' ? 'received' : (body.type ?? q.type) === 'sent' ? 'sent' : null
+      if (!id || !type) {
+        return badRequest(res, 'Query or body must include id and type (sent or received)')
+      }
+      if (type === 'sent') {
+        const log = await prisma.documentCollectionEmailLog.findFirst({
+          where: { id, projectId, kind: 'sent' }
+        })
+        if (!log) {
+          return badRequest(res, 'Sent log not found or access denied')
+        }
+        await prisma.documentCollectionEmailLog.delete({ where: { id } })
+        return ok(res, { deleted: true, type: 'sent', id })
+      }
+      // type === 'received': DocumentItemComment
+      const comment = await prisma.documentItemComment.findUnique({
+        where: { id },
+        include: { item: { select: { section: { select: { projectId: true } } } } }
+      })
+      if (!comment || String(comment.item?.section?.projectId) !== projectId) {
+        return badRequest(res, 'Received comment not found or access denied')
+      }
+      await prisma.documentItemComment.delete({ where: { id } })
+      return ok(res, { deleted: true, type: 'received', id })
+    } catch (e) {
+      if (e.code === 'P2025') {
+        return badRequest(res, 'Record not found')
+      }
+      console.error('DELETE document-collection-email-activity error:', e)
+      return serverError(res, e.message || 'Delete failed')
+    }
+  }
+
+  if (req.method !== 'GET') {
+    return res.status(405).setHeader('Allow', 'GET, DELETE').json({ error: 'Method not allowed' })
   }
 
   const fullUrl = req.originalUrl || req.url || ''
