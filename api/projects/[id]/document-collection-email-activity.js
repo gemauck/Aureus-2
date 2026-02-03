@@ -33,28 +33,34 @@ async function handler(req, res) {
     return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
 
+  let sent = []
   try {
-    // Sent items from dedicated log first (so we always show sent even if document check fails)
-    let sent = await prisma.documentCollectionEmailLog.findMany({
-      where: { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month, kind: 'sent' },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, createdAt: true }
-    })
-    if (sent.length === 0) {
-      const fallback = await prisma.documentCollectionEmailLog.findMany({
-        where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+    if (prisma.documentCollectionEmailLog) {
+      sent = await prisma.documentCollectionEmailLog.findMany({
+        where: { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month, kind: 'sent' },
         orderBy: { createdAt: 'asc' },
-        select: { id: true, createdAt: true, documentId: true }
+        select: { id: true, createdAt: true }
       })
-      sent = fallback.filter((row) => String(row.documentId) === String(cell.documentId)).map(({ id, createdAt }) => ({ id, createdAt }))
-      if (sent.length === 0 && fallback.length > 0) {
-        console.log('document-collection-email-activity: exact documentId match missed, fallback had', fallback.length, 'rows for project/month/year', { projectId: cell.projectId, year: cell.year, month: cell.month, requestedDocumentId: cell.documentId, fallbackDocumentIds: fallback.map((r) => r.documentId) })
+      if (sent.length === 0) {
+        const fallback = await prisma.documentCollectionEmailLog.findMany({
+          where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, createdAt: true, documentId: true }
+        })
+        sent = fallback.filter((row) => String(row.documentId) === String(cell.documentId)).map(({ id, createdAt }) => ({ id, createdAt }))
+        if (sent.length === 0 && fallback.length > 0) {
+          console.log('document-collection-email-activity: exact documentId match missed, fallback had', fallback.length, 'rows')
+        }
       }
     }
-    if (sent.length === 0) {
-      console.log('document-collection-email-activity: no sent items for cell', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
-    }
+  } catch (logErr) {
+    console.error('document-collection-email-activity: log query failed (returning empty sent):', logErr.message)
+  }
+  if (sent.length === 0) {
+    console.log('document-collection-email-activity: no sent items for cell', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
+  }
 
+  try {
     // Verify document exists and belongs to this project (for received comments and auth)
     const document = await prisma.documentItem.findUnique({
       where: { id: cell.documentId },
@@ -64,23 +70,21 @@ async function handler(req, res) {
       return ok(res, { sent, received: [] })
     }
 
-    const [receivedRows] = await Promise.all([
-      prisma.documentItemComment.findMany({
-        where: {
-          itemId: cell.documentId,
-          year: cell.year,
-          month: cell.month,
-          OR: [
-            { author: 'Email from Client' },
-            { text: { startsWith: 'Email from Client' } }
-          ]
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, text: true, attachments: true, createdAt: true }
-      })
-    ])
+    const receivedRows = await prisma.documentItemComment.findMany({
+      where: {
+        itemId: cell.documentId,
+        year: cell.year,
+        month: cell.month,
+        OR: [
+          { author: 'Email from Client' },
+          { text: { startsWith: 'Email from Client' } }
+        ]
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, text: true, attachments: true, createdAt: true }
+    })
 
-    let received = receivedRows.map((r) => {
+    const received = receivedRows.map((r) => {
       let attachments = []
       if (r.attachments) {
         try {
@@ -100,7 +104,7 @@ async function handler(req, res) {
     return ok(res, { sent, received })
   } catch (e) {
     console.error('GET document-collection-email-activity error:', e)
-    return serverError(res, e.message || 'Failed to load email activity')
+    return ok(res, { sent, received: [] })
   }
 }
 

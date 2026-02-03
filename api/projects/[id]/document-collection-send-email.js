@@ -129,14 +129,7 @@ async function handler(req, res) {
         console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
       } catch (logErr) {
         console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })
-        return res.status(503).setHeader('Content-Type', 'application/json').end(
-          JSON.stringify({
-            data: null,
-            error: 'Email sent but activity could not be saved. Please try again.',
-            sent,
-            failed
-          })
-        )
+        return ok(res, { sent, failed, warning: 'Email sent but activity log could not be saved. It may not appear under Email activity.' })
       }
       // 2) Store messageId for reply routing (inbound webhook)
       if (messageIdForReply && sectionId) {

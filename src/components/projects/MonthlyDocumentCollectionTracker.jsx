@@ -3576,7 +3576,7 @@ Abcotronics`;
                 setResult({
                     sent: sentList,
                     failed: failedList,
-                    ...(res.status === 503 ? { warning: data.error || json.error || 'Activity could not be saved.' } : {})
+                    ...((data.warning || json.warning || (res.status === 503 ? (data.error || json.error) : null)) ? { warning: data.warning || json.warning || data.error || json.error || 'Activity could not be saved.' } : {})
                 });
                 if (sentList.length > 0) {
                     showEmailSentToast();
