@@ -1905,6 +1905,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             ? sectionsByYear 
             : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        // Capture prior participants for this cell so we can notify them (even if not @mentioned in new comment)
+        const priorSection = currentYearSections.find((s) => String(s.id) === String(sectionId));
+        const priorDoc = priorSection?.documents?.find((d) => String(d.id) === String(documentId));
+        const priorComments = priorDoc ? getCommentsForYear(priorDoc.comments, month, selectedYear) : [];
         
             const updated = currentYearSections.map(section => {
                 if (String(section.id) === String(sectionId)) {
@@ -2017,6 +2021,39 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         } catch (error) {
             console.error('❌ Unexpected error in handleAddComment @mentions processing:', error);
             // Swallow errors so commenting UI never breaks due to notifications
+        }
+
+        // Notify prior participants (prior commenters + prior @mentioned) so they get notified on every new comment
+        if (priorComments.length > 0 && window.DatabaseAPI?.makeRequest) {
+            try {
+                const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
+                const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+                await window.DatabaseAPI.makeRequest('/notifications/comment-participants', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        commentAuthorId: currentUser.id,
+                        commentText,
+                        entityAuthorId: null,
+                        priorCommentAuthorIds: priorComments.map((c) => c.authorId).filter(Boolean),
+                        priorCommentTexts: priorComments.map((c) => c.text).filter(Boolean),
+                        authorName: currentUser.name || currentUser.email || 'Unknown',
+                        contextTitle,
+                        link: contextLink,
+                        metadata: {
+                            projectId: project?.id,
+                            projectName: project?.name,
+                            sectionId: linkSectionId,
+                            documentId: linkDocumentId,
+                            month: linkMonth,
+                            commentId: newCommentId,
+                            docYear: selectedYear,
+                            year: selectedYear
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('❌ Error notifying prior participants for document collection comment:', err);
+            }
         }
     };
     
