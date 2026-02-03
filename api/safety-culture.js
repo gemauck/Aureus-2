@@ -36,6 +36,7 @@ async function handler(req, res) {
     connected: configured ? connected : null,
     endpoints: {
       inspections: '/api/safety-culture/inspections',
+      issues: '/api/safety-culture/issues',
       groups: '/api/safety-culture/groups'
     },
     docs: 'https://developer.safetyculture.com/',

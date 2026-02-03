@@ -14,6 +14,11 @@ const SafetyCultureInspections = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [importing, setImporting] = useState(false);
     const [importResult, setImportResult] = useState(null);
+    const [activeTab, setActiveTab] = useState('inspections');
+    const [issues, setIssues] = useState([]);
+    const [issuesMetadata, setIssuesMetadata] = useState({ next_page: null, remaining_records: 0 });
+    const [issuesLoading, setIssuesLoading] = useState(false);
+    const [issuesSearchQuery, setIssuesSearchQuery] = useState('');
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -76,6 +81,38 @@ const SafetyCultureInspections = () => {
         }
     };
 
+    const loadIssues = async () => {
+        setIssuesLoading(true);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=50`, { headers: getHeaders() });
+            const json = await res.json().catch(() => ({}));
+            const data = json?.data ?? json;
+            setIssues(data.issues ?? []);
+            setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
+        } catch (e) {
+            setError(e.message || 'Failed to load issues');
+        } finally {
+            setIssuesLoading(false);
+        }
+    };
+
+    const loadMoreIssues = async () => {
+        const next = issuesMetadata?.next_page;
+        if (!next) return;
+        setLoadingMore(true);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
+            const json = await res.json().catch(() => ({}));
+            const data = json?.data ?? json;
+            setIssues(prev => [...prev, ...(data.issues ?? [])]);
+            setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
+        } catch (e) {
+            setError(e.message || 'Failed to load more issues');
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+
     const searchLower = (searchQuery || '').trim().toLowerCase();
     const filteredInspections = searchLower
         ? inspections.filter((insp) => {
@@ -86,6 +123,16 @@ const SafetyCultureInspections = () => {
             return name.includes(searchLower) || template.includes(searchLower) || owner.includes(searchLower) || id.includes(searchLower);
         })
         : inspections;
+
+    const issuesSearchLower = (issuesSearchQuery || '').trim().toLowerCase();
+    const filteredIssues = issuesSearchLower
+        ? issues.filter((i) => {
+            const title = (i.title || i.name || i.description || '').toLowerCase();
+            const status = (i.status || '').toLowerCase();
+            const id = (i.id || '').toLowerCase();
+            return title.includes(issuesSearchLower) || status.includes(issuesSearchLower) || id.includes(issuesSearchLower);
+        })
+        : issues;
 
     const runImport = async () => {
         setImporting(true);
@@ -222,25 +269,111 @@ const SafetyCultureInspections = () => {
                 </div>
             )}
 
+            <div className="flex border-b border-gray-200 dark:border-gray-700">
+                <button
+                    onClick={() => setActiveTab('inspections')}
+                    className={`px-4 py-2 text-sm font-medium ${activeTab === 'inspections' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                >
+                    <i className="fas fa-clipboard-check mr-2"></i>
+                    Inspections
+                </button>
+                <button
+                    onClick={() => { setActiveTab('issues'); if (issues.length === 0 && !issuesLoading) loadIssues(); }}
+                    className={`px-4 py-2 text-sm font-medium ${activeTab === 'issues' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                >
+                    <i className="fas fa-exclamation-circle mr-2"></i>
+                    Issues
+                </button>
+            </div>
+
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                 <input
                     type="text"
-                    placeholder="Search inspections, templates, owners..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={activeTab === 'inspections' ? 'Search inspections, templates, owners...' : 'Search issues...'}
+                    value={activeTab === 'inspections' ? searchQuery : issuesSearchQuery}
+                    onChange={(e) => activeTab === 'inspections' ? setSearchQuery(e.target.value) : setIssuesSearchQuery(e.target.value)}
                     className={`w-full max-w-md px-3 py-2 rounded-lg border text-sm placeholder-gray-400 ${
                         isDark
                             ? 'bg-gray-700 border-gray-600 text-gray-100 focus:ring-primary-500 focus:border-primary-500'
                             : 'bg-white border-gray-300 text-gray-900 focus:ring-primary-500 focus:border-primary-500'
                     }`}
                 />
-                {searchQuery && (
+                {((activeTab === 'inspections' && searchQuery) || (activeTab === 'issues' && issuesSearchQuery)) && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                        Showing {filteredInspections.length} of {inspections.length} inspections
+                        Showing {activeTab === 'inspections' ? filteredInspections.length : filteredIssues.length} of {activeTab === 'inspections' ? inspections.length : issues.length} {activeTab === 'inspections' ? 'inspections' : 'issues'}
                     </p>
                 )}
             </div>
 
+            {activeTab === 'issues' && (
+                <div className="p-4">
+                    {issuesLoading ? (
+                        <div className="py-8 text-center">
+                            <i className="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+                            <p className="text-gray-500 mt-2">Loading issues...</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className={isDark ? 'bg-gray-700/50 text-gray-300' : 'bg-gray-50 text-gray-600'}>
+                                        <th className="text-left p-3 font-medium">Issue</th>
+                                        <th className="text-left p-3 font-medium">Status</th>
+                                        <th className="text-left p-3 font-medium">Priority</th>
+                                        <th className="text-left p-3 font-medium">Created</th>
+                                        <th className="text-left p-3 font-medium">Due</th>
+                                        <th className="text-left p-3 font-medium">Assignee</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredIssues.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="p-6 text-center text-gray-500">
+                                                {issues.length === 0 ? 'No issues found' : 'No issues match your search'}
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredIssues.map((issue) => (
+                                            <tr key={issue.id} className={`border-t ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}>
+                                                <td className="p-3 font-medium text-gray-900 dark:text-gray-100">
+                                                    {issue.title || issue.name || issue.description || issue.id}
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className={`px-2 py-0.5 rounded text-xs ${
+                                                        (issue.status || '').toLowerCase() === 'closed' ? 'bg-gray-200 dark:bg-gray-600' :
+                                                        (issue.status || '').toLowerCase() === 'open' ? 'bg-amber-100 dark:bg-amber-900/40' :
+                                                        'bg-blue-100 dark:bg-blue-900/40'
+                                                    }`}>
+                                                        {issue.status || '-'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3 text-gray-600 dark:text-gray-400">{issue.priority || '-'}</td>
+                                                <td className="p-3 text-gray-600 dark:text-gray-400">{formatDate(issue.created_at || issue.createdAt)}</td>
+                                                <td className="p-3 text-gray-600 dark:text-gray-400">{formatDate(issue.due_date || issue.dueDate)}</td>
+                                                <td className="p-3 text-gray-600 dark:text-gray-400">{issue.assignee_name || issue.assigneeName || '-'}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {!issuesLoading && issuesMetadata?.next_page && (
+                        <div className="mt-4 text-center">
+                            <button
+                                onClick={loadMoreIssues}
+                                disabled={loadingMore}
+                                className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 text-sm"
+                            >
+                                {loadingMore ? 'Loading...' : `Load more (${issuesMetadata.remaining_records} remaining)`}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'inspections' && (
+            <>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
@@ -318,6 +451,8 @@ const SafetyCultureInspections = () => {
                         {loadingMore ? 'Loading...' : `Load more (${metadata.remaining_records} remaining)`}
                     </button>
                 </div>
+            )}
+            </>
             )}
         </div>
     );

@@ -76,11 +76,8 @@ class POAReview:
 		# Proof records: No Transaction ID, but have an Asset Number
 		self.proof_mask = (self.data["Transaction ID"].isna()) & (self.data["Asset Number"].notna())
 		
-		# Convert date columns to datetime for time-based calculations (errors='coerce' for bad/mixed values; .values to avoid setitem index mismatch)
-		trans_dates = pd.to_datetime(self.data.loc[self.transaction_mask, "Date & Time"], yearfirst=True, errors="coerce")
-		self.data.loc[self.transaction_mask, "Date & Time"] = trans_dates.values
-		proof_dates = pd.to_datetime(self.data.loc[self.proof_mask, "Date & Time"], yearfirst=True, errors="coerce")
-		self.data.loc[self.proof_mask, "Date & Time"] = proof_dates.values	
+		# Convert entire "Date & Time" column to datetime in one go (avoids pandas setitem failure on large masked assignment)
+		self.data["Date & Time"] = pd.to_datetime(self.data["Date & Time"], yearfirst=True, errors="coerce")	
 
 	def mark_no_poa_assets(self):
 		"""

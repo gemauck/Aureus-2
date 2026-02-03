@@ -94,3 +94,28 @@ export async function fetchInspectionsNextPage(nextPagePath) {
 export async function fetchGroups() {
   return safetyCultureRequest('/share/connections')
 }
+
+/**
+ * Fetch issues from the feed API (paginated)
+ * @param {object} params - optional: modified_after, limit
+ * @returns {Promise<{ data: array; metadata: object }|{ error: string }>}
+ */
+export async function fetchIssues(params = {}) {
+  const q = new URLSearchParams()
+  if (params.modified_after) q.set('modified_after', params.modified_after)
+  if (params.limit != null) q.set('limit', String(params.limit))
+
+  const path = `/feed/issues${q.toString() ? `?${q.toString()}` : ''}`
+  return safetyCultureRequest(path)
+}
+
+/**
+ * Fetch next page of issues using metadata.next_page
+ * @param {string} nextPagePath - from response.metadata.next_page
+ * @returns {Promise<{ data: array; metadata: object }|{ error: string }>}
+ */
+export async function fetchIssuesNextPage(nextPagePath) {
+  if (!nextPagePath) return { data: [], metadata: { next_page: null, remaining_records: 0 } }
+  const path = nextPagePath.startsWith('/') ? nextPagePath : `/${nextPagePath}`
+  return safetyCultureRequest(path)
+}

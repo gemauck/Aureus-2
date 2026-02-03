@@ -40,6 +40,7 @@ All endpoints require a valid JWT (ERP login). Base path: `/api/safety-culture`.
 |----------|--------|-------------|
 | `/api/safety-culture` | GET | Status and config |
 | `/api/safety-culture/inspections` | GET | Inspections feed (paginated) |
+| `/api/safety-culture/issues` | GET | Issues feed (paginated) |
 | `/api/safety-culture/groups` | GET | Groups/organizations |
 
 ### Inspections feed
