@@ -176,6 +176,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
     const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
+    const loadRetryTimeoutRef = useRef(null); // Timeout for single retry when load returns empty
+    const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
@@ -623,6 +625,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
                     }
                 }
+                hasRetriedLoadRef.current = false; // Reset so future loads can retry if needed
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -649,17 +652,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 setSectionsByYear({});
                 sectionsRef.current = {};
                 lastSavedDataRef.current = JSON.stringify({});
-                // One-time forced reload when Document Collection shows empty (busts stale cache so new bundle + dedicated API load)
-                if (!isMonthlyDataReview && typeof sessionStorage !== 'undefined') {
-                    const reloadKey = 'docCollection_reloaded_' + project.id;
-                    if (sessionStorage.getItem(reloadKey) !== '1') {
-                        sessionStorage.setItem(reloadKey, '1');
-                        if (typeof window !== 'undefined' && window.location) {
-                            const url = new URL(window.location.href);
-                            url.searchParams.set('v', String(Date.now()));
-                            window.location.href = url.pathname + url.search + (window.location.hash || '');
+                // Document Collection only: retry load once after a short delay (fixes "empty in this tab, works in new incognito")
+                if (!isMonthlyDataReview) {
+                    if (loadRetryTimeoutRef.current) {
+                        clearTimeout(loadRetryTimeoutRef.current);
+                        loadRetryTimeoutRef.current = null;
+                    }
+                    if (!hasRetriedLoadRef.current) {
+                        hasRetriedLoadRef.current = true;
+                        loadRetryTimeoutRef.current = setTimeout(() => {
+                            loadRetryTimeoutRef.current = null;
+                            loadData();
+                        }, 800);
+                    } else {
+                        // Already retried and still empty: one-time full-page reload to bust cache
+                        if (typeof sessionStorage !== 'undefined') {
+                            const reloadKey = 'docCollection_reloaded_' + project.id;
+                            if (sessionStorage.getItem(reloadKey) !== '1') {
+                                sessionStorage.setItem(reloadKey, '1');
+                                if (typeof window !== 'undefined' && window.location) {
+                                    const url = new URL(window.location.href);
+                                    url.searchParams.set('v', String(Date.now()));
+                                    window.location.href = url.pathname + url.search + (window.location.hash || '');
+                                }
+                                return;
+                            }
                         }
-                        return;
                     }
                 }
             }
@@ -678,6 +696,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             loadData();
         }
     }, [project?.id, selectedYear, loadData]);
+
+    // When tab becomes visible and we have no sections, refetch (fixes "empty in this tab, works in new incognito")
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        const onVisibility = () => {
+            if (document.visibilityState !== 'visible' || !project?.id || isMonthlyDataReview) return;
+            const years = sectionsByYear && typeof sectionsByYear === 'object' ? Object.keys(sectionsByYear) : [];
+            const hasAny = years.some((y) => Array.isArray(sectionsByYear[y]) && sectionsByYear[y].length > 0);
+            if (!hasAny) loadData();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => document.removeEventListener('visibilitychange', onVisibility);
+    }, [project?.id, sectionsByYear, isMonthlyDataReview, loadData]);
+
+    // Clear retry timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (loadRetryTimeoutRef.current) {
+                clearTimeout(loadRetryTimeoutRef.current);
+                loadRetryTimeoutRef.current = null;
+            }
+        };
+    }, []);
 
     // Sync selectedYear from URL (docYear) so deep links open with correct year and popup shows comments
     useEffect(() => {
@@ -1919,8 +1960,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         // Otherwise the email can be delivered but the comment never saved (e.g. save skipped when another save in progress).
         try {
             await saveToDatabase();
-            // If save was skipped (e.g. another save in progress), retry after a short delay so comment is not lost
-            setTimeout(() => saveToDatabase(), 500);
+            // Retry after short delay if first save was skipped (e.g. another save in progress); await so notifications run only after save
+            await new Promise((r) => setTimeout(r, 600));
+            await saveToDatabase();
         } catch (saveErr) {
             console.error('❌ Failed to save comment:', saveErr);
             // Still allow @mentions below; user may retry save via debounce

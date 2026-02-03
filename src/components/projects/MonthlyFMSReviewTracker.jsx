@@ -1708,13 +1708,20 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately
-        saveToDatabase();
+        // CRITICAL: Clear so save is not skipped as "unchanged"; then await save so comment is persisted before @mention emails
+        lastSavedDataRef.current = null;
+        try {
+            await saveToDatabase();
+            await new Promise((r) => setTimeout(r, 600));
+            await saveToDatabase();
+        } catch (saveErr) {
+            console.error('❌ Failed to save comment (monthly FMS):', saveErr);
+        }
         
         setQuickComment('');
 
         // ========================================================
-        // @MENTIONS - Process mentions and create notifications
+        // @MENTIONS - Process mentions and create notifications (after comment is saved)
         // ========================================================
         try {
             if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {

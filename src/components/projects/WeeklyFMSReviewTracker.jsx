@@ -1977,17 +1977,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately and await to ensure it completes before any navigation
+        // CRITICAL: Clear so save is not skipped; await save + retry so comment is persisted before @mention emails
+        lastSavedDataRef.current = null;
         try {
             await saveToDatabase();
+            await new Promise((r) => setTimeout(r, 600));
+            await saveToDatabase();
         } catch (error) {
-            console.error('❌ Error saving comment:', error);
+            console.error('❌ Error saving comment (weekly FMS):', error);
         }
         
         setQuickComment('');
 
         // ========================================================
-        // @MENTIONS - Process mentions and create notifications
+        // @MENTIONS - Process mentions and create notifications (after comment is saved)
         // ========================================================
         try {
             if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {

@@ -1263,10 +1263,10 @@ const TaskDetailModal = ({
                 throw apiError;
             }
             
-            // Send notifications
+            // Send notifications (only after comment is saved to API; use saved comment ID for links)
             try {
                 const taskId = editedTask.id || task?.id;
-                const commentId = comment.id; // Get the comment ID for deep linking
+                const commentId = (savedCommentFromApi?.id || comment.id); // Prefer saved ID for deep linking
                 // Use hash-based routing format for email links (frontend uses hash routing)
                 const projectLink = project ? `#/projects/${project.id}` : '#/projects';
                 // Build task-specific link with query parameters for direct navigation to task and comment
