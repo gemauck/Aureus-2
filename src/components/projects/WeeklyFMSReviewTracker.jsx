@@ -4434,8 +4434,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         <tr>
                                             <th
                                                 className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
-                                            >
+style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
+                                                >
                                                 Document / Data
                                             </th>
                                             {weeks.map((week) => (
@@ -4496,7 +4496,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                 >
                                                     <td
                                                         className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '250px', minWidth: '250px', maxWidth: '250px' }}
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
                                                             <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
