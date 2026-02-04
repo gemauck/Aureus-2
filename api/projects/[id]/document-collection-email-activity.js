@@ -111,6 +111,28 @@ async function handler(req, res) {
   } catch (logErr) {
     console.error('document-collection-email-activity: log query failed (returning empty sent):', logErr.message)
   }
+
+  // Include fallback "sent reply" comments (when DocumentCollectionEmailLog create failed)
+  try {
+    const replyComments = await prisma.documentItemComment.findMany({
+      where: {
+        itemId: cell.documentId,
+        year: cell.year,
+        month: cell.month,
+        author: 'Sent reply (platform)'
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, text: true, createdAt: true }
+    })
+    for (const c of replyComments) {
+      const firstLine = (c.text || '').split('\n')[0] || ''
+      const subject = firstLine.startsWith('Subject: ') ? firstLine.slice(9).trim() : firstLine.trim()
+      const bodyText = (c.text || '').includes('\n\n') ? (c.text || '').split('\n\n').slice(1).join('\n\n').trim() : ''
+      sent.push({ id: c.id, createdAt: c.createdAt, subject: subject.slice(0, 1000), bodyText: bodyText.slice(0, 50000) })
+    }
+    if (replyComments.length > 0) sent.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  } catch (_) {}
+
   // Deduplicate sent: same subject + createdAt within 10s → keep first (avoids 3x same send in UI). Never dedupe replies (Re:) so all replies show.
   if (sent.length > 1) {
     const deduped = []

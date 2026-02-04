@@ -47,9 +47,13 @@ async function handler(req, res) {
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
     const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
-    const documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null
-    const month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : (q.month != null ? parseInt(String(q.month), 10) : null))
-    const year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (query.get('year') != null ? parseInt(String(query.get('year')), 10) : (q.year != null ? parseInt(String(q.year), 10) : null))
+    // Cell keys: body first, then URL query (manual), then Express req.query so reply always persists
+    let documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null
+    let month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : (q.month != null ? parseInt(String(q.month), 10) : null))
+    let year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (query.get('year') != null ? parseInt(String(query.get('year')), 10) : (q.year != null ? parseInt(String(q.year), 10) : null))
+    if (documentId == null && q.documentId != null) documentId = String(q.documentId).trim()
+    if (month == null || isNaN(month)) month = q.month != null ? parseInt(String(q.month), 10) : null
+    if (year == null || isNaN(year)) year = q.year != null ? parseInt(String(q.year), 10) : null
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
     const hasCellContext = !!(sectionId && cell)
 
@@ -135,6 +139,8 @@ async function handler(req, res) {
     }
 
     // Log for activity view whenever we have a valid cell and at least one send (do not require sectionId)
+    let activityPersisted = false
+    let logId = null
     if (sent.length > 0 && cell) {
       const bodyForLog = typeof text === 'string' && text.trim()
         ? text.trim().slice(0, 50000)
@@ -142,7 +148,7 @@ async function handler(req, res) {
           ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
           : null
       try {
-        await prisma.documentCollectionEmailLog.create({
+        const log = await prisma.documentCollectionEmailLog.create({
           data: {
             projectId: cell.projectId,
             documentId: cell.documentId,
@@ -154,14 +160,35 @@ async function handler(req, res) {
             ...(bodyForLog ? { bodyText: bodyForLog } : {})
           }
         })
-        console.log('document-collection-send-email: activity log created', { projectId: cell.projectId, sectionId: sectionId || null, documentId: cell.documentId, month: cell.month, year: cell.year })
+        activityPersisted = true
+        logId = log.id
+        console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, sectionId: sectionId || null, documentId: cell.documentId, month: cell.month, year: cell.year })
       } catch (logErr) {
         const code = logErr.code || logErr.meta?.code || ''
         console.error('document-collection-send-email: log create failed:', logErr.message, code ? { code } : {}, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })
+        // Fallback: persist reply as DocumentItemComment so it still appears in activity
+        try {
+          const bodyForComment = typeof text === 'string' && text.trim() ? text.trim().slice(0, 50000) : (typeof html === 'string' && html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000) : '')
+          const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForComment}`
+          await prisma.documentItemComment.create({
+            data: {
+              itemId: cell.documentId,
+              year: cell.year,
+              month: cell.month,
+              text: commentText,
+              author: 'Sent reply (platform)'
+            }
+          })
+          activityPersisted = true
+          console.log('document-collection-send-email: fallback comment created for reply', { documentId: cell.documentId, month: cell.month, year: cell.year })
+        } catch (commentErr) {
+          console.warn('document-collection-send-email: fallback comment failed:', commentErr.message)
+        }
         const hint = code === 'P2021' || /does not exist|relation.*does not exist/i.test(logErr.message || '')
           ? ' The DocumentCollectionEmailLog table may be missing — run: npx prisma migrate deploy'
           : ''
-        return ok(res, { sent, failed, warning: 'Email sent but activity log could not be saved.' + hint + ' Sent items may not appear under Email activity.' })
+        const warning = activityPersisted ? null : ('Email sent but activity log could not be saved.' + hint + ' Sent items may not appear under Email activity.')
+        return ok(res, { sent, failed, activityPersisted, warning: warning || undefined, messageId: messageIdForReply || undefined })
       }
       // 2) Store messageId for reply routing (inbound webhook) — always when we have custom Message-ID so replies can be matched
       if (messageIdForReply) {
@@ -183,13 +210,13 @@ async function handler(req, res) {
       }
     } else {
       if (sent.length === 0) {
-        console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId'), month: body.month ?? query.get('month'), year: body.year ?? query.get('year') })
+        console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId') ?? q.documentId, month: body.month ?? query.get('month') ?? q.month, year: body.year ?? query.get('year') ?? q.year })
       } else if (!cell) {
-        console.warn('document-collection-send-email: skipping activity log (no cell) — activity will not persist after refresh', { projectId, fromBody: { documentId: body.documentId, month: body.month, year: body.year }, fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') || q.month, year: query.get('year') || q.year }, parsed: { documentId, month, year } })
+        console.warn('document-collection-send-email: skipping activity log (no cell) — activity will not persist after refresh', { projectId, fromBody: { documentId: body.documentId, month: body.month, year: body.year }, fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') || q.month, year: query.get('year') || q.year }, expressQuery: q, parsed: { documentId, month, year } })
       }
     }
 
-    return ok(res, { sent, failed, messageId: messageIdForReply || undefined })
+    return ok(res, { sent, failed, activityPersisted, logId: logId || undefined, messageId: messageIdForReply || undefined })
   } catch (e) {
     console.error('POST /api/projects/:id/document-collection-send-email error:', e)
     return serverError(res, e.message || 'Failed to send document request emails')

@@ -3815,6 +3815,8 @@ Abcotronics`;
                 const data = json.data || json;
                 const sentList = data.sent || json.sent || [];
                 const failedList = data.failed || json.failed || [];
+                const activityPersisted = data.activityPersisted !== false && json.activityPersisted !== false;
+                const warning = data.warning || json.warning;
                 if (!res.ok && res.status !== 503) {
                     setResult({ error: data.error || json.error || 'Failed to send reply' });
                     return;
@@ -3830,11 +3832,15 @@ Abcotronics`;
                     await new Promise((r) => setTimeout(r, 300));
                     await fetchEmailActivity();
                     setTimeout(() => fetchEmailActivity(), 800);
+                    if (!activityPersisted || warning) {
+                        setTimeout(() => fetchEmailActivity(), 2000);
+                        setTimeout(() => fetchEmailActivity(), 5000);
+                    }
                 }
                 setResult({
                     sent: sentList,
                     failed: failedList,
-                    ...((data.warning || json.warning) ? { warning: data.warning || json.warning } : {})
+                    ...((warning || (!activityPersisted && sentList.length > 0)) ? { warning: warning || 'Reply sent but it may not appear in the list. Try refreshing.' } : {})
                 });
             } catch (err) {
                 setResult({ error: err.message || 'Failed to send reply' });
