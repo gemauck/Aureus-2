@@ -93,12 +93,22 @@ async function documentSectionsToJson(projectId, options = {}) {
             }
           }
 
+          let assignedTo = []
+          if (doc.assignedTo) {
+            try {
+              assignedTo = typeof doc.assignedTo === 'string' ? JSON.parse(doc.assignedTo || '[]') : (Array.isArray(doc.assignedTo) ? doc.assignedTo : [])
+            } catch (_) {
+              assignedTo = []
+            }
+          }
+
           return {
             id: doc.id,
             name: doc.name,
             description: doc.description || '',
             required: doc.required || false,
             collectionStatus,
+            assignedTo,
             ...(includeComments ? { comments } : { comments: {} })
           }
         })
@@ -220,12 +230,22 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
             }
           }
 
+          let assignedTo = []
+          if (item.assignedTo) {
+            try {
+              assignedTo = typeof item.assignedTo === 'string' ? JSON.parse(item.assignedTo || '[]') : (Array.isArray(item.assignedTo) ? item.assignedTo : [])
+            } catch (_) {
+              assignedTo = []
+            }
+          }
+
           return {
             id: item.id,
             name: item.name,
             description: item.description || '',
             required: item.required || false,
             collectionStatus,
+            assignedTo,
             ...(includeComments ? { comments } : { comments: {} })
           }
         })
@@ -565,11 +585,20 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                     }
                   }
 
+                  const assignedToJson = (() => {
+                    const val = doc.assignedTo
+                    if (val == null) return '[]'
+                    if (Array.isArray(val)) return JSON.stringify(val)
+                    if (typeof val === 'string') return val
+                    return '[]'
+                  })()
+
                   return {
                     name: doc.name || '',
                     description: doc.description || '',
                     required: doc.required || false,
                     order: docIdx,
+                    assignedTo: assignedToJson,
                     statuses: { create: statuses },
                     comments: { create: comments }
                   }
@@ -1106,12 +1135,21 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                       }
                     }
 
+                    const assignedToJson = (() => {
+                      const val = doc.assignedTo
+                      if (val == null) return '[]'
+                      if (Array.isArray(val)) return JSON.stringify(val)
+                      if (typeof val === 'string') return val
+                      return '[]'
+                    })()
+
                     // Build item data, only include statuses/comments if they have data
                     const itemData = {
                       name: doc.name || '',
                       description: doc.description || '',
                       required: doc.required || false,
-                      order: docIdx
+                      order: docIdx,
+                      assignedTo: assignedToJson
                     }
                     
                     // Only add statuses if array is not empty
@@ -1213,12 +1251,21 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
                     }
                   }
 
+                  const assignedToJsonLegacy = (() => {
+                    const val = doc.assignedTo
+                    if (val == null) return '[]'
+                    if (Array.isArray(val)) return JSON.stringify(val)
+                    if (typeof val === 'string') return val
+                    return '[]'
+                  })()
+
                   // Build item data, only include statuses/comments if they have data
                   const itemData = {
                     name: doc.name || '',
                     description: doc.description || '',
                     required: doc.required || false,
-                    order: docIdx
+                    order: docIdx,
+                    assignedTo: assignedToJsonLegacy
                   }
                   
                   // Only add statuses if array is not empty
@@ -1236,13 +1283,13 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
               }
             }
           });
-            totalSectionsCreated++;
-          } catch (createError) {
-            console.error(`❌ Error creating monthly FMS review section "${section.name}":`, createError);
-            throw createError;
-          }
+          totalSectionsCreated++;
+        } catch (createError) {
+          console.error(`❌ Error creating monthly FMS review section "${section.name}":`, createError);
+          throw createError;
         }
-        console.log(`✅ saveMonthlyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
+      }
+      console.log(`✅ saveMonthlyFMSReviewSectionsToTable: Successfully saved ${totalSectionsCreated} sections (legacy format) to table`);
         return totalSectionsCreated;
       } else {
         console.error('❌ saveMonthlyFMSReviewSectionsToTable: Invalid data format - expected object or array, got:', typeof sections);

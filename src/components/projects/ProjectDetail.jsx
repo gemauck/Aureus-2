@@ -7419,7 +7419,7 @@ function initializeProjectDetail() {
             <div className="bg-white rounded-lg border border-gray-200 p-1">
                 <div className="flex gap-1">
                     <button
-                        onClick={() => switchSection('overview')}
+                        onClick={() => requestAnimationFrame(() => switchSection('overview'))}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'overview'
                                 ? 'bg-primary-600 text-white hover:bg-primary-700'
@@ -7431,19 +7431,21 @@ function initializeProjectDetail() {
                     </button>
                     <button
                         onClick={(e) => {
-                            try {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (typeof switchSection === 'function') {
-                                    switchSection('tasks');
-                                } else {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            requestAnimationFrame(() => {
+                                try {
+                                    if (typeof switchSection === 'function') {
+                                        switchSection('tasks');
+                                    } else {
                                     console.error('❌ switchSection is not a function');
-                                    alert('Failed to switch to tasks: Handler not available.');
+                                        alert('Failed to switch to tasks: Handler not available.');
+                                    }
+                                } catch (error) {
+                                    console.error('❌ Error in Tasks button click handler:', error);
+                                    alert('An unexpected error occurred while trying to switch to tasks: ' + (error?.message || 'Unknown error'));
                                 }
-                            } catch (error) {
-                                console.error('❌ Error in Tasks button click handler:', error);
-                                alert('An unexpected error occurred while trying to switch to tasks: ' + (error?.message || 'Unknown error'));
-                            }
+                            });
                         }}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'tasks'
@@ -7457,7 +7459,7 @@ function initializeProjectDetail() {
                     {hasTimeProcess && (
                         <div className="flex-1 flex items-center gap-0.5 min-w-0">
                             <button
-                                onClick={() => switchSection('time')}
+                                onClick={() => requestAnimationFrame(() => switchSection('time'))}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
                                     activeSection === 'time'
                                         ? 'bg-primary-600 text-white hover:bg-primary-700'
@@ -7481,7 +7483,7 @@ function initializeProjectDetail() {
                         <div className="flex-1 flex items-center gap-0.5 min-w-0">
                             <button
                                 type="button"
-                                onClick={() => switchSection('documentCollection')}
+                                onClick={() => requestAnimationFrame(() => switchSection('documentCollection'))}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
                                     activeSection === 'documentCollection'
                                         ? 'bg-primary-600 text-white hover:bg-primary-700'
@@ -7505,7 +7507,7 @@ function initializeProjectDetail() {
                         <div className="flex-1 flex items-center gap-0.5 min-w-0">
                             <button
                                 type="button"
-                                onClick={() => switchSection('weeklyFMSReview')}
+                                onClick={() => requestAnimationFrame(() => switchSection('weeklyFMSReview'))}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
                                     activeSection === 'weeklyFMSReview'
                                         ? 'bg-primary-600 text-white hover:bg-primary-700'
@@ -7529,7 +7531,7 @@ function initializeProjectDetail() {
                         <div className="flex-1 flex items-center gap-0.5 min-w-0">
                             <button
                                 type="button"
-                                onClick={() => switchSection('monthlyFMSReview')}
+                                onClick={() => requestAnimationFrame(() => switchSection('monthlyFMSReview'))}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
                                     activeSection === 'monthlyFMSReview'
                                         ? 'bg-primary-600 text-white hover:bg-primary-700'
@@ -7553,7 +7555,7 @@ function initializeProjectDetail() {
                         <div className="flex-1 flex items-center gap-0.5 min-w-0">
                             <button
                                 type="button"
-                                onClick={() => switchSection('monthlyDataReview')}
+                                onClick={() => requestAnimationFrame(() => switchSection('monthlyDataReview'))}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
                                     activeSection === 'monthlyDataReview'
                                         ? 'bg-primary-600 text-white hover:bg-primary-700'

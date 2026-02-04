@@ -4,6 +4,9 @@
  * "Request documents" flow. Uses existing mail infrastructure (Resend/SendGrid/SMTP).
  * Optional body: sectionId, documentId, month, year — when provided, Reply-To is set
  * to the inbound address and a custom Message-ID is set so reply In-Reply-To matches.
+ * The requester is CC'd so that "Reply All" from the recipient includes them (reduces risk
+ * of missing replies if the inbound webhook fails). A short line in the body asks recipients
+ * to use Reply All when responding.
  */
 import crypto from 'crypto'
 import { authRequired } from '../../_lib/authRequired.js'
@@ -60,7 +63,7 @@ async function handler(req, res) {
     if (validTo.length === 0) {
       return badRequest(res, 'At least one valid recipient email is required')
     }
-    const validCc = cc.filter((e) => isValidEmail(e))
+    let validCc = cc.filter((e) => isValidEmail(e))
 
     const user = req.user || {}
     const userName = user.name || user.email || ''
@@ -75,7 +78,23 @@ async function handler(req, res) {
       if (text) text = text + sentByLine
     }
 
+    // When using inbound (documents@): CC the requester so "Reply All" includes them and they don't miss replies
     const inboundEmail = process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || ''
+    if (hasCellContext && inboundEmail && isValidEmail(inboundEmail) && userEmail && isValidEmail(userEmail)) {
+      const requesterNorm = userEmail.trim().toLowerCase()
+      const inTo = validTo.some((e) => e.trim().toLowerCase() === requesterNorm)
+      const inCc = validCc.some((e) => e.trim().toLowerCase() === requesterNorm)
+      if (!inTo && !inCc) {
+        validCc = [...validCc.map((e) => e.trim()), userEmail.trim()]
+      }
+    }
+
+    const replyAllLine = '\n\nPlease use "Reply All" when responding so that both our system and the person who requested these documents receive your response.'
+    if (hasCellContext && inboundEmail && isValidEmail(inboundEmail)) {
+      if (html) html = html + replyAllLine.replace(/\n/g, '<br>')
+      if (text) text = text + replyAllLine
+    }
+
     const replyTo = hasCellContext && inboundEmail && isValidEmail(inboundEmail)
       ? inboundEmail
       : (userEmail && isValidEmail(userEmail) ? userEmail : undefined)
@@ -95,7 +114,7 @@ async function handler(req, res) {
     try {
       const result = await sendEmail({
         to: validTo.map((e) => e.trim()),
-        cc: validCc.length > 0 ? validCc.map((e) => e.trim()) : undefined,
+        cc: validCc.length > 0 ? [...new Set(validCc.map((e) => e.trim()))] : undefined,
         subject,
         html: html || undefined,
         text: text || undefined,

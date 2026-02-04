@@ -998,74 +998,63 @@ const DashboardLive = () => {
     useEffect(() => {
         if (!isResizing) return;
 
+        let rafId = null;
+        let lastEvent = null;
+
         const handleMouseMove = (e) => {
             if (!isResizing || !resizeStart) return;
-            
-            const deltaX = e.clientX - resizeStart.x;
-            const deltaY = e.clientY - resizeStart.y;
-            
-            // Calculate grid units - use actual grid container dimensions
-            const gridContainer = document.querySelector('.grid.gap-4[style*="gridTemplateColumns"]');
-            let cellWidth = 300; // Default fallback
-            let cellHeight = 200; // Default fallback
-            
-            if (gridContainer) {
-                const containerWidth = gridContainer.offsetWidth;
-                const gap = 16; // 1rem = 16px (gap-4)
-                cellWidth = (containerWidth - (gap * 2)) / 3;
-                
-                // Get first widget to estimate cell height
-                const firstWidget = gridContainer.querySelector('[style*="gridColumn"]');
-                if (firstWidget) {
-                    cellHeight = firstWidget.offsetHeight || 200;
+            lastEvent = e;
+            if (rafId !== null) return;
+            rafId = requestAnimationFrame(() => {
+                rafId = null;
+                const ev = lastEvent;
+                if (!ev || !resizeStart) return;
+                const deltaX = ev.clientX - resizeStart.x;
+                const deltaY = ev.clientY - resizeStart.y;
+                // Read layout once per frame to avoid forced reflow violations
+                const gridContainer = document.querySelector('.grid.gap-4[style*="gridTemplateColumns"]');
+                let cellWidth = 300;
+                let cellHeight = 200;
+                if (gridContainer) {
+                    const containerWidth = gridContainer.offsetWidth;
+                    const gap = 16;
+                    cellWidth = (containerWidth - (gap * 2)) / 3;
+                    const firstWidget = gridContainer.querySelector('[style*="gridColumn"]');
+                    if (firstWidget) cellHeight = firstWidget.offsetHeight || 200;
                 }
-            }
-            
-            // Calculate size changes based on actual cell dimensions
-            const deltaW = Math.round(deltaX / cellWidth);
-            const deltaH = Math.round(deltaY / cellHeight);
-            
-            setWidgetLayouts(prev => {
-                const layout = prev[isResizing.widgetId] || getDefaultLayout(isResizing.widgetId, selectedWidgets.indexOf(isResizing.widgetId));
-                let newW = resizeStart.w;
-                let newH = resizeStart.h;
-                
-                if (isResizing.direction.includes('e')) {
-                    // Width: positive deltaX = larger, negative = smaller
-                    newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
-                }
-                if (isResizing.direction.includes('s')) {
-                    // Height: positive deltaY = larger, negative = smaller
-                    newH = Math.max(1, Math.min(3, resizeStart.h + deltaH));
-                }
-                
-                const newLayouts = {
-                    ...prev,
-                    [isResizing.widgetId]: { 
-                        ...layout, 
-                        w: newW, 
-                        h: newH,
-                        order: layout.order !== undefined ? layout.order : selectedWidgets.indexOf(isResizing.widgetId)
-                    }
-                };
-                persistWidgetLayouts(newLayouts);
-                return newLayouts;
+                const deltaW = Math.round(deltaX / cellWidth);
+                const deltaH = Math.round(deltaY / cellHeight);
+                setWidgetLayouts(prev => {
+                    const layout = prev[isResizing.widgetId] || getDefaultLayout(isResizing.widgetId, selectedWidgets.indexOf(isResizing.widgetId));
+                    let newW = resizeStart.w;
+                    let newH = resizeStart.h;
+                    if (isResizing.direction.includes('e')) newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
+                    if (isResizing.direction.includes('s')) newH = Math.max(1, Math.min(3, resizeStart.h + deltaH));
+                    const newLayouts = {
+                        ...prev,
+                        [isResizing.widgetId]: { ...layout, w: newW, h: newH, order: layout.order !== undefined ? layout.order : selectedWidgets.indexOf(isResizing.widgetId) }
+                    };
+                    persistWidgetLayouts(newLayouts);
+                    return newLayouts;
+                });
             });
         };
 
         const handleMouseUp = () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            rafId = null;
+            lastEvent = null;
             setIsResizing(null);
             setResizeStart(null);
         };
 
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
-        
-        // Prevent text selection while resizing
         document.body.style.userSelect = 'none';
         document.body.style.cursor = 'se-resize';
 
         return () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
             document.body.style.userSelect = '';

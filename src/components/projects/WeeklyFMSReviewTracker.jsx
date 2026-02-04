@@ -555,6 +555,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const userHasScrolledRef = useRef(false);
     const hasAutoScrolledRef = useRef(false);
     const [users, setUsers] = useState([]);
+    const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
+    const assignmentDropdownRef = useRef(null);
     
     // Multi-select state: Set of cell keys (sectionId-documentId-weekLabel)
     const [selectedCells, setSelectedCells] = useState(new Set());
@@ -631,7 +633,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
     }, [project?.id, selectedYear, loadData]);
     
-    // Load users for reviewer assignment
+    // Load users for reviewer and document assignment
     useEffect(() => {
         const loadUsers = async () => {
             try {
@@ -642,7 +644,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         usersResponse?.data?.data?.users ||
                         usersResponse?.users ||
                         [];
-                    setUsers(allUsers);
+                    setUsers(Array.isArray(allUsers) ? allUsers : []);
+                } else if (typeof window.dataService?.getUsers === 'function') {
+                    const list = await window.dataService.getUsers() || [];
+                    setUsers(Array.isArray(list) ? list : []);
                 }
             } catch (error) {
                 console.error('❌ Error loading users:', error);
@@ -650,6 +655,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
         loadUsers();
     }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (assignmentDropdownRef.current && !assignmentDropdownRef.current.contains(event.target)) {
+                setAssignmentOpen(null);
+            }
+        };
+        if (assignmentOpen) {
+            documentRef.addEventListener('mousedown', handleClickOutside);
+            return () => documentRef.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [assignmentOpen]);
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -1682,7 +1699,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                         id: Date.now(),
                         ...documentData,
                         collectionStatus: documentData.collectionStatus || {},
-                        comments: documentData.comments || {}
+                        comments: documentData.comments || {},
+                        assignedTo: documentData.assignedTo ?? []
                     };
                     return {
                         ...section,
@@ -1696,6 +1714,61 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
+    };
+
+    const normalizeAssignedTo = (doc) => {
+        if (!doc) return [];
+        const raw = doc.assignedTo;
+        if (Array.isArray(raw)) return raw.filter(Boolean);
+        if (typeof raw === 'string') {
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+            } catch (_) {
+                return raw.trim() ? [raw] : [];
+            }
+        }
+        return [];
+    };
+
+    const getAssigneeLabel = (identifier) => {
+        if (identifier == null || identifier === '') return 'Unknown';
+        const str = String(identifier).trim();
+        const user = users.find(u => {
+            if (!u) return false;
+            const id = u.id || u._id;
+            const name = (u.name || u.fullName || u.email || '').toString().trim();
+            const email = (u.email || '').toString().trim().toLowerCase();
+            if (id && str === String(id)) return true;
+            if (name && (str === name || str.toLowerCase() === name.toLowerCase())) return true;
+            if (email && str.toLowerCase() === email) return true;
+            if (id && str === `id:${id}`) return true;
+            if (email && str === `email:${email}`) return true;
+            return false;
+        });
+        return user ? (user.name || user.fullName || user.email || str) : str;
+    };
+
+    const getUserIdentifier = (user) => {
+        if (!user) return null;
+        if (user.id) return user.id;
+        if (user._id) return user._id;
+        if (user.email) return String(user.email).toLowerCase();
+        return (user.name || user.fullName || '').toString().trim() || null;
+    };
+
+    const handleAssignmentChange = (sectionId, docId, newAssignedTo) => {
+        setSections(prev => prev.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    if (String(doc.id) !== String(docId)) return doc;
+                    return { ...doc, assignedTo: Array.isArray(newAssignedTo) ? newAssignedTo : [] };
+                })
+            };
+        }));
+        setAssignmentOpen(null);
     };
     
     const handleDeleteDocument = (sectionId, documentId, event) => {
@@ -4435,6 +4508,76 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                                                 );
                                                             })()}
                                                         </div>
+                                                            {/* Assigned to: chips + Assign button */}
+                                                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                                <span className="text-[10px] text-gray-500 mr-0.5">Assigned to:</span>
+                                                                {normalizeAssignedTo(doc).map((uid, i) => (
+                                                                    <span
+                                                                        key={`${doc.id}-${i}-${uid}`}
+                                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-800 text-[10px]"
+                                                                    >
+                                                                        {getAssigneeLabel(uid)}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const next = normalizeAssignedTo(doc).filter((_, j) => j !== i);
+                                                                                handleAssignmentChange(section.id, doc.id, next);
+                                                                            }}
+                                                                            className="text-primary-600 hover:text-primary-800"
+                                                                            aria-label="Remove assignee"
+                                                                        >
+                                                                            <i className="fas fa-times text-[8px]"></i>
+                                                                        </button>
+                                                                    </span>
+                                                                ))}
+                                                                <div className="relative inline-block" ref={assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id ? assignmentDropdownRef : null}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setAssignmentOpen(prev => (prev?.sectionId === section.id && prev?.docId === doc.id) ? null : { sectionId: section.id, docId: doc.id });
+                                                                        }}
+                                                                        className="inline-flex items-center gap-1 text-[10px] text-primary-600 hover:text-primary-700 hover:underline"
+                                                                    >
+                                                                        <i className="fas fa-user-plus"></i>
+                                                                        <span>Assign</span>
+                                                                    </button>
+                                                                    {assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id && (
+                                                                        <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                                                                            {users.length === 0 ? (
+                                                                                <div className="px-3 py-2 text-[10px] text-gray-500">No users loaded</div>
+                                                                            ) : (
+                                                                                users
+                                                                                    .filter(u => u && (u.name || u.email || u.fullName))
+                                                                                    .sort((a, b) => ((a.name || a.email || a.fullName || '').toString().toLowerCase()).localeCompare((b.name || b.email || b.fullName || '').toString().toLowerCase()))
+                                                                                    .map(user => {
+                                                                                        const ident = getUserIdentifier(user);
+                                                                                        const label = user.name || user.fullName || user.email || 'Unknown';
+                                                                                        const current = normalizeAssignedTo(doc);
+                                                                                        const isChecked = ident && current.some(c => String(c) === String(ident) || getAssigneeLabel(c) === label);
+                                                                                        return (
+                                                                                            <label key={ident || label} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                                                                                                <input
+                                                                                                    type="checkbox"
+                                                                                                    checked={!!isChecked}
+                                                                                                    onChange={() => {
+                                                                                                        const next = isChecked
+                                                                                                            ? current.filter(c => String(c) !== String(ident) && getAssigneeLabel(c) !== label)
+                                                                                                            : [...current, ident].filter(Boolean);
+                                                                                                        handleAssignmentChange(section.id, doc.id, next);
+                                                                                                    }}
+                                                                                                    className="rounded border-gray-300 text-primary-600"
+                                                                                                />
+                                                                                                <span className="truncate">{label}</span>
+                                                                                            </label>
+                                                                                        );
+                                                                                    })
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                             </div>
                                                     </td>
                                                     {weeks.map((week) => (

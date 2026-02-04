@@ -250,52 +250,50 @@ const TaskDetailModal = ({
         const contentArea = contentAreaRef.current;
         const header = modal.querySelector('.border-b.border-gray-200');
         
-        const applyStyles = () => {
-            // CRITICAL: Move footer inside modal if it's not already there
-            if (footer.parentElement !== modal) {
-                modal.appendChild(footer);
-            }
-            
-            // Set modal to flex column first
+        // Phase 1: DOM writes only (avoids forced reflow in same frame)
+        const writeLayoutStyles = () => {
+            if (footer.parentElement !== modal) modal.appendChild(footer);
             modal.style.display = 'flex';
             modal.style.flexDirection = 'column';
             modal.style.maxHeight = '90vh';
             modal.style.overflow = 'hidden';
-            
-            // Force footer to bottom
             footer.style.marginTop = 'auto';
             footer.style.flexShrink = '0';
-            
-            // Force reflow to get accurate measurements
-            void modal.offsetHeight;
-            void footer.offsetHeight;
-            
-            // Calculate proper maxHeight for content area AFTER footer is positioned
-            const modalHeight = modal.getBoundingClientRect().height;
-            const headerHeight = header ? header.getBoundingClientRect().height : 0;
-            const footerHeight = footer.getBoundingClientRect().height;
-            const availableHeight = Math.max(0, modalHeight - headerHeight - footerHeight);
-            
-            // Constrain content area - use direct assignment for better compatibility
             contentArea.style.flex = '1 1 0%';
             contentArea.style.minHeight = '0';
-            contentArea.style.maxHeight = `${availableHeight}px`;
-            contentArea.style.height = `${availableHeight}px`;
             contentArea.style.overflowY = 'auto';
             contentArea.style.overflowX = 'hidden';
         };
+        // Phase 2: Read layout in next frame to avoid forced reflow violation
+        const measureAndConstrainContent = () => {
+            requestAnimationFrame(() => {
+                if (!modal.isConnected || !contentArea.isConnected) return;
+                const modalHeight = modal.getBoundingClientRect().height;
+                const headerHeight = header ? header.getBoundingClientRect().height : 0;
+                const footerHeight = footer.getBoundingClientRect().height;
+                const availableHeight = Math.max(0, modalHeight - headerHeight - footerHeight);
+                contentArea.style.maxHeight = `${availableHeight}px`;
+                contentArea.style.height = `${availableHeight}px`;
+            });
+        };
+        const applyStyles = () => {
+            writeLayoutStyles();
+            measureAndConstrainContent();
+        };
         
-        // Apply immediately
-        applyStyles();
+        writeLayoutStyles();
+        measureAndConstrainContent();
         
-        // Also apply after delays to ensure DOM is ready and layout is stable
         const timeout1 = setTimeout(applyStyles, 50);
         const timeout2 = setTimeout(applyStyles, 200);
         const timeout3 = setTimeout(applyStyles, 500);
         
-        // Use ResizeObserver to recalculate when footer size changes
         const resizeObserver = new ResizeObserver(() => {
-            applyStyles();
+            requestAnimationFrame(() => {
+                if (!modal.isConnected || !contentArea.isConnected) return;
+                writeLayoutStyles();
+                measureAndConstrainContent();
+            });
         });
         resizeObserver.observe(footer);
         resizeObserver.observe(modal);

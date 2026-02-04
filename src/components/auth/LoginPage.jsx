@@ -206,9 +206,11 @@ const LoginPage = () => {
         const handleOrientationChange = () => {
             setTimeout(() => {
                 setViewportHeight();
-                // Force a reflow to ensure proper layout
+                // Defer layout read to next frame to avoid forced reflow violation
                 if (wrapperRef.current) {
-                    wrapperRef.current.offsetHeight;
+                    requestAnimationFrame(() => {
+                        if (wrapperRef.current) void wrapperRef.current.offsetHeight;
+                    });
                 }
             }, 150);
         };
