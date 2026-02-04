@@ -193,13 +193,14 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 enhancedMessage += '</div>';
             }
             // Source heading: where the comment comes from (e.g. Projects, Document collection, May 2026)
-            const hasDocCollectionMeta = metadataObj && (metadataObj.sectionId || metadataObj.documentId) && (metadataObj.month != null || metadataObj.docYear != null || metadataObj.year != null);
+            const hasPeriod = metadataObj && (metadataObj.month != null || metadataObj.docYear != null || metadataObj.year != null);
+            const hasDocCollectionMeta = metadataObj && (metadataObj.sectionId || metadataObj.documentId || metadataObj.projectId) && hasPeriod;
             if (hasDocCollectionMeta) {
                 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                 const monthNum = metadataObj.month != null ? Number(metadataObj.month) : null;
                 const year = metadataObj.docYear != null ? metadataObj.docYear : metadataObj.year;
-                const monthLabel = monthNum >= 1 && monthNum <= 12 ? monthNames[monthNum - 1] : (metadataObj.month || '');
-                const periodLabel = monthLabel && year ? `${monthLabel} ${year}` : (year ? String(year) : 'Document collection');
+                const monthLabel = monthNum >= 1 && monthNum <= 12 ? monthNames[monthNum - 1] : (metadataObj.month != null && metadataObj.month !== '' ? String(metadataObj.month) : '');
+                const periodLabel = monthLabel && year ? `${monthLabel} ${year}` : (year != null && year !== '' ? String(year) : 'Document collection');
                 const sourceLabel = `Projects, Document collection${periodLabel ? `, ${periodLabel}` : ''}`;
                 enhancedMessage += `<div style="background:#f0f4f8;border-left:4px solid #64748b;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📍 Where</h3><p style="color:#555;margin:5px 0;">${escapeHtml(sourceLabel)}</p></div>`;
             }
@@ -207,10 +208,13 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 const prev = commentText.length > 200 ? commentText.slice(0, 200) + '...' : commentText;
                 enhancedMessage += `<div style="background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:15px;margin:20px 0;"><h4 style="color:#333;margin:0 0 10px;font-size:14px;">💬 Comment</h4><p style="color:#555;margin:0;line-height:1.6;white-space:pre-wrap;">${escapeHtml(prev)}</p></div>`;
             }
+            // So plain-text part does not duplicate Context/Comment (which are already in enhancedMessage)
+            const messageAlreadyContainsContext = enhancedMessage !== message;
             await sendNotificationEmail(targetUser.email, enhancedSubject, enhancedMessage, {
                 projectName, clientName, commentText, commentLink, taskTitle,
                 isProjectRelated: !!(metadataObj && (type === 'comment' || type === 'mention' || type === 'task')),
-                skipNotificationCreation: true
+                skipNotificationCreation: true,
+                messageAlreadyContainsContext
             });
         } catch (e) {
             console.error('Failed to send email notification to', id, e);

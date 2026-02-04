@@ -676,6 +676,8 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         taskDueDate,
         taskListName,
         isProjectRelated,
+        // When true, HTML body already has Context/Where/Comment; skip duplicating in plain text
+        messageAlreadyContainsContext = false,
         // Notification creation parameters (if userId provided, create in-app notification)
         userId,
         notificationType,
@@ -1001,8 +1003,10 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         text: (() => {
             let text = subject + '\n\n';
             
-            // Add project context to plain text email
-            if (isProjectRelated && (clientName || projectName || taskTitle)) {
+            // Add project context to plain text only when message does not already contain it
+            // (comment/mention notifications send HTML with Context+Where+Comment; duplicating here causes two Context blocks)
+            const messageAlreadyHasContext = messageAlreadyContainsContext || !!commentText;
+            if (isProjectRelated && (clientName || projectName || taskTitle) && !messageAlreadyHasContext) {
                 text += '--- Project Context ---\n';
                 if (clientName) {
                     text += `Client: ${clientName}\n`;
@@ -1050,8 +1054,8 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                 }
             }
             
-            // Add comment text if available
-            if (commentText) {
+            // Add comment section to plain text only when message does not already contain it
+            if (commentText && !messageAlreadyHasContext) {
                 const commentPreview = commentText.length > 200 
                     ? commentText.substring(0, 200) + '...' 
                     : commentText;
