@@ -54,6 +54,11 @@ async function handler(req, res) {
     if (documentId == null && q.documentId != null) documentId = String(q.documentId).trim()
     if (month == null || isNaN(month)) month = q.month != null ? parseInt(String(q.month), 10) : null
     if (year == null || isNaN(year)) year = q.year != null ? parseInt(String(q.year), 10) : null
+    // Header fallback (proxies sometimes strip query/body for POST)
+    const h = req.headers || {}
+    if (documentId == null && h['x-document-id']) documentId = String(h['x-document-id']).trim()
+    if ((month == null || isNaN(month)) && h['x-month'] != null) month = parseInt(String(h['x-month']), 10)
+    if ((year == null || isNaN(year)) && h['x-year'] != null) year = parseInt(String(h['x-year']), 10)
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
     const hasCellContext = !!(sectionId && cell)
 
@@ -138,38 +143,21 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
-    // Log for activity view whenever we have a valid cell and at least one send (do not require sectionId)
+    // Persist for activity view. Replies (Re:) use DocumentItemComment only so they always show; initial sends use DocumentCollectionEmailLog.
+    const isReply = (subject || '').trim().toLowerCase().startsWith('re:')
     let activityPersisted = false
     let logId = null
     if (sent.length > 0 && cell) {
-      const bodyForLog = typeof text === 'string' && text.trim()
+      const bodyForStorage = typeof text === 'string' && text.trim()
         ? text.trim().slice(0, 50000)
         : typeof html === 'string' && html
           ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
-          : null
-      try {
-        const log = await prisma.documentCollectionEmailLog.create({
-          data: {
-            projectId: cell.projectId,
-            documentId: cell.documentId,
-            year: cell.year,
-            month: cell.month,
-            kind: 'sent',
-            ...(sectionId ? { sectionId } : {}),
-            ...(subject ? { subject: subject.slice(0, 1000) } : {}),
-            ...(bodyForLog ? { bodyText: bodyForLog } : {})
-          }
-        })
-        activityPersisted = true
-        logId = log.id
-        console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, sectionId: sectionId || null, documentId: cell.documentId, month: cell.month, year: cell.year })
-      } catch (logErr) {
-        const code = logErr.code || logErr.meta?.code || ''
-        console.error('document-collection-send-email: log create failed:', logErr.message, code ? { code } : {}, { projectId: cell.projectId, documentId: cell.documentId, year: cell.year, month: cell.month })
-        // Fallback: persist reply as DocumentItemComment so it still appears in activity
+          : ''
+      const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForStorage}`
+
+      if (isReply) {
+        // Replies: persist only as comment (same table as received emails — always works)
         try {
-          const bodyForComment = typeof text === 'string' && text.trim() ? text.trim().slice(0, 50000) : (typeof html === 'string' && html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000) : '')
-          const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForComment}`
           await prisma.documentItemComment.create({
             data: {
               itemId: cell.documentId,
@@ -180,17 +168,33 @@ async function handler(req, res) {
             }
           })
           activityPersisted = true
-          console.log('document-collection-send-email: fallback comment created for reply', { documentId: cell.documentId, month: cell.month, year: cell.year })
+          console.log('document-collection-send-email: reply persisted as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
         } catch (commentErr) {
-          console.warn('document-collection-send-email: fallback comment failed:', commentErr.message)
+          console.error('document-collection-send-email: reply comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
         }
-        const hint = code === 'P2021' || /does not exist|relation.*does not exist/i.test(logErr.message || '')
-          ? ' The DocumentCollectionEmailLog table may be missing — run: npx prisma migrate deploy'
-          : ''
-        const warning = activityPersisted ? null : ('Email sent but activity log could not be saved.' + hint + ' Sent items may not appear under Email activity.')
-        return ok(res, { sent, failed, activityPersisted, warning: warning || undefined, messageId: messageIdForReply || undefined })
+      } else {
+        // Initial sends: use DocumentCollectionEmailLog
+        try {
+          const log = await prisma.documentCollectionEmailLog.create({
+            data: {
+              projectId: cell.projectId,
+              documentId: cell.documentId,
+              year: cell.year,
+              month: cell.month,
+              kind: 'sent',
+              ...(sectionId ? { sectionId } : {}),
+              ...(subject ? { subject: subject.slice(0, 1000) } : {}),
+              ...(bodyForStorage ? { bodyText: bodyForStorage } : {})
+            }
+          })
+          activityPersisted = true
+          logId = log.id
+          console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
+        } catch (logErr) {
+          console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId })
+        }
       }
-      // 2) Store messageId for reply routing (inbound webhook) — always when we have custom Message-ID so replies can be matched
+
       if (messageIdForReply) {
         try {
           await prisma.documentRequestEmailSent.create({
