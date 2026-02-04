@@ -647,10 +647,10 @@ const api = {
     return res
   },
 
-  // Heartbeat to track online status
+  // Heartbeat to track online status (short timeout so we don't block when server is slow)
   async heartbeat() {
     try {
-      const res = await request('/users/heartbeat', { method: 'POST' })
+      const res = await request('/users/heartbeat', { method: 'POST', timeout: 10000 })
       return res
     } catch (error) {
       // Silently fail heartbeat errors to avoid console spam

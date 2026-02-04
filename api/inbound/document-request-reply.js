@@ -519,9 +519,18 @@ async function handler(req, res) {
       return ok(res, { processed: false, reason: 'no_resend_api_key' })
     }
 
+    // Prepare payload before sending response so we never throw after res is sent
+    let dataCopy
+    try {
+      dataCopy = data ? JSON.parse(JSON.stringify(data)) : {}
+    } catch (e) {
+      console.warn('document-request-reply: clone payload failed', e.message)
+      dataCopy = {}
+    }
+
     // Respond immediately to avoid Resend timeout (10–30s); process in background
     res.status(200).json({ received: true, processing: 'async' })
-    const dataCopy = data ? JSON.parse(JSON.stringify(data)) : {}
+
     setImmediate(() => {
       Promise.resolve()
         .then(() => processReceivedEmail(emailId, apiKey, dataCopy))

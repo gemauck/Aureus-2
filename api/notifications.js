@@ -238,19 +238,22 @@ async function handler(req, res) {
 
         if (req.method === 'GET') {
             try {
-                // Get query parameters
                 const read = req.query.read;
-                const limit = parseInt(req.query.limit) || 50;
-                const offset = parseInt(req.query.offset) || 0;
+                const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+                const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
-                // Build where clause
                 const where = { userId };
                 if (read !== undefined) {
                     where.read = read === 'true';
                 }
 
-                // Fetch notifications and unread count in parallel for faster response (reduces 502 from proxy timeout)
-                const [notifications, unreadCount] = await Promise.all([
+                // Timeout guard: respond with 504 before client/proxy (client uses 12s, so respond by 8s)
+                const NOTIFICATIONS_GET_TIMEOUT_MS = 8000;
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('NOTIFICATIONS_TIMEOUT')), NOTIFICATIONS_GET_TIMEOUT_MS);
+                });
+
+                const fetchPromise = Promise.all([
                     prisma.notification.findMany({
                         where,
                         orderBy: { createdAt: 'desc' },
@@ -262,11 +265,20 @@ async function handler(req, res) {
                     })
                 ]);
 
+                const [notifications, unreadCount] = await Promise.race([fetchPromise, timeoutPromise]);
+
                 return ok(res, {
                     notifications,
                     unreadCount
                 });
             } catch (error) {
+                if (error?.message === 'NOTIFICATIONS_TIMEOUT') {
+                    console.warn('⚠️ Notifications GET timed out');
+                    if (!res.headersSent && !res.writableEnded) {
+                        res.status(504).json({ error: 'Request timeout', message: 'Notifications took too long. Try again.' });
+                    }
+                    return;
+                }
                 const isConnError = logDatabaseError(error, 'getting notifications');
                 if (isConnError) {
                     return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.');

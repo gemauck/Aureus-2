@@ -28,6 +28,11 @@ const DatabaseAPI = {
         '/locations': 300000,   // 5 minutes - locations rarely change
         '/notifications': 15000, // 15 seconds - reduces focus/polling 429s
     },
+    // Per-endpoint request timeout (ms) - fail fast for light endpoints when server is slow
+    _endpointTimeout: {
+        '/notifications': 12000,   // 12s - match server; avoid piling up 30s waits
+        '/users/heartbeat': 10000, // 10s - heartbeat should be quick
+    },
 
     // Request throttling / rate limiting safeguards
     _maxConcurrentRequests: 2, // Reduced from 4 to prevent overwhelming the server
@@ -322,11 +327,11 @@ const DatabaseAPI = {
     
     // Internal method to execute the actual request
     async _executeRequest(endpoint, options = {}) {
-        // Reduce retries for 502 errors - they often indicate server is down
-        // Reduced default maxRetries from 5 to 2 to fail faster and reduce load
-        // For timeout errors, use fewer retries (1) since they're less likely to succeed
+        // Reduce retries for 502/timeout - fail faster to avoid piling up when server is slow
+        const pathOnly = (endpoint || '').split('?')[0];
+        const isLightEndpoint = pathOnly === '/notifications' || pathOnly === '/users/heartbeat';
         const isTimeoutRequest = options.isTimeout || false;
-        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : (isTimeoutRequest ? 1 : 2);
+        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : (isTimeoutRequest || isLightEndpoint ? 1 : 2);
         const baseDelay = 3000; // Start with 3 seconds - longer delay to give server time to recover
 
         // Check RateLimitManager before acquiring slot (if available)
@@ -448,10 +453,9 @@ const DatabaseAPI = {
                 }
                 
                 // Add timeout handling using AbortController
-                // Match server timeout (30s) to prevent premature client-side timeouts
-                // Server timeout is 30s for most endpoints, so client should match to avoid false timeouts
-                // Note: Individual requests can still override with options.timeout for longer-running operations
-                const timeoutMs = options.timeout || 30000; // Default 30 seconds (matches server timeout)
+                // Use per-endpoint timeout for light endpoints so we fail fast when server is slow
+                const pathOnly = (endpoint || '').split('?')[0];
+                const timeoutMs = options.timeout ?? this._endpointTimeout?.[pathOnly] ?? 30000;
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => {
                     controller.abort();
