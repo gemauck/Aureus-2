@@ -179,9 +179,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const loadRetryTimeoutRef = useRef(null); // Timeout for single retry when load returns empty
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     
-    // Section header Actions dropdown - MUST be declared before any effect/callback that references it (avoids TDZ)
-    const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
-    
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
         : null;
@@ -227,6 +224,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     };
     
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
+    // Section header Actions dropdown (declare early to avoid TDZ in effects below)
+    const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
     // Close section Actions dropdown when clicking outside (effect lives near state to avoid TDZ)
     useEffect(() => {
         const handleClickOutside = (event) => {
