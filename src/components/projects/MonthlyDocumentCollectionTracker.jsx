@@ -3523,6 +3523,13 @@ Abcotronics`;
             fetchEmailActivity();
         }, [ctx?.doc?.id, ctx?.month, selectedYear, project?.id, fetchEmailActivity]);
 
+        // Auto-refresh email activity every 5s while modal is open (so replies appear without closing)
+        useEffect(() => {
+            if (!ctx?.doc?.id || !ctx?.month) return;
+            const interval = setInterval(fetchEmailActivity, 5000);
+            return () => clearInterval(interval);
+        }, [ctx?.doc?.id, ctx?.month, fetchEmailActivity]);
+
         const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const addContact = () => {
             const t = newContact.trim();
@@ -3934,16 +3941,29 @@ Abcotronics`;
 
                         {/* Email activity for this month: sent, received, attachments */}
                         <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
-                            <div className="flex items-center gap-2 mb-3">
-                                <i className="fas fa-inbox text-[#0369a1] text-sm"></i>
-                                <label className="text-sm font-medium text-gray-800">Email activity for this month</label>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-2">
+                                    <i className="fas fa-inbox text-[#0369a1] text-sm"></i>
+                                    <label className="text-sm font-medium text-gray-800">Email activity for this month</label>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => fetchEmailActivity()}
+                                    disabled={loadingActivity}
+                                    className="text-xs text-[#0369a1] hover:text-[#0284c7] disabled:opacity-50 flex items-center gap-1"
+                                    title="Refresh to check for new replies"
+                                    aria-label="Refresh email activity"
+                                >
+                                    {loadingActivity ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-sync-alt"></i>}
+                                    Refresh
+                                </button>
                             </div>
                             {loadingActivity ? (
                                 <p className="text-sm text-gray-500 flex items-center gap-2">
                                     <i className="fas fa-spinner fa-spin"></i> Loading…
                                 </p>
                             ) : (emailActivity.sent.length === 0 && emailActivity.received.length === 0) ? (
-                                <p className="text-sm text-gray-500">No emails sent or received yet for this document and month.</p>
+                                <p className="text-sm text-gray-500">No emails sent or received yet for this document and month. Replies are processed automatically—click Refresh after replying.</p>
                             ) : (
                                 <div className="space-y-4">
                                     {emailActivity.sent.length > 0 && (

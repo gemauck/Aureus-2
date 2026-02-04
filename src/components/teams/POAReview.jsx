@@ -499,22 +499,51 @@ const POAReview = () => {
             if (isExcel && isLargeFile) {
                 console.log('POA Review - Large Excel file detected, using server-side processing...');
                 setProcessingProgress('Uploading file to server for processing...');
-                
+
                 const formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
-                
+
                 const token = window.storage?.getToken?.() || '';
-                const response = await fetch('/api/poa-review/process-excel', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                const maxRetries = 2;
+                const retryDelay = 2000;
+                let response = null;
+
+                for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                    try {
+                        if (attempt > 0) {
+                            setProcessingProgress(`Retrying upload (${attempt}/${maxRetries})...`);
+                            await new Promise(r => setTimeout(r, retryDelay * attempt));
+                            // FormData body is consumed after first fetch; recreate for retry
+                            const retryFormData = new FormData();
+                            retryFormData.append('file', uploadedFile);
+                            retryFormData.append('sources', JSON.stringify(sources));
+                            formData = retryFormData;
+                        }
+                        response = await fetch('/api/poa-review/process-excel', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: formData
+                        });
+                        break;
+                    } catch (fetchErr) {
+                        const isNetworkError = fetchErr?.message === 'Failed to fetch' ||
+                            (fetchErr?.name && /NetworkError|TypeError/i.test(fetchErr.name));
+                        if (attempt < maxRetries && isNetworkError) {
+                            console.warn(`POA Review - process-excel network error, retrying (${attempt + 1}/${maxRetries}):`, fetchErr.message);
+                            continue;
+                        }
+                        const friendlyMsg = isNetworkError
+                            ? 'Network request was interrupted (e.g. tab in background or connection lost). Please keep this tab active and try again.'
+                            : (fetchErr?.message || 'Upload failed');
+                        throw new Error(friendlyMsg);
+                    }
+                }
+
+                if (!response?.ok) {
+                    const errorData = await response.json().catch(() => ({ message: response?.statusText || 'Unknown error' }));
                     const msg = (typeof errorData.error === 'object' && errorData.error?.message)
                         ? errorData.error.message
                         : (typeof errorData.error === 'string' ? errorData.error : null)
@@ -525,16 +554,16 @@ const POAReview = () => {
                     console.error('POA Review process-excel API error:', errorData);
                     throw new Error(msg);
                 }
-                
+
                 const result = await response.json();
                 const downloadUrl = result.data?.downloadUrl || result.downloadUrl;
-            
-            if (downloadUrl) {
-                setDownloadUrl(downloadUrl);
-                setProcessingProgress('Complete!');
+
+                if (downloadUrl) {
+                    setDownloadUrl(downloadUrl);
+                    setProcessingProgress('Complete!');
                     setProcessingProgressPercent(100);
-            } else {
-                throw new Error('No download URL received from server');
+                } else {
+                    throw new Error('No download URL received from server');
                 }
                 return;
             }
