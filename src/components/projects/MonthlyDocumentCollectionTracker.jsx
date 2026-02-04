@@ -491,6 +491,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return () => { cancelled = true; };
     }, []);
 
+    const [showTemplateList, setShowTemplateList] = useState(true);
+    const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
+    const [editingSection, setEditingSection] = useState(null);
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [editingSectionId, setEditingSectionId] = useState(null);
+    const [editingTemplate, setEditingTemplate] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
+    const assignmentDropdownRef = useRef(null);
+
     // Close assignment dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -511,21 +521,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 setIsTemplateDropdownOpen(false);
             }
         };
-        
         if (isTemplateDropdownOpen) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
     }, [isTemplateDropdownOpen]);
-    const [showTemplateList, setShowTemplateList] = useState(true);
-    const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
-    const [editingSection, setEditingSection] = useState(null);
-    const [editingDocument, setEditingDocument] = useState(null);
-    const [editingSectionId, setEditingSectionId] = useState(null);
-    const [editingTemplate, setEditingTemplate] = useState(null);
-    const [users, setUsers] = useState([]);
-    const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
-    const assignmentDropdownRef = useRef(null);
+
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
     // (POST) instead of trying to update an existing template.
