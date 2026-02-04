@@ -249,18 +249,18 @@ async function handler(req, res) {
                     where.read = read === 'true';
                 }
 
-                // Fetch notifications
-                const notifications = await prisma.notification.findMany({
-                    where,
-                    orderBy: { createdAt: 'desc' },
-                    take: limit,
-                    skip: offset
-                });
-
-                // Count total unread notifications
-                const unreadCount = await prisma.notification.count({
-                    where: { userId, read: false }
-                });
+                // Fetch notifications and unread count in parallel for faster response (reduces 502 from proxy timeout)
+                const [notifications, unreadCount] = await Promise.all([
+                    prisma.notification.findMany({
+                        where,
+                        orderBy: { createdAt: 'desc' },
+                        take: limit,
+                        skip: offset
+                    }),
+                    prisma.notification.count({
+                        where: { userId, read: false }
+                    })
+                ]);
 
                 return ok(res, {
                     notifications,
@@ -275,7 +275,7 @@ async function handler(req, res) {
             }
         }
 
-            if (req.method === 'PATCH') {
+        if (req.method === 'PATCH') {
             try {
                 const body = req.body || await parseJsonBody(req);
                 const { read, notificationIds } = body;

@@ -346,8 +346,9 @@ app.use('/api', apiLimiter)
 app.use(compression({ threshold: 0 }))
 
 // Document request reply webhook MUST run before express.json() so we get raw body for signature verification
-// Use app.all so GET (reachability check) and POST (Resend webhook) both hit the handler
-app.all('/api/inbound/document-request-reply', express.text({ type: '*/*', limit: '1mb' }), async (req, res, next) => {
+// Use app.all so GET (reachability check) and POST (Resend webhook) both hit the handler.
+// Limit 50mb so replies with large attachments (e.g. 11MB+) don't get rejected or crash the body parser.
+app.all('/api/inbound/document-request-reply', express.text({ type: '*/*', limit: '50mb' }), async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'inbound', 'document-request-reply.js'))
     if (!handler) {
@@ -2028,7 +2029,9 @@ app.use('/api', async (req, res) => {
   let timeout = null
   try {
     const handlerPath = toHandlerPath(req.url)
-    console.log(`🔍 Loading handler for ${req.method} ${req.url} -> ${handlerPath}`)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔍 Loading handler for ${req.method} ${req.url} -> ${handlerPath}`)
+    }
     
     // Extract ID from URL for dynamic routes (e.g., /api/leads/[id] or /api/projects/[id]/document-sections-v2)
     // This ensures req.params.id is available for handlers that expect it
