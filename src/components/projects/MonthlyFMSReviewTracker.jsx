@@ -1570,6 +1570,18 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         return user ? (user.name || user.fullName || user.email || str) : str;
     };
 
+    const getAssigneeInitials = (identifier) => {
+        const label = getAssigneeLabel(identifier);
+        if (!label || label === 'Unknown') return '?';
+        const parts = label.trim().split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) {
+            const first = (parts[0] || '').charAt(0);
+            const last = (parts[parts.length - 1] || '').charAt(0);
+            return (first + last).toUpperCase().slice(0, 2);
+        }
+        return (label.slice(0, 2) || '?').toUpperCase();
+    };
+
     const getUserIdentifier = (user) => {
         if (!user) return null;
         if (user.id) return user.id;
@@ -4245,9 +4257,14 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                                 {normalizeAssignedTo(document).map((uid, i) => (
                                                                     <span
                                                                         key={`${document.id}-${i}-${uid}`}
-                                                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary-50 text-primary-800 text-[10px]"
+                                                                        className="inline-flex items-center gap-0.5 group/avatar"
                                                                     >
-                                                                        {getAssigneeLabel(uid)}
+                                                                        <span
+                                                                            title={getAssigneeLabel(uid)}
+                                                                            className="w-6 h-6 rounded-full bg-primary-100 text-primary-800 flex items-center justify-center text-[10px] font-semibold shrink-0"
+                                                                        >
+                                                                            {getAssigneeInitials(uid)}
+                                                                        </span>
                                                                         <button
                                                                             type="button"
                                                                             onClick={(e) => {
@@ -4255,8 +4272,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                                                                                 const next = normalizeAssignedTo(document).filter((_, j) => j !== i);
                                                                                 handleAssignmentChange(section.id, document.id, next);
                                                                             }}
-                                                                            className="text-primary-600 hover:text-primary-800"
-                                                                            aria-label="Remove assignee"
+                                                                            className="opacity-0 group-hover/avatar:opacity-100 text-gray-500 hover:text-red-600 p-0.5 rounded"
+                                                                            aria-label={`Remove ${getAssigneeLabel(uid)}`}
                                                                         >
                                                                             <i className="fas fa-times text-[8px]"></i>
                                                                         </button>

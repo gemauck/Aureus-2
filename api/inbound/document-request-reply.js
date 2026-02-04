@@ -9,8 +9,9 @@
  * for event "email.received" pointing to: https://your-domain/api/inbound/document-request-reply
  * No auth - webhook is validated by Resend/Svix signing when RESEND_WEBHOOK_SECRET is set.
  *
- * When DocumentRequestEmailSent has requesterEmail, a copy of the reply is forwarded to that
- * address (documents@ is not a real mailbox), so the requester does not miss replies.
+ * When DocumentRequestEmailSent has requesterEmail:
+ * - A copy of the reply is forwarded to that address (documents@ is not a real mailbox).
+ * - An in-app notification is created so the requester sees "Document request reply received" when they log in.
  */
 import crypto from 'crypto'
 import fs from 'fs'
@@ -295,6 +296,48 @@ async function resendApi(method, pathname, apiKey, options = {}) {
     throw new Error(`${method} ${pathname} failed: ${res.status} ${text.slice(0, 300)}`)
   }
   return res
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/**
+ * Create an in-app notification for the requester so they see "Document request reply received" when they log in.
+ * Non-blocking; errors are logged only.
+ */
+async function notifyRequesterInApp(requesterEmail, projectId, documentId, year, month) {
+  if (!requesterEmail || !isValidEmail(requesterEmail) || !projectId || !documentId) return
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: requesterEmail.trim().toLowerCase() },
+      select: { id: true }
+    })
+    if (!user) return
+    let docName = 'Document'
+    try {
+      const doc = await prisma.documentItem.findUnique({
+        where: { id: documentId },
+        select: { name: true }
+      })
+      if (doc?.name) docName = doc.name
+    } catch (_) {}
+    const monthName = month >= 1 && month <= 12 ? MONTH_NAMES[month - 1] : String(month)
+    const title = 'Document request reply received'
+    const message = `${docName} – ${monthName} ${year}. Reply and attachments are in the project's Document Collection.`
+    const link = `#/projects/${projectId}?tab=documentCollection`
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        type: 'system',
+        title,
+        message,
+        link,
+        metadata: JSON.stringify({ projectId, documentId, year, month, source: 'document-request-reply' })
+      }
+    })
+    console.log('document-request-reply: in-app notification created for requester', requesterEmail.trim())
+  } catch (err) {
+    console.warn('document-request-reply: in-app notification error', err.message)
+  }
 }
 
 /**
@@ -807,11 +850,14 @@ async function processReceivedEmail(emailId, apiKey, data) {
 
     console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
 
-    // Forward a copy to the requester (documents@ is not a real mailbox)
+    // Forward a copy to the requester (documents@ is not a real mailbox) and notify in-app
     const requesterEmail = mapping.requesterEmail
     if (requesterEmail && isValidEmail(requesterEmail)) {
       forwardReplyToRequester(apiKey, email, requesterEmail, uploaded.length).catch((e) =>
         console.warn('document-request-reply: forward to requester', e.message)
+      )
+      notifyRequesterInApp(requesterEmail, projectId, itemId, year, month).catch((e) =>
+        console.warn('document-request-reply: in-app notify', e.message)
       )
     }
   } catch (e) {
