@@ -3652,14 +3652,14 @@ Abcotronics`;
             setReplyBody('');
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
-        // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send
+        // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send. Returns a promise.
         const fetchEmailActivity = useCallback(() => {
             if (!ctx?.doc?.id || !ctx?.month || project?.id == null || selectedYear == null) {
                 setEmailActivity({ sent: [], received: [] });
-                return;
+                return Promise.resolve();
             }
             const monthNum = months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
-            if (monthNum == null) return;
+            if (monthNum == null) return Promise.resolve();
             setLoadingActivity(true);
             const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
             const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
@@ -3669,7 +3669,7 @@ Abcotronics`;
                 year: String(selectedYear)
             });
             if (ctx?.section?.id) q.set('sectionId', String(ctx.section.id).trim());
-            fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
+            return fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
                 credentials: 'include',
                 headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -3818,8 +3818,9 @@ Abcotronics`;
                 if (sentList.length > 0) {
                     showEmailSentToast();
                     cancelReply();
-                    setEmailActivity((prev) => ({ ...prev, sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString() }] }));
-                    fetchEmailActivity();
+                    // Refetch activity so the reply appears under Sent below (saved by send-email API)
+                    await fetchEmailActivity();
+                    setTimeout(() => fetchEmailActivity(), 500);
                 }
                 setResult({
                     sent: sentList,
