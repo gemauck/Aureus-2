@@ -474,6 +474,36 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
     const templateDropdownRef = useRef(null);
     
+    // Load users for assignment dropdown
+    useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                if (typeof window.dataService?.getUsers === 'function') {
+                    const list = await window.dataService.getUsers() || [];
+                    if (!cancelled) setUsers(Array.isArray(list) ? list : []);
+                }
+            } catch (e) {
+                if (!cancelled) setUsers([]);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Close assignment dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (assignmentDropdownRef.current && !assignmentDropdownRef.current.contains(event.target)) {
+                setAssignmentOpen(null);
+            }
+        };
+        if (assignmentOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [assignmentOpen]);
+
     // Close template dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -493,6 +523,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
     const [editingTemplate, setEditingTemplate] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
+    const assignmentDropdownRef = useRef(null);
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
     // (POST) instead of trying to update an existing template.
@@ -512,6 +545,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
     const [emailModalContext, setEmailModalContext] = useState(null);
+    // Received email counts per cell (key: `${documentId}-${month}` where month is 1-12) for badge on envelope
+    const [receivedCountByCell, setReceivedCountByCell] = useState({});
+    const previousEmailModalContextRef = useRef(null);
 
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
@@ -528,7 +564,48 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     useEffect(() => {
         selectedCellsRef.current = selectedCells;
     }, [selectedCells]);
-    
+
+    // Fetch received email counts per document/month for the current project and year (badge on envelope)
+    const fetchReceivedCounts = useCallback(() => {
+        if (!project?.id || !selectedYear) {
+            setReceivedCountByCell({});
+            return;
+        }
+        const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+        const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+        fetch(`${base}/api/projects/${project.id}/document-collection-received-counts?year=${selectedYear}`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+        })
+            .then((res) => res.json().catch(() => ({})))
+            .then((json) => {
+                const data = json.data || json;
+                const list = Array.isArray(data.counts) ? data.counts : [];
+                const map = {};
+                list.forEach(({ documentId, month, receivedCount }) => {
+                    if (documentId != null && month != null && receivedCount > 0) {
+                        map[`${String(documentId)}-${Number(month)}`] = receivedCount;
+                    }
+                });
+                setReceivedCountByCell(map);
+            })
+            .catch(() => setReceivedCountByCell({}));
+    }, [project?.id, selectedYear]);
+
+    useEffect(() => {
+        fetchReceivedCounts();
+    }, [fetchReceivedCounts]);
+
+    // When email modal closes, refetch received counts so badge updates after refresh in modal
+    useEffect(() => {
+        const wasOpen = previousEmailModalContextRef.current != null;
+        previousEmailModalContextRef.current = emailModalContext;
+        if (wasOpen && emailModalContext == null) {
+            fetchReceivedCounts();
+        }
+    }, [emailModalContext, fetchReceivedCounts]);
+
     // ============================================================
     // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
     // ============================================================
@@ -1683,7 +1760,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         id: Date.now(),
                         ...documentData,
                         collectionStatus: documentData.collectionStatus || {},
-                        comments: documentData.comments || {}
+                        comments: documentData.comments || {},
+                        assignedTo: documentData.assignedTo ?? []
                     };
                     return {
                         ...section,
@@ -1697,6 +1775,61 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
+    };
+
+    const normalizeAssignedTo = (doc) => {
+        if (!doc) return [];
+        const raw = doc.assignedTo;
+        if (Array.isArray(raw)) return raw.filter(Boolean);
+        if (typeof raw === 'string') {
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+            } catch (_) {
+                return raw.trim() ? [raw] : [];
+            }
+        }
+        return [];
+    };
+
+    const getAssigneeLabel = (identifier) => {
+        if (identifier == null || identifier === '') return 'Unknown';
+        const str = String(identifier).trim();
+        const user = users.find(u => {
+            if (!u) return false;
+            const id = u.id || u._id;
+            const name = (u.name || u.fullName || u.email || '').toString().trim();
+            const email = (u.email || '').toString().trim().toLowerCase();
+            if (id && str === String(id)) return true;
+            if (name && (str === name || str.toLowerCase() === name.toLowerCase())) return true;
+            if (email && str.toLowerCase() === email) return true;
+            if (id && str === `id:${id}`) return true;
+            if (email && str === `email:${email}`) return true;
+            return false;
+        });
+        return user ? (user.name || user.fullName || user.email || str) : str;
+    };
+
+    const getUserIdentifier = (user) => {
+        if (!user) return null;
+        if (user.id) return user.id;
+        if (user._id) return user._id;
+        if (user.email) return String(user.email).toLowerCase();
+        return (user.name || user.fullName || '').toString().trim() || null;
+    };
+
+    const handleAssignmentChange = (sectionId, docId, newAssignedTo) => {
+        setSections(prev => prev.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    if (String(doc.id) !== String(docId)) return doc;
+                    return { ...doc, assignedTo: Array.isArray(newAssignedTo) ? newAssignedTo : [] };
+                })
+            };
+        }));
+        setAssignmentOpen(null);
     };
     
     const handleDeleteDocument = (sectionId, documentId, event) => {
@@ -3214,22 +3347,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     </select>
                     {/* Right side: email above, comments below - stacked with gap so they never overlap */}
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
-                        {!isMonthlyDataReview && (
-                            <button
-                                type="button"
-                                data-email-cell={cellKey}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setEmailModalContext({ section, doc, month });
-                                }}
-                                className="text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
-                                title="Request documents via email"
-                                aria-label="Request documents via email"
-                            >
-                                <i className="fas fa-envelope text-[10px]"></i>
-                            </button>
-                        )}
+                        {!isMonthlyDataReview && (() => {
+                            const monthNum = months.indexOf(month) + 1;
+                            const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
+                            const hasReceived = receivedCount > 0;
+                            return (
+                                <button
+                                    type="button"
+                                    data-email-cell={cellKey}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setEmailModalContext({ section, doc, month });
+                                    }}
+                                    className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
+                                    title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
+                                    aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
+                                >
+                                    <i className="fas fa-envelope text-[10px]"></i>
+                                    {hasReceived && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full min-w-[1rem] h-4 px-1 flex items-center justify-center font-bold">
+                                            {receivedCount}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })()}
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -5578,6 +5721,76 @@ Abcotronics`;
                                                                 );
                                                             })()}
                                                         </div>
+                                                            {/* Assigned to: chips + Assign button */}
+                                                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                                <span className="text-[10px] text-gray-500 mr-0.5">Assigned to:</span>
+                                                                {normalizeAssignedTo(doc).map((uid, i) => (
+                                                                    <span
+                                                                        key={`${doc.id}-${i}-${uid}`}
+                                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-800 text-[10px]"
+                                                                    >
+                                                                        {getAssigneeLabel(uid)}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const next = normalizeAssignedTo(doc).filter((_, j) => j !== i);
+                                                                                handleAssignmentChange(section.id, doc.id, next);
+                                                                            }}
+                                                                            className="text-primary-600 hover:text-primary-800"
+                                                                            aria-label="Remove assignee"
+                                                                        >
+                                                                            <i className="fas fa-times text-[8px]"></i>
+                                                                        </button>
+                                                                    </span>
+                                                                ))}
+                                                                <div className="relative inline-block" ref={assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id ? assignmentDropdownRef : null}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setAssignmentOpen(prev => (prev?.sectionId === section.id && prev?.docId === doc.id) ? null : { sectionId: section.id, docId: doc.id });
+                                                                        }}
+                                                                        className="inline-flex items-center gap-1 text-[10px] text-primary-600 hover:text-primary-700 hover:underline"
+                                                                    >
+                                                                        <i className="fas fa-user-plus"></i>
+                                                                        <span>Assign</span>
+                                                                    </button>
+                                                                    {assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id && (
+                                                                        <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                                                                            {users.length === 0 ? (
+                                                                                <div className="px-3 py-2 text-[10px] text-gray-500">No users loaded</div>
+                                                                            ) : (
+                                                                                users
+                                                                                    .filter(u => u && (u.name || u.email || u.fullName))
+                                                                                    .sort((a, b) => ((a.name || a.email || a.fullName || '').toString().toLowerCase()).localeCompare((b.name || b.email || b.fullName || '').toString().toLowerCase()))
+                                                                                    .map(user => {
+                                                                                        const ident = getUserIdentifier(user);
+                                                                                        const label = user.name || user.fullName || user.email || 'Unknown';
+                                                                                        const current = normalizeAssignedTo(doc);
+                                                                                        const isChecked = ident && current.some(c => String(c) === String(ident) || getAssigneeLabel(c) === label);
+                                                                                        return (
+                                                                                            <label key={ident || label} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                                                                                                <input
+                                                                                                    type="checkbox"
+                                                                                                    checked={!!isChecked}
+                                                                                                    onChange={() => {
+                                                                                                        const next = isChecked
+                                                                                                            ? current.filter(c => String(c) !== String(ident) && getAssigneeLabel(c) !== label)
+                                                                                                            : [...current, ident].filter(Boolean);
+                                                                                                        handleAssignmentChange(section.id, doc.id, next);
+                                                                                                    }}
+                                                                                                    className="rounded border-gray-300 text-primary-600"
+                                                                                                />
+                                                                                                <span className="truncate">{label}</span>
+                                                                                            </label>
+                                                                                        );
+                                                                                    })
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                             </div>
                                                     </td>
                                                     {months.map((month) => (
