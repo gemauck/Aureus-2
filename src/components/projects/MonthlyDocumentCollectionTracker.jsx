@@ -3263,7 +3263,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
         const isEmailModalOpenForCell = emailModalContext && emailModalContext.section?.id === section.id && emailModalContext.doc?.id === doc.id && emailModalContext.month === month;
-        const showCellActions = hoveredStatusCell === cellKey || isPopupOpen || isEmailModalOpenForCell;
+        // Always show comment/email actions (no hover gating).
+        const showCellActions = true;
         
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
         let cellBackgroundClass = statusConfig 
