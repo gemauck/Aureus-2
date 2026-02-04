@@ -111,10 +111,16 @@ async function handler(req, res) {
   } catch (logErr) {
     console.error('document-collection-email-activity: log query failed (returning empty sent):', logErr.message)
   }
-  // Deduplicate sent: same subject + createdAt within 10s → keep first (avoids 3x same send in UI)
+  // Deduplicate sent: same subject + createdAt within 10s → keep first (avoids 3x same send in UI). Never dedupe replies (Re:) so all replies show.
   if (sent.length > 1) {
     const deduped = []
     for (const s of sent) {
+      const subj = (s.subject || '').trim()
+      const isReply = subj.toLowerCase().startsWith('re:')
+      if (isReply) {
+        deduped.push(s)
+        continue
+      }
       const t = s.createdAt ? new Date(s.createdAt).getTime() : 0
       let skip = false
       for (const other of deduped) {

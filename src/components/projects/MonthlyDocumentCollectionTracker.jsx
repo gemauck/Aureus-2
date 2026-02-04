@@ -3666,7 +3666,8 @@ Abcotronics`;
             const q = new URLSearchParams({
                 documentId: String(ctx.doc.id).trim(),
                 month: String(monthNum),
-                year: String(selectedYear)
+                year: String(selectedYear),
+                _: String(Date.now())
             });
             if (ctx?.section?.id) q.set('sectionId', String(ctx.section.id).trim());
             return fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
@@ -3819,8 +3820,9 @@ Abcotronics`;
                     showEmailSentToast();
                     cancelReply();
                     // Refetch activity so the reply appears under Sent below (saved by send-email API)
+                    await new Promise((r) => setTimeout(r, 200));
                     await fetchEmailActivity();
-                    setTimeout(() => fetchEmailActivity(), 500);
+                    setTimeout(() => fetchEmailActivity(), 600);
                 }
                 setResult({
                     sent: sentList,
