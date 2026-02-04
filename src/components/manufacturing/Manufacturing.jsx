@@ -21,6 +21,28 @@ const normalizeManufacturingTab = (value = 'dashboard') => {
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
 };
 
+// Never throw so caching never breaks loading. Skip cache when over ~2MB to avoid quota.
+const SAFE_STORAGE_MAX_BYTES = 2 * 1024 * 1024;
+
+function safeSetItem(key, value) {
+  try {
+    const str = typeof value === 'string' ? value : JSON.stringify(value);
+    if (str.length > SAFE_STORAGE_MAX_BYTES) {
+      console.warn('⚠️ Skipping cache for', key, '(payload too large:', (str.length / 1024).toFixed(0), 'KB)');
+      return;
+    }
+    localStorage.setItem(key, str);
+  } catch (e) {
+    const isQuota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+    if (isQuota) {
+      console.warn('⚠️ localStorage quota exceeded, skipping cache for', key);
+    } else {
+      console.warn('⚠️ localStorage setItem failed for', key, e?.message || e);
+    }
+    // Never rethrow - caching is optional; UI should still show API data
+  }
+}
+
 // Wrap component definition in try-catch to catch any errors during definition
 let Manufacturing;
 try {
@@ -273,10 +295,10 @@ try {
         if (userCategories.length > 0) {
           setCategories(userCategories);
           // Update localStorage to only contain user-added categories
-          localStorage.setItem('inventory_categories', JSON.stringify(userCategories));
+          safeSetItem('inventory_categories', JSON.stringify(userCategories));
         } else if (loadedCategories.length > 0) {
           // Clear localStorage if it only had default categories
-          localStorage.setItem('inventory_categories', JSON.stringify([]));
+          safeSetItem('inventory_categories', JSON.stringify([]));
         }
 
         // Load box numbers from localStorage (merge with any from inventory after API load)
@@ -303,7 +325,7 @@ try {
               .then(locResponse => {
                 const locData = locResponse?.data?.locations || [];
                 setStockLocations(locData);
-                localStorage.setItem('stock_locations', JSON.stringify(locData));
+                safeSetItem('stock_locations', JSON.stringify(locData));
                 
                 // Ensure main warehouse exists (LOC001)
                 const mainWarehouse = locData.find(loc => loc.code === 'LOC001');
@@ -334,7 +356,7 @@ try {
                 const invData = invResponse?.data?.inventory || [];
                 const processed = invData.map(item => ({ ...item, id: item.id }));
                 setInventory(processed);
-                localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
+                safeSetItem('manufacturing_inventory', JSON.stringify(processed));
                 return { type: 'inventory', data: processed };
               })
               .catch(error => {
@@ -356,7 +378,7 @@ try {
                   components: Array.isArray(bom.components) ? bom.components : (typeof bom.components === 'string' ? JSON.parse(bom.components || '[]') : [])
                 }));
                 setBoms(processed);
-                localStorage.setItem('manufacturing_boms', JSON.stringify(processed));
+                safeSetItem('manufacturing_boms', JSON.stringify(processed));
                 return { type: 'boms', data: processed };
               })
               .catch(error => {
@@ -374,7 +396,7 @@ try {
                 const ordersData = ordersResponse?.data?.productionOrders || [];
                 const processed = ordersData.map(order => ({ ...order, id: order.id }));
                 setProductionOrders(processed);
-                localStorage.setItem('manufacturing_production_orders', JSON.stringify(processed));
+                safeSetItem('manufacturing_production_orders', JSON.stringify(processed));
                 return { type: 'productionOrders', data: processed };
               })
               .catch(error => {
@@ -392,7 +414,7 @@ try {
                 const ordersData = ordersResponse?.data?.salesOrders || [];
                 const processed = ordersData.map(order => ({ ...order, id: order.id }));
                 setSalesOrders(processed);
-                localStorage.setItem('manufacturing_sales_orders', JSON.stringify(processed));
+                safeSetItem('manufacturing_sales_orders', JSON.stringify(processed));
                 return { type: 'salesOrders', data: processed };
               })
               .catch(error => {
@@ -418,7 +440,7 @@ try {
                   return orderWithParsedItems;
                 });
                 setPurchaseOrders(processed);
-                localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(processed));
+                safeSetItem('manufacturing_purchase_orders', JSON.stringify(processed));
                 return { type: 'purchaseOrders', data: processed };
               })
               .catch(error => {
@@ -462,7 +484,7 @@ try {
                 }, {});
                 
                 setMovements(processed);
-                localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+                safeSetItem('manufacturing_movements', JSON.stringify(processed));
                 return { type: 'movements', data: processed };
               })
               .catch(error => {
@@ -485,7 +507,7 @@ try {
                   updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
                 }));
                 setSuppliers(processed);
-                localStorage.setItem('manufacturing_suppliers', JSON.stringify(processed));
+                safeSetItem('manufacturing_suppliers', JSON.stringify(processed));
                 return { type: 'suppliers', data: processed };
               })
               .catch(error => {
@@ -581,7 +603,7 @@ try {
     setBoxNumbers(prev => {
       const merged = [...new Set([...prev, ...fromInv])].sort((a, b) => a.localeCompare(b));
       if (merged.length > prev.length) {
-        localStorage.setItem('inventory_box_numbers', JSON.stringify(merged));
+        safeSetItem('inventory_box_numbers', JSON.stringify(merged));
       }
       return merged;
     });
@@ -603,7 +625,7 @@ try {
               const invData = invResponse?.data?.inventory || [];
               const processed = invData.map(item => ({ ...item, id: item.id }));
               setInventory(processed);
-              localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
+              safeSetItem('manufacturing_inventory', JSON.stringify(processed));
               return { type: 'inventory', data: processed };
             })
             .catch(error => ({ type: 'inventory', error }))
@@ -622,7 +644,7 @@ try {
                 components: Array.isArray(bom.components) ? bom.components : (typeof bom.components === 'string' ? JSON.parse(bom.components || '[]') : [])
               }));
               setBoms(processed);
-              localStorage.setItem('manufacturing_boms', JSON.stringify(processed));
+              safeSetItem('manufacturing_boms', JSON.stringify(processed));
               return { type: 'boms', data: processed };
             })
             .catch(error => ({ type: 'boms', error }))
@@ -637,7 +659,7 @@ try {
               const ordersData = ordersResponse?.data?.productionOrders || [];
               const processed = ordersData.map(order => ({ ...order, id: order.id }));
               setProductionOrders(processed);
-              localStorage.setItem('manufacturing_production_orders', JSON.stringify(processed));
+              safeSetItem('manufacturing_production_orders', JSON.stringify(processed));
               return { type: 'productionOrders', data: processed };
             })
             .catch(error => ({ type: 'productionOrders', error }))
@@ -652,7 +674,7 @@ try {
               const movementsData = movementsResponse?.data?.movements || [];
               const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
               setMovements(processed);
-              localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+              safeSetItem('manufacturing_movements', JSON.stringify(processed));
               return { type: 'movements', data: processed };
             })
             .catch(error => ({ type: 'movements', error }))
@@ -672,7 +694,7 @@ try {
                 updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
               }));
               setSuppliers(processed);
-              localStorage.setItem('manufacturing_suppliers', JSON.stringify(processed));
+              safeSetItem('manufacturing_suppliers', JSON.stringify(processed));
               return { type: 'suppliers', data: processed };
             })
             .catch(error => ({ type: 'suppliers', error }))
@@ -1505,7 +1527,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           const invResponse = await window.DatabaseAPI.getInventory(selectedLocationId !== 'all' ? selectedLocationId : null);
           if (invResponse?.data?.items) {
             setInventory(invResponse.data.items);
-            localStorage.setItem('manufacturing_inventory', JSON.stringify(invResponse.data.items));
+            safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.items));
           }
         } catch (refreshError) {
           console.warn('Failed to refresh inventory after upload:', refreshError);
@@ -1871,7 +1893,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           const processed = invData.map(item => ({ ...item, id: item.id }));
           
           setInventory(processed);
-          localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
+          safeSetItem('manufacturing_inventory', JSON.stringify(processed));
           
           // Restore focus after state update if user was typing
           if (wasInputFocused) {
@@ -1917,7 +1939,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           const locResponse = await window.DatabaseAPI.getStockLocations();
           const locData = locResponse?.data?.locations || [];
           setStockLocations(locData);
-          localStorage.setItem('stock_locations', JSON.stringify(locData));
+          safeSetItem('stock_locations', JSON.stringify(locData));
         } catch (error) {
           console.error('Error loading stock locations:', error);
         }
@@ -1932,7 +1954,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const updatedLocations = event.detail?.locations || [];
       if (updatedLocations.length > 0) {
         setStockLocations(updatedLocations);
-        localStorage.setItem('stock_locations', JSON.stringify(updatedLocations));
+        safeSetItem('stock_locations', JSON.stringify(updatedLocations));
       }
     };
 
@@ -3527,7 +3549,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (response?.data?.inventory) {
           const updatedInventory = response.data.inventory.map(item => ({ ...item, id: item.id }));
           setInventory(updatedInventory);
-          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         }
       }
     } catch (error) {
@@ -3744,7 +3766,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (response?.data?.item) {
           const updatedInventory = inventory.map(item => getInventoryItemId(item) === targetId ? response.data.item : item);
           setInventory(updatedInventory);
-          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         }
       } else {
         // Create new - include quantity for initial stock, but not SKU (auto-generated)
@@ -3777,7 +3799,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (response?.data?.item) {
           const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
           setInventory(updatedInventory);
-          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         }
       }
 
@@ -3799,7 +3821,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (response?.data?.item) {
         const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
         setInventory(updatedInventory);
-        localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+        safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
       }
       
       // Close both modals
@@ -3828,7 +3850,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (trimmedName && !categories.includes(trimmedName)) {
       const updatedCategories = [...categories, trimmedName];
       setCategories(updatedCategories);
-      localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
+      safeSetItem('inventory_categories', JSON.stringify(updatedCategories));
       setFormData({ ...formData, category: trimmedName });
       setNewCategoryName('');
       setShowCategoryInput(false);
@@ -3842,7 +3864,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (trimmed && !boxNumbers.includes(trimmed)) {
       const updated = [...boxNumbers, trimmed].sort((a, b) => a.localeCompare(b));
       setBoxNumbers(updated);
-      localStorage.setItem('inventory_box_numbers', JSON.stringify(updated));
+      safeSetItem('inventory_box_numbers', JSON.stringify(updated));
       setFormData({ ...formData, boxNumber: trimmed });
       setNewBoxNumber('');
       setShowBoxNumberInput(false);
@@ -3855,7 +3877,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (confirm(`Remove "${boxToDelete}" from the box number list? Items using it will keep the value.`)) {
       const updated = boxNumbers.filter(b => b !== boxToDelete);
       setBoxNumbers(updated);
-      localStorage.setItem('inventory_box_numbers', JSON.stringify(updated));
+      safeSetItem('inventory_box_numbers', JSON.stringify(updated));
       if (formData.boxNumber === boxToDelete) {
         setFormData({ ...formData, boxNumber: updated.length > 0 ? updated[0] : '' });
       }
@@ -3866,7 +3888,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (confirm(`Are you sure you want to delete category "${categoryToDelete}"? This will only remove it from the list. Items using this category will keep it.`)) {
       const updatedCategories = categories.filter(cat => cat !== categoryToDelete);
       setCategories(updatedCategories);
-      localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
+      safeSetItem('inventory_categories', JSON.stringify(updatedCategories));
       if (formData.category === categoryToDelete) {
         setFormData({ ...formData, category: updatedCategories.length > 0 ? updatedCategories[0] : '' });
       }
@@ -3885,7 +3907,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         await safeCallAPI('deleteInventoryItem', itemId);
         const updatedInventory = inventory.filter(item => getInventoryItemId(item) !== itemId);
         setInventory(updatedInventory);
-        localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+        safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         setShowModal(false);
       } catch (error) {
         console.error('Error deleting inventory item:', error);
@@ -3940,7 +3962,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           };
           const updatedBoms = boms.map(bom => bom.id === selectedItem.id ? updatedBom : bom);
           setBoms(updatedBoms);
-          localStorage.setItem('manufacturing_boms', JSON.stringify(updatedBoms));
+          safeSetItem('manufacturing_boms', JSON.stringify(updatedBoms));
         }
       } else {
         // Create new
@@ -3952,7 +3974,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           };
           const updatedBoms = [...boms, newBom];
           setBoms(updatedBoms);
-          localStorage.setItem('manufacturing_boms', JSON.stringify(updatedBoms));
+          safeSetItem('manufacturing_boms', JSON.stringify(updatedBoms));
         }
       }
 
@@ -3972,7 +3994,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         await safeCallAPI('deleteBOM', bomId);
         const updatedBoms = boms.filter(bom => bom.id !== bomId);
         setBoms(updatedBoms);
-        localStorage.setItem('manufacturing_boms', JSON.stringify(updatedBoms));
+        safeSetItem('manufacturing_boms', JSON.stringify(updatedBoms));
         setShowModal(false);
       } catch (error) {
         console.error('Error deleting BOM:', error);
@@ -3987,7 +4009,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         await safeCallAPI('deleteProductionOrder', orderId);
         const updatedOrders = productionOrders.filter(order => order.id !== orderId);
         setProductionOrders(updatedOrders);
-        localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
       } catch (error) {
         console.error('Error deleting production order:', error);
         alert('Failed to delete production order. Please try again.');
@@ -4001,7 +4023,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         await safeCallAPI('deleteSalesOrder', orderId);
         const updatedOrders = salesOrders.filter(order => order.id !== orderId);
         setSalesOrders(updatedOrders);
-        localStorage.setItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
       } catch (error) {
         console.error('Error deleting sales order:', error);
         alert('Failed to delete sales order. Please try again.');
@@ -4155,7 +4177,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     synced: false
                   });
-                  localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                  safeSetItem('manufacturing_movements', JSON.stringify(cachedMovements));
                 }
               } else {
                 // Offline mode - store in localStorage for later sync
@@ -4165,7 +4187,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                   synced: false
                 });
-                localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                safeSetItem('manufacturing_movements', JSON.stringify(cachedMovements));
               }
             }
             
@@ -4175,7 +4197,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 const invResponse = await window.DatabaseAPI.getInventory();
                 const invData = invResponse?.data?.inventory || [];
                 setInventory(invData);
-                localStorage.setItem('manufacturing_inventory', JSON.stringify(invData));
+                safeSetItem('manufacturing_inventory', JSON.stringify(invData));
               } catch (invError) {
                 console.error('❌ Failed to refresh inventory:', invError);
               }
@@ -4191,7 +4213,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
         const updatedOrders = [...salesOrders, { ...createdOrder, id: createdOrder.id }];
         setSalesOrders(updatedOrders);
-        localStorage.setItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
         alert('Sales order created successfully! Stock movements have been recorded.');
       } else {
         alert('Sales order created but response data incomplete. Please refresh to verify.');
@@ -4313,7 +4335,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
         const updatedOrders = [...purchaseOrders, orderWithParsedItems];
         setPurchaseOrders(updatedOrders);
-        localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
         alert('Purchase order created successfully! Mark it as "received" to record stock movements and update inventory.');
         
         setShowModal(false);
@@ -4336,7 +4358,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         await safeCallAPI('deletePurchaseOrder', orderId);
         const updatedOrders = purchaseOrders.filter(order => order.id !== orderId);
         setPurchaseOrders(updatedOrders);
-        localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
       } catch (error) {
         console.error('Error deleting purchase order:', error);
         alert('Failed to delete purchase order. Please try again.');
@@ -4374,7 +4396,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         // Remove from local state
         const updatedMovements = movements.filter(movement => movement.id !== movementId);
         setMovements(updatedMovements);
-        localStorage.setItem('manufacturing_movements', JSON.stringify(updatedMovements));
+        safeSetItem('manufacturing_movements', JSON.stringify(updatedMovements));
         
       } catch (error) {
         console.error('❌ Error deleting stock movement:', error);
@@ -4449,7 +4471,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const movementsResponse = await window.DatabaseAPI.getStockMovements();
         const movementsData = movementsResponse?.data?.movements || [];
         setMovements(movementsData);
-        localStorage.setItem('manufacturing_movements', JSON.stringify(movementsData));
+        safeSetItem('manufacturing_movements', JSON.stringify(movementsData));
       }
     } catch (error) {
       console.error('❌ Error purging stock movements:', error);
@@ -4609,7 +4631,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           id: movement.id
         }));
         setMovements(processedMovements);
-        localStorage.setItem('manufacturing_movements', JSON.stringify(processedMovements));
+        safeSetItem('manufacturing_movements', JSON.stringify(processedMovements));
         
         // Refresh inventory
         try {
@@ -4617,7 +4639,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           const invData = invResponse?.data?.inventory || [];
           const processedInventory = invData.map(item => ({ ...item, id: item.id }));
           setInventory(processedInventory);
-          localStorage.setItem('manufacturing_inventory', JSON.stringify(processedInventory));
+          safeSetItem('manufacturing_inventory', JSON.stringify(processedInventory));
         } catch (invError) {
           console.warn('⚠️ Failed to refresh inventory, but movement was saved:', invError);
         }
@@ -4709,7 +4731,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }
 
         setSuppliers(updatedSuppliers);
-        localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+        safeSetItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
 
         setShowModal(false);
         setSelectedItem(null);
@@ -4730,7 +4752,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           const updatedSuppliers = isEditingSupplier
             ? prev.map(supplier => (supplier.id === normalizedSupplier.id ? normalizedSupplier : supplier))
             : [...prev, normalizedSupplier];
-          localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+          safeSetItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
           return updatedSuppliers;
         });
       }
@@ -4747,7 +4769,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
           }));
           setSuppliers(processedSuppliers);
-          localStorage.setItem('manufacturing_suppliers', JSON.stringify(processedSuppliers));
+          safeSetItem('manufacturing_suppliers', JSON.stringify(processedSuppliers));
         } catch (refreshError) {
           console.warn('⚠️ Failed to refresh suppliers after save, using local optimistic data:', refreshError);
         }
@@ -4790,7 +4812,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           // Fallback to localStorage
           const updatedSuppliers = suppliers.filter(s => s.id !== supplierId);
           setSuppliers(updatedSuppliers);
-          localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+          safeSetItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
         }
         setShowModal(false);
       } catch (error) {
@@ -4801,7 +4823,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           // Supplier already deleted on server, just update local state
           const updatedSuppliers = suppliers.filter(s => s.id !== supplierId);
           setSuppliers(updatedSuppliers);
-          localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+          safeSetItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
           setShowModal(false);
         } else {
           // Other errors - show alert
@@ -4872,7 +4894,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (response?.data?.order) {
         const updatedOrders = [...productionOrders, { ...response.data.order, id: response.data.order.id }];
         setProductionOrders(updatedOrders);
-        localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
         alert('Production order created successfully!');
       } else {
         console.warn('⚠️ No order in response:', response);
@@ -4918,14 +4940,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           order.id === selectedItem.id ? response.data.order : order
         );
         setProductionOrders(updatedOrders);
-        localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
+        safeSetItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
         
         // Always refresh inventory after production order update to show latest stock levels
         try {
           const inventoryResponse = await safeCallAPI('getInventory');
           if (inventoryResponse?.data?.inventory) {
             setInventory(inventoryResponse.data.inventory);
-            localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryResponse.data.inventory));
+            safeSetItem('manufacturing_inventory', JSON.stringify(inventoryResponse.data.inventory));
           }
         } catch (invError) {
           console.error('⚠️ Failed to refresh inventory:', invError);
@@ -7225,7 +7247,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                               order.id === selectedItem.id ? updatedOrder : order
                             );
                             setPurchaseOrders(updatedOrders);
-                            localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+                            safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
                             setSelectedItem(updatedOrder);
                             
                             // Refresh inventory to show updated stock levels
@@ -7233,7 +7255,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                               const invResponse = await safeCallAPI('getInventory');
                               if (invResponse?.data?.inventory) {
                                 setInventory(invResponse.data.inventory);
-                                localStorage.setItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
+                                safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
                               }
                             } catch (invError) {
                               console.warn('⚠️ Failed to refresh inventory:', invError);
@@ -8655,7 +8677,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           
           const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
           setMovements(processed);
-          localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+          safeSetItem('manufacturing_movements', JSON.stringify(processed));
           alert(`✅ Refreshed! Found ${movementsData.length} stock movements. Types: ${Object.keys(typeBreakdown).join(', ')}`);
         }
       } catch (error) {
@@ -8966,7 +8988,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (response?.data?.item) {
           const updatedInventory = inventory.map(invItem => getInventoryItemId(invItem) === targetId ? response.data.item : invItem);
           setInventory(updatedInventory);
-          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
           setViewingInventoryItemDetail(response.data.item);
           setIsEditingInventoryItem(false);
           alert('Item updated successfully!');
@@ -8982,7 +9004,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (trimmedName && !categories.includes(trimmedName)) {
         const updatedCategories = [...categories, trimmedName];
         setCategories(updatedCategories);
-        localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
+        safeSetItem('inventory_categories', JSON.stringify(updatedCategories));
         setEditFormData({ ...editFormData, category: trimmedName });
         setLocalNewCategoryName('');
         setLocalShowCategoryInput(false);

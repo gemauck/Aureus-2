@@ -1,4 +1,19 @@
 // Local Storage Utilities
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch (e) {
+    const isQuota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+    if (isQuota) {
+      console.warn('⚠️ localStorage quota exceeded, skipping cache for', key);
+    } else {
+      console.warn('⚠️ localStorage setItem failed for', key, e?.message || e);
+    }
+    // Never rethrow - caching is optional
+  }
+}
+
 const storage = {
     // Auth Token
     getToken: () => {
@@ -111,7 +126,7 @@ const storage = {
     },
     
     setClients: (clients) => {
-        localStorage.setItem('abcotronics_clients', JSON.stringify(clients));
+        safeSetItem('abcotronics_clients', clients);
     },
     
     removeClients: () => {
@@ -130,7 +145,7 @@ const storage = {
     },
     
     setLeads: (leads) => {
-        localStorage.setItem('abcotronics_leads', JSON.stringify(leads));
+        safeSetItem('abcotronics_leads', leads);
     },
     
     removeLeads: () => {
@@ -149,7 +164,7 @@ const storage = {
     },
     
     setProjects: (projects) => {
-        localStorage.setItem('abcotronics_projects', JSON.stringify(projects));
+        safeSetItem('abcotronics_projects', projects);
     },
     
     // Time Entries

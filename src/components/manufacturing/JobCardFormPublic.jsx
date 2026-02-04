@@ -681,7 +681,15 @@ const JobCardFormPublic = () => {
               
               if (inventoryItems.length > 0) {
                 setInventory(inventoryItems);
-                localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+                try {
+                  localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+                } catch (e) {
+                  if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+                    console.warn('⚠️ localStorage quota exceeded, skipping manufacturing_inventory cache');
+                  } else {
+                    throw e;
+                  }
+                }
               }
             } else {
               console.warn('⚠️ JobCardFormPublic: Public inventory API returned error:', response.status);
@@ -694,7 +702,15 @@ const JobCardFormPublic = () => {
                     const inventoryItems = response.data.inventory || response.data || [];
                     if (inventoryItems.length > 0) {
                       setInventory(inventoryItems);
-                      localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+                      try {
+                        localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+                      } catch (e) {
+                        if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+                          console.warn('⚠️ localStorage quota exceeded, skipping manufacturing_inventory cache');
+                        } else {
+                          throw e;
+                        }
+                      }
                     }
                   }
                 } catch (authError) {
@@ -1117,7 +1133,15 @@ const JobCardFormPublic = () => {
               id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               synced: false
             });
-            localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+            try {
+              localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+            } catch (e) {
+              if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+                console.warn('⚠️ localStorage quota exceeded, skipping manufacturing_movements cache');
+              } else {
+                throw e;
+              }
+            }
             
             if (isOnline && window.DatabaseAPI?.createStockMovement) {
               window.DatabaseAPI.createStockMovement(movementData).catch(err => {
