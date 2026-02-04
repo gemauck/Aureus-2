@@ -3365,9 +3365,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                     aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                 >
-                                    <i className="fas fa-envelope text-[10px]"></i>
+                                    <i className="fas fa-envelope text-xs"></i>
                                     {hasReceived && (
-                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full min-w-[1rem] h-4 px-1 flex items-center justify-center font-bold">
+                                        <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none">
                                             {receivedCount}
                                         </span>
                                     )}
