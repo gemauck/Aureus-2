@@ -522,7 +522,11 @@ async function handler(req, res) {
     // Respond immediately to avoid Resend timeout (10–30s); process in background
     res.status(200).json({ received: true, processing: 'async' })
     const dataCopy = data ? JSON.parse(JSON.stringify(data)) : {}
-    setImmediate(() => processReceivedEmail(emailId, apiKey, dataCopy).catch((e) => console.error('document-request-reply: background error', e)))
+    setImmediate(() => {
+      Promise.resolve()
+        .then(() => processReceivedEmail(emailId, apiKey, dataCopy))
+        .catch((e) => console.error('document-request-reply: background error', e))
+    })
     return
   } catch (e) {
     console.error('POST /api/inbound/document-request-reply error:', e)
