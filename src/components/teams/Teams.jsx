@@ -113,10 +113,20 @@ const Teams = () => {
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch teams: ${response.status} ${response.statusText}`);
+                    const status = response.status;
+                    const msg = status === 502 ? 'Server unavailable (502). Try again in a moment.' :
+                        status === 503 ? 'Service temporarily unavailable.' :
+                        status === 504 ? 'Request timed out.' :
+                        `Failed to fetch teams: ${status} ${response.statusText}`;
+                    throw new Error(msg);
                 }
 
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    throw new Error('Invalid response from server. Try again.');
+                }
                 if (data.data && Array.isArray(data.data.teams)) {
                     // Format teams to match expected structure
                     const formattedTeams = data.data.teams

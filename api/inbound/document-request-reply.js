@@ -591,27 +591,31 @@ async function processReceivedEmail(emailId, apiKey, data) {
       }
     }
     // Last resort: match by subject. Format: "... – DocumentName – Month Year" (e.g. " – Mining Right – February 2026").
-    // Accept hyphen, en-dash, em-dash ([-–—]) in case email clients normalize them.
+    // Reply subject is often "Re: Abco Document / Data request: ProjectName - DocumentName - February 2026".
+    // Use the LAST " - Month Year" so we get DocumentName (segment before it), not ProjectName.
     if (!mapping) {
       const subject = (email.subject || '').toString()
       const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
       let fallbackMonth = null
       let fallbackYear = null
       let docNameFromSubject = null
-      const dash = '[\\s\\u002D\\u2013\\u2014]+' // hyphen, en-dash, em-dash with optional spaces
+      const dash = '[\\s\\u002D\\u2013\\u2014]+'
+      let lastMatchIndex = -1
       for (let i = 0; i < monthNames.length; i++) {
-        const re = new RegExp(`${dash}([^\\u002D\\u2013\\u2014]+)${dash}${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
-        const m = subject.match(re)
-        if (m) {
-          docNameFromSubject = m[1].trim()
-          fallbackMonth = i + 1
-          fallbackYear = parseInt(m[2], 10)
-          break
+        const re = new RegExp(`${dash}([^\\u002D\\u2013\\u2014]+)${dash}${monthNames[i]}\\s+(20\\d{2})\\b`, 'gi')
+        let m
+        while ((m = re.exec(subject)) !== null) {
+          if (m.index > lastMatchIndex) {
+            lastMatchIndex = m.index
+            docNameFromSubject = m[1].trim()
+            fallbackMonth = i + 1
+            fallbackYear = parseInt(m[2], 10)
+          }
         }
       }
       if (!fallbackMonth || !fallbackYear) {
         for (let i = 0; i < monthNames.length; i++) {
-          const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
+          const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'gi')
           const m = subject.match(re)
           if (m) {
             fallbackMonth = i + 1

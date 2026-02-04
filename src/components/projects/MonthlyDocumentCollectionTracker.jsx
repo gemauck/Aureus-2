@@ -3523,13 +3523,6 @@ Abcotronics`;
             fetchEmailActivity();
         }, [ctx?.doc?.id, ctx?.month, selectedYear, project?.id, fetchEmailActivity]);
 
-        // Auto-refresh email activity every 5s while modal is open (so replies appear without closing)
-        useEffect(() => {
-            if (!ctx?.doc?.id || !ctx?.month) return;
-            const interval = setInterval(fetchEmailActivity, 5000);
-            return () => clearInterval(interval);
-        }, [ctx?.doc?.id, ctx?.month, fetchEmailActivity]);
-
         const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const addContact = () => {
             const t = newContact.trim();

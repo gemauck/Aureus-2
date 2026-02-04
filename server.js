@@ -2269,17 +2269,25 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }
 app.get(/^\/uploads\//, (req, res) => {
   const pathname = (req.originalUrl || req.url || '').split('?')[0]
-  const subPath = (pathname.replace(/^\/uploads\/?/, '') || '').replace(/^\//, '')
+  let subPath = (pathname.replace(/^\/uploads\/?/, '') || '').replace(/^\//, '')
+  try {
+    subPath = decodeURIComponent(subPath)
+  } catch (_) {
+    return res.status(400).type('text/plain').send('Bad request')
+  }
+  if (subPath.includes('..')) {
+    return res.status(403).type('text/plain').send('Forbidden')
+  }
   const filePath = path.join(uploadsDir, subPath)
   const resolved = path.resolve(filePath)
   const uploadsResolved = path.resolve(uploadsDir)
-  if (!resolved.startsWith(uploadsResolved) || subPath.includes('..')) {
+  if (!resolved.startsWith(uploadsResolved)) {
     return res.status(403).type('text/plain').send('Forbidden')
   }
   res.sendFile(resolved, (err) => {

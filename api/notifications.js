@@ -224,128 +224,136 @@ export async function createNotificationForUser(targetUserId, type, title, messa
 }
 
 async function handler(req, res) {
-    // JWT payload uses 'sub' for user ID, not 'id'
-    const userId = req.user?.sub || req.user?.id;
-    
-    if (!userId) {
-        console.error('❌ Notifications: No user ID found in token. req.user =', req.user);
-        return unauthorized(res, 'Authentication required');
-    }
+    const safeSend = (fn) => {
+        if (!res.headersSent && !res.writableEnded) return fn();
+    };
+    try {
+        // JWT payload uses 'sub' for user ID, not 'id'
+        const userId = req.user?.sub || req.user?.id;
 
-    if (req.method === 'GET') {
-        try {
-            // Get query parameters
-            const read = req.query.read;
-            const limit = parseInt(req.query.limit) || 50;
-            const offset = parseInt(req.query.offset) || 0;
-            
-            // Build where clause
-            const where = { userId };
-            if (read !== undefined) {
-                where.read = read === 'true';
-            }
-            
-            // Fetch notifications
-            const notifications = await prisma.notification.findMany({
-                where,
-                orderBy: { createdAt: 'desc' },
-                take: limit,
-                skip: offset
-            });
-            
-            // Count total unread notifications
-            const unreadCount = await prisma.notification.count({
-                where: { userId, read: false }
-            });
-            
-            return ok(res, {
-                notifications,
-                unreadCount
-            });
-        } catch (error) {
-            const isConnError = logDatabaseError(error, 'getting notifications');
-            if (isConnError) {
-                return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.');
-            }
-            return serverError(res, 'Failed to get notifications', error.message);
+        if (!userId) {
+            console.error('❌ Notifications: No user ID found in token. req.user =', req.user);
+            return unauthorized(res, 'Authentication required');
         }
-    }
-    
-    if (req.method === 'PATCH') {
-        try {
-            const body = req.body || await parseJsonBody(req);
-            const { read, notificationIds } = body;
-            
-            if (read === undefined || notificationIds === undefined) {
-                return badRequest(res, 'Missing required fields: read, notificationIds');
-            }
-            
-            // Mark notifications as read/unread
-            await prisma.notification.updateMany({
-                where: {
-                    id: { in: notificationIds },
-                    userId // Ensure user can only update their own notifications
-                },
-                data: { read }
-            });
-            
-            return ok(res, { success: true });
-        } catch (error) {
-            console.error('Update notifications error:', error);
-            return serverError(res, 'Failed to update notifications', error.message);
-        }
-    }
-    
-    if (req.method === 'POST') {
-        try {
-            let body = req.body || await parseJsonBody(req);
-            if (body && typeof body === 'object' && body.data && !body.userId && !body.type) {
-                body = body.data;
-            }
-            const { userId: targetUserId, type, title, message, link, metadata } = body || {};
-            if (!targetUserId || !type || !title || !message) {
-                console.error('❌ POST /notifications - Missing required fields:', { hasUserId: !!targetUserId, hasType: !!type, hasTitle: !!title, hasMessage: !!message });
-                return badRequest(res, 'Missing required fields: userId, type, title, message');
-            }
-            const result = await createNotificationForUser(targetUserId, type, title, message, link ?? null, metadata ?? null);
-            if (!result) return badRequest(res, 'User not found');
-            return ok(res, result);
-        } catch (error) {
-            console.error('❌ POST /notifications - Error creating notification:', error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                code: error.code,
-                meta: error.meta
-            });
-            return serverError(res, 'Failed to create notification', error.message);
-        }
-    }
-    
-    if (req.method === 'DELETE') {
-        try {
-            const { notificationIds } = req.body;
-            
-            if (!notificationIds || !Array.isArray(notificationIds)) {
-                return badRequest(res, 'Missing required field: notificationIds (array)');
-            }
-            
-            // Delete notifications
-            await prisma.notification.deleteMany({
-                where: {
-                    id: { in: notificationIds },
-                    userId // Ensure user can only delete their own notifications
+
+        if (req.method === 'GET') {
+            try {
+                // Get query parameters
+                const read = req.query.read;
+                const limit = parseInt(req.query.limit) || 50;
+                const offset = parseInt(req.query.offset) || 0;
+
+                // Build where clause
+                const where = { userId };
+                if (read !== undefined) {
+                    where.read = read === 'true';
                 }
-            });
-            
-            return ok(res, { success: true });
-        } catch (error) {
-            console.error('Delete notifications error:', error);
-            return serverError(res, 'Failed to delete notifications', error.message);
+
+                // Fetch notifications
+                const notifications = await prisma.notification.findMany({
+                    where,
+                    orderBy: { createdAt: 'desc' },
+                    take: limit,
+                    skip: offset
+                });
+
+                // Count total unread notifications
+                const unreadCount = await prisma.notification.count({
+                    where: { userId, read: false }
+                });
+
+                return ok(res, {
+                    notifications,
+                    unreadCount
+                });
+            } catch (error) {
+                const isConnError = logDatabaseError(error, 'getting notifications');
+                if (isConnError) {
+                    return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.');
+                }
+                return serverError(res, 'Failed to get notifications', error.message);
+            }
         }
+
+            if (req.method === 'PATCH') {
+            try {
+                const body = req.body || await parseJsonBody(req);
+                const { read, notificationIds } = body;
+
+                if (read === undefined || notificationIds === undefined) {
+                    return badRequest(res, 'Missing required fields: read, notificationIds');
+                }
+
+                // Mark notifications as read/unread
+                await prisma.notification.updateMany({
+                    where: {
+                        id: { in: notificationIds },
+                        userId // Ensure user can only update their own notifications
+                    },
+                    data: { read }
+                });
+
+                return ok(res, { success: true });
+            } catch (error) {
+                console.error('Update notifications error:', error);
+                return serverError(res, 'Failed to update notifications', error.message);
+            }
+        }
+
+        if (req.method === 'POST') {
+            try {
+                let body = req.body || await parseJsonBody(req);
+                if (body && typeof body === 'object' && body.data && !body.userId && !body.type) {
+                    body = body.data;
+                }
+                const { userId: targetUserId, type, title, message, link, metadata } = body || {};
+                if (!targetUserId || !type || !title || !message) {
+                    console.error('❌ POST /notifications - Missing required fields:', { hasUserId: !!targetUserId, hasType: !!type, hasTitle: !!title, hasMessage: !!message });
+                    return badRequest(res, 'Missing required fields: userId, type, title, message');
+                }
+                const result = await createNotificationForUser(targetUserId, type, title, message, link ?? null, metadata ?? null);
+                if (!result) return badRequest(res, 'User not found');
+                return ok(res, result);
+            } catch (error) {
+                console.error('❌ POST /notifications - Error creating notification:', error);
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    code: error.code,
+                    meta: error.meta
+                });
+                return serverError(res, 'Failed to create notification', error.message);
+            }
+        }
+
+        if (req.method === 'DELETE') {
+            try {
+                const { notificationIds } = req.body;
+
+                if (!notificationIds || !Array.isArray(notificationIds)) {
+                    return badRequest(res, 'Missing required field: notificationIds (array)');
+                }
+
+                // Delete notifications
+                await prisma.notification.deleteMany({
+                    where: {
+                        id: { in: notificationIds },
+                        userId // Ensure user can only delete their own notifications
+                    }
+                });
+
+                return ok(res, { success: true });
+            } catch (error) {
+                console.error('Delete notifications error:', error);
+                return serverError(res, 'Failed to delete notifications', error.message);
+            }
+        }
+
+        return badRequest(res, 'Method not allowed');
+    } catch (err) {
+        console.error('❌ Notifications handler unexpected error:', err?.message || err, err?.stack);
+        safeSend(() => serverError(res, 'Failed to process notifications', err?.message));
     }
-    
-    return badRequest(res, 'Method not allowed');
 }
 
 export default withLogging(withHttp(authRequired(handler)));
