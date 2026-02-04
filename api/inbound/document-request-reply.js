@@ -536,7 +536,9 @@ async function handler(req, res) {
 
 async function processReceivedEmail(emailId, apiKey, data) {
   try {
+    console.log('document-request-reply: processing', { emailId })
     const email = await fetchReceivedEmail(emailId, apiKey)
+    console.log('document-request-reply: fetched email', { subject: (email.subject || '').toString().slice(0, 100) })
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
     const allCandidates = await getAllMessageIdCandidates(email, rawUrl, apiKey)
     if (allCandidates.length === 0) {
@@ -632,7 +634,8 @@ async function processReceivedEmail(emailId, apiKey, data) {
       }
       if (fallbackMonth && fallbackYear) {
         let whereClause = { month: fallbackMonth, year: fallbackYear }
-        if (docNameFromSubject && docNameFromSubject.length > 1) {
+        const cleanDocName = docNameFromSubject ? docNameFromSubject.replace(/\s+/g, ' ').trim() : null
+        if (cleanDocName && cleanDocName.length > 1) {
           const recentProjects = await prisma.documentRequestEmailSent.findMany({
             where: { month: fallbackMonth, year: fallbackYear },
             select: { projectId: true },
@@ -640,25 +643,38 @@ async function processReceivedEmail(emailId, apiKey, data) {
             take: 20
           })
           const projectIds = recentProjects.map((p) => p.projectId)
-          const docsWithName = await prisma.documentItem.findMany({
+          let docsWithName = await prisma.documentItem.findMany({
             where: {
-              name: { equals: docNameFromSubject, mode: 'insensitive' },
+              name: { equals: cleanDocName, mode: 'insensitive' },
               section: { projectId: { in: projectIds } }
             },
             select: { id: true }
           })
+          if (docsWithName.length === 0 && projectIds.length > 0) {
+            docsWithName = await prisma.documentItem.findMany({
+              where: {
+                name: { contains: cleanDocName, mode: 'insensitive' },
+                section: { projectId: { in: projectIds } }
+              },
+              select: { id: true }
+            })
+          }
           const matchingDocIds = docsWithName.map((d) => d.id)
           if (matchingDocIds.length > 0) {
             whereClause = { ...whereClause, documentId: { in: matchingDocIds } }
           }
+          console.log('document-request-reply: subject fallback lookup', { fallbackMonth, fallbackYear, cleanDocName, projectCount: projectIds.length, matchingDocIds: matchingDocIds.length })
         }
         mapping = await prisma.documentRequestEmailSent.findFirst({
           where: whereClause,
           orderBy: { createdAt: 'desc' }
         })
         if (mapping) {
-          console.log('document-request-reply: matched by subject fallback', { month: fallbackMonth, year: fallbackYear, docName: docNameFromSubject || 'any', subject: subject.slice(0, 60) })
+          console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any' })
         }
+      }
+      if (!mapping && (email.subject || '').toString().length > 0) {
+        console.warn('document-request-reply: subject fallback did not find mapping', { subject: (email.subject || '').toString().slice(0, 120) })
       }
     }
     if (!mapping) {
