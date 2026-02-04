@@ -1701,6 +1701,63 @@ const JobCardFormPublic = () => {
         />
       </section>
 
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <header className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Photos</h2>
+            <p className="text-sm text-gray-500 mt-1">Add photos of the site, fault, or work completed (optional).</p>
+          </div>
+          {selectedPhotos.length > 0 && (
+            <span className="text-sm font-medium text-blue-600">
+              {selectedPhotos.length} photo{selectedPhotos.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </header>
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-6 text-center">
+          <input
+            type="file"
+            id="photoUploadWork"
+            onChange={handlePhotoUpload}
+            className="hidden"
+            accept="image/*"
+            multiple
+          />
+          <label
+            htmlFor="photoUploadWork"
+            className="cursor-pointer block"
+          >
+            <i className="fas fa-camera text-3xl sm:text-4xl text-gray-400 mb-2"></i>
+            <p className="text-sm sm:text-base text-gray-600">
+              Tap to upload photos or drag and drop
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Supports mobile camera capture • Add as many as needed
+            </p>
+          </label>
+        </div>
+        {selectedPhotos.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {selectedPhotos.map((photo, idx) => (
+              <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200">
+                <img
+                  src={typeof photo === 'string' ? photo : photo.url}
+                  alt={`Photo ${idx + 1}`}
+                  className="w-full h-24 sm:h-32 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemovePhoto(idx)}
+                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation"
+                  title="Remove photo"
+                >
+                  <i className="fas fa-times text-xs"></i>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Service forms attached to this job card */}
       {Array.isArray(formData.serviceForms) && formData.serviceForms.length > 0 && (
         <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
