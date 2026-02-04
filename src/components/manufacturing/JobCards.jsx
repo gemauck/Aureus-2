@@ -37,6 +37,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [saving, setSaving] = useState(false);
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const pageSize = 25;
 
@@ -324,13 +325,34 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     return date.toLocaleString();
   };
 
-  const handleRowClick = (jobCard) => {
+  const handleRowClick = async (jobCard) => {
     if (typeof onOpenDetail === 'function') {
       onOpenDetail(jobCard);
       return;
     }
-    setSelectedJobCard(jobCard);
+    if (!jobCard?.id) {
+      setSelectedJobCard(jobCard);
+      setShowDetail(true);
+      return;
+    }
+    setDetailLoading(true);
     setShowDetail(true);
+    setSelectedJobCard(jobCard);
+    try {
+      const token = window.storage?.getToken?.();
+      const response = await fetch(`/api/jobcards/${jobCard.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const full = data?.jobCard ?? data;
+        if (full && full.id) setSelectedJobCard(full);
+      }
+    } catch (e) {
+      console.warn('Failed to load full job card details, showing list data', e);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const handleNewJobCard = () => {
@@ -1038,19 +1060,30 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                           Photos
                         </div>
                         <div className="text-sm text-slate-100">
-                          {Array.isArray(selectedJobCard.photos)
-                            ? selectedJobCard.photos.length
-                            : 0}{' '}
-                          photo
-                          {Array.isArray(selectedJobCard.photos) &&
-                          selectedJobCard.photos.length === 1
-                            ? ''
-                            : 's'}
+                          {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
+                            <span className="text-slate-400">Loading…</span>
+                          ) : (
+                            <>
+                              {Array.isArray(selectedJobCard.photos)
+                                ? selectedJobCard.photos.length
+                                : 0}{' '}
+                              photo
+                              {Array.isArray(selectedJobCard.photos) &&
+                              selectedJobCard.photos.length === 1
+                                ? ''
+                                : 's'}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
                   </header>
-                  {Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
+                  {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
+                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
+                      <i className="fa-solid fa-spinner fa-spin text-slate-500 text-xl mb-2" />
+                      <p className="text-sm text-slate-400">Loading photos…</p>
+                    </div>
+                  ) : Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       {selectedJobCard.photos.map((photo, idx) => (
                         <figure
