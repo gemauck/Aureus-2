@@ -523,11 +523,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 setIsTemplateDropdownOpen(false);
             }
         };
-        if (isTemplateDropdownOpen) {
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Close section Actions dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (event.target.closest && !event.target.closest('[data-section-actions-dropdown]')) {
+                setSectionActionsOpenId(null);
+            }
+        };
+        if (sectionActionsOpenId != null) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [isTemplateDropdownOpen]);
+    }, [sectionActionsOpenId]);
 
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
@@ -551,6 +562,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Received email counts per cell (key: `${documentId}-${month}` where month is 1-12) for badge on envelope
     const [receivedCountByCell, setReceivedCountByCell] = useState({});
     const previousEmailModalContextRef = useRef(null);
+    // Cell hover: show email/comment actions only on hover to reduce visual clutter
+    const [hoveredStatusCell, setHoveredStatusCell] = useState(null);
+    // Status legend collapsed by default to reduce visual weight
+    const [legendCollapsed, setLegendCollapsed] = useState(true);
+    // Section header: single Actions dropdown (Add Document, Edit, Delete) per section
+    const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
 
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
@@ -3246,6 +3263,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const cellKey = buildCellKey(section.id, doc.id, month);
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
+        const isEmailModalOpenForCell = emailModalContext && emailModalContext.section?.id === section.id && emailModalContext.doc?.id === doc.id && emailModalContext.month === month;
+        const showCellActions = hoveredStatusCell === cellKey || isPopupOpen || isEmailModalOpenForCell;
         
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
         let cellBackgroundClass = statusConfig 
@@ -3295,10 +3314,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         };
         
         return (
-            <td 
+            <td
+                data-cell-key={cellKey}
+                tabIndex={0}
                 className={`px-3 py-2 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
                 onClick={handleCellClick}
+                onMouseEnter={() => setHoveredStatusCell(cellKey)}
+                onMouseLeave={() => setHoveredStatusCell(null)}
+                onFocus={() => setHoveredStatusCell(cellKey)}
+                onBlur={(e) => {
+                    if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
+                    setHoveredStatusCell(null);
+                }}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
+                role="gridcell"
             >
                 <div className="min-w-[160px] relative">
                     <select
@@ -3363,37 +3392,39 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    {/* Right side: email above, comments below - stacked with gap so they never overlap */}
+                    {/* Right side: email + comment - show full buttons on cell hover (or when popup/modal open), else a small activity hint */}
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
-                        {!isMonthlyDataReview && (() => {
-                            const monthNum = months.indexOf(month) + 1;
-                            const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
-                            const hasReceived = receivedCount > 0;
-                            return (
+                        {showCellActions ? (
+                            <>
+                                {!isMonthlyDataReview && (() => {
+                                    const monthNum = months.indexOf(month) + 1;
+                                    const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
+                                    const hasReceived = receivedCount > 0;
+                                    return (
+                                        <button
+                                            type="button"
+                                            data-email-cell={cellKey}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setEmailModalContext({ section, doc, month });
+                                            }}
+                                            className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
+                                            title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
+                                            aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
+                                        >
+                                            <i className="fas fa-envelope text-sm"></i>
+                                            {hasReceived && (
+                                                <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none">
+                                                    {receivedCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })()}
                                 <button
-                                    type="button"
-                                    data-email-cell={cellKey}
+                                    data-comment-cell={cellKey}
                                     onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setEmailModalContext({ section, doc, month });
-                                    }}
-                                    className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
-                                    title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
-                                    aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
-                                >
-                                    <i className="fas fa-envelope text-sm"></i>
-                                    {hasReceived && (
-                                        <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none">
-                                            {receivedCount}
-                                        </span>
-                                    )}
-                                </button>
-                            );
-                        })()}
-                        <button
-                            data-comment-cell={cellKey}
-                            onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 
@@ -3474,17 +3505,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     }, 10);
                                 }
                             }}
-                            className="relative text-gray-500 hover:text-gray-700 transition-colors p-1 rounded shrink-0"
-                            title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
-                            type="button"
-                        >
-                            <i className="fas fa-comment text-base"></i>
-                            {hasComments && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                                    {comments.length}
+                                    className="relative text-gray-500 hover:text-gray-700 transition-colors p-1 rounded shrink-0"
+                                    title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
+                                    type="button"
+                                >
+                                    <i className="fas fa-comment text-base"></i>
+                                    {hasComments && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                                            {comments.length}
+                                        </span>
+                                    )}
+                                </button>
+                            </>
+                        ) : (() => {
+                            const monthNum = months.indexOf(month) + 1;
+                            const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
+                            const hasActivity = hasComments || (!isMonthlyDataReview && receivedCount > 0);
+                            if (!hasActivity) return null;
+                            const total = (hasComments ? comments.length : 0) + (!isMonthlyDataReview ? receivedCount : 0);
+                            return (
+                                <span
+                                    className="text-[10px] text-gray-400 tabular-nums"
+                                    title="Hover for email & comments"
+                                >
+                                    {total}
                                 </span>
-                            )}
-                        </button>
+                            );
+                        })()}
                     </div>
                 </div>
             </td>
@@ -5469,91 +5516,63 @@ Abcotronics`;
                 );
             })()}
             
-            {/* Header */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-                <div className="flex flex-col gap-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <button 
-                                onClick={onBack} 
-                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            {/* Header - compact toolbar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 mb-4">
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <button
+                                onClick={onBack}
+                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+                                aria-label="Back"
                             >
                                 <i className="fas fa-arrow-left"></i>
                             </button>
-                            <div>
-                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
-                                    {isMonthlyDataReview ? 'Monthly Data Review' : 'Monthly Document Collection Tracker'}
+                            <div className="min-w-0">
+                                <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">
+                                    {isMonthlyDataReview ? 'Monthly Data Review' : 'Document Collection Tracker'}
                                 </h1>
-                                <p className="text-sm text-gray-500 mt-0.5">
+                                <p className="text-xs text-gray-500 truncate">
                                     {project?.name}
                                     {project?.client && ` • ${project.client}`}
-                                    {!isMonthlyDataReview && (
-                                        <>
-                                            {' • Facilities: '}
-                                            <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
-                                        </>
-                                    )}
-                                    {isMonthlyDataReview && ' • Same functionality as Document Collection'}
+                                    {!isMonthlyDataReview && getFacilitiesLabel(project) && ` • ${getFacilitiesLabel(project)}`}
                                 </p>
                             </div>
                         </div>
-                        
-                        <button
-                            onClick={handleExportToExcel}
-                            disabled={isExporting || sections.length === 0}
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center gap-1.5 self-start lg:self-auto"
-                        >
-                            {isExporting ? (
-                                <><i className="fas fa-spinner fa-spin"></i><span>Exporting...</span></>
-                            ) : (
-                                <><i className="fas fa-file-excel"></i><span>Export</span></>
-                            )}
-                        </button>
-                    </div>
-                    
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-                            <label className="text-xs font-semibold text-gray-700">Year:</label>
-                            <select
-                                value={selectedYear}
-                                onChange={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const newYear = parseInt(e.target.value, 10);
-                                    if (!isNaN(newYear)) {
-                                        handleYearChange(newYear);
-                                    }
-                                }}
-                                onBlur={(e) => {
-                                    const newYear = parseInt(e.target.value, 10);
-                                    if (!isNaN(newYear) && newYear !== selectedYear) {
-                                        handleYearChange(newYear);
-                                    }
-                                }}
-                                aria-label="Select year for document collection tracker"
-                                role="combobox"
-                                aria-haspopup="listbox"
-                                data-testid="year-selector"
-                                className="text-sm font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer"
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
+                                <label className="text-xs font-medium text-gray-600">Year</label>
+                                <select
+                                    value={selectedYear}
+                                    onChange={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        const newYear = parseInt(e.target.value, 10);
+                                        if (!isNaN(newYear)) handleYearChange(newYear);
+                                    }}
+                                    onBlur={(e) => {
+                                        const newYear = parseInt(e.target.value, 10);
+                                        if (!isNaN(newYear) && newYear !== selectedYear) handleYearChange(newYear);
+                                    }}
+                                    aria-label="Select year"
+                                    data-testid="year-selector"
+                                    className="text-xs font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer py-0.5"
+                                >
+                                    {yearOptions.map(year => (
+                                        <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <button
+                                onClick={handleAddSection}
+                                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold flex items-center gap-1.5"
                             >
-                                {yearOptions.map(year => (
-                                    <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
-                                ))}
-                            </select>
-                        </div>
-                        
-                        <button
-                            onClick={handleAddSection}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                        >
-                            <i className="fas fa-plus"></i><span>Add Section</span>
-                        </button>
-                        
-                        <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
+                                <i className="fas fa-plus"></i><span>Add Section</span>
+                            </button>
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
-                                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold flex items-center gap-1.5"
                                 >
                                     <i className="fas fa-layer-group"></i><span>Templates</span>
                                     <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
@@ -5619,25 +5638,43 @@ Abcotronics`;
                                     </div>
                                 )}
                             </div>
+                            <button
+                                onClick={handleExportToExcel}
+                                disabled={isExporting || sections.length === 0}
+                                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            >
+                                {isExporting ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-excel"></i>}
+                                <span>{isExporting ? 'Exporting…' : 'Export'}</span>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
             
-            {/* Legend */}
-            <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm">
-                <div className="flex flex-wrap items-center gap-4">
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status Legend:</span>
-                    {statusOptions.map((option, idx) => (
-                        <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                <div className={`w-4 h-4 rounded-full ${option.cellColor} ring-2 ring-white shadow-sm`}></div>
-                                <span className="text-xs font-medium text-gray-700">{option.label}</span>
-                            </div>
-                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
-                        </React.Fragment>
-                    ))}
-                </div>
+            {/* Legend - collapsible to reduce clutter */}
+            <div className="rounded-xl border border-gray-200 mb-4 shadow-sm overflow-hidden bg-gradient-to-r from-gray-50 to-white">
+                <button
+                    type="button"
+                    onClick={() => setLegendCollapsed(!legendCollapsed)}
+                    className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-gray-100/80 transition-colors"
+                    aria-expanded={!legendCollapsed}
+                >
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status legend</span>
+                    <i className={`fas fa-chevron-${legendCollapsed ? 'down' : 'up'} text-gray-500 text-xs`}></i>
+                </button>
+                {!legendCollapsed && (
+                    <div className="px-3 pb-3 pt-0 flex flex-wrap items-center gap-3">
+                        {statusOptions.map((option, idx) => (
+                            <React.Fragment key={option.value}>
+                                <div className="flex items-center gap-2 bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm">
+                                    <div className={`w-3.5 h-3.5 rounded-full ${option.cellColor} ring-2 ring-white shadow-sm`}></div>
+                                    <span className="text-xs font-medium text-gray-700">{option.label}</span>
+                                </div>
+                                {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[10px] text-gray-400"></i>}
+                            </React.Fragment>
+                        ))}
+                    </div>
+                )}
             </div>
             
             {/* Per-section tables with independent horizontal scroll */}
@@ -5733,28 +5770,46 @@ Abcotronics`;
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="relative" data-section-actions-dropdown>
                                     <button
-                                        onClick={() => handleAddDocument(section.id)}
-                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-semibold hover:bg-primary-700 transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
-                                    >
-                                        <i className="fas fa-plus"></i><span>Add Document</span>
-                                    </button>
-                                    <button
-                                        onClick={() => handleEditSection(section)}
-                                        className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                                        title="Edit section"
-                                    >
-                                        <i className="fas fa-edit text-sm"></i>
-                                    </button>
-                                    <button
-                                        onClick={(e) => handleDeleteSection(section.id, e)}
-                                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                         type="button"
-                                        title="Delete section"
+                                        onClick={() => setSectionActionsOpenId(prev => prev === section.id ? null : section.id)}
+                                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                                        title="Section actions"
+                                        aria-expanded={sectionActionsOpenId === section.id}
+                                        aria-haspopup="true"
                                     >
-                                        <i className="fas fa-trash text-sm"></i>
+                                        <i className="fas fa-ellipsis-v text-sm"></i>
+                                        <span className="ml-1.5 text-xs font-medium">Actions</span>
                                     </button>
+                                    {sectionActionsOpenId === section.id && (
+                                        <div className="absolute right-0 mt-1 w-48 py-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                                            <button
+                                                type="button"
+                                                onClick={() => { handleAddDocument(section.id); setSectionActionsOpenId(null); }}
+                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-plus text-primary-600"></i>
+                                                <span>Add Document</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { handleEditSection(section); setSectionActionsOpenId(null); }}
+                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-edit text-gray-500"></i>
+                                                <span>Edit section</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { handleDeleteSection(section.id, e); setSectionActionsOpenId(null); }}
+                                                className="w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                                <span>Delete section</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -5826,7 +5881,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
                                                 >
                                                     <td
-                                                        className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
+                                                        className="px-4 py-3.5 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
@@ -5834,7 +5889,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 <i className="fas fa-grip-vertical text-[10px]"></i>
                                                             </span>
                                                             <div className="flex-1 min-w-0">
-                                                            <div className="text-sm font-semibold text-gray-900 mb-1">{doc.name}</div>
+                                                            <div className="text-sm font-semibold text-gray-900 leading-snug">{doc.name}</div>
                                                             {doc.description && (() => {
                                                                 // Check if description contains ISO date strings and format them
                                                                 let desc = String(doc.description);
@@ -5886,7 +5941,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 const isExpanded = expandedDescriptionId === doc.id;
                                                                 
                                                                 return (
-                                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1 overflow-hidden">
+                                                                    <div className="mt-1.5 text-xs text-gray-500 flex items-center gap-1 overflow-hidden">
                                                                         <span className="truncate flex-1 min-w-0">{truncated}</span>
                                                                         {isLong && (
                                                                             <button
