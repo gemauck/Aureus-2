@@ -210,6 +210,9 @@ try {
   const [categories, setCategories] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategoryInput, setShowCategoryInput] = useState(false);
+  const [boxNumbers, setBoxNumbers] = useState([]);
+  const [newBoxNumber, setNewBoxNumber] = useState('');
+  const [showBoxNumberInput, setShowBoxNumberInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExportingInventory, setIsExportingInventory] = useState(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
@@ -274,6 +277,12 @@ try {
         } else if (loadedCategories.length > 0) {
           // Clear localStorage if it only had default categories
           localStorage.setItem('inventory_categories', JSON.stringify([]));
+        }
+
+        // Load box numbers from localStorage (merge with any from inventory after API load)
+        const loadedBoxNumbers = JSON.parse(localStorage.getItem('inventory_box_numbers') || '[]');
+        if (loadedBoxNumbers.length > 0) {
+          setBoxNumbers(loadedBoxNumbers);
         }
 
         // STEP 2: Load from API in parallel (background sync)
@@ -564,6 +573,19 @@ try {
 
     loadData();
   }, []);
+
+  // Merge box numbers from loaded inventory into dropdown list (so existing items' box numbers appear)
+  useEffect(() => {
+    const fromInv = [...new Set(inventory.map(i => i.boxNumber).filter(Boolean))];
+    if (fromInv.length === 0) return;
+    setBoxNumbers(prev => {
+      const merged = [...new Set([...prev, ...fromInv])].sort((a, b) => a.localeCompare(b));
+      if (merged.length > prev.length) {
+        localStorage.setItem('inventory_box_numbers', JSON.stringify(merged));
+      }
+      return merged;
+    });
+  }, [inventory.length]); // Run when inventory list changes (e.g. after load/refresh), not on every item change
 
   // Manual refresh for diagnostics - OPTIMIZED: Parallel loading
   const refreshAllManufacturingData = async () => {
@@ -1994,6 +2016,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       name: '',
       thumbnail: '',
       category: '',
+      boxNumber: '',
       type: 'component',
       quantity: undefined,
       inProductionQuantity: undefined,
@@ -2043,12 +2066,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesLegacyPart = !columnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(columnFilters.legacyPart.toLowerCase()));
       const matchesManufacturingPart = !columnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(columnFilters.manufacturingPart.toLowerCase()));
       const matchesCategoryFilter = !columnFilters.category || category.toLowerCase().includes(columnFilters.category.toLowerCase());
+      const matchesBoxNumber = !columnFilters.boxNumber || (item.boxNumber || '').toString().toLowerCase().includes(columnFilters.boxNumber.toLowerCase());
       const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
       const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
       
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
-             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation;
+             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation;
     });
 
     // Sorting logic
@@ -2541,6 +2565,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('category')}
                     </button>
                   </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Box Number</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
                     <button 
                       type="button"
@@ -2784,6 +2809,30 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-boxNumber-input"
+                      ref={(el) => { if (el) filterInputRefs.current.boxNumber = el; }}
+                      type="text"
+                      placeholder="Filter Box..."
+                      defaultValue={columnFilters.boxNumber || ''}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={(e) => {
+                        handleColumnFilterChange('boxNumber', e.target.value, e);
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('boxNumber', e.target.value, e)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    <input
                       key="filter-type-input"
                       ref={(el) => { if (el) filterInputRefs.current.type = el; }}
                       type="text"
@@ -2949,6 +2998,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
+                    <td className="px-3 py-2 text-sm text-gray-600">{item.boxNumber || '—'}</td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">
                       {item.type === 'final_product'
                         ? 'Final Product'
@@ -3660,6 +3710,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         name: formData.name,
         thumbnail: formData.thumbnail || '',
         category: formData.category,
+        boxNumber: formData.boxNumber || '',
         type: formData.type,
         unit: formData.unit,
         reorderPoint: formData.reorderPoint === undefined || formData.reorderPoint === null || formData.reorderPoint === '' ? undefined : parseFloat(formData.reorderPoint),
@@ -3783,6 +3834,31 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       setShowCategoryInput(false);
     } else if (categories.includes(trimmedName)) {
       alert('Category already exists!');
+    }
+  };
+
+  const handleAddBoxNumber = () => {
+    const trimmed = (newBoxNumber || '').trim();
+    if (trimmed && !boxNumbers.includes(trimmed)) {
+      const updated = [...boxNumbers, trimmed].sort((a, b) => a.localeCompare(b));
+      setBoxNumbers(updated);
+      localStorage.setItem('inventory_box_numbers', JSON.stringify(updated));
+      setFormData({ ...formData, boxNumber: trimmed });
+      setNewBoxNumber('');
+      setShowBoxNumberInput(false);
+    } else if (boxNumbers.includes(trimmed)) {
+      alert('Box number already exists!');
+    }
+  };
+
+  const handleDeleteBoxNumber = (boxToDelete) => {
+    if (confirm(`Remove "${boxToDelete}" from the box number list? Items using it will keep the value.`)) {
+      const updated = boxNumbers.filter(b => b !== boxToDelete);
+      setBoxNumbers(updated);
+      localStorage.setItem('inventory_box_numbers', JSON.stringify(updated));
+      if (formData.boxNumber === boxToDelete) {
+        setFormData({ ...formData, boxNumber: updated.length > 0 ? updated[0] : '' });
+      }
     }
   };
 
@@ -5202,6 +5278,83 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       >
                         Cancel
                       </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Box Number - with add/manage like Category */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Box Number</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.boxNumber || ''}
+                      onChange={(e) => setFormData({ ...formData, boxNumber: e.target.value })}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {boxNumbers.length === 0 ? (
+                        <option value="">No box numbers yet - Add one using the + button</option>
+                      ) : (
+                        <>
+                          <option value="">Select a box number...</option>
+                          {formData.boxNumber && !boxNumbers.includes(formData.boxNumber) && (
+                            <option value={formData.boxNumber}>{formData.boxNumber} (existing)</option>
+                          )}
+                          {boxNumbers.map(box => (
+                            <option key={box} value={box}>{box}</option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowBoxNumberInput(!showBoxNumberInput)}
+                      className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                      title="Add new box number"
+                    >
+                      <i className="fas fa-plus"></i>
+                    </button>
+                  </div>
+                  {showBoxNumberInput && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={newBoxNumber}
+                        onChange={(e) => setNewBoxNumber(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddBoxNumber()}
+                        className="flex-1 px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="New box number..."
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddBoxNumber}
+                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowBoxNumberInput(false); setNewBoxNumber(''); }}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {boxNumbers.length > 0 && (
+                    <div className="mt-1.5 text-xs text-gray-500">
+                      Manage: {boxNumbers.map(box => (
+                        <span key={box} className="inline-flex items-center gap-0.5 mr-2 mt-0.5">
+                          <span>{box}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBoxNumber(box)}
+                            className="text-red-500 hover:text-red-700"
+                            title="Remove from list"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>

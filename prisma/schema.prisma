@@ -1234,6 +1234,7 @@ model InventoryItem {
   inProductionQuantity    Float          @default(0)
   locationId              String?
   manufacturingPartNumber String         @default("")
+  boxNumber               String         @default("")
   boms                    BOM[]          @relation("BOMFinishedProduct")
   stockLocation           StockLocation? @relation(fields: [locationId], references: [id])
 

@@ -4233,69 +4233,65 @@ Abcotronics`;
                                 <p className="text-sm text-gray-500">No emails sent or received yet for this document and month. Replies are processed automatically—click Refresh after replying.</p>
                             ) : (
                                 <div className="space-y-4">
-                                    {emailActivity.sent.length > 0 && (
-                                        <div>
-                                            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Sent</h4>
-                                            <ul className="space-y-1.5">
-                                                {emailActivity.sent.map((s) => {
+                                    {/* Single conversation thread: sent + received merged by date */}
+                                    <ul className="space-y-3">
+                                        {[...(emailActivity.sent || []).map((s) => ({ type: 'sent', ...s, _sortAt: new Date(s.createdAt).getTime() })), ...(emailActivity.received || []).map((r) => ({ type: 'received', ...r, _sortAt: new Date(r.createdAt).getTime() }))]
+                                            .sort((a, b) => a._sortAt - b._sortAt)
+                                            .map((item) => {
+                                                if (item.type === 'sent') {
+                                                    const s = item;
                                                     const isExpanded = expandedSentId === s.id;
                                                     return (
-                                                        <li key={s.id} className="rounded-lg bg-sky-50 border border-sky-100 overflow-hidden">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setExpandedSentId((prev) => (prev === s.id ? null : s.id))}
-                                                                className="w-full flex items-center gap-2 text-sm text-gray-700 py-1.5 px-2 text-left hover:bg-sky-100/80 transition-colors"
-                                                            >
-                                                                <i className={`fas fa-paper-plane text-sky-600 text-xs shrink-0 ${isExpanded ? 'rotate-90' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
-                                                                <span className="flex-1">{formatDateTime(s.createdAt)}</span>
+                                                        <li key={'sent-' + s.id} className="rounded-lg bg-sky-50 border border-sky-100 overflow-hidden">
+                                                            <div className="px-3 py-1.5 border-b border-sky-100 bg-sky-100/50 flex items-center gap-2">
+                                                                <i className="fas fa-paper-plane text-sky-600 text-xs shrink-0"></i>
+                                                                <span className="text-xs font-medium text-sky-800">You</span>
+                                                                <span className="text-xs text-gray-500">{formatDateTime(s.createdAt)}</span>
+                                                                <span className="flex-1"></span>
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => { e.stopPropagation(); handleDeleteEmailActivity(s.id, 'sent'); }}
                                                                     disabled={deletingActivityId === s.id}
                                                                     className="shrink-0 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                                                    title="Remove sent email from list"
-                                                                    aria-label="Remove sent email from list"
+                                                                    title="Remove from list"
                                                                 >
                                                                     {deletingActivityId === s.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
                                                                 </button>
-                                                                <i className={`fas fa-chevron-down text-sky-500 text-xs shrink-0 ${isExpanded ? 'rotate-180' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
-                                                            </button>
-                                                            {isExpanded && (
-                                                                <div className="px-3 py-2 border-t border-sky-100 bg-white/80">
-                                                                    <div className="mb-2">
-                                                                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subject</span>
-                                                                        <p className="text-sm font-medium text-gray-800 mt-0.5">{s.subject && s.subject.trim() ? s.subject : '—'}</p>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setExpandedSentId((prev) => (prev === s.id ? null : s.id))}
+                                                                    className="shrink-0 p-1 rounded text-sky-600 hover:bg-sky-200/50"
+                                                                >
+                                                                    <i className={`fas fa-chevron-down text-xs ${isExpanded ? 'rotate-180' : ''}`} style={{ transition: 'transform 0.2s' }}></i>
+                                                                </button>
+                                                            </div>
+                                                            <div className="px-3 py-2">
+                                                                <p className="text-sm font-medium text-gray-800">{s.subject && s.subject.trim() ? s.subject : '—'}</p>
+                                                                {isExpanded && (
+                                                                    <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-y-auto rounded border border-gray-100 p-2 bg-white/80">
+                                                                        {s.bodyText && s.bodyText.trim() ? s.bodyText : '—'}
                                                                     </div>
-                                                                    <div>
-                                                                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Message</span>
-                                                                        <div className="mt-0.5 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-y-auto rounded border border-gray-100 p-2 bg-gray-50/50">
-                                                                            {s.bodyText && s.bodyText.trim() ? s.bodyText : '—'}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
+                                                                )}
+                                                            </div>
                                                         </li>
                                                     );
-                                                })}
-                                            </ul>
-                                        </div>
-                                    )}
-                                    {emailActivity.received.length > 0 && (
-                                        <div>
-                                            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Received</h4>
-                                            <ul className="space-y-3">
-                                                {emailActivity.received.map((r) => (
-                                                    <li key={r.id} className="text-sm border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
+                                                }
+                                                const r = item;
+                                                const senderEmail = getReplyToFromReceived(r);
+                                                const fromLabel = senderEmail ? `From: ${senderEmail}` : 'From: Client';
+                                                return (
+                                                    <li key={'received-' + r.id} className="text-sm border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
                                                         <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
-                                                            <i className="fas fa-inbox text-emerald-600 text-xs"></i>
-                                                            <span className="flex-1 text-gray-600">{formatDateTime(r.createdAt)}</span>
+                                                            <i className="fas fa-inbox text-emerald-600 text-xs shrink-0"></i>
+                                                            <span className="text-xs font-medium text-gray-700">{fromLabel}</span>
+                                                            <span className="text-xs text-gray-500">{formatDateTime(r.createdAt)}</span>
+                                                            <span className="flex-1"></span>
                                                             {getReplyToFromReceived(r) && (
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => openReply(r)}
                                                                     className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-primary-50"
                                                                     title="Reply to this email"
-                                                                    aria-label="Reply to this email"
                                                                 >
                                                                     <i className="fas fa-reply text-xs"></i>
                                                                 </button>
@@ -4305,8 +4301,7 @@ Abcotronics`;
                                                                 onClick={() => handleDeleteEmailActivity(r.id, 'received')}
                                                                 disabled={deletingActivityId === r.id}
                                                                 className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                                                title="Remove received email from list"
-                                                                aria-label="Remove received email from list"
+                                                                title="Remove from list"
                                                             >
                                                                 {deletingActivityId === r.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
                                                             </button>
@@ -4379,10 +4374,9 @@ Abcotronics`;
                                                             </div>
                                                         )}
                                                     </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
+                                                );
+                                            })}
+                                    </ul>
                                     {(() => {
                                         const allAttachments = (emailActivity.received || []).flatMap((r) => (r.attachments || []).map((a) => ({ ...a, receivedAt: r.createdAt })));
                                         if (allAttachments.length === 0) return null;

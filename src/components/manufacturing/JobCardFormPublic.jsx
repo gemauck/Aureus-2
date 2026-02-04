@@ -1226,10 +1226,26 @@ const JobCardFormPublic = () => {
         }
       }
 
-      // Always keep a local offline copy for safety
+      // Always keep a local offline copy for safety (strip base64 photos to avoid quota)
+      const forStorage = (card) => ({
+        ...card,
+        photos: [],
+        photoCount: Array.isArray(card.photos) ? card.photos.length : 0
+      });
       const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      const updatedJobCards = [...existingJobCards, jobCardData];
-      localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+      const updatedJobCards = [...existingJobCards, forStorage(jobCardData)];
+      try {
+        localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+      } catch (e) {
+        if (e.name === 'QuotaExceededError') {
+          const trimmed = existingJobCards.slice(-20).map(jc => ({ ...jc, photos: [], photoCount: Array.isArray(jc.photos) ? jc.photos.length : 0 }));
+          try {
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify([...trimmed, forStorage(jobCardData)]));
+          } catch (_) {
+            console.warn('Job card local cache skipped (storage full)');
+          }
+        } else throw e;
+      }
 
       // Primary persistence: use public, unauthenticated job cards API
       // This creates a real job card record that appears in Service & Maintenance
@@ -1252,18 +1268,16 @@ const JobCardFormPublic = () => {
         const saved = result?.jobCard || result?.data?.jobCard || null;
 
         if (saved && saved.id) {
-          // Optionally update local copy with server ID / number so future tooling can reconcile
           const syncedCards = updatedJobCards.map((jc) =>
             jc.id === jobCardData.id
-              ? {
-                  ...jc,
-                  id: saved.id,
-                  jobCardNumber: saved.jobCardNumber || jc.jobCardNumber,
-                  synced: true
-                }
+              ? { ...jc, id: saved.id, jobCardNumber: saved.jobCardNumber || jc.jobCardNumber, synced: true }
               : jc
           );
-          localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards));
+          try {
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards.map(jc => ({ ...jc, photos: [], photoCount: Array.isArray(jc.photos) ? jc.photos.length : (jc.photoCount || 0) }))));
+          } catch (_) {
+            console.warn('Job card sync cache update skipped (storage full)');
+          }
         } else {
           console.warn('⚠️ JobCardFormPublic: Public API response did not include jobCard payload', result);
         }

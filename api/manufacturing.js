@@ -19,6 +19,7 @@ const INVENTORY_TEMPLATE_FIELDS = {
   supplierPartNumbers: true,
   manufacturingPartNumber: true,
   legacyPartNumber: true,
+  boxNumber: true,
   ownerId: true
 }
 
@@ -53,6 +54,7 @@ const buildInventoryClone = (baseItem, location, overrides = {}) => ({
   supplierPartNumbers: baseItem.supplierPartNumbers || '[]',
   manufacturingPartNumber: baseItem.manufacturingPartNumber || '',
   legacyPartNumber: baseItem.legacyPartNumber || '',
+  boxNumber: baseItem.boxNumber || '',
   status: overrides.status || 'out_of_stock',
   ownerId: baseItem.ownerId || null,
   lastRestocked: overrides.lastRestocked ?? null
@@ -588,12 +590,13 @@ async function handler(req, res) {
                   ...createData,
                   supplierPartNumbers: body.supplierPartNumbers || '[]',
                   manufacturingPartNumber: body.manufacturingPartNumber || '',
-                  legacyPartNumber: body.legacyPartNumber || ''
+                  legacyPartNumber: body.legacyPartNumber || '',
+                  boxNumber: body.boxNumber || ''
                 }
               })
             } catch (createError) {
               // If columns don't exist yet, create without them
-              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber'))) {
+              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber') || createError.message.includes('boxNumber'))) {
                 console.warn('⚠️ Creating inventory item without new fields (columns may not exist yet)');
                 master = await tx.inventoryItem.create({ data: createData })
               } else {
@@ -800,6 +803,7 @@ async function handler(req, res) {
               existing.unitCost = item.unitCost || existing.unitCost;
               existing.category = item.category || existing.category;
               existing.type = item.type || existing.type;
+              existing.boxNumber = item.boxNumber || existing.boxNumber;
             }
             
             // Prefer valid locationId if one has it and the other doesn't
@@ -1039,11 +1043,12 @@ async function handler(req, res) {
                   ...createData,
                   supplierPartNumbers: itemData.supplierPartNumbers || '[]',
                   manufacturingPartNumber: itemData.manufacturingPartNumber || '',
-                  legacyPartNumber: itemData.legacyPartNumber || ''
+                  legacyPartNumber: itemData.legacyPartNumber || '',
+                  boxNumber: itemData.boxNumber || ''
                 }
               })
             } catch (createError) {
-              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber'))) {
+              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber') || createError.message.includes('boxNumber'))) {
                 console.warn('⚠️ Bulk import: Creating items without new fields (run migration)');
                 inventoryItem = await prisma.inventoryItem.create({ data: createData })
               } else {
@@ -1204,12 +1209,13 @@ async function handler(req, res) {
         })
         
         // Try to update new fields if provided (safe - won't crash if columns don't exist yet)
-        if ((body.supplierPartNumbers !== undefined || body.manufacturingPartNumber !== undefined || body.legacyPartNumber !== undefined)) {
+        if ((body.supplierPartNumbers !== undefined || body.manufacturingPartNumber !== undefined || body.legacyPartNumber !== undefined || body.boxNumber !== undefined)) {
           try {
             const updateFields = {};
             if (body.supplierPartNumbers !== undefined) updateFields.supplierPartNumbers = body.supplierPartNumbers || '[]';
             if (body.manufacturingPartNumber !== undefined) updateFields.manufacturingPartNumber = body.manufacturingPartNumber || '';
             if (body.legacyPartNumber !== undefined) updateFields.legacyPartNumber = body.legacyPartNumber || '';
+            if (body.boxNumber !== undefined) updateFields.boxNumber = body.boxNumber || '';
             
             if (Object.keys(updateFields).length > 0) {
               await prisma.inventoryItem.update({
@@ -1343,6 +1349,13 @@ async function handler(req, res) {
             console.warn('⚠️ legacyPartNumber field not available:', e.message)
           }
         }
+        if (body.boxNumber !== undefined) {
+          try {
+            updateData.boxNumber = body.boxNumber || ''
+          } catch (e) {
+            console.warn('⚠️ boxNumber field not available:', e.message)
+          }
+        }
         
         // Status will be auto-calculated based on quantity and reorder point
         if (body.lastRestocked !== undefined) updateData.lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : null
@@ -1375,12 +1388,13 @@ async function handler(req, res) {
           })
         } catch (updateError) {
           // If error is about missing columns, retry without new fields
-          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('manufacturingPartNumber') || updateError.message.includes('legacyPartNumber'))) {
+          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('manufacturingPartNumber') || updateError.message.includes('legacyPartNumber') || updateError.message.includes('boxNumber'))) {
             console.warn('⚠️ New inventory columns not available yet, updating without them');
             const safeUpdateData = { ...updateData };
             delete safeUpdateData.supplierPartNumbers;
             delete safeUpdateData.manufacturingPartNumber;
             delete safeUpdateData.legacyPartNumber;
+            delete safeUpdateData.boxNumber;
             item = await prisma.inventoryItem.update({
               where: { id },
               data: safeUpdateData

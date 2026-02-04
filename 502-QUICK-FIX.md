@@ -1,5 +1,32 @@
 # 502 Bad Gateway - Quick Fix Guide
 
+## Production site not working – run these first
+
+SSH in and run these on the **server** (e.g. `ssh root@abcoafrica.co.za` then `cd /var/www/abcotronics-erp`):
+
+```bash
+# 1. If app won't start: remove .env.local (server must use .env only)
+rm -f .env.local
+
+# 2. Check process and port
+pm2 status
+curl -s http://127.0.0.1:3000/health || echo "App not responding"
+
+# 3. Restart app and check logs
+pm2 restart abcotronics-erp
+pm2 logs abcotronics-erp --lines 30 --nostream
+```
+
+**If the app exits immediately on start**, check PM2 logs for:
+
+- **`.env.local` in production** → Server refuses to start. Fix: `rm -f .env.local` then `pm2 restart abcotronics-erp`.
+- **Missing `JWT_SECRET` or `DATABASE_URL`** → Set them in `.env` on the server.
+- **`DATABASE_URL` points to localhost** → In production it must point to your Digital Ocean DB (e.g. `...ondigitalocean.com...`). Fix: set correct `DATABASE_URL` in server `.env`.
+
+**If the app runs but pages are 502/500**: database or nginx. See "Common Causes" and "If Server Won't Start" below.
+
+---
+
 ## Immediate Action Required
 
 Your site `https://abcoafrica.co.za` is returning 502 Bad Gateway errors, which means nginx is running but can't connect to the Node.js server.
@@ -119,8 +146,11 @@ git diff HEAD~1
 ### Check Environment Variables
 
 ```bash
-# Verify .env file exists
-cat .env | grep -E "DATABASE_URL|JWT_SECRET|PORT"
+# Production must use .env only (no .env.local)
+ls -la .env .env.local 2>/dev/null; [ -f .env.local ] && echo "⚠️ Remove .env.local: rm -f .env.local"
+
+# Verify .env has required vars (DATABASE_URL must be Digital Ocean, not localhost)
+grep -E "DATABASE_URL|JWT_SECRET|PORT" .env
 ```
 
 ### Test Server Manually

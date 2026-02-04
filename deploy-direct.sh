@@ -52,6 +52,7 @@ if ! rsync -avz --progress \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude '.env' \
+  --exclude '.env.local' \
   --exclude '*.log' \
   --exclude 'dist/node_modules' \
   --exclude '.DS_Store' \
