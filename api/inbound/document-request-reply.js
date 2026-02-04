@@ -632,6 +632,8 @@ async function processReceivedEmail(emailId, apiKey, data) {
           }
         }
       }
+      let subjectFallbackDocIds = []
+      let subjectFallbackProjectIds = []
       if (fallbackMonth && fallbackYear) {
         let whereClause = { month: fallbackMonth, year: fallbackYear }
         const cleanDocName = docNameFromSubject ? docNameFromSubject.replace(/\s+/g, ' ').trim() : null
@@ -643,6 +645,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
             take: 20
           })
           const projectIds = recentProjects.map((p) => p.projectId)
+          subjectFallbackProjectIds = projectIds
           let docsWithName = await prisma.documentItem.findMany({
             where: {
               name: { equals: cleanDocName, mode: 'insensitive' },
@@ -660,6 +663,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
             })
           }
           const matchingDocIds = docsWithName.map((d) => d.id)
+          subjectFallbackDocIds = matchingDocIds
           if (matchingDocIds.length > 0) {
             whereClause = { ...whereClause, documentId: { in: matchingDocIds } }
           }
@@ -671,6 +675,17 @@ async function processReceivedEmail(emailId, apiKey, data) {
         })
         if (mapping) {
           console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any' })
+        } else if (subjectFallbackDocIds.length > 0 && subjectFallbackProjectIds.length > 0) {
+          // No DocumentRequestEmailSent row for this doc+month+year (e.g. send log succeeded but reply routing row failed). Still attach reply to the document we matched by name.
+          mapping = {
+            documentId: subjectFallbackDocIds[0],
+            projectId: subjectFallbackProjectIds[0],
+            year: fallbackYear,
+            month: fallbackMonth,
+            sectionId: null,
+            messageId: ''
+          }
+          console.log('document-request-reply: matched by subject fallback (no sent row)', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear })
         }
       }
       if (!mapping && (email.subject || '').toString().length > 0) {
