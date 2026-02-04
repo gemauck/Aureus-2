@@ -495,11 +495,20 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                       }
                     }
 
+                    const assignedToJson = (() => {
+                      const val = doc.assignedTo
+                      if (val == null) return '[]'
+                      if (Array.isArray(val)) return JSON.stringify(val)
+                      if (typeof val === 'string') return val
+                      return '[]'
+                    })()
+
                     return {
                       name: doc.name || '',
                       description: doc.description || '',
                       required: doc.required || false,
                       order: docIdx,
+                      assignedTo: assignedToJson,
                       statuses: { create: statuses },
                       comments: { create: comments }
                     }
