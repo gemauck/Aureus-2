@@ -5248,7 +5248,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <button
                       type="button"
                       onClick={() => setShowCategoryInput(!showCategoryInput)}
-                      className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                      className="flex-shrink-0 min-w-[2.75rem] px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 border border-blue-700 focus:ring-2 focus:ring-blue-500"
                       title="Add new category"
                     >
                       <i className="fas fa-plus"></i>
@@ -5285,11 +5285,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 {/* Box Number - with add/manage like Category */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Box Number</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-stretch min-w-0">
                     <select
                       value={formData.boxNumber || ''}
                       onChange={(e) => setFormData({ ...formData, boxNumber: e.target.value })}
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       {boxNumbers.length === 0 ? (
                         <option value="">No box numbers yet - Add one using the + button</option>
@@ -5308,7 +5308,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <button
                       type="button"
                       onClick={() => setShowBoxNumberInput(!showBoxNumberInput)}
-                      className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                      className="flex-shrink-0 min-w-[2.75rem] px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 border border-blue-700 focus:ring-2 focus:ring-blue-500"
                       title="Add new box number"
                     >
                       <i className="fas fa-plus"></i>

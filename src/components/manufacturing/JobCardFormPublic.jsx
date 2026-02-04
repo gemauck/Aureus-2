@@ -528,8 +528,20 @@ const JobCardFormPublic = () => {
               
               if (clients.length > 0) {
                 setClients(clients);
-                localStorage.setItem('manufacturing_clients', JSON.stringify(clients));
-                localStorage.setItem('clients', JSON.stringify(clients));
+                try {
+                  localStorage.setItem('manufacturing_clients', JSON.stringify(clients));
+                  localStorage.setItem('clients', JSON.stringify(clients));
+                } catch (e) {
+                  if (e.name === 'QuotaExceededError') {
+                    const slim = clients.map(c => ({ id: c.id, name: c.name || c.companyName, status: c.status, type: c.type }));
+                    try {
+                      localStorage.setItem('manufacturing_clients', JSON.stringify(slim));
+                      localStorage.setItem('clients', JSON.stringify(slim));
+                    } catch (_) {
+                      console.warn('JobCardFormPublic: Client cache skipped (storage full)');
+                    }
+                  }
+                }
               }
             } else {
               console.warn('⚠️ JobCardFormPublic: Public API returned error:', response.status);
@@ -546,8 +558,20 @@ const JobCardFormPublic = () => {
                     }) : [];
                     if (active.length > 0) {
                       setClients(active);
-                      localStorage.setItem('manufacturing_clients', JSON.stringify(active));
-                      localStorage.setItem('clients', JSON.stringify(active));
+                      try {
+                        localStorage.setItem('manufacturing_clients', JSON.stringify(active));
+                        localStorage.setItem('clients', JSON.stringify(active));
+                      } catch (e) {
+                        if (e.name === 'QuotaExceededError') {
+                          const slim = active.map(c => ({ id: c.id, name: c.name || c.companyName, status: c.status, type: c.type }));
+                          try {
+                            localStorage.setItem('manufacturing_clients', JSON.stringify(slim));
+                            localStorage.setItem('clients', JSON.stringify(slim));
+                          } catch (_) {
+                            console.warn('JobCardFormPublic: Client cache skipped (storage full)');
+                          }
+                        }
+                      }
                     }
                   }
                 } catch (authError) {
@@ -1131,8 +1155,18 @@ const JobCardFormPublic = () => {
       clientEntry.id === formData.clientId ? updatedClient : clientEntry
                 );
                 setClients(updatedClients);
-                localStorage.setItem('manufacturing_clients', JSON.stringify(updatedClients));
-                localStorage.setItem('clients', JSON.stringify(updatedClients));
+                try {
+                  localStorage.setItem('manufacturing_clients', JSON.stringify(updatedClients));
+                  localStorage.setItem('clients', JSON.stringify(updatedClients));
+                } catch (e) {
+                  if (e.name === 'QuotaExceededError') {
+                    const slim = updatedClients.map(c => ({ id: c.id, name: c.name || c.companyName, status: c.status, type: c.type }));
+                    try {
+                      localStorage.setItem('manufacturing_clients', JSON.stringify(slim));
+                      localStorage.setItem('clients', JSON.stringify(slim));
+                    } catch (_) {}
+                  }
+                }
   };
 
   const resetForm = () => {
