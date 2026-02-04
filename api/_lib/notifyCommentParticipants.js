@@ -108,15 +108,19 @@ export async function notifyCommentParticipants(opts) {
     const priorAuthorIdsFromNames = priorAuthorNames.length > 0
         ? await resolveAuthorNamesToUserIds(priorAuthorNames)
         : [];
+    // Recipients: entity author, prior commenters, prior @mentioned. Exclude users @mentioned in this comment
+    // so they get only the mention email (from frontend), not a duplicate "comment" email.
     const recipientIds = new Set([
         entityAuthorId,
         ...priorCommentAuthorIds,
         ...priorAuthorIdsFromNames,
-        ...mentionedIds,
         ...priorMentionedIds
     ].filter(Boolean));
     const authorIdStr = commentAuthorId ? String(commentAuthorId) : null;
-    const toNotify = [...recipientIds].filter((id) => authorIdStr !== String(id));
+    const mentionedSet = new Set((mentionedIds || []).map(String));
+    const toNotify = [...recipientIds].filter(
+        (id) => authorIdStr !== String(id) && !mentionedSet.has(String(id))
+    );
     if (toNotify.length === 0) return;
 
     const preview = (commentText && commentText.length > 100) ? commentText.slice(0, 100) + '...' : (commentText || '');
