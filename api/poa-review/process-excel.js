@@ -3,6 +3,7 @@
  * 
  * Processes Excel files directly on the server using pandas (much faster than client-side parsing).
  * For large files (>10MB), this avoids slow client-side XLSX.js parsing.
+ * Enforces file size and row limits to prevent server overload/crashes.
  */
 
 import fs from 'fs';
@@ -17,8 +18,9 @@ import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 
-// For busboy, we'll use a simpler approach with FormData parsing
-// Since we're using FormData from the client, we can parse it directly
+// Limits to prevent server crash from huge documents
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB (matches UI)
+const MAX_ROWS = 400000; // Reject if CSV/Excel has more rows to avoid OOM
 
 const execAsync = promisify(exec);
 
@@ -42,12 +44,20 @@ async function handler(req, res) {
                 fileName = filename;
                 fileReceived = true;
                 
+                let totalBytes = 0;
                 const chunks = [];
                 file.on('data', (chunk) => {
+                    totalBytes += chunk.length;
+                    if (totalBytes > MAX_FILE_SIZE_BYTES) {
+                        file.destroy();
+                        reject(new Error(`File too large. Maximum size is ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB. Upload a smaller file or split your data.`));
+                        return;
+                    }
                     chunks.push(chunk);
                 });
                 
                 file.on('end', () => {
+                    if (totalBytes > MAX_FILE_SIZE_BYTES) return;
                     fileBuffer = Buffer.concat(chunks);
                 });
             });
@@ -69,6 +79,15 @@ async function handler(req, res) {
 
         if (!fileReceived || !fileBuffer) {
             return badRequest(res, 'No file uploaded');
+        }
+
+        if (fileBuffer.length > MAX_FILE_SIZE_BYTES) {
+            return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
+                error: {
+                    code: 'POA_FILE_TOO_LARGE',
+                    message: `File too large. Maximum size is ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB. Upload a smaller file or split your data.`
+                }
+            }));
         }
 
         if (!fileName) {
@@ -250,6 +269,14 @@ print("Reading CSV file...")
 data = pd.read_csv(input_file, skiprows=0, low_memory=False)
 print(f"Read {len(data)} rows from CSV")
 
+MAX_ROWS = ${MAX_ROWS}
+if len(data) > MAX_ROWS:
+    raise ValueError(
+        f"This file has too many rows ({len(data)}). "
+        f"Maximum {MAX_ROWS} rows are supported to avoid server overload. "
+        "Please split your file or use a smaller dataset."
+    )
+
 # Required columns check (same as process-batch.js)
 required_columns = {
     "Transaction ID": ["transaction id", "transactionid", "txn id", "txnid"],
@@ -381,17 +408,34 @@ sys.exit(0)
 
     } catch (error) {
         console.error('POA Review Excel API - Error:', error);
-        // Return a clear, specific message so it is not mistaken for a DB error.
-        const msg = `Failed to process Excel file: ${error.message || error}`;
+        const msg = error.message || String(error);
+        const isFileTooLarge = msg.includes('File too large') || error.code === 'POA_FILE_TOO_LARGE';
+        const isTooManyRows = msg.includes('too many rows') || msg.includes('Maximum') && msg.includes('rows are supported');
         if (!res.headersSent && !res.writableEnded) {
+            if (isFileTooLarge) {
+                res.statusCode = 413;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                    error: { code: 'POA_FILE_TOO_LARGE', message: msg }
+                }));
+                return;
+            }
+            if (isTooManyRows) {
+                res.statusCode = 413;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                    error: { code: 'POA_TOO_MANY_ROWS', message: msg }
+                }));
+                return;
+            }
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({
-                error: { code: 'POA_PROCESS_ERROR', message: msg, details: error.message || String(error) }
+                error: { code: 'POA_PROCESS_ERROR', message: `Failed to process Excel file: ${msg}`, details: msg }
             }));
             return;
         }
-        return serverError(res, msg);
+        return serverError(res, `Failed to process Excel file: ${msg}`);
     }
 }
 

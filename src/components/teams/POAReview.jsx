@@ -3,9 +3,14 @@
  * 
  * This component provides a UI for uploading fuel transaction data files
  * and downloading formatted review reports with compliance analysis.
+ * Server enforces file size (50MB) and row limits to avoid overload.
  */
 
 const { useState, useCallback } = React;
+
+// Must match server limits (api/poa-review/process-excel.js and process-batch.js)
+const MAX_FILE_SIZE_MB = 50;
+const MAX_ROWS = 400000;
 
 const POAReview = () => {
     const { isDark } = window.useTheme || (() => ({ isDark: false }));
@@ -32,9 +37,9 @@ const POAReview = () => {
             }
             
             // Validate file size (max 50MB)
-            const maxSize = 50 * 1024 * 1024; // 50MB
+            const maxSize = MAX_FILE_SIZE_MB * 1024 * 1024;
             if (file.size > maxSize) {
-                setError('File size must be less than 50MB');
+                setError(`File size must be less than ${MAX_FILE_SIZE_MB}MB to avoid server overload.`);
                 return;
             }
             
@@ -576,6 +581,12 @@ const POAReview = () => {
             
             if (rows.length === 0) {
                 throw new Error('No data rows found in file');
+            }
+
+            if (rows.length > MAX_ROWS) {
+                throw new Error(
+                    `This file has too many rows (${rows.length.toLocaleString()}). Maximum ${MAX_ROWS.toLocaleString()} rows are supported to avoid server overload. Please split your file or use a smaller dataset.`
+                );
             }
 
             setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...`);

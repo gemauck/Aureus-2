@@ -3,6 +3,7 @@
  * 
  * Processes data in chunks to prevent server crashes with large files.
  * Accumulates results and generates final report when all batches are complete.
+ * Enforces row limits to avoid OOM and server crash.
  */
 
 import fs from 'fs';
@@ -16,6 +17,10 @@ import { created, badRequest, serverError, ok } from '../_lib/response.js';
 import { parseJsonBody } from '../_lib/body.js';
 
 const execAsync = promisify(exec);
+
+// Limits to prevent server crash from huge documents
+const MAX_TOTAL_ROWS = 400000;   // Reject job if total rows exceed this
+const MAX_ROWS_PER_BATCH = 25000; // Reject single batch if it has more rows
 
 // Store batch data in memory (in production, use Redis or database)
 const batchStore = new Map();
@@ -46,6 +51,15 @@ async function handler(req, res) {
 
         if (!batchId || !rows || !Array.isArray(rows)) {
             return badRequest(res, 'batchId and rows array are required');
+        }
+
+        if (rows.length > MAX_ROWS_PER_BATCH) {
+            return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
+                error: {
+                    code: 'POA_TOO_MANY_ROWS',
+                    message: `This batch has too many rows (${rows.length}). Maximum ${MAX_ROWS_PER_BATCH} rows per batch. Use a smaller batch size or split your file.`
+                }
+            }));
         }
 
         // Get root directory
@@ -96,6 +110,17 @@ async function handler(req, res) {
                 isFinal,
                 batchNumbers: batchData.batches.map(b => b.batchNumber).sort((a, b) => a - b)
             });
+
+            // Enforce total row limit to avoid server OOM/crash
+            if (totalRowsReceived > MAX_TOTAL_ROWS) {
+                batchStore.delete(batchId);
+                return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
+                    error: {
+                        code: 'POA_TOO_MANY_ROWS',
+                        message: `This file has too many rows (${totalRowsReceived}). Maximum ${MAX_TOTAL_ROWS} rows are supported to avoid server overload. Please split your file or use a smaller dataset.`
+                    }
+                }));
+            }
             
             // Validate we have all expected batches
             if (receivedBatches < expectedBatches && !isFinal) {
