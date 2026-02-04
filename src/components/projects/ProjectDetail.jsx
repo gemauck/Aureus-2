@@ -2320,7 +2320,7 @@ function initializeProjectDetail() {
     
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        // Don't overwrite when user explicitly changed it (e.g. via Hide Weekly FMS)
+        // Don't overwrite when user explicitly changed it
         if (hasWeeklyFMSReviewProcessChangedRef.current) return;
         if (normalizedValue !== hasWeeklyFMSReviewProcess) {
             setHasWeeklyFMSReviewProcess(normalizedValue);
@@ -5955,66 +5955,6 @@ function initializeProjectDetail() {
         }
     };
 
-    const handleRemoveModule = async (moduleKey) => {
-        if (activeSection === moduleKey) switchSection('tasks');
-        if (moduleKey === 'time') {
-            hasTimeProcessChangedRef.current = true;
-            setHasTimeProcess(false);
-            try {
-                await persistProjectData({ nextHasTimeProcess: false });
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject({ ...project, hasTimeProcess: false });
-                }
-            } finally {
-                hasTimeProcessChangedRef.current = false;
-            }
-        } else if (moduleKey === 'documentCollection') {
-            hasDocumentCollectionProcessChangedRef.current = true;
-            setHasDocumentCollectionProcess(false);
-            try {
-                await persistProjectData({ nextHasDocumentCollectionProcess: false });
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject({ ...project, hasDocumentCollectionProcess: false });
-                }
-            } finally {
-                hasDocumentCollectionProcessChangedRef.current = false;
-            }
-        } else if (moduleKey === 'weeklyFMSReview') {
-            hasWeeklyFMSReviewProcessChangedRef.current = true;
-            setHasWeeklyFMSReviewProcess(false);
-            try {
-                await persistProjectData({ nextHasWeeklyFMSReviewProcess: false });
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject({ ...project, hasWeeklyFMSReviewProcess: false });
-                }
-            } finally {
-                hasWeeklyFMSReviewProcessChangedRef.current = false;
-            }
-        } else if (moduleKey === 'monthlyFMSReview') {
-            hasMonthlyFMSReviewProcessChangedRef.current = true;
-            setHasMonthlyFMSReviewProcess(false);
-            try {
-                await persistProjectData({ nextHasMonthlyFMSReviewProcess: false });
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject({ ...project, hasMonthlyFMSReviewProcess: false });
-                }
-            } finally {
-                hasMonthlyFMSReviewProcessChangedRef.current = false;
-            }
-        } else if (moduleKey === 'monthlyDataReview') {
-            hasMonthlyDataReviewProcessChangedRef.current = true;
-            setHasMonthlyDataReviewProcess(false);
-            try {
-                await persistProjectData({ nextHasMonthlyDataReviewProcess: false });
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject({ ...project, hasMonthlyDataReviewProcess: false });
-                }
-            } finally {
-                hasMonthlyDataReviewProcessChangedRef.current = false;
-            }
-        }
-    };
-
     const handleAddDocumentCollectionProcess = async () => {
         
         try {
@@ -7457,123 +7397,73 @@ function initializeProjectDetail() {
                         Tasks
                     </button>
                     {hasTimeProcess && (
-                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
-                            <button
-                                onClick={() => requestAnimationFrame(() => switchSection('time'))}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
-                                    activeSection === 'time'
-                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                            >
-                                <i className="fas fa-clock mr-1.5"></i>
-                                Time
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('time'); }}
-                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
-                                title="Hide Time module"
-                            >
-                                <i className="fas fa-times text-[10px]"></i>
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => requestAnimationFrame(() => switchSection('time'))}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'time'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-clock mr-1.5"></i>
+                            Time
+                        </button>
                     )}
                     {hasDocumentCollectionProcess && (
-                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
-                            <button
-                                type="button"
-                                onClick={() => requestAnimationFrame(() => switchSection('documentCollection'))}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
-                                    activeSection === 'documentCollection'
-                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                            >
-                                <i className="fas fa-folder-open mr-1.5"></i>
-                                Document Collection
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('documentCollection'); }}
-                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
-                                title="Hide Document Collection module"
-                            >
-                                <i className="fas fa-times text-[10px]"></i>
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => requestAnimationFrame(() => switchSection('documentCollection'))}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'documentCollection'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-folder-open mr-1.5"></i>
+                            Document Collection
+                        </button>
                     )}
                     {hasWeeklyFMSReviewProcess && (
-                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
-                            <button
-                                type="button"
-                                onClick={() => requestAnimationFrame(() => switchSection('weeklyFMSReview'))}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
-                                    activeSection === 'weeklyFMSReview'
-                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                            >
-                                <i className="fas fa-calendar-week mr-1.5"></i>
-                                Weekly FMS Review
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('weeklyFMSReview'); }}
-                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
-                                title="Hide Weekly FMS Review module"
-                            >
-                                <i className="fas fa-times text-[10px]"></i>
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => requestAnimationFrame(() => switchSection('weeklyFMSReview'))}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'weeklyFMSReview'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-calendar-week mr-1.5"></i>
+                            Weekly FMS Review
+                        </button>
                     )}
                     {hasMonthlyFMSReviewProcess && (
-                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
-                            <button
-                                type="button"
-                                onClick={() => requestAnimationFrame(() => switchSection('monthlyFMSReview'))}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
-                                    activeSection === 'monthlyFMSReview'
-                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                            >
-                                <i className="fas fa-calendar-alt mr-1.5"></i>
-                                Monthly FMS Review
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('monthlyFMSReview'); }}
-                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
-                                title="Hide Monthly FMS Review module"
-                            >
-                                <i className="fas fa-times text-[10px]"></i>
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => requestAnimationFrame(() => switchSection('monthlyFMSReview'))}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'monthlyFMSReview'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-calendar-alt mr-1.5"></i>
+                            Monthly FMS Review
+                        </button>
                     )}
                     {hasMonthlyDataReviewProcess && (
-                        <div className="flex-1 flex items-center gap-0.5 min-w-0">
-                            <button
-                                type="button"
-                                onClick={() => requestAnimationFrame(() => switchSection('monthlyDataReview'))}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-l-lg transition-colors ${
-                                    activeSection === 'monthlyDataReview'
-                                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                            >
-                                <i className="fas fa-clipboard-check mr-1.5"></i>
-                                Monthly Data Review
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveModule('monthlyDataReview'); }}
-                                className="px-1.5 py-2 text-gray-400 hover:text-red-600 rounded-r-lg hover:bg-gray-100 transition-colors"
-                                title="Hide Monthly Data Review module"
-                            >
-                                <i className="fas fa-times text-[10px]"></i>
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => requestAnimationFrame(() => switchSection('monthlyDataReview'))}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'monthlyDataReview'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-clipboard-check mr-1.5"></i>
+                            Monthly Data Review
+                        </button>
                     )}
                     <div className="relative">
                         <button
