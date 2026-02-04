@@ -111,6 +111,23 @@ async function handler(req, res) {
   } catch (logErr) {
     console.error('document-collection-email-activity: log query failed (returning empty sent):', logErr.message)
   }
+  // Deduplicate sent: same subject + createdAt within 10s → keep first (avoids 3x same send in UI)
+  if (sent.length > 1) {
+    const deduped = []
+    for (const s of sent) {
+      const t = s.createdAt ? new Date(s.createdAt).getTime() : 0
+      let skip = false
+      for (const other of deduped) {
+        const ot = other.createdAt ? new Date(other.createdAt).getTime() : 0
+        if (Math.abs(t - ot) <= 10000 && (s.subject || '') === (other.subject || '')) {
+          skip = true
+          break
+        }
+      }
+      if (!skip) deduped.push(s)
+    }
+    sent = deduped
+  }
   if (sent.length === 0) {
     try {
       const totalForProject = await prisma.documentCollectionEmailLog.count({ where: { projectId: cell.projectId } })
