@@ -280,9 +280,30 @@ const ServiceAndMaintenance = () => {
     }
   };
 
-  const handleOpenJobCardDetail = (jobCard) => {
+  const handleOpenJobCardDetail = async (jobCard) => {
+    if (!jobCard?.id) {
+      setSelectedJobCard(jobCard);
+      setShowJobCardDetail(true);
+      return;
+    }
     setSelectedJobCard(jobCard);
     setShowJobCardDetail(true);
+    setLoadingJobCard(true);
+    try {
+      const token = window.storage?.getToken?.();
+      const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCard.id)}`, {
+        headers: token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {},
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
+        if (full && full.id) setSelectedJobCard(full);
+      }
+    } catch (e) {
+      console.warn('Failed to load full job card details (photos etc.), showing list data', e);
+    } finally {
+      setLoadingJobCard(false);
+    }
   };
 
   const handleCloseJobCardDetail = () => {
@@ -1462,19 +1483,30 @@ const JobCardFormsSection = ({ jobCard }) => {
                           Photos
                         </div>
                         <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                          {Array.isArray(selectedJobCard.photos)
-                            ? selectedJobCard.photos.length
-                            : 0}{' '}
-                          photo
-                          {Array.isArray(selectedJobCard.photos) &&
-                          selectedJobCard.photos.length === 1
-                            ? ''
-                            : 's'}
+                          {loadingJobCard && !Array.isArray(selectedJobCard.photos) ? (
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading…</span>
+                          ) : (
+                            <>
+                              {Array.isArray(selectedJobCard.photos)
+                                ? selectedJobCard.photos.length
+                                : 0}{' '}
+                              photo
+                              {Array.isArray(selectedJobCard.photos) &&
+                              selectedJobCard.photos.length === 1
+                                ? ''
+                                : 's'}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
                   </header>
-                  {Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
+                  {loadingJobCard && !Array.isArray(selectedJobCard.photos) ? (
+                    <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                      <i className="fa-solid fa-spinner fa-spin text-xl mb-2" />
+                      <p className="text-sm">Loading photos…</p>
+                    </div>
+                  ) : Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       {selectedJobCard.photos.map((photo, idx) => (
                         <figure
