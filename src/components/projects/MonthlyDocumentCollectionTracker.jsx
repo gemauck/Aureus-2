@@ -179,6 +179,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const loadRetryTimeoutRef = useRef(null); // Timeout for single retry when load returns empty
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     
+    // Section header Actions dropdown - MUST be declared before any effect/callback that references it (avoids TDZ)
+    const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
+    
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
         : null;
@@ -224,7 +227,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     };
     
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
-    
+    // Close section Actions dropdown when clicking outside (effect lives near state to avoid TDZ)
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (event.target.closest && !event.target.closest('[data-section-actions-dropdown]')) {
+                setSectionActionsOpenId(null);
+            }
+        };
+        if (sectionActionsOpenId != null) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [sectionActionsOpenId]);
+
     // Parse documentSections safely (legacy flat array support)
     // OPTIMIZED: Reduced retry attempts and improved early exit conditions
     const parseSections = (data) => {
@@ -527,19 +542,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Close section Actions dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (event.target.closest && !event.target.closest('[data-section-actions-dropdown]')) {
-                setSectionActionsOpenId(null);
-            }
-        };
-        if (sectionActionsOpenId != null) {
-            document.addEventListener('mousedown', handleClickOutside);
-            return () => document.removeEventListener('mousedown', handleClickOutside);
-        }
-    }, [sectionActionsOpenId]);
-
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
     // (POST) instead of trying to update an existing template.
@@ -566,8 +568,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [hoveredStatusCell, setHoveredStatusCell] = useState(null);
     // Status legend collapsed by default to reduce visual weight
     const [legendCollapsed, setLegendCollapsed] = useState(true);
-    // Section header: single Actions dropdown (Add Document, Edit, Delete) per section
-    const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
 
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
