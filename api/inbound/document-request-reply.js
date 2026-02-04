@@ -540,61 +540,55 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
     const allCandidates = await getAllMessageIdCandidates(email, rawUrl, apiKey)
     if (allCandidates.length === 0) {
-      const headerKeys = email.headers ? Object.keys(normalizeHeaders(email.headers)) : []
-      const hasRaw = !!(email.raw && (email.raw.download_url || email.raw.downloadUrl))
-      console.warn('document-request-reply: no In-Reply-To or References', {
-        emailId,
-        headerKeys,
-        hasRawUrl: hasRaw,
-        in_reply_to: email.in_reply_to || null,
-        references: email.references ? (typeof email.references === 'string' ? email.references.slice(0, 80) : 'present') : null
-      })
-      return
+      console.log('document-request-reply: no In-Reply-To/References, will try subject fallback', { emailId, subject: (email.subject || '').toString().slice(0, 80) })
     }
 
-    // Resend may put its own format (e.g. 0102019c24a3ef6e-...) in In-Reply-To; our docreq-uuid@domain may be in References. Try ALL candidates.
-    const messageIdCandidates = new Set(allCandidates)
-    allCandidates.forEach((c) => {
-      const lp = c.split('@')[0]
-      if (lp && lp.startsWith('docreq-')) messageIdCandidates.add(lp)
-    })
-    const candidatesArray = [...messageIdCandidates]
-    let mapping = await prisma.documentRequestEmailSent.findFirst({
-      where: { messageId: { in: candidatesArray } }
-    })
-    if (!mapping) {
-      const recent = await prisma.documentRequestEmailSent.findMany({
-        take: 300,
-        orderBy: { createdAt: 'desc' }
+    let mapping = null
+    // Try message-ID matching when we have candidates.
+    if (allCandidates.length > 0) {
+      const messageIdCandidates = new Set(allCandidates)
+      allCandidates.forEach((c) => {
+        const lp = c.split('@')[0]
+        if (lp && lp.startsWith('docreq-')) messageIdCandidates.add(lp)
       })
-      for (const cand of candidatesArray) {
-        const lp = cand.split('@')[0]
-        mapping =
-          recent.find(
-            (r) =>
-              r.messageId === cand ||
-              r.messageId === lp ||
-              cand.startsWith(r.messageId) ||
-              (r.messageId.length >= 10 && cand.includes(r.messageId))
-          ) || null
-        if (mapping) break
+      const candidatesArray = [...messageIdCandidates]
+      mapping = await prisma.documentRequestEmailSent.findFirst({
+        where: { messageId: { in: candidatesArray } }
+      })
+      if (!mapping) {
+        const recent = await prisma.documentRequestEmailSent.findMany({
+          take: 300,
+          orderBy: { createdAt: 'desc' }
+        })
+        for (const cand of candidatesArray) {
+          const lp = cand.split('@')[0]
+          mapping =
+            recent.find(
+              (r) =>
+                r.messageId === cand ||
+                r.messageId === lp ||
+                cand.startsWith(r.messageId) ||
+                (r.messageId.length >= 10 && cand.includes(r.messageId))
+            ) || null
+          if (mapping) break
+        }
       }
-    }
-    if (!mapping) {
-      for (const cand of candidatesArray) {
-        const lp = cand.split('@')[0]
-        if (lp && lp.startsWith('docreq-')) {
-          const byLocalPart = await prisma.documentRequestEmailSent.findFirst({
-            where: { messageId: { startsWith: lp + '@' } }
-          })
-          if (byLocalPart) {
-            mapping = byLocalPart
-            break
+      if (!mapping) {
+        for (const cand of candidatesArray) {
+          const lp = cand.split('@')[0]
+          if (lp && lp.startsWith('docreq-')) {
+            const byLocalPart = await prisma.documentRequestEmailSent.findFirst({
+              where: { messageId: { startsWith: lp + '@' } }
+            })
+            if (byLocalPart) {
+              mapping = byLocalPart
+              break
+            }
           }
         }
       }
     }
-    // Last resort: match by subject. Format: "... – DocumentName – Month Year" (e.g. " – Mining Right – February 2026").
+    // Fallback: match by subject (e.g. "Re: ... - CIPC Documents - February 2026"). Works even when In-Reply-To is missing.
     // Reply subject is often "Re: Abco Document / Data request: ProjectName - DocumentName - February 2026".
     // Use the LAST " - Month Year" so we get DocumentName (segment before it), not ProjectName.
     if (!mapping) {
@@ -618,12 +612,20 @@ async function processReceivedEmail(emailId, apiKey, data) {
         }
       }
       if (!fallbackMonth || !fallbackYear) {
+        const abbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
         for (let i = 0; i < monthNames.length; i++) {
-          const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'gi')
-          const m = subject.match(re)
-          if (m) {
+          const re = new RegExp(`\\b${monthNames[i]}\\s+(20\\d{2})\\b`, 'i')
+          const m = re.exec(subject)
+          if (m && m[1]) {
             fallbackMonth = i + 1
             fallbackYear = parseInt(m[1], 10)
+            break
+          }
+          const reAbbr = new RegExp(`\\b${abbr[i]}\\w*\\s+(20\\d{2})\\b`, 'i')
+          const mAbbr = reAbbr.exec(subject)
+          if (mAbbr && mAbbr[1]) {
+            fallbackMonth = i + 1
+            fallbackYear = parseInt(mAbbr[1], 10)
             break
           }
         }
@@ -664,7 +666,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
       console.warn('document-request-reply: unknown_thread', {
         candidatesCount: allCandidates.length,
         firstCandidate: primaryId.slice(0, 80),
-        tried: candidatesArray.slice(0, 10),
+        tried: allCandidates.slice(0, 10),
         recentCount: (await prisma.documentRequestEmailSent.count()).toString(),
         subject: (email.subject || '').slice(0, 80),
         hint: 'Send a new document request from the app, then reply to that email. Resend may use a different In-Reply-To format.'
