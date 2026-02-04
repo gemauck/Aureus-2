@@ -173,7 +173,8 @@ async function handler(req, res) {
               ...(sectionId ? { sectionId } : {}),
               documentId: cell.documentId,
               year: cell.year,
-              month: cell.month
+              month: cell.month,
+              ...(userEmail && isValidEmail(userEmail) ? { requesterEmail: userEmail.trim() } : {})
             }
           })
         } catch (dbErr) {

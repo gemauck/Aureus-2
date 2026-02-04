@@ -777,14 +777,15 @@ model DocumentItemComment {
 
 // Maps sent document-request email message ID → cell for inbound reply routing
 model DocumentRequestEmailSent {
-  id          String   @id @default(cuid())
-  messageId   String   // Custom Message-ID (e.g. docreq-uuid@domain); used to match In-Reply-To on replies
-  projectId   String
-  sectionId   String?  // Optional so we always store messageId for reply matching even when section missing
-  documentId  String   // DocumentItem.id (itemId)
-  year        Int
-  month       Int
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  messageId      String   // Custom Message-ID (e.g. docreq-uuid@domain); used to match In-Reply-To on replies
+  projectId      String
+  sectionId      String?  // Optional so we always store messageId for reply matching even when section missing
+  documentId     String   // DocumentItem.id (itemId)
+  year           Int
+  month          Int
+  requesterEmail String?  // Person who sent the request; replies are forwarded here (documents@ is not a real mailbox)
+  createdAt      DateTime @default(now())
 
   @@unique([messageId])
   @@index([projectId])

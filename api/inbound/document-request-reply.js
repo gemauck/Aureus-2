@@ -8,6 +8,9 @@
  * Resend setup: In Resend Dashboard enable "Receive" for your domain, then add a webhook
  * for event "email.received" pointing to: https://your-domain/api/inbound/document-request-reply
  * No auth - webhook is validated by Resend/Svix signing when RESEND_WEBHOOK_SECRET is set.
+ *
+ * When DocumentRequestEmailSent has requesterEmail, a copy of the reply is forwarded to that
+ * address (documents@ is not a real mailbox), so the requester does not miss replies.
  */
 import crypto from 'crypto'
 import fs from 'fs'
@@ -19,6 +22,11 @@ import { ok, badRequest, serverError } from '../_lib/response.js'
 const UPLOAD_FOLDER = 'doc-collection-comments'
 // 24h tolerance so Resend Replay works (replays send original timestamp); override via RESEND_WEBHOOK_TOLERANCE_SEC
 const SIGNATURE_TOLERANCE_SEC = parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_SEC || '86400', 10) || 86400
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+function isValidEmail(s) {
+  return typeof s === 'string' && s.trim().length > 0 && EMAIL_RE.test(s.trim())
+}
 
 /** Verify Resend/Svix webhook signature (raw body + svix-id, svix-timestamp, svix-signature). */
 function verifyWebhookSignature(rawBody, headers, secret) {
@@ -287,6 +295,48 @@ async function resendApi(method, pathname, apiKey, options = {}) {
     throw new Error(`${method} ${pathname} failed: ${res.status} ${text.slice(0, 300)}`)
   }
   return res
+}
+
+/**
+ * Forward a copy of the received reply to the requester (documents@ is not a real mailbox).
+ * Uses Resend Send API; non-blocking, errors are logged only.
+ */
+async function forwardReplyToRequester(apiKey, email, requesterEmail, attachmentCount) {
+  const inboundEmail = process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || ''
+  if (!inboundEmail || !isValidEmail(inboundEmail) || !isValidEmail(requesterEmail)) return
+  const subject = (email.subject || '').toString().trim() || '(no subject)'
+  const fwdSubject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`
+  const origHtml = (email.html || '').toString().trim()
+  const origText = (email.text || '').toString().trim()
+  const intro = 'This document request reply was received at documents@ and forwarded to you as the requester.'
+  const attachmentNote = attachmentCount > 0 ? ` Attachments (${attachmentCount}) have been saved to the project in the ERP.` : ''
+  const html = `<p>${intro}${attachmentNote}</p><hr/><p><strong>From:</strong> ${(email.from || '').toString()}</p><p><strong>Subject:</strong> ${fwdSubject}</p><hr/>${origHtml || `<pre>${(origText || '').replace(/</g, '&lt;')}</pre>`}`
+  const text = `${intro}${attachmentNote}\n\nFrom: ${(email.from || '').toString()}\nSubject: ${fwdSubject}\n\n---\n\n${origText || origHtml.replace(/<[^>]+>/g, '')}`
+  const payload = {
+    from: `Abcotronics Documents <${inboundEmail}>`,
+    to: [requesterEmail.trim()],
+    subject: `Fwd: ${fwdSubject}`,
+    html,
+    text
+  }
+  try {
+    const res = await fetch(`${RESEND_API_BASE}/emails`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok) {
+      const t = await res.text()
+      console.warn('document-request-reply: forward to requester failed', res.status, t.slice(0, 200))
+      return
+    }
+    console.log('document-request-reply: forwarded reply to requester', requesterEmail.trim())
+  } catch (err) {
+    console.warn('document-request-reply: forward to requester error', err.message)
+  }
 }
 
 /**
@@ -756,6 +806,14 @@ async function processReceivedEmail(emailId, apiKey, data) {
     })
 
     console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
+
+    // Forward a copy to the requester (documents@ is not a real mailbox)
+    const requesterEmail = mapping.requesterEmail
+    if (requesterEmail && isValidEmail(requesterEmail)) {
+      forwardReplyToRequester(apiKey, email, requesterEmail, uploaded.length).catch((e) =>
+        console.warn('document-request-reply: forward to requester', e.message)
+      )
+    }
   } catch (e) {
     console.error('document-request-reply: background process error', e)
   }

@@ -499,6 +499,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [users, setUsers] = useState([]);
     const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
+    const [assignmentAnchorRect, setAssignmentAnchorRect] = useState(null); // { top, left, bottom, width } for fixed dropdown
     const assignmentDropdownRef = useRef(null);
 
     // Close assignment dropdown when clicking outside
@@ -506,6 +507,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const handleClickOutside = (event) => {
             if (assignmentDropdownRef.current && !assignmentDropdownRef.current.contains(event.target)) {
                 setAssignmentOpen(null);
+                setAssignmentAnchorRect(null);
             }
         };
         if (assignmentOpen) {
@@ -1831,6 +1833,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             };
         }));
         setAssignmentOpen(null);
+        setAssignmentAnchorRect(null);
+        // Force save after ref/state flush so assignment persists
+        setTimeout(() => { if (typeof saveToDatabase === 'function') saveToDatabase(); }, 200);
     };
     
     const handleDeleteDocument = (sectionId, documentId, event) => {
@@ -3365,7 +3370,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                     title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                     aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                 >
-                                    <i className="fas fa-envelope text-xs"></i>
+                                    <i className="fas fa-envelope text-sm"></i>
                                     {hasReceived && (
                                         <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none">
                                             {receivedCount}
@@ -5722,13 +5727,12 @@ Abcotronics`;
                                                                 );
                                                             })()}
                                                         </div>
-                                                            {/* Assigned to: chips + Assign button */}
-                                                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                                                <span className="text-[10px] text-gray-500 mr-0.5">Assigned to:</span>
+                                                            {/* Assign: compact icon + chips only; dropdown rendered fixed so not covered */}
+                                                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
                                                                 {normalizeAssignedTo(doc).map((uid, i) => (
                                                                     <span
                                                                         key={`${doc.id}-${i}-${uid}`}
-                                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-800 text-[10px]"
+                                                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary-50 text-primary-800 text-[10px]"
                                                                     >
                                                                         {getAssigneeLabel(uid)}
                                                                         <button
@@ -5745,52 +5749,26 @@ Abcotronics`;
                                                                         </button>
                                                                     </span>
                                                                 ))}
-                                                                <div className="relative inline-block" ref={assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id ? assignmentDropdownRef : null}>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setAssignmentOpen(prev => (prev?.sectionId === section.id && prev?.docId === doc.id) ? null : { sectionId: section.id, docId: doc.id });
-                                                                        }}
-                                                                        className="inline-flex items-center gap-1 text-[10px] text-primary-600 hover:text-primary-700 hover:underline"
-                                                                    >
-                                                                        <i className="fas fa-user-plus"></i>
-                                                                        <span>Assign</span>
-                                                                    </button>
-                                                                    {assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id && (
-                                                                        <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                                                                            {users.length === 0 ? (
-                                                                                <div className="px-3 py-2 text-[10px] text-gray-500">No users loaded</div>
-                                                                            ) : (
-                                                                                users
-                                                                                    .filter(u => u && (u.name || u.email || u.fullName))
-                                                                                    .sort((a, b) => ((a.name || a.email || a.fullName || '').toString().toLowerCase()).localeCompare((b.name || b.email || b.fullName || '').toString().toLowerCase()))
-                                                                                    .map(user => {
-                                                                                        const ident = getUserIdentifier(user);
-                                                                                        const label = user.name || user.fullName || user.email || 'Unknown';
-                                                                                        const current = normalizeAssignedTo(doc);
-                                                                                        const isChecked = ident && current.some(c => String(c) === String(ident) || getAssigneeLabel(c) === label);
-                                                                                        return (
-                                                                                            <label key={ident || label} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
-                                                                                                <input
-                                                                                                    type="checkbox"
-                                                                                                    checked={!!isChecked}
-                                                                                                    onChange={() => {
-                                                                                                        const next = isChecked
-                                                                                                            ? current.filter(c => String(c) !== String(ident) && getAssigneeLabel(c) !== label)
-                                                                                                            : [...current, ident].filter(Boolean);
-                                                                                                        handleAssignmentChange(section.id, doc.id, next);
-                                                                                                    }}
-                                                                                                    className="rounded border-gray-300 text-primary-600"
-                                                                                                />
-                                                                                                <span className="truncate">{label}</span>
-                                                                                            </label>
-                                                                                        );
-                                                                                    })
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    title="Assign User"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const isOpen = assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id;
+                                                                        if (isOpen) {
+                                                                            setAssignmentOpen(null);
+                                                                            setAssignmentAnchorRect(null);
+                                                                        } else {
+                                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                                            setAssignmentOpen({ sectionId: section.id, docId: doc.id });
+                                                                            setAssignmentAnchorRect({ top: rect.top, left: rect.left, bottom: rect.bottom, width: rect.width });
+                                                                        }
+                                                                    }}
+                                                                    className="inline-flex items-center justify-center w-6 h-6 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                                                    aria-label="Assign User"
+                                                                >
+                                                                    <i className="fas fa-user-plus text-xs"></i>
+                                                                </button>
                                                             </div>
                                                             </div>
                                                     </td>
@@ -5882,6 +5860,52 @@ Abcotronics`;
                                 </button>
                             </div>
                         </div>
+                    </div>
+                );
+            })()}
+            {/* Fixed-position assignment dropdown so it is not covered by table/columns */}
+            {assignmentOpen && assignmentAnchorRect && (() => {
+                const section = sections.find(s => String(s.id) === assignmentOpen.sectionId);
+                const doc = section?.documents?.find(d => String(d.id) === assignmentOpen.docId);
+                if (!section || !doc) return null;
+                const current = normalizeAssignedTo(doc);
+                return (
+                    <div
+                        ref={assignmentDropdownRef}
+                        className="fixed min-w-[180px] max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10000]"
+                        style={{
+                            left: assignmentAnchorRect.left,
+                            top: assignmentAnchorRect.bottom + 4
+                        }}
+                    >
+                        {users.length === 0 ? (
+                            <div className="px-3 py-2 text-[10px] text-gray-500">No users loaded</div>
+                        ) : (
+                            users
+                                .filter(u => u && (u.name || u.email || u.fullName))
+                                .sort((a, b) => ((a.name || a.email || a.fullName || '').toString().toLowerCase()).localeCompare((b.name || b.email || b.fullName || '').toString().toLowerCase()))
+                                .map(user => {
+                                    const ident = getUserIdentifier(user);
+                                    const label = user.name || user.fullName || user.email || 'Unknown';
+                                    const isChecked = ident && current.some(c => String(c) === String(ident) || getAssigneeLabel(c) === label);
+                                    return (
+                                        <label key={ident || label} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!isChecked}
+                                                onChange={() => {
+                                                    const next = isChecked
+                                                        ? current.filter(c => String(c) !== String(ident) && getAssigneeLabel(c) !== label)
+                                                        : [...current, ident].filter(Boolean);
+                                                    handleAssignmentChange(section.id, doc.id, next);
+                                                }}
+                                                className="rounded border-gray-300 text-primary-600"
+                                            />
+                                            <span className="truncate">{label}</span>
+                                        </label>
+                                    );
+                                })
+                        )}
                     </div>
                 );
             })()}
