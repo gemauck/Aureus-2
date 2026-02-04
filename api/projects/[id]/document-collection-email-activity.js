@@ -161,6 +161,7 @@ async function handler(req, res) {
       select: { id: true, text: true, attachments: true, createdAt: true }
     })
 
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const received = receivedRows.map((r) => {
       let attachments = []
       if (r.attachments) {
@@ -170,11 +171,20 @@ async function handler(req, res) {
           attachments = []
         }
       }
+      // Parse reply-to email from stored text: "Email from Client (sender@example.com)"
+      let replyToEmail = null
+      const text = (r.text || '').trim()
+      const match = text.match(/^Email from Client\s*\(([^)]+)\)/)
+      if (match && match[1]) {
+        const addr = match[1].trim()
+        if (emailRe.test(addr)) replyToEmail = addr
+      }
       return {
         id: r.id,
         text: r.text,
         attachments,
-        createdAt: r.createdAt
+        createdAt: r.createdAt,
+        replyToEmail
       }
     })
 

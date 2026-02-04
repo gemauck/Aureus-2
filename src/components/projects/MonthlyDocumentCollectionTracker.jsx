@@ -3602,6 +3602,12 @@ Abcotronics`;
         const [loadingActivity, setLoadingActivity] = useState(false);
         const [expandedSentId, setExpandedSentId] = useState(null);
         const [deletingActivityId, setDeletingActivityId] = useState(null);
+        // Reply to a received email: which item and form fields
+        const [replyingToReceivedId, setReplyingToReceivedId] = useState(null);
+        const [replyToEmail, setReplyToEmail] = useState('');
+        const [replySubject, setReplySubject] = useState('');
+        const [replyBody, setReplyBody] = useState('');
+        const [sendingReply, setSendingReply] = useState(false);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3640,6 +3646,10 @@ Abcotronics`;
             setNewContact('');
             setNewContactCc('');
             setResult(null);
+            setReplyingToReceivedId(null);
+            setReplyToEmail('');
+            setReplySubject('');
+            setReplyBody('');
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
         // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send
@@ -3736,6 +3746,90 @@ Abcotronics`;
                 alert(err.message || 'Failed to delete')
             } finally {
                 setDeletingActivityId(null);
+            }
+        };
+
+        // Parse reply-to email from received item text (fallback if API didn't return replyToEmail)
+        const getReplyToFromReceived = (r) => {
+            if (r.replyToEmail && emailRe.test(r.replyToEmail)) return r.replyToEmail;
+            const match = (r.text || '').trim().match(/^Email from Client\s*\(([^)]+)\)/);
+            return match && match[1] && emailRe.test(match[1].trim()) ? match[1].trim() : null;
+        };
+
+        const openReply = (r) => {
+            const toAddr = getReplyToFromReceived(r);
+            if (!toAddr) {
+                alert('Cannot reply: sender email could not be determined from this message.');
+                return;
+            }
+            setReplyingToReceivedId(r.id);
+            setReplyToEmail(toAddr);
+            setReplySubject((defaultSubject || '').trim().toLowerCase().startsWith('re:') ? defaultSubject : `Re: ${(defaultSubject || '').trim()}`);
+            setReplyBody('');
+        };
+
+        const cancelReply = () => {
+            setReplyingToReceivedId(null);
+            setReplyToEmail('');
+            setReplySubject('');
+            setReplyBody('');
+        };
+
+        const handleSendReply = async () => {
+            if (!replyToEmail || !replySubject.trim() || !ctx?.doc?.id || !ctx?.month || project?.id == null || selectedYear == null) return;
+            const monthNum = months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
+            if (!monthNum) return;
+            setSendingReply(true);
+            setResult(null);
+            try {
+                const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+                const yearNum = parseInt(selectedYear, 10);
+                const htmlPayload = buildStyledEmailHtml(replySubject.trim(), (replyBody || '').trim());
+                const sendUrl = `${base}/api/projects/${project.id}/document-collection-send-email?documentId=${encodeURIComponent(String(ctx.doc.id))}&month=${Number(monthNum)}&year=${Number(yearNum)}`;
+                const res = await fetch(sendUrl, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        to: [replyToEmail.trim()],
+                        subject: replySubject.trim(),
+                        html: htmlPayload,
+                        text: (replyBody || '').trim(),
+                        projectId: String(project.id).trim(),
+                        documentId: String(ctx.doc.id).trim(),
+                        month: Number(monthNum),
+                        year: Number(yearNum),
+                        ...(ctx?.section?.id ? { sectionId: String(ctx.section.id).trim() } : {})
+                    })
+                });
+                const json = await res.json().catch(() => ({}));
+                const data = json.data || json;
+                const sentList = data.sent || json.sent || [];
+                const failedList = data.failed || json.failed || [];
+                if (!res.ok && res.status !== 503) {
+                    setResult({ error: data.error || json.error || 'Failed to send reply' });
+                    return;
+                }
+                if (sentList.length > 0) {
+                    showEmailSentToast();
+                    cancelReply();
+                    setEmailActivity((prev) => ({ ...prev, sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString() }] }));
+                    fetchEmailActivity();
+                }
+                setResult({
+                    sent: sentList,
+                    failed: failedList,
+                    ...((data.warning || json.warning) ? { warning: data.warning || json.warning } : {})
+                });
+            } catch (err) {
+                setResult({ error: err.message || 'Failed to send reply' });
+            } finally {
+                setSendingReply(false);
             }
         };
 
@@ -4174,8 +4268,19 @@ Abcotronics`;
                                                 {emailActivity.received.map((r) => (
                                                     <li key={r.id} className="text-sm border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
                                                         <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
-                                                            <i className="fas fa-reply text-emerald-600 text-xs"></i>
+                                                            <i className="fas fa-inbox text-emerald-600 text-xs"></i>
                                                             <span className="flex-1 text-gray-600">{formatDateTime(r.createdAt)}</span>
+                                                            {getReplyToFromReceived(r) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openReply(r)}
+                                                                    className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-primary-50"
+                                                                    title="Reply to this email"
+                                                                    aria-label="Reply to this email"
+                                                                >
+                                                                    <i className="fas fa-reply text-xs"></i>
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleDeleteEmailActivity(r.id, 'received')}
@@ -4206,6 +4311,52 @@ Abcotronics`;
                                                                         </a>
                                                                     );
                                                                 })}
+                                                            </div>
+                                                        )}
+                                                        {replyingToReceivedId === r.id && (
+                                                            <div className="px-3 py-3 border-t border-gray-200 bg-white space-y-3">
+                                                                <div className="text-xs font-medium text-gray-500">Reply to this message</div>
+                                                                <div>
+                                                                    <label className="block text-xs text-gray-500 mb-0.5">To</label>
+                                                                    <input type="text" readOnly value={replyToEmail} className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-gray-50" />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-xs text-gray-500 mb-0.5">Subject</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={replySubject}
+                                                                        onChange={(e) => setReplySubject(e.target.value)}
+                                                                        className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-xs text-gray-500 mb-0.5">Message</label>
+                                                                    <textarea
+                                                                        value={replyBody}
+                                                                        onChange={(e) => setReplyBody(e.target.value)}
+                                                                        rows={4}
+                                                                        placeholder="Type your reply..."
+                                                                        className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded resize-y"
+                                                                    />
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={cancelReply}
+                                                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleSendReply}
+                                                                        disabled={sendingReply || !replyBody.trim()}
+                                                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                                                                    >
+                                                                        {sendingReply ? <i className="fas fa-spinner fa-spin mr-1"></i> : null}
+                                                                        Send reply
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </li>
