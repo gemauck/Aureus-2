@@ -3608,6 +3608,7 @@ Abcotronics`;
         const [replySubject, setReplySubject] = useState('');
         const [replyBody, setReplyBody] = useState('');
         const [sendingReply, setSendingReply] = useState(false);
+        const activityFetchIdRef = useRef(0);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3660,6 +3661,7 @@ Abcotronics`;
             }
             const monthNum = months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
             if (monthNum == null) return Promise.resolve();
+            const fetchId = ++activityFetchIdRef.current;
             setLoadingActivity(true);
             const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
             const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
@@ -3677,14 +3679,15 @@ Abcotronics`;
             })
                 .then((res) => res.json().catch(() => ({})))
                 .then((json) => {
+                    if (fetchId !== activityFetchIdRef.current) return;
                     const data = json.data || json;
                     setEmailActivity({
                         sent: Array.isArray(data.sent) ? data.sent : [],
                         received: Array.isArray(data.received) ? data.received : []
                     });
                 })
-                .catch(() => setEmailActivity({ sent: [], received: [] }))
-                .finally(() => setLoadingActivity(false));
+                .catch(() => { if (fetchId === activityFetchIdRef.current) setEmailActivity({ sent: [], received: [] }); })
+                .finally(() => { if (fetchId === activityFetchIdRef.current) setLoadingActivity(false); });
         }, [ctx?.doc?.id, ctx?.month, selectedYear, project?.id]);
 
         useEffect(() => {
@@ -3818,11 +3821,15 @@ Abcotronics`;
                 }
                 if (sentList.length > 0) {
                     showEmailSentToast();
+                    // Optimistic update so reply appears immediately and persists in UI even if refetch is slow or races
+                    setEmailActivity((prev) => ({
+                        ...prev,
+                        sent: [...prev.sent, { id: 'sent-reply-' + Date.now(), subject: replySubject.trim(), bodyText: (replyBody || '').trim(), createdAt: new Date().toISOString() }]
+                    }));
                     cancelReply();
-                    // Refetch activity so the reply appears under Sent below (saved by send-email API)
-                    await new Promise((r) => setTimeout(r, 200));
+                    await new Promise((r) => setTimeout(r, 300));
                     await fetchEmailActivity();
-                    setTimeout(() => fetchEmailActivity(), 600);
+                    setTimeout(() => fetchEmailActivity(), 800);
                 }
                 setResult({
                     sent: sentList,
