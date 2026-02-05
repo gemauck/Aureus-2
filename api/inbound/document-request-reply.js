@@ -594,7 +594,12 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid JSON body' })
     }
     const data = body.data || body.payload?.data || body
-    const emailId = data && (data.email_id || data.emailId)
+    const emailId =
+      (data && (data.email_id || data.emailId || data.id)) ||
+      body.email_id ||
+      body.emailId ||
+      body.id ||
+      null
     const eventType = body.type || body.event_type || (data && (data.type || data.event_type))
     if (eventType !== 'email.received') {
       console.warn('document-request-reply: ignored event (expected email.received)', { receivedType: eventType, bodyKeys: Object.keys(body) })
