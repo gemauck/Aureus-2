@@ -2888,7 +2888,7 @@ const getAssigneeColor = (identifier, users) => {
                                     }, 10);
                                 }
                             }}
-                            className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
+                            className="text-red-300 hover:text-red-400 transition-colors relative p-1"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
