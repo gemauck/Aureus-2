@@ -22,6 +22,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .env.production.backup
+.env.local.backup
 
 # Database credentials (server-side only, never commit)
 .db-credentials.sh
