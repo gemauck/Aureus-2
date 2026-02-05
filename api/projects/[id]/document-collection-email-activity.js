@@ -28,10 +28,22 @@ async function handler(req, res) {
         const log = await prisma.documentCollectionEmailLog.findFirst({
           where: { id, projectId, kind: 'sent' }
         })
-        if (!log) {
+        if (log) {
+          await prisma.documentCollectionEmailLog.delete({ where: { id } })
+          return ok(res, { deleted: true, type: 'sent', id })
+        }
+        // Fallback: sent replies are stored as DocumentItemComment (author: Sent reply (platform))
+        const replyComment = await prisma.documentItemComment.findUnique({
+          where: { id },
+          include: { item: { select: { section: { select: { projectId: true } } } } }
+        })
+        if (!replyComment || String(replyComment.item?.section?.projectId) !== projectId) {
           return badRequest(res, 'Sent log not found or access denied')
         }
-        await prisma.documentCollectionEmailLog.delete({ where: { id } })
+        if ((replyComment.author || '').trim() !== 'Sent reply (platform)') {
+          return badRequest(res, 'Sent log not found or access denied')
+        }
+        await prisma.documentItemComment.delete({ where: { id } })
         return ok(res, { deleted: true, type: 'sent', id })
       }
       // type === 'received': DocumentItemComment

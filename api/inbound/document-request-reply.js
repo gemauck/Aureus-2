@@ -21,6 +21,8 @@ import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const UPLOAD_FOLDER = 'doc-collection-comments'
+const ENABLE_RECEIVED_EMAIL_COMMENTS =
+  String(process.env.DOC_COLLECTION_RECEIVED_COMMENT_ENABLED || '').toLowerCase() === 'true'
 // 24h tolerance so Resend Replay works (replays send original timestamp); override via RESEND_WEBHOOK_TOLERANCE_SEC
 const SIGNATURE_TOLERANCE_SEC = parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_SEC || '86400', 10) || 86400
 
@@ -322,7 +324,7 @@ async function notifyRequesterInApp(requesterEmail, projectId, documentId, year,
     } catch (_) {}
     const monthName = month >= 1 && month <= 12 ? MONTH_NAMES[month - 1] : String(month)
     const title = 'Document request reply received'
-    const message = `${docName} – ${monthName} ${year}. Reply and attachments are in the project's Document Collection.`
+    const message = `${docName} – ${monthName} ${year}. Reply received via email.`
     const link = `#/projects/${projectId}?tab=documentCollection`
     await prisma.notification.create({
       data: {
@@ -352,7 +354,7 @@ async function forwardReplyToRequester(apiKey, email, requesterEmail, attachment
   const origHtml = (email.html || '').toString().trim()
   const origText = (email.text || '').toString().trim()
   const intro = 'This document request reply was received at documents@ and forwarded to you as the requester.'
-  const attachmentNote = attachmentCount > 0 ? ` Attachments (${attachmentCount}) have been saved to the project in the ERP.` : ''
+  const attachmentNote = attachmentCount > 0 ? ` This reply included ${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}.` : ''
   const html = `<p>${intro}${attachmentNote}</p><hr/><p><strong>From:</strong> ${(email.from || '').toString()}</p><p><strong>Subject:</strong> ${fwdSubject}</p><hr/>${origHtml || `<pre>${(origText || '').replace(/</g, '&lt;')}</pre>`}`
   const text = `${intro}${attachmentNote}\n\nFrom: ${(email.from || '').toString()}\nSubject: ${fwdSubject}\n\n---\n\n${origText || origHtml.replace(/<[^>]+>/g, '')}`
   const payload = {
@@ -821,39 +823,50 @@ async function processReceivedEmail(emailId, apiKey, data) {
 
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
     const webhookAttachments = data.attachments && Array.isArray(data.attachments) ? data.attachments : null
-    const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
-    console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
+    const receivedAttachmentCount = Array.isArray(webhookAttachments)
+      ? webhookAttachments.length
+      : Array.isArray(email?.attachments)
+        ? email.attachments.length
+        : 0
+    let uploaded = []
+    if (ENABLE_RECEIVED_EMAIL_COMMENTS) {
+      uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
+      console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
 
-    const attachmentLine =
-      uploaded.length > 0
-        ? `Attachments: ${uploaded.map((u) => u.name).join(', ')}`
-        : 'No attachments'
-    const commentText = [
-      'Email from Client',
-      fromStr !== 'unknown' ? ` (${fromStr})` : '',
-      bodyText ? `\n\n${bodyText}\n\n${attachmentLine}` : `\n\n${attachmentLine}`
-    ]
-      .join('')
-      .trim()
+      const attachmentLine =
+        uploaded.length > 0
+          ? `Attachments: ${uploaded.map((u) => u.name).join(', ')}`
+          : 'No attachments'
+      const commentText = [
+        'Email from Client',
+        fromStr !== 'unknown' ? ` (${fromStr})` : '',
+        bodyText ? `\n\n${bodyText}\n\n${attachmentLine}` : `\n\n${attachmentLine}`
+      ]
+        .join('')
+        .trim()
 
-    await prisma.documentItemComment.create({
-      data: {
-        itemId,
-        year,
-        month,
-        text: commentText,
-        author: 'Email from Client',
-        authorId: null,
-        attachments: JSON.stringify(uploaded)
-      }
-    })
+      await prisma.documentItemComment.create({
+        data: {
+          itemId,
+          year,
+          month,
+          text: commentText,
+          author: 'Email from Client',
+          authorId: null,
+          attachments: JSON.stringify(uploaded)
+        }
+      })
 
-    console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
+      console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
+    } else {
+      console.log('document-request-reply: received comment creation disabled', { projectId, itemId, year, month })
+    }
 
     // Forward a copy to the requester (documents@ is not a real mailbox) and notify in-app
     const requesterEmail = mapping.requesterEmail
     if (requesterEmail && isValidEmail(requesterEmail)) {
-      forwardReplyToRequester(apiKey, email, requesterEmail, uploaded.length).catch((e) =>
+      const attachmentCount = ENABLE_RECEIVED_EMAIL_COMMENTS ? uploaded.length : receivedAttachmentCount
+      forwardReplyToRequester(apiKey, email, requesterEmail, attachmentCount).catch((e) =>
         console.warn('document-request-reply: forward to requester', e.message)
       )
       notifyRequesterInApp(requesterEmail, projectId, itemId, year, month).catch((e) =>

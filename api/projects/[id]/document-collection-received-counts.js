@@ -31,6 +31,7 @@ async function handler(req, res) {
   }
 
   try {
+    const userId = req.user?.sub || req.user?.id
     const rows = await prisma.documentItemComment.groupBy({
       by: ['itemId', 'month'],
       where: {
@@ -41,16 +42,35 @@ async function handler(req, res) {
           { text: { startsWith: 'Email from Client' } }
         ]
       },
-      _count: { id: true }
+      _count: { id: true },
+      _max: { createdAt: true }
     })
 
     const counts = rows.map((r) => ({
       documentId: r.itemId,
       month: r.month,
-      receivedCount: r._count.id
+      receivedCount: r._count.id,
+      latestReceivedAt: r._max?.createdAt || null
     }))
 
-    return ok(res, { counts })
+    let opened = []
+    if (userId) {
+      opened = await prisma.documentCollectionNotificationRead.findMany({
+        where: {
+          userId: String(userId),
+          projectId: String(projectId),
+          year
+        },
+        select: {
+          documentId: true,
+          month: true,
+          type: true,
+          openedAt: true
+        }
+      })
+    }
+
+    return ok(res, { counts, opened })
   } catch (e) {
     console.error('GET document-collection-received-counts error:', e)
     return serverError(res, e.message || 'Failed to load counts')

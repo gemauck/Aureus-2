@@ -809,6 +809,24 @@ model DocumentCollectionEmailLog {
   @@index([projectId, sectionId, documentId, year, month])
 }
 
+// Per-user read state for document collection email/comment notifications
+model DocumentCollectionNotificationRead {
+  id         String   @id @default(cuid())
+  userId     String
+  projectId  String
+  documentId String
+  year       Int
+  month      Int
+  type       String   // 'email' | 'comment'
+  openedAt   DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, projectId, documentId, year, month, type])
+  @@index([userId])
+  @@index([projectId, year])
+}
+
 // Weekly FMS Review Tables (duplicated from Monthly FMS Review)
 model WeeklyFMSReviewSection {
   id          String   @id @default(cuid())

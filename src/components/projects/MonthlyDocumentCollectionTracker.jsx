@@ -8,6 +8,8 @@ const DEBUG_SCROLL_SYNC = false; // Log scroll-sync attach/scroll (set true to d
 const COMMENT_CELL_SEP = '\u0001';
 const buildCellKey = (sectionId, documentId, month) =>
     `${String(sectionId)}${COMMENT_CELL_SEP}${String(documentId)}${COMMENT_CELL_SEP}${String(month)}`;
+const buildDocMonthKey = (documentId, month) =>
+    `${String(documentId)}-${Number(month)}`;
 const parseCellKey = (cellKey) => {
     const p = String(cellKey).split(COMMENT_CELL_SEP);
     return { sectionId: p[0], documentId: p[1], month: p[2] };
@@ -36,6 +38,7 @@ const getFacilitiesLabel = (project) => {
 
     return String(candidate || '').trim();
 };
+
 
 // Non-blocking toast for attachment errors (avoids native alert / CursorBrowser dialog suppression).
 const showAttachmentToast = (message) => {
@@ -561,7 +564,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const commentPopupContainerRef = useRef(null);
     const [emailModalContext, setEmailModalContext] = useState(null);
     // Received email counts per cell (key: `${documentId}-${month}` where month is 1-12) for badge on envelope
-    const [receivedCountByCell, setReceivedCountByCell] = useState({});
+    const [receivedMetaByCell, setReceivedMetaByCell] = useState({});
     const [openedNotificationByCell, setOpenedNotificationByCell] = useState({});
     const previousEmailModalContextRef = useRef(null);
     // Cell hover: show email/comment actions only on hover to reduce visual clutter
@@ -588,7 +591,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Fetch received email counts per document/month for the current project and year (badge on envelope)
     const fetchReceivedCounts = useCallback(() => {
         if (!project?.id || !selectedYear) {
-            setReceivedCountByCell({});
+            setReceivedMetaByCell({});
             return;
         }
         const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
@@ -603,28 +606,75 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 const data = json.data || json;
                 const list = Array.isArray(data.counts) ? data.counts : [];
                 const map = {};
-                list.forEach(({ documentId, month, receivedCount }) => {
+                list.forEach(({ documentId, month, receivedCount, latestReceivedAt }) => {
                     if (documentId != null && month != null && receivedCount > 0) {
-                        map[`${String(documentId)}-${Number(month)}`] = receivedCount;
+                        map[buildDocMonthKey(documentId, month)] = {
+                            count: receivedCount,
+                            latestReceivedAt: latestReceivedAt || null
+                        };
                     }
                 });
-                setReceivedCountByCell(map);
+                setReceivedMetaByCell(map);
+                const openedList = Array.isArray(data.opened) ? data.opened : [];
+                if (openedList.length > 0) {
+                    const openedMap = {};
+                    openedList.forEach(({ documentId, month, type, openedAt }) => {
+                        if (!documentId || !month || !type || !openedAt) return;
+                        const docMonthKey = buildDocMonthKey(documentId, month);
+                        const current = openedMap[docMonthKey] || {};
+                        openedMap[docMonthKey] = { ...current, [type]: openedAt };
+                    });
+                    setOpenedNotificationByCell(openedMap);
+                } else {
+                    setOpenedNotificationByCell({});
+                }
             })
-            .catch(() => setReceivedCountByCell({}));
+            .catch(() => {
+                setReceivedMetaByCell({});
+                setOpenedNotificationByCell({});
+            });
     }, [project?.id, selectedYear]);
 
     useEffect(() => {
         fetchReceivedCounts();
     }, [fetchReceivedCounts]);
 
-    const markNotificationOpened = useCallback((cellKey, type) => {
-        if (!cellKey || !type) return;
+    const markNotificationOpened = useCallback((documentId, month, type) => {
+        if (!documentId || !month || !type) return;
+        const docMonthKey = buildDocMonthKey(documentId, month);
         setOpenedNotificationByCell(prev => {
-            const current = prev[cellKey] || {};
+            const current = prev[docMonthKey] || {};
             if (current[type]) return prev;
-            return { ...prev, [cellKey]: { ...current, [type]: true } };
+            return { ...prev, [docMonthKey]: { ...current, [type]: new Date().toISOString() } };
         });
-    }, []);
+        try {
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            fetch(`${base}/api/projects/${project?.id}/document-collection-notification-opened`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    documentId,
+                    year: selectedYear,
+                    month: month,
+                    type
+                })
+            }).catch(() => {});
+        } catch (_) {
+            // ignore network errors
+        }
+    }, [project?.id, selectedYear]);
+
+    useEffect(() => {
+        if (!project?.id || !selectedYear) {
+            setOpenedNotificationByCell({});
+        }
+    }, [project?.id, selectedYear]);
 
     // When email modal closes, refetch received counts so badge updates after refresh in modal
     useEffect(() => {
@@ -2330,8 +2380,16 @@ const getAssigneeColor = (identifier, users) => {
         return getStatusForYear(doc.collectionStatus, month, selectedYear);
     };
     
+    const isEmailActivityComment = (comment) => {
+        if (!comment) return false;
+        const author = (comment.author || '').trim();
+        if (author === 'Email from Client' || author === 'Sent reply (platform)') return true;
+        const text = (comment.text || '').trim();
+        return text.startsWith('Email from Client');
+    };
     const getDocumentComments = (doc, month) => {
-        return getCommentsForYear(doc.comments, month, selectedYear);
+        const comments = getCommentsForYear(doc.comments, month, selectedYear);
+        return Array.isArray(comments) ? comments.filter((c) => !isEmailActivityComment(c)) : [];
     };
     
     // ============================================================
@@ -3452,10 +3510,14 @@ const getAssigneeColor = (identifier, users) => {
                             <>
                                 {!isMonthlyDataReview && (() => {
                                     const monthNum = months.indexOf(month) + 1;
-                                    const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
+                                    const docMonthKey = buildDocMonthKey(doc.id, monthNum);
+                                    const receivedMeta = receivedMetaByCell[docMonthKey] || {};
+                                    const receivedCount = receivedMeta.count || 0;
                                     const hasReceived = receivedCount > 0;
-                                    const isEmailOpened = !!openedNotificationByCell[cellKey]?.email;
-                                    const emailBadgeClass = isEmailOpened ? 'bg-rose-300 text-slate-800' : 'bg-amber-300 text-slate-800';
+                                    const latestReceivedAt = receivedMeta.latestReceivedAt ? new Date(receivedMeta.latestReceivedAt).getTime() : null;
+                                    const openedAt = openedNotificationByCell[docMonthKey]?.email ? new Date(openedNotificationByCell[docMonthKey].email).getTime() : null;
+                                    const isEmailUnread = !!latestReceivedAt && (!openedAt || latestReceivedAt > openedAt);
+                                    const emailBadgeClass = isEmailUnread ? 'bg-amber-300 text-slate-800' : 'bg-rose-300 text-slate-800';
                                     return (
                                         <button
                                             type="button"
@@ -3463,7 +3525,7 @@ const getAssigneeColor = (identifier, users) => {
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                markNotificationOpened(cellKey, 'email');
+                                                markNotificationOpened(doc.id, monthNum, 'email');
                                                 setEmailModalContext({ section, doc, month });
                                             }}
                                             className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
@@ -3480,8 +3542,18 @@ const getAssigneeColor = (identifier, users) => {
                                     );
                                 })()}
                                 {(() => {
-                                    const isCommentOpened = !!openedNotificationByCell[cellKey]?.comment;
-                                    const commentBadgeClass = isCommentOpened ? 'bg-rose-300 text-slate-800' : 'bg-amber-300 text-slate-800';
+                                    const monthNum = months.indexOf(month) + 1;
+                                    const docMonthKey = buildDocMonthKey(doc.id, monthNum);
+                                    const openedAt = openedNotificationByCell[docMonthKey]?.comment ? new Date(openedNotificationByCell[docMonthKey].comment).getTime() : null;
+                                    const latestCommentAt = Array.isArray(comments)
+                                        ? comments.reduce((max, c) => {
+                                            const t = c?.createdAt ? new Date(c.createdAt).getTime() : null;
+                                            if (!t || isNaN(t)) return max;
+                                            return max == null || t > max ? t : max;
+                                        }, null)
+                                        : null;
+                                    const isCommentUnread = !!latestCommentAt && (!openedAt || latestCommentAt > openedAt);
+                                    const commentBadgeClass = isCommentUnread ? 'bg-amber-300 text-slate-800' : 'bg-rose-300 text-slate-800';
                                     return (
                                 <button
                                     data-comment-cell={cellKey}
@@ -3504,7 +3576,7 @@ const getAssigneeColor = (identifier, users) => {
                                         });
                                     }
                                 } else {
-                                    markNotificationOpened(cellKey, 'comment');
+                                    markNotificationOpened(doc.id, monthNum, 'comment');
                                     // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);
                                     
@@ -3583,7 +3655,8 @@ const getAssigneeColor = (identifier, users) => {
                             </>
                         ) : (() => {
                             const monthNum = months.indexOf(month) + 1;
-                            const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
+                            const receivedMeta = receivedMetaByCell[buildDocMonthKey(doc.id, monthNum)] || {};
+                            const receivedCount = receivedMeta.count || 0;
                             const hasActivity = hasComments || (!isMonthlyDataReview && receivedCount > 0);
                             if (!hasActivity) return null;
                             const total = (hasComments ? comments.length : 0) + (!isMonthlyDataReview ? receivedCount : 0);
