@@ -562,6 +562,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [emailModalContext, setEmailModalContext] = useState(null);
     // Received email counts per cell (key: `${documentId}-${month}` where month is 1-12) for badge on envelope
     const [receivedCountByCell, setReceivedCountByCell] = useState({});
+    const [openedNotificationByCell, setOpenedNotificationByCell] = useState({});
     const previousEmailModalContextRef = useRef(null);
     // Cell hover: show email/comment actions only on hover to reduce visual clutter
     const [hoveredStatusCell, setHoveredStatusCell] = useState(null);
@@ -615,6 +616,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     useEffect(() => {
         fetchReceivedCounts();
     }, [fetchReceivedCounts]);
+
+    const markNotificationOpened = useCallback((cellKey, type) => {
+        if (!cellKey || !type) return;
+        setOpenedNotificationByCell(prev => {
+            const current = prev[cellKey] || {};
+            if (current[type]) return prev;
+            return { ...prev, [cellKey]: { ...current, [type]: true } };
+        });
+    }, []);
 
     // When email modal closes, refetch received counts so badge updates after refresh in modal
     useEffect(() => {
@@ -3444,6 +3454,8 @@ const getAssigneeColor = (identifier, users) => {
                                     const monthNum = months.indexOf(month) + 1;
                                     const receivedCount = receivedCountByCell[`${doc.id}-${monthNum}`] || 0;
                                     const hasReceived = receivedCount > 0;
+                                    const isEmailOpened = !!openedNotificationByCell[cellKey]?.email;
+                                    const emailBadgeClass = isEmailOpened ? 'bg-rose-300 text-slate-800' : 'bg-amber-300 text-slate-800';
                                     return (
                                         <button
                                             type="button"
@@ -3451,6 +3463,7 @@ const getAssigneeColor = (identifier, users) => {
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
+                                                markNotificationOpened(cellKey, 'email');
                                                 setEmailModalContext({ section, doc, month });
                                             }}
                                             className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
@@ -3459,13 +3472,17 @@ const getAssigneeColor = (identifier, users) => {
                                         >
                                             <i className="fas fa-envelope text-base"></i>
                                             {hasReceived && (
-                                                <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none">
+                                                <span className={`absolute top-0 right-0 ${emailBadgeClass} text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none`}>
                                                     {receivedCount}
                                                 </span>
                                             )}
                                         </button>
                                     );
                                 })()}
+                                {(() => {
+                                    const isCommentOpened = !!openedNotificationByCell[cellKey]?.comment;
+                                    const commentBadgeClass = isCommentOpened ? 'bg-rose-300 text-slate-800' : 'bg-amber-300 text-slate-800';
+                                    return (
                                 <button
                                     data-comment-cell={cellKey}
                                     onClick={(e) => {
@@ -3487,6 +3504,7 @@ const getAssigneeColor = (identifier, users) => {
                                         });
                                     }
                                 } else {
+                                    markNotificationOpened(cellKey, 'comment');
                                     // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);
                                     
@@ -3555,11 +3573,13 @@ const getAssigneeColor = (identifier, users) => {
                                 >
                                     <i className="fas fa-comment text-base"></i>
                                     {hasComments && (
-                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                                        <span className={`absolute -top-1 -right-1 ${commentBadgeClass} text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold`}>
                                             {comments.length}
                                         </span>
                                     )}
                                 </button>
+                                    );
+                                })()}
                             </>
                         ) : (() => {
                             const monthNum = months.indexOf(month) + 1;
