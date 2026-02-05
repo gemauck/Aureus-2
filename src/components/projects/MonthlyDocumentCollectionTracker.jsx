@@ -2329,7 +2329,7 @@ const getAssigneeColor = (identifier, users) => {
         }
     };
     
-    const handleDeleteComment = (sectionId, documentId, month, commentId) => {
+    const handleDeleteComment = async (sectionId, documentId, month, commentId) => {
         
         const currentUser = getCurrentUser();
         
@@ -2342,8 +2342,48 @@ const getAssigneeColor = (identifier, users) => {
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
         const doc = section?.documents.find(d => String(d.id) === String(documentId));
         const existingComments = getCommentsForYear(doc?.comments, month, selectedYear);
+        const commentToDelete = Array.isArray(existingComments)
+            ? existingComments.find((c) => String(c.id) === String(commentId))
+            : null;
         
         if (!confirm('Delete this comment?')) return;
+
+        if (commentToDelete && isEmailActivityComment(commentToDelete)) {
+            if (!project?.id) {
+                alert('Project not found');
+                return;
+            }
+            const author = (commentToDelete.author || '').trim();
+            const type = author === 'Sent reply (platform)' ? 'sent' : 'received';
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            try {
+                const url = `${base}/api/projects/${project?.id}/document-collection-email-activity?id=${encodeURIComponent(commentToDelete.id)}&type=${encodeURIComponent(type)}`;
+                const res = await fetch(url, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({ id: commentToDelete.id, type })
+                });
+                const json = await res.json().catch(() => ({}));
+                const data = json.data != null ? json.data : json;
+                if (!(res.ok && data.deleted)) {
+                    alert(data.error || json.error || 'Failed to delete');
+                    return;
+                }
+                setEmailActivity((prev) => ({
+                    sent: prev.sent.filter((s) => String(s.id) !== String(commentToDelete.id)),
+                    received: prev.received.filter((r) => String(r.id) !== String(commentToDelete.id))
+                }));
+            } catch (err) {
+                alert(err.message || 'Failed to delete');
+                return;
+            }
+        }
         
         const updated = currentYearSections.map(section => {
             if (String(section.id) === String(sectionId)) {
