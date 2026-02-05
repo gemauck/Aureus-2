@@ -21,8 +21,9 @@ import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const UPLOAD_FOLDER = 'doc-collection-comments'
+// Default to enabled; allow explicit opt-out by setting to "false".
 const ENABLE_RECEIVED_EMAIL_COMMENTS =
-  String(process.env.DOC_COLLECTION_RECEIVED_COMMENT_ENABLED || '').toLowerCase() === 'true'
+  String(process.env.DOC_COLLECTION_RECEIVED_COMMENT_ENABLED || 'true').toLowerCase() !== 'false'
 // 24h tolerance so Resend Replay works (replays send original timestamp); override via RESEND_WEBHOOK_TOLERANCE_SEC
 const SIGNATURE_TOLERANCE_SEC = parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_SEC || '86400', 10) || 86400
 
