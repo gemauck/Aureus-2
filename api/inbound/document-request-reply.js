@@ -20,16 +20,44 @@ import { fileURLToPath } from 'url'
 import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const UPLOAD_FOLDER = 'doc-collection-comments'
-// Default to enabled; allow explicit opt-out by setting to "false".
-const ENABLE_RECEIVED_EMAIL_COMMENTS =
-  String(process.env.DOC_COLLECTION_RECEIVED_COMMENT_ENABLED || 'true').toLowerCase() !== 'false'
+const DEBUG_RECEIVED_EMAIL_WEBHOOK =
+  String(process.env.DOC_COLLECTION_RECEIVED_WEBHOOK_DEBUG || '').toLowerCase() === 'true'
 // 24h tolerance so Resend Replay works (replays send original timestamp); override via RESEND_WEBHOOK_TOLERANCE_SEC
 const SIGNATURE_TOLERANCE_SEC = parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_SEC || '86400', 10) || 86400
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function isValidEmail(s) {
   return typeof s === 'string' && s.trim().length > 0 && EMAIL_RE.test(s.trim())
+}
+
+function summarizeWebhookData(data) {
+  if (!data || typeof data !== 'object') return null
+  const out = {
+    id: data.id || null,
+    email_id: data.email_id || data.emailId || null,
+    from: data.from || null,
+    subject: data.subject || null,
+    in_reply_to: data.in_reply_to || null,
+    references: data.references || null
+  }
+  if (Array.isArray(data.attachments)) out.attachmentsCount = data.attachments.length
+  return out
+}
+
+function writeWebhookDebugLog(dirname, payload) {
+  if (!DEBUG_RECEIVED_EMAIL_WEBHOOK) return
+  try {
+    const rootDir = path.resolve(dirname, '..', '..')
+    const targetDir = path.join(rootDir, 'uploads', 'inbound-email-debug')
+    fs.mkdirSync(targetDir, { recursive: true })
+    const name = `webhook-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`
+    const filePath = path.join(targetDir, name)
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2))
+  } catch (err) {
+    console.warn('document-request-reply: debug log failed', err.message)
+  }
 }
 
 /** Verify Resend/Svix webhook signature (raw body + svix-id, svix-timestamp, svix-signature). */
@@ -325,7 +353,7 @@ async function notifyRequesterInApp(requesterEmail, projectId, documentId, year,
     } catch (_) {}
     const monthName = month >= 1 && month <= 12 ? MONTH_NAMES[month - 1] : String(month)
     const title = 'Document request reply received'
-    const message = `${docName} – ${monthName} ${year}. Reply received via email.`
+    const message = `${docName} – ${monthName} ${year}. Reply and attachments are in the project's Document Collection.`
     const link = `#/projects/${projectId}?tab=documentCollection`
     await prisma.notification.create({
       data: {
@@ -355,7 +383,7 @@ async function forwardReplyToRequester(apiKey, email, requesterEmail, attachment
   const origHtml = (email.html || '').toString().trim()
   const origText = (email.text || '').toString().trim()
   const intro = 'This document request reply was received at documents@ and forwarded to you as the requester.'
-  const attachmentNote = attachmentCount > 0 ? ` This reply included ${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}.` : ''
+  const attachmentNote = attachmentCount > 0 ? ` Attachments (${attachmentCount}) have been saved to the project in the ERP.` : ''
   const html = `<p>${intro}${attachmentNote}</p><hr/><p><strong>From:</strong> ${(email.from || '').toString()}</p><p><strong>Subject:</strong> ${fwdSubject}</p><hr/>${origHtml || `<pre>${(origText || '').replace(/</g, '&lt;')}</pre>`}`
   const text = `${intro}${attachmentNote}\n\nFrom: ${(email.from || '').toString()}\nSubject: ${fwdSubject}\n\n---\n\n${origText || origHtml.replace(/<[^>]+>/g, '')}`
   const payload = {
@@ -580,9 +608,22 @@ async function handler(req, res) {
 
   try {
     const rawBody = typeof req.body === 'string' ? req.body : (req.body ? JSON.stringify(req.body) : '{}')
+    const debugBase = {
+      receivedAt: new Date().toISOString(),
+      contentType: req.headers?.['content-type'] || 'none',
+      headers: {
+        'svix-id': req.headers?.['svix-id'] || null,
+        'svix-timestamp': req.headers?.['svix-timestamp'] || null,
+        'svix-signature': req.headers?.['svix-signature'] || null,
+        'user-agent': req.headers?.['user-agent'] || null,
+        'content-length': req.headers?.['content-length'] || null
+      },
+      rawBodyPreview: rawBody.slice(0, 4000)
+    }
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET || process.env.WEBHOOK_SIGNING_SECRET
     if (webhookSecret) {
       if (!verifyWebhookSignature(rawBody, req.headers || {}, webhookSecret)) {
+        writeWebhookDebugLog(__dirname, { ...debugBase, error: 'invalid_signature' })
         console.warn('document-request-reply: invalid webhook signature (401)')
         return res.status(401).json({ error: 'Invalid webhook signature' })
       }
@@ -591,6 +632,7 @@ async function handler(req, res) {
     try {
       body = typeof req.body === 'object' && req.body !== null && !Array.isArray(req.body) ? req.body : JSON.parse(rawBody)
     } catch (_) {
+      writeWebhookDebugLog(__dirname, { ...debugBase, error: 'invalid_json' })
       return res.status(400).json({ error: 'Invalid JSON body' })
     }
     const data = body.data || body.payload?.data || body
@@ -601,6 +643,14 @@ async function handler(req, res) {
       body.id ||
       null
     const eventType = body.type || body.event_type || (data && (data.type || data.event_type))
+    writeWebhookDebugLog(__dirname, {
+      ...debugBase,
+      eventType,
+      emailId,
+      bodyKeys: body && typeof body === 'object' ? Object.keys(body) : null,
+      dataKeys: data && typeof data === 'object' ? Object.keys(data) : null,
+      dataSummary: summarizeWebhookData(data)
+    })
     if (eventType !== 'email.received') {
       console.warn('document-request-reply: ignored event (expected email.received)', { receivedType: eventType, bodyKeys: Object.keys(body) })
       return ok(res, { processed: false, reason: 'not_email_received', receivedType: eventType })
@@ -827,52 +877,40 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const bodyText = emailBodyText(email)
     const fromStr = (email.from || '').toString().replace(/^.*<([^>]+)>.*$/, '$1').trim() || 'unknown'
 
-    const __dirname = path.dirname(fileURLToPath(import.meta.url))
     const webhookAttachments = data.attachments && Array.isArray(data.attachments) ? data.attachments : null
-    const receivedAttachmentCount = Array.isArray(webhookAttachments)
-      ? webhookAttachments.length
-      : Array.isArray(email?.attachments)
-        ? email.attachments.length
-        : 0
-    let uploaded = []
-    if (ENABLE_RECEIVED_EMAIL_COMMENTS) {
-      uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
-      console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
+    const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
+    console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
 
-      const attachmentLine =
-        uploaded.length > 0
-          ? `Attachments: ${uploaded.map((u) => u.name).join(', ')}`
-          : 'No attachments'
-      const commentText = [
-        'Email from Client',
-        fromStr !== 'unknown' ? ` (${fromStr})` : '',
-        bodyText ? `\n\n${bodyText}\n\n${attachmentLine}` : `\n\n${attachmentLine}`
-      ]
-        .join('')
-        .trim()
+    const attachmentLine =
+      uploaded.length > 0
+        ? `Attachments: ${uploaded.map((u) => u.name).join(', ')}`
+        : 'No attachments'
+    const commentText = [
+      'Email from Client',
+      fromStr !== 'unknown' ? ` (${fromStr})` : '',
+      bodyText ? `\n\n${bodyText}\n\n${attachmentLine}` : `\n\n${attachmentLine}`
+    ]
+      .join('')
+      .trim()
 
-      await prisma.documentItemComment.create({
-        data: {
-          itemId,
-          year,
-          month,
-          text: commentText,
-          author: 'Email from Client',
-          authorId: null,
-          attachments: JSON.stringify(uploaded)
-        }
-      })
+    await prisma.documentItemComment.create({
+      data: {
+        itemId,
+        year,
+        month,
+        text: commentText,
+        author: 'Email from Client',
+        authorId: null,
+        attachments: JSON.stringify(uploaded)
+      }
+    })
 
-      console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
-    } else {
-      console.log('document-request-reply: received comment creation disabled', { projectId, itemId, year, month })
-    }
+    console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
 
     // Forward a copy to the requester (documents@ is not a real mailbox) and notify in-app
     const requesterEmail = mapping.requesterEmail
     if (requesterEmail && isValidEmail(requesterEmail)) {
-      const attachmentCount = ENABLE_RECEIVED_EMAIL_COMMENTS ? uploaded.length : receivedAttachmentCount
-      forwardReplyToRequester(apiKey, email, requesterEmail, attachmentCount).catch((e) =>
+      forwardReplyToRequester(apiKey, email, requesterEmail, uploaded.length).catch((e) =>
         console.warn('document-request-reply: forward to requester', e.message)
       )
       notifyRequesterInApp(requesterEmail, projectId, itemId, year, month).catch((e) =>

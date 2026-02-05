@@ -363,6 +363,59 @@ async function handler(req, res) {
       return new Date(date).toISOString().split('T')[0]
     }
 
+    // PURGE ALL MANUFACTURING DATA
+    if (req.method === 'DELETE' && resourceType === 'purge') {
+      try {
+        const { confirm } = req.query
+        if (confirm !== 'true') {
+          return badRequest(res, 'confirm=true is required to purge manufacturing data')
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+          const counts = await Promise.all([
+            tx.locationInventory.count(),
+            tx.stockMovement.count(),
+            tx.productionOrder.count(),
+            tx.bOM.count(),
+            tx.inventoryItem.count(),
+            tx.stockLocation.count(),
+            tx.purchaseOrder.count(),
+            tx.supplier.count()
+          ])
+
+          const deleted = {
+            locationInventory: (await tx.locationInventory.deleteMany()).count,
+            stockMovements: (await tx.stockMovement.deleteMany()).count,
+            productionOrders: (await tx.productionOrder.deleteMany()).count,
+            boms: (await tx.bOM.deleteMany()).count,
+            inventoryItems: (await tx.inventoryItem.deleteMany()).count,
+            stockLocations: (await tx.stockLocation.deleteMany()).count,
+            purchaseOrders: (await tx.purchaseOrder.deleteMany()).count,
+            suppliers: (await tx.supplier.deleteMany()).count
+          }
+
+          return {
+            existing: {
+              locationInventory: counts[0],
+              stockMovements: counts[1],
+              productionOrders: counts[2],
+              boms: counts[3],
+              inventoryItems: counts[4],
+              stockLocations: counts[5],
+              purchaseOrders: counts[6],
+              suppliers: counts[7]
+            },
+            deleted
+          }
+        })
+
+        return ok(res, { deleted: true, ...result })
+      } catch (error) {
+        console.error('❌ Failed to purge manufacturing data:', error)
+        return serverError(res, 'Failed to purge manufacturing data', error.message)
+      }
+    }
+
   // STOCK LOCATIONS
   if (resourceType === 'locations') {
     // LIST
