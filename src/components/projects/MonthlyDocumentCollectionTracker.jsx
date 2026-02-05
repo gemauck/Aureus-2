@@ -4192,6 +4192,8 @@ Abcotronics`;
             try {
                 const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+                const requester = getCurrentUser();
+                const requesterEmail = requester?.email && emailRe.test(requester.email) ? requester.email : '';
                 const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim());
                 const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
@@ -4214,6 +4216,7 @@ Abcotronics`;
                         subject: subject.trim(),
                         html: htmlPayload,
                         text: body.trim(),
+                        ...(requesterEmail ? { requesterEmail } : {}),
                         ...(hasCellKeys
                             ? {
                                 projectId: String(project.id).trim(),

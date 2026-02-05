@@ -47,6 +47,7 @@ async function handler(req, res) {
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
     const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
+    const requesterEmail = typeof body.requesterEmail === 'string' ? body.requesterEmail.trim() : ''
     // Cell keys: body first, then URL query (manual), then Express req.query so reply always persists
     let documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null
     let month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : (q.month != null ? parseInt(String(q.month), 10) : null))
@@ -60,7 +61,7 @@ async function handler(req, res) {
     if ((month == null || isNaN(month)) && h['x-month'] != null) month = parseInt(String(h['x-month']), 10)
     if ((year == null || isNaN(year)) && h['x-year'] != null) year = parseInt(String(h['x-year']), 10)
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
-    const hasCellContext = !!(sectionId && cell)
+    const hasCellContext = !!cell
 
     if (!subject) {
       return badRequest(res, 'Subject is required')
@@ -77,6 +78,9 @@ async function handler(req, res) {
     const user = req.user || {}
     const userName = user.name || user.email || ''
     const userEmail = user.email || ''
+    const requesterAddress = requesterEmail && isValidEmail(requesterEmail)
+      ? requesterEmail
+      : (userEmail && isValidEmail(userEmail) ? userEmail : '')
     const sentByLine = userName && userEmail
       ? `\n\n—\nSent by ${userName} (${userEmail})`
       : userEmail
@@ -89,12 +93,12 @@ async function handler(req, res) {
 
     // When using inbound (documents@): CC the requester so "Reply All" includes them and they don't miss replies
     const inboundEmail = process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || ''
-    if (hasCellContext && inboundEmail && isValidEmail(inboundEmail) && userEmail && isValidEmail(userEmail)) {
-      const requesterNorm = userEmail.trim().toLowerCase()
+    if (hasCellContext && inboundEmail && isValidEmail(inboundEmail) && requesterAddress) {
+      const requesterNorm = requesterAddress.trim().toLowerCase()
       const inTo = validTo.some((e) => e.trim().toLowerCase() === requesterNorm)
       const inCc = validCc.some((e) => e.trim().toLowerCase() === requesterNorm)
       if (!inTo && !inCc) {
-        validCc = [...validCc.map((e) => e.trim()), userEmail.trim()]
+        validCc = [...validCc.map((e) => e.trim()), requesterAddress.trim()]
       }
     }
 
@@ -106,7 +110,7 @@ async function handler(req, res) {
 
     const replyTo = hasCellContext && inboundEmail && isValidEmail(inboundEmail)
       ? inboundEmail
-      : (userEmail && isValidEmail(userEmail) ? userEmail : undefined)
+      : (requesterAddress ? requesterAddress : undefined)
     const fromName = userName ? `Abcotronics (via ${userName})` : undefined
     // Send from documents@abcoafrica.co.za when inbound address is set (so From and Reply-To match)
     const fromAddress = inboundEmail && isValidEmail(inboundEmail) ? inboundEmail : undefined
@@ -195,7 +199,7 @@ async function handler(req, res) {
         }
       }
 
-      if (messageIdForReply) {
+    if (messageIdForReply) {
         try {
           await prisma.documentRequestEmailSent.create({
             data: {
@@ -205,7 +209,7 @@ async function handler(req, res) {
               documentId: cell.documentId,
               year: cell.year,
               month: cell.month,
-              ...(userEmail && isValidEmail(userEmail) ? { requesterEmail: userEmail.trim() } : {})
+              ...(requesterAddress ? { requesterEmail: requesterAddress.trim() } : {})
             }
           })
         } catch (dbErr) {
