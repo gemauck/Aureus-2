@@ -19,6 +19,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
+import { createNotificationForUser } from '../notifications.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const UPLOAD_FOLDER = 'doc-collection-comments'
@@ -76,6 +77,99 @@ function extractCcFromEmail(email) {
     ...extractEmailsFromString(headerCc)
   ]
   return [...new Set(list.map((e) => e.trim().toLowerCase()))].filter((e) => isValidEmail(e))
+}
+
+function normalizeAssignedToValue(raw) {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw.filter(Boolean)
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : (raw.trim() ? [raw] : [])
+    } catch (_) {
+      return raw.trim() ? [raw] : []
+    }
+  }
+  return []
+}
+
+function normalizeIdentifier(value) {
+  return String(value || '').trim()
+}
+
+function matchUserFromIdentifier(user, identifier) {
+  if (!user || !identifier) return false
+  const id = user.id || user._id
+  const email = (user.email || '').toString().trim().toLowerCase()
+  const name = (user.name || '').toString().trim()
+  const norm = identifier.toLowerCase()
+  if (id && norm === String(id).toLowerCase()) return true
+  if (email && norm === email) return true
+  if (name && norm === name.toLowerCase()) return true
+  if (id && norm === `id:${String(id).toLowerCase()}`) return true
+  if (email && norm === `email:${email}`) return true
+  return false
+}
+
+async function notifyAssigneesOnReply({
+  projectId,
+  sectionId,
+  documentId,
+  month,
+  year,
+  requesterEmail
+}) {
+  if (!projectId || !documentId) return
+  const [doc, users, requesterUser] = await Promise.all([
+    prisma.documentItem.findUnique({
+      where: { id: documentId },
+      select: { assignedTo: true, name: true }
+    }),
+    prisma.user.findMany({
+      where: { status: { not: 'inactive' } },
+      select: { id: true, name: true, email: true }
+    }),
+    requesterEmail && isValidEmail(requesterEmail)
+      ? prisma.user.findUnique({
+        where: { email: requesterEmail.trim().toLowerCase() },
+        select: { id: true }
+      })
+      : Promise.resolve(null)
+  ])
+
+  const assigned = normalizeAssignedToValue(doc?.assignedTo)
+  if (assigned.length === 0) return
+
+  const matchedIds = new Set()
+  assigned.forEach((raw) => {
+    const identifier = normalizeIdentifier(raw)
+    if (!identifier) return
+    const user = users.find((u) => matchUserFromIdentifier(u, identifier))
+    if (user?.id) matchedIds.add(String(user.id))
+  })
+
+  const requesterId = requesterUser?.id ? String(requesterUser.id) : null
+  if (requesterId && matchedIds.has(requesterId)) matchedIds.delete(requesterId)
+  if (matchedIds.size === 0) return
+
+  const monthName = month >= 1 && month <= 12 ? MONTH_NAMES[month - 1] : String(month)
+  const docName = doc?.name || 'Document'
+  const title = 'Document request reply received'
+  const message = `${docName} – ${monthName} ${year}. Reply received via email.`
+  const metadata = {
+    projectId,
+    sectionId: sectionId || undefined,
+    documentId,
+    month,
+    year,
+    source: 'document-request-reply'
+  }
+
+  await Promise.allSettled(
+    [...matchedIds].map((userId) =>
+      createNotificationForUser(userId, 'system', title, message, '', metadata)
+    )
+  )
 }
 
 function summarizeWebhookData(data) {
@@ -954,6 +1048,19 @@ async function processReceivedEmail(emailId, apiKey, data) {
     })
 
     console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
+
+    try {
+      await notifyAssigneesOnReply({
+        projectId,
+        sectionId,
+        documentId: itemId,
+        month,
+        year,
+        requesterEmail: mapping.requesterEmail
+      })
+    } catch (notifyErr) {
+      console.warn('document-request-reply: assignee notify failed', notifyErr.message)
+    }
 
     // Forward a copy to the requester (documents@ is not a real mailbox) and notify in-app
     const requesterEmail = mapping.requesterEmail
