@@ -32,6 +32,52 @@ function isValidEmail(s) {
   return typeof s === 'string' && s.trim().length > 0 && EMAIL_RE.test(s.trim())
 }
 
+function extractEmailsFromString(value) {
+  if (!value || typeof value !== 'string') return []
+  const parts = value.split(/[;,]+/).map((p) => p.trim()).filter(Boolean)
+  const out = []
+  for (const p of parts) {
+    const match = p.match(/<([^>]+)>/)
+    const email = (match && match[1] ? match[1] : p).trim()
+    if (isValidEmail(email)) out.push(email)
+  }
+  return out
+}
+
+function normalizeEmailList(value) {
+  if (!value) return []
+  if (typeof value === 'string') return extractEmailsFromString(value)
+  if (Array.isArray(value)) {
+    const out = []
+    for (const item of value) {
+      if (!item) continue
+      if (typeof item === 'string') {
+        out.push(...extractEmailsFromString(item))
+      } else if (typeof item === 'object') {
+        const email = item.email || item.address || item.value || item.addr || ''
+        const name = item.name || item.label || ''
+        const combined = email || name || ''
+        out.push(...extractEmailsFromString(combined))
+      }
+    }
+    return out
+  }
+  return []
+}
+
+function extractCcFromEmail(email) {
+  if (!email || typeof email !== 'object') return []
+  const headers = normalizeHeaders(email.headers || {})
+  const headerCc = headers['cc'] || headers['carbon-copy'] || ''
+  const list = [
+    ...normalizeEmailList(email.cc),
+    ...normalizeEmailList(email.ccs),
+    ...normalizeEmailList(email.cc_list),
+    ...extractEmailsFromString(headerCc)
+  ]
+  return [...new Set(list.map((e) => e.trim().toLowerCase()))].filter((e) => isValidEmail(e))
+}
+
 function summarizeWebhookData(data) {
   if (!data || typeof data !== 'object') return null
   const out = {
@@ -881,6 +927,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
     console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
 
+    const ccList = extractCcFromEmail(email)
     const attachmentLine =
       uploaded.length > 0
         ? `Attachments: ${uploaded.map((u) => u.name).join(', ')}`
@@ -888,6 +935,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const commentText = [
       'Email from Client',
       fromStr !== 'unknown' ? ` (${fromStr})` : '',
+      ccList.length > 0 ? `\nCC: ${ccList.join(', ')}` : '',
       bodyText ? `\n\n${bodyText}\n\n${attachmentLine}` : `\n\n${attachmentLine}`
     ]
       .join('')

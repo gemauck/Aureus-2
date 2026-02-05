@@ -3831,6 +3831,8 @@ Abcotronics`;
         const [replyToEmail, setReplyToEmail] = useState('');
         const [replySubject, setReplySubject] = useState('');
         const [replyBody, setReplyBody] = useState('');
+        const [replyCc, setReplyCc] = useState([]);
+        const [replyNewCc, setReplyNewCc] = useState('');
         const [sendingReply, setSendingReply] = useState(false);
         const activityFetchIdRef = useRef(0);
 
@@ -3875,6 +3877,8 @@ Abcotronics`;
             setReplyToEmail('');
             setReplySubject('');
             setReplyBody('');
+            setReplyCc([]);
+            setReplyNewCc('');
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
         // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send. Returns a promise.
@@ -3984,16 +3988,38 @@ Abcotronics`;
             return match && match[1] && emailRe.test(match[1].trim()) ? match[1].trim() : null;
         };
 
+        const normalizeEmailList = (list) => {
+            if (!Array.isArray(list)) return [];
+            const map = new Map();
+            list.forEach((val) => {
+                const t = (val || '').toString().trim();
+                if (!t || !emailRe.test(t)) return;
+                const key = t.toLowerCase();
+                if (!map.has(key)) map.set(key, t);
+            });
+            return [...map.values()];
+        };
+
         const openReply = (r) => {
             const toAddr = getReplyToFromReceived(r);
             if (!toAddr) {
                 alert('Cannot reply: sender email could not be determined from this message.');
                 return;
             }
+            const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
+            const baseCc = [
+                ...(Array.isArray(s.recipients) ? s.recipients : []),
+                ...(Array.isArray(s.cc) ? s.cc : [])
+            ];
+            const responderCc = Array.isArray(r.cc) ? r.cc : [];
+            const mergedCc = normalizeEmailList([...baseCc, ...responderCc])
+                .filter((e) => e.toLowerCase() !== toAddr.toLowerCase());
             setReplyingToReceivedId(r.id);
             setReplyToEmail(toAddr);
             setReplySubject((defaultSubject || '').trim().toLowerCase().startsWith('re:') ? defaultSubject : `Re: ${(defaultSubject || '').trim()}`);
             setReplyBody('');
+            setReplyCc(mergedCc);
+            setReplyNewCc('');
         };
 
         const cancelReply = () => {
@@ -4001,6 +4027,20 @@ Abcotronics`;
             setReplyToEmail('');
             setReplySubject('');
             setReplyBody('');
+            setReplyCc([]);
+            setReplyNewCc('');
+        };
+
+        const addReplyCc = () => {
+            const t = replyNewCc.trim();
+            if (!t || !emailRe.test(t)) return;
+            setReplyCc((prev) => normalizeEmailList([...prev, t]));
+            setReplyNewCc('');
+        };
+
+        const removeReplyCc = (email) => {
+            const key = (email || '').toString().trim().toLowerCase();
+            setReplyCc((prev) => prev.filter((e) => e.toLowerCase() !== key));
         };
 
         const handleSendReply = async () => {
@@ -4015,6 +4055,7 @@ Abcotronics`;
                 const yearNum = parseInt(selectedYear, 10);
                 const htmlPayload = buildStyledEmailHtml(replySubject.trim(), (replyBody || '').trim());
                 const sendUrl = `${base}/api/projects/${project.id}/document-collection-send-email?documentId=${encodeURIComponent(String(ctx.doc.id))}&month=${Number(monthNum)}&year=${Number(yearNum)}`;
+                const replyCcList = normalizeEmailList(replyCc).filter((e) => e.toLowerCase() !== replyToEmail.trim().toLowerCase());
                 const res = await fetch(sendUrl, {
                     method: 'POST',
                     credentials: 'include',
@@ -4028,6 +4069,7 @@ Abcotronics`;
                     },
                     body: JSON.stringify({
                         to: [replyToEmail.trim()],
+                        ...(replyCcList.length > 0 ? { cc: replyCcList } : {}),
                         subject: replySubject.trim(),
                         html: htmlPayload,
                         text: (replyBody || '').trim(),
@@ -4557,6 +4599,46 @@ Abcotronics`;
                                                                 <div>
                                                                     <label className="block text-xs text-gray-500 mb-0.5">To</label>
                                                                     <input type="text" readOnly value={replyToEmail} className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-gray-50" />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-xs text-gray-500 mb-0.5">CC</label>
+                                                                    <div className="flex gap-2">
+                                                                        <input
+                                                                            type="email"
+                                                                            value={replyNewCc}
+                                                                            onChange={(e) => setReplyNewCc(e.target.value)}
+                                                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addReplyCc(); } }}
+                                                                            placeholder="cc@example.com"
+                                                                            className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={addReplyCc}
+                                                                            className="px-2.5 py-1.5 text-xs font-medium text-white bg-primary-600 rounded hover:bg-primary-700"
+                                                                        >
+                                                                            Add
+                                                                        </button>
+                                                                    </div>
+                                                                    {replyCc.length > 0 && (
+                                                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                                                            {replyCc.map((email) => (
+                                                                                <span
+                                                                                    key={email}
+                                                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700"
+                                                                                >
+                                                                                    <span className="truncate max-w-[180px]">{email}</span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => removeReplyCc(email)}
+                                                                                        className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-gray-200 text-gray-500"
+                                                                                        aria-label={`Remove ${email}`}
+                                                                                    >
+                                                                                        <i className="fas fa-times text-[9px]"></i>
+                                                                                    </button>
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                                 <div>
                                                                     <label className="block text-xs text-gray-500 mb-0.5">Subject</label>

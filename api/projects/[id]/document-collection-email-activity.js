@@ -9,6 +9,24 @@ import { normalizeDocumentCollectionCell, normalizeProjectIdFromRequest } from '
 import { ok, badRequest, serverError } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+function parseCcFromText(text) {
+  if (!text || typeof text !== 'string') return []
+  const lines = text.split(/\r?\n/)
+  const ccLine = lines.find((l) => l.trim().toLowerCase().startsWith('cc:'))
+  if (!ccLine) return []
+  const raw = ccLine.split(':').slice(1).join(':').trim()
+  if (!raw) return []
+  const parts = raw.split(/[;,]+/).map((p) => p.trim()).filter(Boolean)
+  const emails = []
+  for (const p of parts) {
+    const match = p.match(/<([^>]+)>/)
+    const email = (match && match[1] ? match[1] : p).trim()
+    if (EMAIL_RE.test(email)) emails.push(email)
+  }
+  return [...new Set(emails)]
+}
+
 async function handler(req, res) {
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
   if (!projectId) {
@@ -219,12 +237,14 @@ async function handler(req, res) {
         const addr = match[1].trim()
         if (emailRe.test(addr)) replyToEmail = addr
       }
+      const cc = parseCcFromText(text)
       return {
         id: r.id,
         text: r.text,
         attachments,
         createdAt: r.createdAt,
-        replyToEmail
+        replyToEmail,
+        cc
       }
     })
 
