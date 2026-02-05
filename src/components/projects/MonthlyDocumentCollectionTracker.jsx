@@ -1452,11 +1452,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // ============================================================
     
     const statusOptions = [
-        { value: 'requested', label: 'Requested', color: 'bg-sky-400 text-white font-semibold', cellColor: 'bg-sky-400 border-l-4 border-sky-600 shadow-sm' },
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
+        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-slate-700 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-300 shadow-sm' },
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-300 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {
@@ -1828,6 +1828,50 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         });
         return user ? (user.name || user.fullName || user.email || str) : str;
     };
+
+const ASSIGNEE_COLOR_PALETTE = [
+    { bg: '#E0F2FE', text: '#075985', ring: '#7DD3FC' },
+    { bg: '#DCFCE7', text: '#166534', ring: '#86EFAC' },
+    { bg: '#FEE2E2', text: '#991B1B', ring: '#FCA5A5' },
+    { bg: '#FEF3C7', text: '#92400E', ring: '#FCD34D' },
+    { bg: '#EDE9FE', text: '#5B21B6', ring: '#C4B5FD' },
+    { bg: '#FCE7F3', text: '#9D174D', ring: '#F9A8D4' },
+    { bg: '#E2E8F0', text: '#0F172A', ring: '#CBD5F5' },
+    { bg: '#CCFBF1', text: '#115E59', ring: '#5EEAD4' }
+];
+
+const hashString = (input) => {
+    const str = String(input || '');
+    let hash = 0;
+    for (let i = 0; i < str.length; i += 1) {
+        hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return hash;
+};
+
+const getAssigneeColorKey = (identifier, users) => {
+    if (identifier == null || identifier === '') return 'unknown';
+    const str = String(identifier).trim();
+    const user = (users || []).find(u => {
+        if (!u) return false;
+        const id = u.id || u._id;
+        const name = (u.name || u.fullName || u.email || '').toString().trim();
+        const email = (u.email || '').toString().trim().toLowerCase();
+        if (id && str === String(id)) return true;
+        if (name && (str === name || str.toLowerCase() === name.toLowerCase())) return true;
+        if (email && str.toLowerCase() === email) return true;
+        if (id && str === `id:${id}`) return true;
+        if (email && str === `email:${email}`) return true;
+        return false;
+    });
+    return user ? (user.id || user._id || user.email || user.name || user.fullName || str) : str;
+};
+
+const getAssigneeColor = (identifier, users) => {
+    const key = getAssigneeColorKey(identifier, users);
+    const idx = hashString(key) % ASSIGNEE_COLOR_PALETTE.length;
+    return ASSIGNEE_COLOR_PALETTE[idx];
+};
 
     const getAssigneeInitials = (identifier) => {
         const label = getAssigneeLabel(identifier);
@@ -3317,7 +3361,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             <td
                 data-cell-key={cellKey}
                 tabIndex={0}
-                className={`px-3 py-2 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
+                className={`px-3 py-1.5 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
                 onClick={handleCellClick}
                 onMouseEnter={() => setHoveredStatusCell(cellKey)}
                 onMouseLeave={() => setHoveredStatusCell(null)}
@@ -3383,7 +3427,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-2 pr-7 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
+                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -3392,8 +3436,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                             </option>
                         ))}
                     </select>
-                    {/* Right side: email + comment - show full buttons on cell hover (or when popup/modal open), else a small activity hint */}
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
+                    {/* Right side: email (left) + comment (right) - always visible */}
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1.5">
                         {showCellActions ? (
                             <>
                                 {!isMonthlyDataReview && (() => {
@@ -3413,7 +3457,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                                             title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                             aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                         >
-                                            <i className="fas fa-envelope text-sm"></i>
+                                            <i className="fas fa-envelope text-base"></i>
                                             {hasReceived && (
                                                 <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none">
                                                     {receivedCount}
@@ -5819,7 +5863,7 @@ Abcotronics`;
                                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
                                         <tr>
                                             <th
-                                                className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
 style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                 >
                                                 Document / Data
@@ -5827,7 +5871,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                             {months.map((month, idx) => (
                                                 <th
                                                     key={month}
-                                                    className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                    className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
                                                         isOneMonthArrears(selectedYear, idx)
                                                             ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                             : 'text-gray-700'
@@ -5839,7 +5883,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     </div>
                                                 </th>
                                             ))}
-                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
+                                            <th className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
                                                 Actions
                                             </th>
                                         </tr>
@@ -5881,7 +5925,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
                                                 >
                                                     <td
-                                                        className="px-4 py-3.5 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
+                                                        className="px-4 py-2 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
@@ -5960,35 +6004,9 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         </div>
                                                             {/* Assign: compact icon + chips only; dropdown rendered fixed so not covered */}
                                                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                                                                {normalizeAssignedTo(doc).map((uid, i) => (
-                                                                    <span
-                                                                        key={`${doc.id}-${i}-${uid}`}
-                                                                        className="inline-flex items-center gap-0.5 group/avatar"
-                                                                    >
-                                                                        <span
-                                                                            title={getAssigneeLabel(uid)}
-                                                                            className="w-6 h-6 rounded-full bg-primary-100 text-primary-800 flex items-center justify-center text-[10px] font-semibold shrink-0"
-                                                                        >
-                                                                            {getAssigneeInitials(uid)}
-                                                                        </span>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                const next = normalizeAssignedTo(doc).filter((_, j) => j !== i);
-                                                                                handleAssignmentChange(section.id, doc.id, next);
-                                                                            }}
-                                                                            className="opacity-0 group-hover/avatar:opacity-100 text-gray-500 hover:text-red-600 p-0.5 rounded"
-                                                                            aria-label={`Remove ${getAssigneeLabel(uid)}`}
-                                                                        >
-                                                                            <i className="fas fa-times text-[8px]"></i>
-                                                                        </button>
-                                                                    </span>
-                                                                ))}
-                                                                <button
-                                                                    type="button"
-                                                                    title="Assign User"
-                                                                    onClick={(e) => {
+                                                                {(() => {
+                                                                    const assigned = normalizeAssignedTo(doc);
+                                                                    const openAssign = (e) => {
                                                                         e.stopPropagation();
                                                                         const isOpen = assignmentOpen?.sectionId === section.id && assignmentOpen?.docId === doc.id;
                                                                         if (isOpen) {
@@ -5999,12 +6017,95 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                             setAssignmentOpen({ sectionId: section.id, docId: doc.id });
                                                                             setAssignmentAnchorRect({ top: rect.top, left: rect.left, bottom: rect.bottom, width: rect.width });
                                                                         }
-                                                                    }}
-                                                                    className="inline-flex items-center justify-center w-6 h-6 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
-                                                                    aria-label="Assign User"
-                                                                >
-                                                                    <i className="fas fa-user-plus text-xs"></i>
-                                                                </button>
+                                                                    };
+                                                                    if (assigned.length > 1) {
+                                                                        return (
+                                                                            <div className="relative group/assignees">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    title={`${assigned.length} assignees`}
+                                                                                    onClick={openAssign}
+                                                                                    className="flex items-center -space-x-1"
+                                                                                    aria-label="Edit assignees"
+                                                                                >
+                                                                                    {assigned.slice(0, 4).map((uid, i) => {
+                                                                                        const color = getAssigneeColor(uid, users);
+                                                                                        return (
+                                                                                            <span
+                                                                                                key={`${doc.id}-multi-${i}-${uid}`}
+                                                                                                className="w-5 h-5 rounded-full border"
+                                                                                                style={{ backgroundColor: color.bg, borderColor: color.ring }}
+                                                                                                aria-hidden="true"
+                                                                                            ></span>
+                                                                                        );
+                                                                                    })}
+                                                                                </button>
+                                                                                <div className="absolute left-0 top-full mt-1 hidden group-hover/assignees:flex bg-white border border-gray-200 rounded-lg shadow-lg px-2 py-1.5 gap-1.5 z-20">
+                                                                                    {assigned.map((uid, i) => {
+                                                                                        const color = getAssigneeColor(uid, users);
+                                                                                        return (
+                                                                                            <span key={`${doc.id}-full-${i}-${uid}`} className="inline-flex items-center gap-1 text-[10px] text-gray-700">
+                                                                                                <span
+                                                                                                    className="w-4 h-4 rounded-full border"
+                                                                                                    style={{ backgroundColor: color.bg, borderColor: color.ring }}
+                                                                                                    aria-hidden="true"
+                                                                                                ></span>
+                                                                                                <span className="max-w-[120px] truncate">{getAssigneeLabel(uid)}</span>
+                                                                                            </span>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        <>
+                                                                            {assigned.map((uid, i) => (
+                                                                                <span
+                                                                                    key={`${doc.id}-${i}-${uid}`}
+                                                                                    className="inline-flex items-center gap-0.5 group/avatar"
+                                                                                >
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        title={getAssigneeLabel(uid)}
+                                                                                        onClick={openAssign}
+                                                                                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
+                                                                                        style={(() => {
+                                                                                            const color = getAssigneeColor(uid, users);
+                                                                                            return { backgroundColor: color.bg, color: color.text, border: `1px solid ${color.ring}` };
+                                                                                        })()}
+                                                                                        aria-label={`Edit assignees for ${getAssigneeLabel(uid)}`}
+                                                                                    >
+                                                                                        {getAssigneeInitials(uid)}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            const next = assigned.filter((_, j) => j !== i);
+                                                                                            handleAssignmentChange(section.id, doc.id, next);
+                                                                                        }}
+                                                                                        className="opacity-0 group-hover/avatar:opacity-100 text-gray-500 hover:text-red-600 p-0.5 rounded"
+                                                                                        aria-label={`Remove ${getAssigneeLabel(uid)}`}
+                                                                                    >
+                                                                                        <i className="fas fa-times text-[8px]"></i>
+                                                                                    </button>
+                                                                                </span>
+                                                                            ))}
+                                                                            {assigned.length === 0 && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    title="Assign User"
+                                                                                    onClick={openAssign}
+                                                                                    className="inline-flex items-center justify-center w-6 h-6 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                                                                    aria-label="Assign User"
+                                                                                >
+                                                                                    <i className="fas fa-user-plus text-xs"></i>
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                             </div>
                                                     </td>
@@ -6013,7 +6114,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             {renderStatusCell(section, doc, month)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-4 py-3 border-l-2 border-gray-200">
+                                                    <td className="px-4 py-2 border-l-2 border-gray-200">
                                                         <div className="flex items-center gap-2 justify-center">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}
@@ -6124,6 +6225,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                     const ident = getUserIdentifier(user);
                                     const label = user.name || user.fullName || user.email || 'Unknown';
                                     const isChecked = ident && current.some(c => String(c) === String(ident) || getAssigneeLabel(c) === label);
+                                    const color = getAssigneeColor(ident || label, users);
                                     return (
                                         <label key={ident || label} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                                             <input
@@ -6137,6 +6239,11 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 }}
                                                 className="rounded border-gray-300 text-primary-600"
                                             />
+                                            <span
+                                                className="w-3.5 h-3.5 rounded-full shrink-0"
+                                                style={{ backgroundColor: color.bg, border: `1px solid ${color.ring}` }}
+                                                aria-hidden="true"
+                                            ></span>
                                             <span className="truncate">{label}</span>
                                         </label>
                                     );

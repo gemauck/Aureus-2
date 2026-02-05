@@ -1021,11 +1021,17 @@ async function handler(req, res) {
               ownerId: null
             };
             
-            // Get locationId - if not provided, default to main warehouse
+            // Get locationId - resolve from locationCode if provided, else default to main warehouse
             let locationId = itemData.locationId || null
+            if (!locationId && itemData.locationCode) {
+              const byCode = await prisma.stockLocation.findFirst({
+                where: { code: String(itemData.locationCode).trim() }
+              })
+              if (byCode) locationId = byCode.id
+            }
             if (!locationId) {
-              const mainWarehouse = await prisma.stockLocation.findFirst({ 
-                where: { code: 'LOC001' } 
+              const mainWarehouse = await prisma.stockLocation.findFirst({
+                where: { code: 'LOC001' }
               })
               if (mainWarehouse) {
                 locationId = mainWarehouse.id

@@ -232,6 +232,12 @@ if ! bash ./scripts/safe-db-migration.sh npx prisma migrate deploy; then
 fi
 
 echo ""
+echo "🔧 Ensuring InventoryItem.boxNumber column exists (safe one-off if migrations blocked)..."
+if [ -f "prisma/migrations/manual_add_inventory_box_number.sql" ]; then
+    npx prisma db execute --file prisma/migrations/manual_add_inventory_box_number.sql --schema prisma/schema.prisma 2>/dev/null && echo "   ✅ boxNumber column OK" || echo "   ⚠️  Skipped (column may already exist or DB not available)"
+fi
+
+echo ""
 echo "🔄 Restarting application with updated environment..."
 # Source environment to ensure DATABASE_URL is loaded
 set -a

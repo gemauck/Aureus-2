@@ -60,7 +60,9 @@
     "copy:prod-data": "bash scripts/copy-production-data.sh",
     "seed:dummy": "node scripts/create-dummy-data.js",
     "db:studio": "npx prisma studio",
-    "db:test": "node test-db-connection-script.js"
+    "db:test": "node test-db-connection-script.js",
+    "import:stock-count": "node scripts/import-stock-count-excel.js",
+    "reimport:stock-count": "node scripts/reimport-stock-count-excel.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

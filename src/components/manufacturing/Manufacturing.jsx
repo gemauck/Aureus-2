@@ -9579,65 +9579,67 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
           {(() => {
-            // Movements are sorted oldest-first, but we want to display newest-first
-            // So we reverse for display, but calculate balances backwards from current quantity
-            const itemMovements = [...itemMovementsForDetail].reverse();
-
-            // Helper function to normalize quantity based on movement type
-            // This ensures consistent handling across balance calculation and display
+            // Helper: normalize quantity by movement type (receipt = +, consumption/sale = -, adjustment = as-is)
             const normalizeQuantity = (movement) => {
               let qty = parseFloat(movement.quantity) || 0;
-              // Normalize quantity based on type
-              if (movement.type === 'receipt') {
-                qty = Math.abs(qty); // Receipts always increase stock (positive)
-              } else if (movement.type === 'production' || movement.type === 'consumption' || movement.type === 'sale') {
-                qty = -Math.abs(qty); // Production/consumption/sale always decrease stock (negative)
-              }
-              // Adjustments keep their sign as-is (can be positive or negative)
-              // This is critical - adjustments are stored with their actual sign in the database
+              if (movement.type === 'receipt') qty = Math.abs(qty);
+              else if (movement.type === 'production' || movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
               return qty;
             };
 
-            // Calculate balances backwards from current quantity (since we're displaying newest-first)
-            // Start with current quantity and work backwards by subtracting each movement
+            // Compute balances forward from 0 (ledger is source of truth; works for fresh uploads)
+            // itemMovementsForDetail is already sorted oldest-first
+            const rowsWithBalances = itemMovementsForDetail.map((movement) => {
+              const qty = normalizeQuantity(movement);
+              return { movement, qty };
+            });
+            let opening = 0;
+            const rowsCalculated = rowsWithBalances.map(({ movement, qty }) => {
+              const openingBalance = opening;
+              const balanceAfter = openingBalance + qty;
+              opening = balanceAfter;
+              return { movement, qty, openingBalance, balanceAfter };
+            });
+            const ledgerClosingBalance = opening;
             const currentQuantity = item.quantity || 0;
-            let runningBalance = currentQuantity;
+            const mismatch = Math.abs(ledgerClosingBalance - currentQuantity) > 0.001;
+
+            // Display newest-first
+            const displayRows = [...rowsCalculated].reverse();
 
             return (
               <div className="overflow-x-auto">
-                {itemMovements.length === 0 ? (
+                {displayRows.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <i className="fas fa-inbox text-4xl mb-2 text-gray-300"></i>
                     <p className="text-sm">No stock movements recorded for this item</p>
                     <p className="text-xs text-gray-400 mt-1">Stock movements will appear here as they are recorded</p>
                   </div>
                 ) : (
+                  <>
+                  <p className="text-xs text-gray-500 mb-2">Opening + In − Out = Balance (each row shows balance after that movement; ledger starts at 0 for the first movement)</p>
+                  {mismatch && (
+                    <p className="text-xs text-amber-600 mb-2">
+                      Item quantity ({currentQuantity.toFixed(2)} {item.unit}) differs from ledger total ({ledgerClosingBalance.toFixed(2)} {item.unit}). Consider reconciling or re-running the stock count fix.
+                    </p>
+                  )}
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500" title="Balance before this movement">Opening</th>
                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">In</th>
                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Out</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Balance</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500" title="Balance after this movement">Balance</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {/* Transaction Rows */}
-                      {itemMovements.map((movement, index) => {
-                        // Use the same normalization function for consistency
-                        const qty = normalizeQuantity(movement);
-                        
+                      {displayRows.map(({ movement, qty, openingBalance, balanceAfter }) => {
                         const isIncrease = qty > 0;
                         const isDecrease = qty < 0;
-                        
-                        // Display the balance AFTER this movement (runningBalance)
-                        // Then calculate the balance BEFORE this movement for the next row
-                        const balanceToDisplay = runningBalance;
-                        runningBalance = runningBalance - qty;
-                        
                         return (
                           <tr key={movement.id} className="hover:bg-gray-50">
                             <td className="px-3 py-2 text-sm text-gray-900">
@@ -9650,6 +9652,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             </td>
                             <td className="px-3 py-2 text-sm text-gray-700">
                               {getMovementDescription(movement)}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-right text-gray-600 font-medium" title="Balance before this movement">
+                              {openingBalance.toFixed(2)} {item.unit}
                             </td>
                             <td className="px-3 py-2 text-sm text-right">
                               {isIncrease ? (
@@ -9666,9 +9671,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                               )}
                             </td>
                             <td className={`px-3 py-2 text-sm text-right font-semibold ${
-                              balanceToDisplay < 0 ? 'text-red-600' : balanceToDisplay === 0 ? 'text-orange-600' : 'text-gray-900'
+                              balanceAfter < 0 ? 'text-red-600' : balanceAfter === 0 ? 'text-orange-600' : 'text-gray-900'
                             }`}>
-                              {balanceToDisplay.toFixed(2)} {item.unit}
+                              {balanceAfter.toFixed(2)} {item.unit}
                             </td>
                             <td className="px-3 py-2 text-sm text-gray-600">
                               {movement.reference || movement.movementId || '-'}
@@ -9676,21 +9681,21 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           </tr>
                         );
                       })}
-                      
                       {/* Closing Balance Row */}
                       <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
-                        <td className="px-3 py-2 text-sm text-gray-700" colSpan="5">
-                          <span className="text-gray-900">Closing Balance</span>
+                        <td className="px-3 py-2 text-sm text-gray-700" colSpan="6">
+                          <span className="text-gray-900">Closing Balance (from ledger)</span>
                         </td>
                         <td className={`px-3 py-2 text-sm text-right font-bold ${
-                          currentQuantity < 0 ? 'text-red-600' : currentQuantity === 0 ? 'text-orange-600' : 'text-blue-600'
+                          ledgerClosingBalance < 0 ? 'text-red-600' : ledgerClosingBalance === 0 ? 'text-orange-600' : 'text-blue-600'
                         }`}>
-                          {currentQuantity.toFixed(2)} {item.unit}
+                          {ledgerClosingBalance.toFixed(2)} {item.unit}
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-700">-</td>
                       </tr>
                     </tbody>
                   </table>
+                  </>
                 )}
               </div>
             );
