@@ -505,7 +505,7 @@ const POAReview = () => {
                 console.log('POA Review - Large Excel file detected, using server-side processing...');
                 setProcessingProgress('Uploading file to server for processing...');
 
-                const formData = new FormData();
+                let formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
 

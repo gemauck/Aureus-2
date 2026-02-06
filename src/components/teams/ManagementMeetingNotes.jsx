@@ -5097,7 +5097,7 @@ const ManagementMeetingNotes = () => {
                                             )}
                                         </div>
                                     );
-                                });
+                                })}
 
                                 <div
                                     key={`${dept.id}-monthly-goals`}
