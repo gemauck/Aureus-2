@@ -376,16 +376,62 @@ async function handler(req, res) {
 
   // Include fallback "sent reply/request" comments (when DocumentCollectionEmailLog create failed)
   try {
-    const replyComments = await prisma.documentItemComment.findMany({
+    const authorList = ['Sent reply (platform)', 'Sent request (platform)']
+    let replyComments = await prisma.documentItemComment.findMany({
       where: {
         itemId: cell.documentId,
         year: cell.year,
         month: cell.month,
-        author: { in: ['Sent reply (platform)', 'Sent request (platform)'] }
+        author: { in: authorList }
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true, text: true, createdAt: true }
     })
+    if (replyComments.length === 0 && documentName) {
+      try {
+        let docs = await prisma.documentItem.findMany({
+          where: {
+            name: { equals: documentName.trim(), mode: 'insensitive' },
+            section: { projectId: cell.projectId }
+          },
+          select: { id: true },
+          take: 20
+        })
+        if (docs.length === 0) {
+          docs = await prisma.documentItem.findMany({
+            where: {
+              name: { contains: documentName.trim(), mode: 'insensitive' },
+              section: { projectId: cell.projectId }
+            },
+            select: { id: true },
+            take: 20
+          })
+        }
+        const docIds = docs.map((d) => d.id)
+        if (docIds.length > 0) {
+          replyComments = await prisma.documentItemComment.findMany({
+            where: {
+              itemId: { in: docIds },
+              year: cell.year,
+              month: cell.month,
+              author: { in: authorList }
+            },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, text: true, createdAt: true }
+          })
+          if (replyComments.length > 0) {
+            console.log('document-collection-email-activity: sent comments matched by name', {
+              projectId: cell.projectId,
+              documentName,
+              matchedDocs: docIds.length,
+              comments: replyComments.length
+            })
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('document-collection-email-activity: sent comment fallback failed', fallbackErr.message)
+      }
+    }
     for (const c of replyComments) {
       const firstLine = (c.text || '').split('\n')[0] || ''
       const subject = firstLine.startsWith('Subject: ') ? firstLine.slice(9).trim() : firstLine.trim()
