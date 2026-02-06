@@ -4920,6 +4920,12 @@ Abcotronics`;
                                                             </div>
                                                             <div className="px-3 py-2">
                                                                 <p className="text-sm font-medium text-gray-800">{s.subject && s.subject.trim() ? s.subject : '—'}</p>
+                                                                <div className="mt-1 text-[11px] text-gray-500">
+                                                                    <span className="font-medium text-gray-600">Delivery:</span> {statusLabel}
+                                                                    {status === 'bounced' && s.bounceReason ? ` — ${s.bounceReason}` : ''}
+                                                                    {status === 'failed' && s.bouncedAt ? ` at ${formatDateTime(s.bouncedAt)}` : ''}
+                                                                    {status === 'delivered' && s.deliveredAt ? ` at ${formatDateTime(s.deliveredAt)}` : ''}
+                                                                </div>
                                                                 {isExpanded && (
                                                                     <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-y-auto rounded border border-gray-100 p-2 bg-white/80">
                                                                         {s.bodyText && s.bodyText.trim() ? s.bodyText : '—'}
