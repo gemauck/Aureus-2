@@ -85,7 +85,7 @@ async function fetchResendLastEvent(messageId) {
   }
 }
 
-async function refreshResendDeliveryStatus(sentLogs) {
+async function refreshResendDeliveryStatus(sentLogs, { force = false } = {}) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey || !Array.isArray(sentLogs) || sentLogs.length === 0) return sentLogs
 
@@ -93,13 +93,15 @@ async function refreshResendDeliveryStatus(sentLogs) {
   const candidates = sentLogs.filter((log) => {
     if (!log?.messageId) return false
     if (!isLikelyResendId(log.messageId)) return false
-    if (log.deliveryStatus && log.deliveryStatus !== 'sent') return false
+    if (!force && log.deliveryStatus && log.deliveryStatus !== 'sent') return false
     const createdAt = log.createdAt ? new Date(log.createdAt).getTime() : 0
     if (!createdAt || now - createdAt > RESEND_REFRESH_MAX_AGE_MS) return false
-    const lastEventAt = log.lastEventAt ? new Date(log.lastEventAt).getTime() : 0
-    if (lastEventAt && now - lastEventAt < RESEND_REFRESH_MIN_AGE_MS) return false
+    if (!force) {
+      const lastEventAt = log.lastEventAt ? new Date(log.lastEventAt).getTime() : 0
+      if (lastEventAt && now - lastEventAt < RESEND_REFRESH_MIN_AGE_MS) return false
+    }
     return true
-  }).slice(0, RESEND_REFRESH_MAX)
+  }).slice(0, force ? RESEND_REFRESH_MAX * 2 : RESEND_REFRESH_MAX)
 
   if (candidates.length === 0) return sentLogs
 
@@ -426,7 +428,8 @@ async function handler(req, res) {
 
   if (sent.length > 0) {
     try {
-      sent = await refreshResendDeliveryStatus(sent)
+      const forceRefresh = params.get('refresh') === '1' || (q.refresh != null && String(q.refresh) === '1')
+      sent = await refreshResendDeliveryStatus(sent, { force: forceRefresh })
     } catch (_) {}
   }
 

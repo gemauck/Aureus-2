@@ -10,6 +10,7 @@
  */
 
 // Mobile helpers and debug utilities
+import './utils/timezone.js';
 import './utils/mobileTableConverter.js';
 import './utils/debug.js';
 import './utils/routeState.js';

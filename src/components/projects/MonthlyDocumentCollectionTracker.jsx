@@ -3919,7 +3919,7 @@ Abcotronics`;
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
         // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send. Returns a promise.
-        const fetchEmailActivity = useCallback(() => {
+        const fetchEmailActivity = useCallback((opts = {}) => {
             if (!ctx?.doc?.id || !ctx?.month || project?.id == null || selectedYear == null) {
                 setEmailActivity({ sent: [], received: [] });
                 return Promise.resolve();
@@ -3938,6 +3938,7 @@ Abcotronics`;
             });
             if (ctx?.doc?.name) q.set('documentName', String(ctx.doc.name).trim());
             if (ctx?.section?.id) q.set('sectionId', String(ctx.section.id).trim());
+            if (opts.forceRefresh) q.set('refresh', '1');
             return fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
                 credentials: 'include',
@@ -4838,7 +4839,7 @@ Abcotronics`;
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => fetchEmailActivity()}
+                                        onClick={() => fetchEmailActivity({ forceRefresh: true })}
                                         disabled={loadingActivity}
                                         className="text-xs text-[#0369a1] hover:text-[#0284c7] disabled:opacity-50 flex items-center gap-1"
                                         title="Refresh to check for new replies"
@@ -5167,7 +5168,7 @@ Abcotronics`;
                         <button
                             type="button"
                             onClick={handleSaveTemplate}
-                            disabled={savingTemplate || contacts.length === 0}
+                            disabled={savingTemplate}
                             className="px-4 py-2.5 text-sm font-medium text-[#0369a1] bg-[#e0f2fe] hover:bg-[#bae6fd] rounded-xl transition-colors border border-[#7dd3fc]"
                         >
                             {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
