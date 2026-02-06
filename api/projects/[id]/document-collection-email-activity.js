@@ -124,6 +124,7 @@ async function handler(req, res) {
   const params = new URLSearchParams(query)
   const q = req.query || {}
   const documentId = (params.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null)
+  const documentName = (params.get('documentName')?.trim() || (q.documentName != null ? String(q.documentName).trim() : null) || null)
   const monthParam = params.get('month') ?? q.month
   const yearParam = params.get('year') ?? q.year
   const month = monthParam != null ? parseInt(String(monthParam), 10) : null
@@ -166,11 +167,28 @@ async function handler(req, res) {
         if (exactMatch.length > 0) {
           sent = exactMatch
         } else if (fallback.length > 0) {
-          // Avoid showing emails from other requests; keep empty and log mismatch for diagnostics.
-          console.log('document-collection-email-activity: no sent match for documentId; returning empty', {
-            requestedDocumentId: cell.documentId,
-            candidateCount: fallback.length
-          })
+          // Fallback: attempt to match by document name in subject/body (legacy ID mismatch after refresh).
+          const name = (documentName || '').trim().toLowerCase()
+          if (name) {
+            const matched = fallback.filter((row) => {
+              const subject = (row.subject || '').toLowerCase()
+              const body = (row.bodyText || '').toLowerCase()
+              return subject.includes(name) || body.includes(name)
+            }).map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
+            if (matched.length > 0) {
+              sent = matched
+            } else {
+              console.log('document-collection-email-activity: no sent match for documentId or documentName; returning empty', {
+                requestedDocumentId: cell.documentId,
+                candidateCount: fallback.length
+              })
+            }
+          } else {
+            console.log('document-collection-email-activity: no sent match for documentId; returning empty', {
+              requestedDocumentId: cell.documentId,
+              candidateCount: fallback.length
+            })
+          }
         }
       }
     }

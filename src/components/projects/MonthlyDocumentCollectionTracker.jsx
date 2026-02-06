@@ -3829,6 +3829,7 @@ Abcotronics`;
         const [recipientName, setRecipientName] = useState('');
         const [saveNotice, setSaveNotice] = useState(null);
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
+        const [sendPlainTextOnly, setSendPlainTextOnly] = useState(true);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
         const [scheduleStopStatus, setScheduleStopStatus] = useState('collected');
         const [sending, setSending] = useState(false);
@@ -3887,6 +3888,7 @@ Abcotronics`;
                 : (typeof s.recipient_name === 'string' ? s.recipient_name : '');
             setRecipientName(savedRecipientName);
             setRemoveExternalLinks(true);
+            setSendPlainTextOnly(true);
             setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
             setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
             setNewContact('');
@@ -3923,6 +3925,7 @@ Abcotronics`;
                 year: String(selectedYear),
                 _: String(Date.now())
             });
+            if (ctx?.doc?.name) q.set('documentName', String(ctx.doc.name).trim());
             if (ctx?.section?.id) q.set('sectionId', String(ctx.section.id).trim());
             return fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
@@ -4403,7 +4406,7 @@ Abcotronics`;
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
                 const requester = getCurrentUser();
                 const requesterEmail = requester?.email && emailRe.test(requester.email) ? requester.email : '';
-                const htmlPayload = buildStyledEmailHtml(subject.trim(), sanitized.cleanedBody.trim());
+                const htmlPayload = sendPlainTextOnly ? undefined : buildStyledEmailHtml(subject.trim(), sanitized.cleanedBody.trim());
                 const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
                 const hasCellKeys = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
@@ -4423,7 +4426,7 @@ Abcotronics`;
                         to: contacts,
                         cc: contactsCc.length > 0 ? contactsCc : undefined,
                         subject: subject.trim(),
-                        html: htmlPayload,
+                        ...(htmlPayload ? { html: htmlPayload } : {}),
                         text: sanitized.cleanedBody.trim(),
                         ...(requesterEmail ? { requesterEmail } : {}),
                         ...(hasCellKeys
@@ -4716,6 +4719,15 @@ Abcotronics`;
                                     Remove external links before sending (recommended)
                                 </label>
                             )}
+                            <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
+                                <input
+                                    type="checkbox"
+                                    checked={sendPlainTextOnly}
+                                    onChange={(e) => setSendPlainTextOnly(e.target.checked)}
+                                    className="rounded border-gray-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
+                                />
+                                Send as plain text only (improves deliverability)
+                            </label>
                         </div>
 
                         {/* Schedule: repeat until status */}
