@@ -99,9 +99,10 @@ const parseDateValue = (dateValue) => {
     if (dateValue instanceof Date) return dateValue;
     const raw = String(dateValue).trim();
     if (!raw) return null;
-    const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(raw);
     const normalized = raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') : raw;
-    const withTimezone = hasTimezone ? normalized : `${normalized}${SA_TIMEZONE_OFFSET}`;
+    // Treat stored timestamps as SA "wall time" regardless of timezone suffix.
+    const withoutTimezone = normalized.replace(/([zZ]|[+-]\d{2}:?\d{2})$/, '');
+    const withTimezone = `${withoutTimezone}${SA_TIMEZONE_OFFSET}`;
     const date = new Date(withTimezone);
     if (isNaN(date.getTime())) return null;
     return date;
