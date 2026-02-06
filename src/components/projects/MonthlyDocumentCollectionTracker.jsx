@@ -1556,7 +1556,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const newSection = {
                 id: Date.now(),
                 ...sectionData,
-                monthlyGoals: sectionData.monthlyGoals || {},
                 documents: []
             };
             setSections(prev => [...prev, newSection]);
@@ -1566,37 +1565,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setEditingSection(null);
     };
 
-    const handleMonthlyGoalChange = (sectionId, month, value) => {
-        if (!sectionId || !month) return;
-        const monthKey = getMonthKey(month, selectedYear);
-        if (!monthKey) return;
-        
-        setSections(prev => prev.map(section => {
-            if (String(section.id) !== String(sectionId)) return section;
-            const currentGoals = section.monthlyGoals || {};
-            const nextValue = String(value || '');
-            const updatedGoals = { ...currentGoals };
-            
-            if (nextValue.trim()) {
-                updatedGoals[monthKey] = nextValue;
-            } else {
-                delete updatedGoals[monthKey];
-            }
-            
-            return {
-                ...section,
-                monthlyGoals: updatedGoals
-            };
-        }));
-    };
-
-    const getMonthlyGoalValue = (section, month) => {
-        if (!section || !month) return '';
-        const monthKey = getMonthKey(month, selectedYear);
-        if (!monthKey) return '';
-        return (section.monthlyGoals && section.monthlyGoals[monthKey]) || '';
-    };
-    
     // Actual deletion logic extracted to separate function
     const performDeletion = async (sectionId, event) => {
         // Prevent event propagation to avoid interfering with other handlers
@@ -6553,26 +6521,6 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                         className="bg-white divide-y divide-gray-200"
                                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                     >
-                                        <tr className="bg-gray-50">
-                                            <td
-                                                className="px-4 py-2 sticky left-0 bg-gray-50 z-20 border-r-2 border-gray-300"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
-                                            >
-                                                <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Monthly Goals</div>
-                                            </td>
-                                            {months.map((month) => (
-                                                <td key={`goals-${section.id}-${month}`} className="px-2 py-2 border-l-2 border-gray-200 bg-white">
-                                                    <textarea
-                                                        className="w-full min-w-[160px] h-16 text-xs text-gray-800 border border-gray-200 rounded-md p-2 resize-y focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                                                        value={getMonthlyGoalValue(section, month)}
-                                                        onChange={(e) => handleMonthlyGoalChange(section.id, month, e.target.value)}
-                                                        placeholder={`Goals for ${month}`}
-                                                        aria-label={`Monthly goals for ${section.name || 'section'} - ${month} ${selectedYear}`}
-                                                    />
-                                                </td>
-                                            ))}
-                                            <td className="px-4 py-2 border-l-2 border-gray-300 bg-gray-50"></td>
-                                        </tr>
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={14} className="px-8 py-12 text-center">
