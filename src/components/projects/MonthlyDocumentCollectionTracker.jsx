@@ -1483,6 +1483,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             subject: data.subject,
             body: data.body,
             recipientName: data.recipientName,
+            sendPlainTextOnly: !!data.sendPlainTextOnly,
             schedule: data.schedule
         };
         const updated = currentYearSections.map(section => {
@@ -3899,7 +3900,7 @@ Abcotronics`;
             setBody(initialTemplate.body || defaultBody);
             setRecipientName(initialTemplate.recipientName || '');
             setRemoveExternalLinks(true);
-            setSendPlainTextOnly(false);
+            setSendPlainTextOnly(!!initialTemplate.sendPlainTextOnly);
             setScheduleFrequency(initialTemplate.schedule.frequency);
             setScheduleStopStatus(initialTemplate.schedule.stopWhenStatus);
             setNewContact('');
@@ -4206,6 +4207,7 @@ Abcotronics`;
                 subject: (tpl?.subject || '').trim(),
                 body: (tpl?.body || '').trim(),
                 recipientName: (tpl?.recipientName || '').trim(),
+                sendPlainTextOnly: !!(tpl?.sendPlainTextOnly || tpl?.send_plain_text_only),
                 schedule: {
                     frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
                         ? tpl.schedule.frequency
@@ -4227,6 +4229,7 @@ Abcotronics`;
                 subject: savedSubject ? ensureAbcoSubject(withCurrentPeriod(savedSubject)) : defaultSubject,
                 body: savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody,
                 recipientName: savedRecipientName,
+                sendPlainTextOnly: saved?.sendPlainTextOnly ?? saved?.send_plain_text_only,
                 schedule: {
                     frequency: saved?.schedule?.frequency,
                     stopWhenStatus: saved?.schedule?.stopWhenStatus
@@ -4241,6 +4244,7 @@ Abcotronics`;
                 subject: subject.trim() || defaultSubject,
                 body: body.trim() || defaultBody,
                 recipientName: recipientName.trim(),
+                sendPlainTextOnly,
                 schedule: {
                     frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
                     stopWhenStatus: scheduleStopStatus || 'collected'
@@ -4362,6 +4366,7 @@ Abcotronics`;
                 setSubject(normalized.subject || defaultSubject);
                 setBody(normalized.body || defaultBody);
                 setRecipientName(normalized.recipientName || '');
+                setSendPlainTextOnly(!!normalized.sendPlainTextOnly);
                 setScheduleFrequency(normalized.schedule.frequency);
                 setScheduleStopStatus(normalized.schedule.stopWhenStatus);
                 setLastSavedTemplate(normalized);

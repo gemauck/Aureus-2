@@ -163,6 +163,26 @@ const normalizeMonthKeyInput = (value) => {
     return parsed ? getMonthKeyFromDate(parsed) : null;
 };
 
+const normalizeMonthlyGoalsByDepartment = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object') {
+        if (Array.isArray(value)) return {};
+        return value || {};
+    }
+    if (typeof value !== 'string') return {};
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (error) {
+        // Fall through to legacy fallback
+    }
+    return { __legacy: value };
+};
+
 const deriveWeekDetails = (value) => {
     const baseDate = value ? parseDateInput(value) : null;
     if (!baseDate) return null;
@@ -1056,12 +1076,76 @@ const ManagementMeetingNotes = () => {
         return sorted;
     }, [currentMonthlyNotes]);
 
+    const monthlyGoalsRef = useRef({});
+    const monthlyGoalsByDepartment = useMemo(
+        () => normalizeMonthlyGoalsByDepartment(currentMonthlyNotes?.monthlyGoals),
+        [currentMonthlyNotes?.monthlyGoals]
+    );
+
+    useEffect(() => {
+        monthlyGoalsRef.current = monthlyGoalsByDepartment;
+    }, [monthlyGoalsByDepartment]);
+
+    const updateMonthlyGoalsLocal = useCallback((serializedGoals) => {
+        if (!currentMonthlyNotes?.id) return;
+        setCurrentMonthlyNotes((prev) =>
+            prev ? { ...prev, monthlyGoals: serializedGoals } : prev
+        );
+        setMonthlyNotesList((prev) =>
+            prev.map((note) =>
+                note?.id === currentMonthlyNotes.id
+                    ? { ...note, monthlyGoals: serializedGoals }
+                    : note
+            )
+        );
+    }, [currentMonthlyNotes?.id]);
+
+    const persistMonthlyGoals = useCallback(async (serializedGoals) => {
+        if (!currentMonthlyNotes?.id) return;
+        if (!window.DatabaseAPI?.updateMonthlyNotes) {
+            console.warn('Meeting notes: updateMonthlyNotes API not available.');
+            return;
+        }
+        try {
+            await window.DatabaseAPI.updateMonthlyNotes(currentMonthlyNotes.id, { monthlyGoals: serializedGoals });
+        } catch (error) {
+            console.error('Failed to save monthly goals:', error);
+        }
+    }, [currentMonthlyNotes?.id]);
+
+    const handleMonthlyGoalsChange = useCallback((departmentId, value) => {
+        const nextGoals = { ...(monthlyGoalsRef.current || {}) };
+        const normalizedValue = typeof value === 'string' ? value : '';
+        if (normalizedValue.trim() === '') {
+            delete nextGoals[departmentId];
+        } else {
+            nextGoals[departmentId] = normalizedValue;
+        }
+        const serialized = JSON.stringify(nextGoals);
+        updateMonthlyGoalsLocal(serialized);
+    }, [updateMonthlyGoalsLocal]);
+
+    const handleMonthlyGoalsBlur = useCallback((departmentId, value) => {
+        const nextGoals = { ...(monthlyGoalsRef.current || {}) };
+        const normalizedValue = typeof value === 'string' ? value : '';
+        if (normalizedValue.trim() === '') {
+            delete nextGoals[departmentId];
+        } else {
+            nextGoals[departmentId] = normalizedValue;
+        }
+        const serialized = JSON.stringify(nextGoals);
+        updateMonthlyGoalsLocal(serialized);
+        persistMonthlyGoals(serialized);
+    }, [persistMonthlyGoals, updateMonthlyGoalsLocal]);
+
     const getWeekIdentifier = (week) => {
         if (!week) {
             return '';
         }
         return week.weekKey || week.id || '';
     };
+
+    const getWeekGridColumn = (weekIndex) => (weekIndex === 0 ? 1 : weekIndex + 2);
 
     const scrollToWeekId = useCallback((weekId) => {
         if (!weekId) {
@@ -4385,7 +4469,7 @@ const ManagementMeetingNotes = () => {
                         <div 
                             className="inline-grid gap-4"
                             style={{
-                                gridTemplateColumns: `repeat(${weeks.length}, minmax(520px, 560px))`,
+                                gridTemplateColumns: `repeat(${weeks.length + 1}, minmax(520px, 560px))`,
                                 gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
                                 alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
                                 gridAutoFlow: 'row' // Ensure items flow row by row
@@ -4413,7 +4497,7 @@ const ManagementMeetingNotes = () => {
                                         }}
                                         style={{
                                             gridRow: '1',
-                                            gridColumn: `${index + 1}`
+                                            gridColumn: `${getWeekGridColumn(index)}`
                                         }}
                                         className={`rounded-xl border-2 p-5 transition-all duration-300 ${
                                             isActualCurrentWeek
@@ -4479,188 +4563,220 @@ const ManagementMeetingNotes = () => {
                                     </div>
                                 );
                             })}
+
+                            {/* Monthly goals header - placed after the first week */}
+                            <div
+                                key="header-monthly-goals"
+                                style={{
+                                    gridRow: '1',
+                                    gridColumn: '2'
+                                }}
+                                className={`rounded-xl border-2 p-5 transition-all duration-300 ${
+                                    isDark
+                                        ? 'border-slate-600 bg-slate-800/80'
+                                        : 'border-slate-300 bg-white'
+                                }`}
+                            >
+                                <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="flex-1">
+                                        <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>
+                                            Monthly Goals
+                                        </p>
+                                        <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                            <i className={`fas fa-bullseye mr-2 ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
+                                            Department Focus
+                                        </h3>
+                                    </div>
+                                </div>
+                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                    Capture month-level goals for each department.
+                                </p>
+                            </div>
                             
                             {/* Department rows - each department spans all weeks */}
                             {DEPARTMENTS.map((dept, deptIndex) => {
-                                return weeks.map((week, weekIndex) => {
-                                    const rawId = getWeekIdentifier(week);
-                                    const identifier = rawId || `week-${weekIndex}`;
-                                    const deptNote = week.departmentNotes?.find(
-                                        (dn) => dn.departmentId === dept.id
-                                    );
+                                const deptMonthlyGoal = monthlyGoalsByDepartment?.[dept.id] || '';
+                                return (
+                                    <React.Fragment key={`dept-row-${dept.id}`}>
+                                        {weeks.map((week, weekIndex) => {
+                                            const rawId = getWeekIdentifier(week);
+                                            const identifier = rawId || `week-${weekIndex}`;
+                                            const deptNote = week.departmentNotes?.find(
+                                                (dn) => dn.departmentId === dept.id
+                                            );
 
-                                    return (
-                                        <div
-                                            key={`${dept.id}-${identifier}`}
-                                            className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
-                                                !deptNote 
-                                                    ? `border-dashed opacity-60 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50/50'}`
-                                                    : `${isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'}`
-                                            }`}
-                                            style={{ 
-                                                minHeight: '200px',
-                                                gridRow: `${deptIndex + 2}`, // +2 because row 1 is headers
-                                                gridColumn: `${weekIndex + 1}` // +1 because columns start at 1
-                                            }}
-                                        >
-                                            {!deptNote ? (
-                                                <>
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                            <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                            {dept.name}
-                                                        </h4>
-                                                        <div className="flex gap-2">
-                                                            {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
-                                                                <div className="flex gap-1">
-                                                                    {currentMonthlyNotes.userAllocations
-                                                                        .filter((a) => a.departmentId === dept.id)
-                                                                        .map((allocation) => (
-                                                                            <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                                                {getUserName(allocation.userId)}
-                                                                            </span>
-                                                                        ))}
+                                            return (
+                                                <div
+                                                    key={`${dept.id}-${identifier}`}
+                                                    className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
+                                                        !deptNote 
+                                                            ? `border-dashed opacity-60 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50/50'}`
+                                                            : `${isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'}`
+                                                    }`}
+                                                    style={{ 
+                                                        minHeight: '200px',
+                                                        gridRow: `${deptIndex + 2}`, // +2 because row 1 is headers
+                                                        gridColumn: `${getWeekGridColumn(weekIndex)}`
+                                                    }}
+                                                >
+                                                    {!deptNote ? (
+                                                        <>
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                                    <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                                    {dept.name}
+                                                                </h4>
+                                                                <div className="flex gap-2">
+                                                                    {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
+                                                                        <div className="flex gap-1">
+                                                                            {currentMonthlyNotes.userAllocations
+                                                                                .filter((a) => a.departmentId === dept.id)
+                                                                                .map((allocation) => (
+                                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                        {getUserName(allocation.userId)}
+                                                                                    </span>
+                                                                                ))}
+                                                                        </div>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            setSelectedDepartment(dept.id);
+                                                                            setShowAllocationModal(true);
+                                                                        }}
+                                                                        className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                        title="Allocate users"
+                                                                    >
+                                                                        <i className="fas fa-user-plus"></i>
+                                                                    </button>
                                                                 </div>
-                                                            )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                    setSelectedDepartment(dept.id);
-                                                                    setShowAllocationModal(true);
-                                                                }}
-                                                                className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                                title="Allocate users"
-                                                            >
-                                                                <i className="fas fa-user-plus"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <div className={`text-center py-4 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
-                                                        <p className="text-xs">No notes for this department yet</p>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                                <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                                {dept.name}
-                                                            </h4>
-                                                            {/* Auto-save status indicator */}
-                                                            {autoSaveStatus[deptNote.id] === 'saving' && (
-                                                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
-                                                                    <i className="fas fa-circle-notch fa-spin text-xs"></i>
-                                                                    Saving...
-                                                                </span>
-                                                            )}
-                                                            {autoSaveStatus[deptNote.id] === 'saved' && (
-                                                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                                                                    <i className="fas fa-check text-xs"></i>
-                                                                    Saved
-                                                                </span>
-                                                            )}
-                                                            {autoSaveStatus[deptNote.id] === 'error' && (
-                                                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                                                                    <i className="fas fa-exclamation-triangle text-xs"></i>
-                                                                    Save failed
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
-                                                                <div className="flex gap-1">
-                                                                    {currentMonthlyNotes.userAllocations
-                                                                        .filter((a) => a.departmentId === dept.id)
-                                                                        .map((allocation) => (
-                                                                            <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                                                {getUserName(allocation.userId)}
-                                                                            </span>
-                                                                        ))}
+                                                            </div>
+                                                            <div className={`text-center py-4 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
+                                                                <p className="text-xs">No notes for this department yet</p>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                                        <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                                        {dept.name}
+                                                                    </h4>
+                                                                    {/* Auto-save status indicator */}
+                                                                    {autoSaveStatus[deptNote.id] === 'saving' && (
+                                                                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
+                                                                            <i className="fas fa-circle-notch fa-spin text-xs"></i>
+                                                                            Saving...
+                                                                        </span>
+                                                                    )}
+                                                                    {autoSaveStatus[deptNote.id] === 'saved' && (
+                                                                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                                                                            <i className="fas fa-check text-xs"></i>
+                                                                            Saved
+                                                                        </span>
+                                                                    )}
+                                                                    {autoSaveStatus[deptNote.id] === 'error' && (
+                                                                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                                                            <i className="fas fa-exclamation-triangle text-xs"></i>
+                                                                            Save failed
+                                                                        </span>
+                                                                    )}
                                                                 </div>
-                                                            )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                    setSelectedDepartment(dept.id);
-                                                                    setShowAllocationModal(true);
-                                                                }}
-                                                                className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                                title="Allocate users"
-                                                            >
-                                                                <i className="fas fa-user-plus"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    <div className="space-y-3 flex-grow">
-                                                        {/* Successes */}
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                    Last Week's Successes
-                                                                </label>
-                                                            {window.RichTextEditor ? (
-                                                                <window.RichTextEditor
-                                                                    key={`rich-editor-${deptNote.id}-successes`}
-                                                                    value={deptNote.successes || ''}
-                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
-                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
-                                                                    onFocus={() => {
-                                                                        // Preserve scroll position when focusing RichTextEditor
-                                                                        const currentScroll = window.scrollY || window.pageYOffset;
-                                                                        requestAnimationFrame(() => {
-                                                                            window.scrollTo(0, currentScroll);
-                                                                            setTimeout(() => {
-                                                                                window.scrollTo(0, currentScroll);
-                                                                            }, 0);
-                                                                            setTimeout(() => {
-                                                                                window.scrollTo(0, currentScroll);
-                                                                            }, 50);
-                                                                        });
-                                                                    }}
+                                                                <div className="flex gap-2">
+                                                                    {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
+                                                                        <div className="flex gap-1">
+                                                                            {currentMonthlyNotes.userAllocations
+                                                                                .filter((a) => a.departmentId === dept.id)
+                                                                                .map((allocation) => (
+                                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                        {getUserName(allocation.userId)}
+                                                                                    </span>
+                                                                                ))}
+                                                                        </div>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            setSelectedDepartment(dept.id);
+                                                                            setShowAllocationModal(true);
+                                                                        }}
+                                                                        className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                        title="Allocate users"
+                                                                    >
+                                                                        <i className="fas fa-user-plus"></i>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="space-y-3 flex-grow">
+                                                                {/* Successes */}
+                                                                <div>
+                                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                            Last Week's Successes
+                                                                        </label>
+                                                                    {window.RichTextEditor ? (
+                                                                        <window.RichTextEditor
+                                                                            key={`rich-editor-${deptNote.id}-successes`}
+                                                                            value={deptNote.successes || ''}
+                                                                            onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
+                                                                            onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
+                                                                            onFocus={() => {
+                                                                                // Preserve scroll position when focusing RichTextEditor
+                                                                                const currentScroll = window.scrollY || window.pageYOffset;
+                                                                                requestAnimationFrame(() => {
+                                                                                    window.scrollTo(0, currentScroll);
+                                                                                    setTimeout(() => {
+                                                                                        window.scrollTo(0, currentScroll);
+                                                                                    }, 0);
+                                                                                    setTimeout(() => {
+                                                                                        window.scrollTo(0, currentScroll);
+                                                                                    }, 50);
+                                                                                });
+                                                                            }}
                                 placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
-                                                                    rows={4}
-                                                                    isDark={isDark}
-                                                                />
-                                                            ) : (
-                                                                <textarea
-                                                                    value={deptNote.successes || ''}
-                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'successes', e.target.value)}
-                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'successes', e.target.value)}
-                                                                    onFocus={(e) => {
-                                                                        // Preserve scroll position when focusing
-                                                                        e.preventDefault();
-                                                                        const currentScroll = window.scrollY || window.pageYOffset;
-                                                                        // Use multiple restoration attempts
-                                                                        requestAnimationFrame(() => {
-                                                                            window.scrollTo(0, currentScroll);
-                                                                            setTimeout(() => {
-                                                                                window.scrollTo(0, currentScroll);
-                                                                            }, 0);
-                                                                            setTimeout(() => {
-                                                                                window.scrollTo(0, currentScroll);
-                                                                            }, 50);
-                                                                        });
-                                                                    }}
-                                                                    onClick={(e) => {
-                                                                        // Preserve scroll position when clicking
-                                                                        const currentScroll = window.scrollY || window.pageYOffset;
-                                                                        requestAnimationFrame(() => {
-                                                                            window.scrollTo(0, currentScroll);
-                                                                        });
-                                                                    }}
-                                                                    placeholder="What went well during the week?"
-                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                                                    rows={4}
-                                                                    data-dept-note-id={deptNote.id}
-                                                                    data-field="successes"
-                                                                />
-                                                            )}
-                                                        </div>
+                                                                            rows={4}
+                                                                            isDark={isDark}
+                                                                        />
+                                                                    ) : (
+                                                                        <textarea
+                                                                            value={deptNote.successes || ''}
+                                                                            onChange={(e) => handleFieldChange(deptNote.id, 'successes', e.target.value)}
+                                                                            onBlur={(e) => handleFieldBlur(deptNote.id, 'successes', e.target.value)}
+                                                                            onFocus={(e) => {
+                                                                                // Preserve scroll position when focusing
+                                                                                e.preventDefault();
+                                                                                const currentScroll = window.scrollY || window.pageYOffset;
+                                                                                // Use multiple restoration attempts
+                                                                                requestAnimationFrame(() => {
+                                                                                    window.scrollTo(0, currentScroll);
+                                                                                    setTimeout(() => {
+                                                                                        window.scrollTo(0, currentScroll);
+                                                                                    }, 0);
+                                                                                    setTimeout(() => {
+                                                                                        window.scrollTo(0, currentScroll);
+                                                                                    }, 50);
+                                                                                });
+                                                                            }}
+                                                                            onClick={(e) => {
+                                                                                // Preserve scroll position when clicking
+                                                                                const currentScroll = window.scrollY || window.pageYOffset;
+                                                                                requestAnimationFrame(() => {
+                                                                                    window.scrollTo(0, currentScroll);
+                                                                                });
+                                                                            }}
+                                                                            placeholder="What went well during the week?"
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                            rows={4}
+                                                                            data-dept-note-id={deptNote.id}
+                                                                            data-field="successes"
+                                                                        />
+                                                                    )}
+                                                                </div>
 
                                                         {/* Week to Follow */}
                                                         <div>
@@ -4762,9 +4878,9 @@ const ManagementMeetingNotes = () => {
                                                                     data-field="frustrations"
                                                                 />
                                                             )}
-                                                        </div>
-
-                                                        {/* Attachments */}
+                                                    </div>
+                                                
+                                                    {/* Attachments */}
                                                         <div>
                                                             <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                                                                 Attachments
@@ -4982,6 +5098,51 @@ const ManagementMeetingNotes = () => {
                                         </div>
                                     );
                                 });
+
+                                <div
+                                    key={`${dept.id}-monthly-goals`}
+                                    className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
+                                        isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'
+                                    }`}
+                                    style={{ 
+                                        minHeight: '200px',
+                                        gridRow: `${deptIndex + 2}`,
+                                        gridColumn: '2'
+                                    }}
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                            <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                            {dept.name}
+                                        </h4>
+                                        <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                            Monthly Goals
+                                        </span>
+                                    </div>
+
+                                    <div className="flex-grow">
+                                        {window.RichTextEditor ? (
+                                            <window.RichTextEditor
+                                                key={`rich-editor-monthly-goals-${dept.id}`}
+                                                value={deptMonthlyGoal}
+                                                onChange={(html) => handleMonthlyGoalsChange(dept.id, html)}
+                                                onBlur={(html) => handleMonthlyGoalsBlur(dept.id, html)}
+                                                placeholder="Capture the month's goals for this department."
+                                                rows={6}
+                                                isDark={isDark}
+                                            />
+                                        ) : (
+                                            <textarea
+                                                value={deptMonthlyGoal}
+                                                onChange={(e) => handleMonthlyGoalsChange(dept.id, e.target.value)}
+                                                onBlur={(e) => handleMonthlyGoalsBlur(dept.id, e.target.value)}
+                                                placeholder="Capture the month's goals for this department."
+                                                className={`w-full min-h-[160px] p-3 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                rows={6}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
                             })}
                         </div>
                     </div>
