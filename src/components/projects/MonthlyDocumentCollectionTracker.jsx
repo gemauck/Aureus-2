@@ -3891,6 +3891,31 @@ Abcotronics`;
             return docMatch.emailRequestByMonth?.[monthKey] || {};
         };
 
+        const getPlainTextPreferenceKey = (sectionId, documentId) => {
+            if (!project?.id || !sectionId || !documentId) return null;
+            return `doc-email-plain-text:${project.id}:${sectionId}:${documentId}`;
+        };
+
+        const getPlainTextPreferenceFallback = (sectionId, documentId) => {
+            try {
+                const key = getPlainTextPreferenceKey(sectionId, documentId);
+                if (!key || typeof window === 'undefined') return null;
+                const raw = window.localStorage?.getItem?.(key);
+                if (raw == null) return null;
+                return raw === '1';
+            } catch (_) {
+                return null;
+            }
+        };
+
+        const setPlainTextPreferenceFallback = (sectionId, documentId, value) => {
+            try {
+                const key = getPlainTextPreferenceKey(sectionId, documentId);
+                if (!key || typeof window === 'undefined') return;
+                window.localStorage?.setItem?.(key, value ? '1' : '0');
+            } catch (_) {}
+        };
+
         useEffect(() => {
             const s = getLatestEmailRequest();
             const initialTemplate = buildTemplateFromSaved(s);
@@ -3900,14 +3925,27 @@ Abcotronics`;
             setBody(initialTemplate.body || defaultBody);
             setRecipientName(initialTemplate.recipientName || '');
             setRemoveExternalLinks(true);
-            setSendPlainTextOnly(!!initialTemplate.sendPlainTextOnly);
+            const fallbackPlainText = getPlainTextPreferenceFallback(ctx?.section?.id, ctx?.doc?.id);
+            const hasSavedPlainText = initialTemplate.sendPlainTextOnly != null;
+            const plainTextValue = hasSavedPlainText
+                ? !!initialTemplate.sendPlainTextOnly
+                : (fallbackPlainText != null ? fallbackPlainText : false);
+            setSendPlainTextOnly(plainTextValue);
             setScheduleFrequency(initialTemplate.schedule.frequency);
             setScheduleStopStatus(initialTemplate.schedule.stopWhenStatus);
             setNewContact('');
             setNewContactCc('');
             setResult(null);
             setSaveNotice(null);
-            setLastSavedTemplate(initialTemplate);
+            const templateWithPlainText = { ...initialTemplate, sendPlainTextOnly: plainTextValue };
+            setLastSavedTemplate(templateWithPlainText);
+            setPlainTextPreferenceFallback(ctx?.section?.id, ctx?.doc?.id, plainTextValue);
+            if (!hasSavedPlainText && fallbackPlainText != null && ctx?.section?.id && ctx?.doc?.id && ctx?.month) {
+                const nextTemplate = normalizeTemplate({ ...initialTemplate, sendPlainTextOnly: plainTextValue });
+                saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, nextTemplate).catch((err) => {
+                    console.warn('Failed to persist plain text preference fallback:', err);
+                });
+            }
             if (saveNoticeTimeoutRef.current) {
                 clearTimeout(saveNoticeTimeoutRef.current);
                 saveNoticeTimeoutRef.current = null;
@@ -4795,6 +4833,7 @@ Abcotronics`;
                                     onChange={(e) => {
                                         const nextValue = e.target.checked;
                                         setSendPlainTextOnly(nextValue);
+                                        setPlainTextPreferenceFallback(ctx?.section?.id, ctx?.doc?.id, nextValue);
                                         if (ctx?.section?.id && ctx?.doc?.id && ctx?.month) {
                                             const nextTemplate = buildTemplateFromState({ sendPlainTextOnly: nextValue });
                                             saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, nextTemplate).catch((err) => {
