@@ -4118,21 +4118,53 @@ Abcotronics`;
             }
         };
 
+        const normalizeTemplate = (tpl) => ({
+            recipients: normalizeEmailList(tpl?.recipients || []),
+            cc: normalizeEmailList(tpl?.cc || []),
+            subject: (tpl?.subject || '').trim(),
+            body: (tpl?.body || '').trim(),
+            schedule: {
+                frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
+                    ? tpl.schedule.frequency
+                    : 'none',
+                stopWhenStatus: (tpl?.schedule?.stopWhenStatus || 'collected')
+            }
+        });
+
+        const autoSaveTemplateIfChanged = async () => {
+            if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
+            const current = normalizeTemplate({
+                recipients: contacts,
+                cc: contactsCc,
+                subject: subject.trim() || defaultSubject,
+                body: body.trim() || defaultBody,
+                schedule: {
+                    frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
+                    stopWhenStatus: scheduleStopStatus || 'collected'
+                }
+            });
+            const saved = normalizeTemplate(getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear));
+            const hasInput = current.recipients.length > 0 || current.cc.length > 0 || current.subject || current.body;
+            if (!hasInput) return;
+            if (JSON.stringify(current) === JSON.stringify(saved)) return;
+            await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, current);
+        };
+
         const handleSaveTemplate = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
             setSavingTemplate(true);
             setResult(null);
             try {
-                await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, {
-                    recipients: [...contacts],
-                    cc: [...contactsCc],
+                await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, normalizeTemplate({
+                    recipients: contacts,
+                    cc: contactsCc,
                     subject: subject.trim() || defaultSubject,
                     body: body.trim() || defaultBody,
                     schedule: {
                         frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
                         stopWhenStatus: scheduleStopStatus || 'collected'
                     }
-                });
+                }));
                 setResult({ saved: true });
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
             } catch (err) {
@@ -4190,6 +4222,7 @@ Abcotronics`;
             setSending(true);
             setResult(null);
             try {
+                await autoSaveTemplateIfChanged();
                 const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
                 const requester = getCurrentUser();
@@ -4308,7 +4341,15 @@ Abcotronics`;
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setEmailModalContext(null)}
+                                onClick={async () => {
+                                    try {
+                                        await autoSaveTemplateIfChanged();
+                                    } catch (err) {
+                                        console.warn('Auto-save email template failed:', err);
+                                    } finally {
+                                        setEmailModalContext(null);
+                                    }
+                                }}
                                 className="flex h-9 w-9 items-center justify-center rounded-lg text-white/80 hover:bg-white/20 hover:text-white transition-colors shrink-0"
                                 aria-label="Close"
                             >
@@ -4761,7 +4802,15 @@ Abcotronics`;
                     <div className="flex flex-wrap justify-end gap-3 px-5 py-4 bg-white border-t border-gray-100">
                         <button
                             type="button"
-                            onClick={() => setEmailModalContext(null)}
+                            onClick={async () => {
+                                try {
+                                    await autoSaveTemplateIfChanged();
+                                } catch (err) {
+                                    console.warn('Auto-save email template failed:', err);
+                                } finally {
+                                    setEmailModalContext(null);
+                                }
+                            }}
                             className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
                         >
                             Close
