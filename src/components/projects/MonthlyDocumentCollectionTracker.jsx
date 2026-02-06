@@ -1465,7 +1465,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         };
     };
 
-    // Email request per document/month: saved recipients, subject, body, schedule (for "Request documents via email")
+    // Email request per document/month: saved recipients, subject, body, recipientName, schedule (for "Request documents via email")
     const getEmailRequestForYear = (doc, month, year = selectedYear) => {
         if (!doc) return {};
         const monthKey = getMonthKey(month, year);
@@ -1478,7 +1478,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const saveEmailRequestForCell = (sectionId, documentId, _month, data) => {
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        const byMonthTemplate = { recipients: data.recipients, cc: data.cc, subject: data.subject, body: data.body, schedule: data.schedule };
+        const byMonthTemplate = {
+            recipients: data.recipients,
+            cc: data.cc,
+            subject: data.subject,
+            body: data.body,
+            recipientName: data.recipientName,
+            schedule: data.schedule
+        };
         const updated = currentYearSections.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
             return {
@@ -3872,7 +3879,10 @@ Abcotronics`;
             const savedBody = typeof s.body === 'string' && s.body.trim() ? s.body : null;
             setSubject(savedSubject ? ensureAbcoSubject(withCurrentPeriod(savedSubject)) : defaultSubject);
             setBody(savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody);
-            setRecipientName('');
+            const savedRecipientName = typeof s.recipientName === 'string'
+                ? s.recipientName
+                : (typeof s.recipient_name === 'string' ? s.recipient_name : '');
+            setRecipientName(savedRecipientName);
             setRemoveExternalLinks(true);
             setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
             setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
@@ -4129,6 +4139,7 @@ Abcotronics`;
             cc: normalizeEmailList(tpl?.cc || []),
             subject: (tpl?.subject || '').trim(),
             body: (tpl?.body || '').trim(),
+            recipientName: (tpl?.recipientName || '').trim(),
             schedule: {
                 frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
                     ? tpl.schedule.frequency
@@ -4193,6 +4204,20 @@ Abcotronics`;
             return text;
         };
 
+        const normalizeGreeting = (text, name) => {
+            if (!text || typeof text !== 'string') return text;
+            const lines = text.split('\n');
+            const firstIdx = lines.findIndex((l) => l.trim().length > 0);
+            if (firstIdx === -1) return text;
+            const first = lines[firstIdx].trim();
+            if (/^dear\b/i.test(first)) {
+                const n = (name || '').trim();
+                lines[firstIdx] = n ? `Hello ${n},` : 'Hello,';
+                return lines.join('\n');
+            }
+            return text;
+        };
+
         const sanitizeBodyText = (text, shouldRemoveLinks) => {
             const urls = extractUrls(text);
             const suspicious = urls.filter((u) => isSuspiciousUrl(u));
@@ -4215,6 +4240,7 @@ Abcotronics`;
                 cc: contactsCc,
                 subject: subject.trim() || defaultSubject,
                 body: body.trim() || defaultBody,
+                recipientName: recipientName.trim(),
                 schedule: {
                     frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
                     stopWhenStatus: scheduleStopStatus || 'collected'
@@ -4237,6 +4263,7 @@ Abcotronics`;
                     cc: contactsCc,
                     subject: subject.trim() || defaultSubject,
                     body: body.trim() || defaultBody,
+                    recipientName: recipientName.trim(),
                     schedule: {
                         frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
                         stopWhenStatus: scheduleStopStatus || 'collected'
@@ -4248,13 +4275,14 @@ Abcotronics`;
                 setContactsCc(normalized.cc);
                 setSubject(normalized.subject || defaultSubject);
                 setBody(normalized.body || defaultBody);
+                setRecipientName(normalized.recipientName || '');
                 setScheduleFrequency(normalized.schedule.frequency);
                 setScheduleStopStatus(normalized.schedule.stopWhenStatus);
-                setResult({ saved: true, message: 'Information Saved' });
+                setResult({ saved: true, message: 'Saved changes', source: 'save' });
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
             } catch (err) {
                 console.error('Failed to save email template:', err);
-                setResult({ error: 'Save failed. Please try again.' });
+                setResult({ error: 'Save failed. Please try again.', source: 'save' });
             } finally {
                 setSavingTemplate(false);
             }
@@ -4305,7 +4333,8 @@ Abcotronics`;
                 return;
             }
             const bodyWithGreeting = applyGreeting(body.trim(), recipientName);
-            const sanitized = sanitizeBodyText(bodyWithGreeting, removeExternalLinks);
+            const normalizedBody = normalizeGreeting(bodyWithGreeting, recipientName);
+            const sanitized = sanitizeBodyText(normalizedBody, removeExternalLinks);
             if (sanitized.cleanedBody.trim().length < MIN_BODY_CHARS) {
                 alert(`Please add more detail to the message (at least ${MIN_BODY_CHARS} characters). This improves deliverability.`);
                 return;
@@ -4955,6 +4984,12 @@ Abcotronics`;
                         >
                             {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
                         </button>
+                        {result?.source === 'save' && result?.saved && (
+                            <span className="text-xs text-emerald-600 font-medium">Saved changes</span>
+                        )}
+                        {result?.source === 'save' && result?.error && (
+                            <span className="text-xs text-red-600 font-medium">{result.error}</span>
+                        )}
                         <button
                             type="button"
                             onClick={handleSend}
