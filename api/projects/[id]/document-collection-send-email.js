@@ -22,6 +22,51 @@ function isValidEmail(s) {
   return typeof s === 'string' && s.trim().length > 0 && EMAIL_RE.test(s.trim())
 }
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+function parseDocAndPeriodFromSubject(subject) {
+  if (!subject || typeof subject !== 'string') return { docName: null, month: null, year: null }
+  const subj = subject.trim()
+  if (!subj) return { docName: null, month: null, year: null }
+  let month = null
+  let year = null
+  let docName = null
+  const dash = '[\\s\\u002D\\u2013\\u2014]+'
+  let lastMatchIndex = -1
+  for (let i = 0; i < MONTH_NAMES.length; i++) {
+    const re = new RegExp(`${dash}([^\\u002D\\u2013\\u2014]+)${dash}${MONTH_NAMES[i]}\\s+(20\\d{2})\\b`, 'gi')
+    let m
+    while ((m = re.exec(subj)) !== null) {
+      if (m.index > lastMatchIndex) {
+        lastMatchIndex = m.index
+        docName = m[1].trim()
+        month = i + 1
+        year = parseInt(m[2], 10)
+      }
+    }
+  }
+  if (!month || !year) {
+    const abbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    for (let i = 0; i < MONTH_NAMES.length; i++) {
+      const re = new RegExp(`\\b${MONTH_NAMES[i]}\\s+(20\\d{2})\\b`, 'i')
+      const m = re.exec(subj)
+      if (m && m[1]) {
+        month = i + 1
+        year = parseInt(m[1], 10)
+        break
+      }
+      const reAbbr = new RegExp(`\\b${abbr[i]}\\w*\\s+(20\\d{2})\\b`, 'i')
+      const mAbbr = reAbbr.exec(subj)
+      if (mAbbr && mAbbr[1]) {
+        month = i + 1
+        year = parseInt(mAbbr[1], 10)
+        break
+      }
+    }
+  }
+  return { docName, month, year }
+}
+
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).setHeader('Allow', 'POST').json({ error: 'Method not allowed' })
@@ -186,13 +231,14 @@ async function handler(req, res) {
     const isReply = (subject || '').trim().toLowerCase().startsWith('re:')
     let activityPersisted = false
     let logId = null
+    let warning = null
+    const bodyForStorage = typeof text === 'string' && text.trim()
+      ? text.trim().slice(0, 50000)
+      : typeof html === 'string' && html
+        ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
+        : ''
+    const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForStorage}`
     if (sent.length > 0 && cell) {
-      const bodyForStorage = typeof text === 'string' && text.trim()
-        ? text.trim().slice(0, 50000)
-        : typeof html === 'string' && html
-          ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
-          : ''
-      const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForStorage}`
 
       if (isReply) {
         // Replies: persist only as comment (same table as received emails — always works)
@@ -293,6 +339,85 @@ async function handler(req, res) {
           console.warn('document-collection-send-email: reply routing record failed (non-blocking):', dbErr.message)
         }
       }
+    } else if (sent.length > 0 && !cell) {
+      let fallbackCell = null
+      const monthNum = month != null && !isNaN(Number(month)) ? Number(month) : null
+      const yearNum = year != null && !isNaN(Number(year)) ? Number(year) : null
+      if (projectId && documentId && monthNum && yearNum) {
+        fallbackCell = { projectId: String(projectId).trim(), documentId: String(documentId).trim(), month: monthNum, year: yearNum }
+      }
+      if (!fallbackCell && projectId && subject) {
+        const parsed = parseDocAndPeriodFromSubject(subject)
+        if (parsed.month && parsed.year) {
+          try {
+            let docs = await prisma.documentItem.findMany({
+              where: {
+                name: { equals: parsed.docName || '', mode: 'insensitive' },
+                section: { projectId: String(projectId).trim() }
+              },
+              select: { id: true }
+            })
+            if (docs.length === 0 && parsed.docName) {
+              docs = await prisma.documentItem.findMany({
+                where: {
+                  name: { contains: parsed.docName, mode: 'insensitive' },
+                  section: { projectId: String(projectId).trim() }
+                },
+                select: { id: true }
+              })
+            }
+            if (docs.length > 0) {
+              fallbackCell = {
+                projectId: String(projectId).trim(),
+                documentId: String(docs[0].id),
+                month: parsed.month,
+                year: parsed.year
+              }
+            }
+          } catch (lookupErr) {
+            console.warn('document-collection-send-email: fallback doc lookup failed', lookupErr.message)
+          }
+        }
+      }
+      if (fallbackCell) {
+        try {
+          const log = await prisma.documentCollectionEmailLog.create({
+            data: {
+              projectId: fallbackCell.projectId,
+              documentId: fallbackCell.documentId,
+              year: fallbackCell.year,
+              month: fallbackCell.month,
+              kind: 'sent',
+              ...(subject ? { subject: subject.slice(0, 1000) } : {}),
+              ...(bodyForStorage ? { bodyText: bodyForStorage } : {})
+            }
+          })
+          activityPersisted = true
+          logId = log.id
+          warning = 'Email sent, but activity context was reconstructed. Please verify the activity list.'
+          console.log('document-collection-send-email: activity log created via fallback', { logId: log.id, projectId: fallbackCell.projectId, documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year })
+        } catch (fallbackLogErr) {
+          try {
+            await prisma.documentItemComment.create({
+              data: {
+                itemId: fallbackCell.documentId,
+                year: fallbackCell.year,
+                month: fallbackCell.month,
+                text: commentText,
+                author: 'Sent request (platform)'
+              }
+            })
+            activityPersisted = true
+            warning = 'Email sent, activity saved as comment fallback.'
+            console.log('document-collection-send-email: activity fallback comment saved via fallback cell', { documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year })
+          } catch (fallbackCommentErr) {
+            console.error('document-collection-send-email: fallback comment create failed:', fallbackCommentErr.message, { projectId, documentId })
+          }
+        }
+      } else {
+        warning = 'Email sent but activity could not be saved (missing document/month/year).'
+        console.warn('document-collection-send-email: missing cell for activity persistence', { projectId, documentId, month, year })
+      }
     } else {
       if (sent.length === 0) {
         console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId') ?? q.documentId, month: body.month ?? query.get('month') ?? q.month, year: body.year ?? query.get('year') ?? q.year })
@@ -301,7 +426,7 @@ async function handler(req, res) {
       }
     }
 
-    return ok(res, { sent, failed, activityPersisted, logId: logId || undefined, messageId: messageIdForReply || undefined })
+    return ok(res, { sent, failed, activityPersisted, logId: logId || undefined, messageId: messageIdForReply || undefined, ...(warning ? { warning } : {}) })
   } catch (e) {
     console.error('POST /api/projects/:id/document-collection-send-email error:', e)
     return serverError(res, e.message || 'Failed to send document request emails')
