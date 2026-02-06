@@ -46,6 +46,101 @@ function buildSentSelect({ includeMessageId = true } = {}) {
   return select
 }
 
+const RESEND_EMAILS_API = 'https://api.resend.com/emails/'
+const RESEND_REFRESH_MAX = 5
+const RESEND_REFRESH_MIN_AGE_MS = 60 * 1000
+const RESEND_REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+function isLikelyResendId(messageId) {
+  return /^[0-9a-fA-F-]{36}$/.test(String(messageId || '').trim())
+}
+
+function mapResendLastEventToStatus(lastEvent) {
+  const event = String(lastEvent || '').toLowerCase()
+  if (event === 'delivered' || event === 'opened' || event === 'clicked') return 'delivered'
+  if (event === 'bounced') return 'bounced'
+  if (event === 'failed' || event === 'complained') return 'failed'
+  if (event === 'sent' || event === 'delivery_delayed' || event === 'scheduled' || event === 'canceled') return 'sent'
+  return null
+}
+
+async function fetchResendLastEvent(messageId) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey || !messageId) return null
+  try {
+    const response = await fetch(`${RESEND_EMAILS_API}${encodeURIComponent(messageId)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    if (!response.ok) {
+      return null
+    }
+    const data = await response.json()
+    return data?.last_event || data?.data?.last_event || null
+  } catch (_) {
+    return null
+  }
+}
+
+async function refreshResendDeliveryStatus(sentLogs) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey || !Array.isArray(sentLogs) || sentLogs.length === 0) return sentLogs
+
+  const now = Date.now()
+  const candidates = sentLogs.filter((log) => {
+    if (!log?.messageId) return false
+    if (!isLikelyResendId(log.messageId)) return false
+    if (log.deliveryStatus && log.deliveryStatus !== 'sent') return false
+    const createdAt = log.createdAt ? new Date(log.createdAt).getTime() : 0
+    if (!createdAt || now - createdAt > RESEND_REFRESH_MAX_AGE_MS) return false
+    const lastEventAt = log.lastEventAt ? new Date(log.lastEventAt).getTime() : 0
+    if (lastEventAt && now - lastEventAt < RESEND_REFRESH_MIN_AGE_MS) return false
+    return true
+  }).slice(0, RESEND_REFRESH_MAX)
+
+  if (candidates.length === 0) return sentLogs
+
+  const updates = await Promise.all(candidates.map(async (log) => {
+    const lastEvent = await fetchResendLastEvent(log.messageId)
+    const status = mapResendLastEventToStatus(lastEvent)
+    if (!status || status === log.deliveryStatus) return null
+    const eventAt = new Date()
+    const data = {
+      deliveryStatus: status,
+      lastEventAt: eventAt
+    }
+    if (status === 'delivered' && !log.deliveredAt) data.deliveredAt = eventAt
+    if ((status === 'bounced' || status === 'failed') && !log.bouncedAt) data.bouncedAt = eventAt
+    try {
+      await prisma.documentCollectionEmailLog.update({
+        where: { id: log.id },
+        data
+      })
+      return { id: log.id, ...data }
+    } catch (_) {
+      return null
+    }
+  }))
+
+  const updateMap = new Map(updates.filter(Boolean).map((u) => [u.id, u]))
+  if (updateMap.size === 0) return sentLogs
+
+  return sentLogs.map((log) => {
+    const update = updateMap.get(log.id)
+    if (!update) return log
+    return {
+      ...log,
+      deliveryStatus: update.deliveryStatus,
+      lastEventAt: update.lastEventAt,
+      deliveredAt: update.deliveredAt ?? log.deliveredAt,
+      bouncedAt: update.bouncedAt ?? log.bouncedAt
+    }
+  })
+}
+
 async function handler(req, res) {
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
   if (!projectId) {
@@ -327,6 +422,12 @@ async function handler(req, res) {
     } catch (_) {
       console.log('document-collection-email-activity: no sent items for cell', { projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
     }
+  }
+
+  if (sent.length > 0) {
+    try {
+      sent = await refreshResendDeliveryStatus(sent)
+    } catch (_) {}
   }
 
   try {
