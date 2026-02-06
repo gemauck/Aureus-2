@@ -302,6 +302,7 @@ async function runUiChecks({
   finishedProduct,
   bom,
   mainLocation,
+  token,
   workOrder,
   salesOrder,
   purchaseOrder
@@ -311,12 +312,26 @@ async function runUiChecks({
     browser = await chromium.launch({ headless: true })
     const context = await browser.newContext()
     const page = await context.newPage()
+    await page.setViewportSize({ width: 1440, height: 900 })
     page.setDefaultTimeout(15000)
 
     const waitVisible = async (selector, timeout = 15000) => {
       try {
         await page.waitForSelector(selector, { timeout })
         return await page.locator(selector).first().isVisible()
+      } catch {
+        return false
+      }
+    }
+
+    const waitTextInPage = async (text, timeout = 15000) => {
+      try {
+        await page.waitForFunction(
+          (value) => document.body && document.body.innerText && document.body.innerText.includes(value),
+          text,
+          { timeout }
+        )
+        return true
       } catch {
         return false
       }
@@ -335,13 +350,24 @@ async function runUiChecks({
       return false
     }
 
-    // Login
-    await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' })
-    await page.fill('input[type="email"], input[name="email"]', TEST_EMAIL)
-    await page.fill('input[type="password"], input[name="password"]', TEST_PASSWORD)
-    await page.click('button[type="submit"], button:has-text("Login")')
-    await page.waitForLoadState('networkidle').catch(() => {})
-    await page.waitForTimeout(1000)
+    if (token) {
+      await page.addInitScript((authToken) => {
+        try {
+          localStorage.setItem('authToken', authToken)
+          localStorage.setItem('auth_token', authToken)
+          localStorage.setItem('abcotronics_token', authToken)
+          localStorage.setItem('token', authToken)
+        } catch {}
+      }, token)
+    } else {
+      // Login if token not provided
+      await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' })
+      await page.fill('input[type="email"], input[name="email"]', TEST_EMAIL)
+      await page.fill('input[type="password"], input[name="password"]', TEST_PASSWORD)
+      await page.click('button[type="submit"], button:has-text("Login")')
+      await page.waitForLoadState('networkidle').catch(() => {})
+      await page.waitForTimeout(1000)
+    }
 
     // Navigate to manufacturing
     await page.goto(`${BASE_URL}/manufacturing`, { waitUntil: 'domcontentloaded' })
@@ -366,13 +392,13 @@ async function runUiChecks({
     if (await inventorySearch.isVisible()) {
       await inventorySearch.fill(componentA.sku)
       await page.waitForTimeout(600)
-      recordResult('UI: Inventory shows component A', await waitVisible(`text=${componentA.sku}`))
+      recordResult('UI: Inventory shows component A', await waitTextInPage(componentA.sku))
       await inventorySearch.fill(componentB.sku)
       await page.waitForTimeout(600)
-      recordResult('UI: Inventory shows component B', await waitVisible(`text=${componentB.sku}`))
+      recordResult('UI: Inventory shows component B', await waitTextInPage(componentB.sku))
       await inventorySearch.fill(finishedProduct.sku)
       await page.waitForTimeout(600)
-      recordResult('UI: Inventory shows finished product', await waitVisible(`text=${finishedProduct.sku}`))
+      recordResult('UI: Inventory shows finished product', await waitTextInPage(finishedProduct.sku))
       await inventorySearch.fill('')
     } else {
       recordResult('UI: Inventory shows component A', false, 'Inventory search input not visible')
@@ -388,17 +414,17 @@ async function runUiChecks({
     // Production tab
     await clickIfVisible('button:has-text("Production"), a:has-text("Production")')
     await waitVisible('text=Production Orders')
-    recordResult('UI: Production order shows product', await waitVisible(`text=${finishedProduct.name}`))
+    recordResult('UI: Production order shows product', await waitTextInPage(finishedProduct.name))
 
     // Sales tab
     await clickIfVisible('button:has-text("Sales"), a:has-text("Sales")')
     await waitVisible('text=Sales Orders')
-    recordResult('UI: Sales order shows order number', await waitVisible(`text=${salesOrder}`))
+    recordResult('UI: Sales order shows order number', await waitTextInPage(salesOrder))
 
     // Purchase tab
     await clickIfVisible('button:has-text("Purchase"), a:has-text("Purchase")')
     await waitVisible('text=Purchase Orders')
-    recordResult('UI: Purchase order shows order number', await waitVisible(`text=${purchaseOrder}`))
+    recordResult('UI: Purchase order shows order number', await waitTextInPage(purchaseOrder))
 
     // Movements tab
     await clickIfVisible('button:has-text("Movements"), a:has-text("Movements")')
@@ -954,6 +980,7 @@ async function run() {
     finishedProduct,
     bom,
     mainLocation,
+    token: null,
     workOrder: refs.workOrder,
     salesOrder: refs.salesOrder,
     purchaseOrder: refs.purchaseOrder
