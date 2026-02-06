@@ -112,8 +112,29 @@ async function handler(req, res) {
       ? inboundEmail
       : (requesterAddress ? requesterAddress : undefined)
     const fromName = userName ? `Abcotronics (via ${userName})` : undefined
-    // Send from documents@abcoafrica.co.za when inbound address is set (so From and Reply-To match)
-    const fromAddress = inboundEmail && isValidEmail(inboundEmail) ? inboundEmail : undefined
+    // Prefer a verified From domain to avoid recipient policy rejections (Mimecast, etc.)
+    const defaultFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || ''
+    const defaultFromEmail = defaultFrom && defaultFrom.includes('<')
+      ? (defaultFrom.match(/<(.+)>/)?.[1] || defaultFrom).trim()
+      : String(defaultFrom || '').trim()
+    const inboundDomain = inboundEmail && inboundEmail.includes('@') ? inboundEmail.split('@')[1].trim().toLowerCase() : ''
+    const defaultFromDomain = defaultFromEmail && defaultFromEmail.includes('@') ? defaultFromEmail.split('@')[1].trim().toLowerCase() : ''
+    let fromAddress
+    if (inboundEmail && isValidEmail(inboundEmail) && inboundDomain && defaultFromDomain && inboundDomain === defaultFromDomain) {
+      // Domains align; safe to send from inbound address
+      fromAddress = inboundEmail
+    } else if (defaultFromEmail && isValidEmail(defaultFromEmail)) {
+      // Use verified From to satisfy SPF/DKIM/DMARC alignment
+      fromAddress = defaultFromEmail
+      if (inboundEmail && isValidEmail(inboundEmail) && inboundDomain && defaultFromDomain && inboundDomain !== defaultFromDomain) {
+        console.warn('document-collection-send-email: inbound domain differs from EMAIL_FROM; using EMAIL_FROM for From to avoid policy rejection', {
+          inboundDomain,
+          defaultFromDomain
+        })
+      }
+    } else if (inboundEmail && isValidEmail(inboundEmail)) {
+      fromAddress = inboundEmail
+    }
 
     const sent = []
     const failed = []
