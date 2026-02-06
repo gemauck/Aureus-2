@@ -149,6 +149,7 @@ try {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
+  const [isSavingItem, setIsSavingItem] = useState(false);
   const [viewingInventoryItemDetail, setViewingInventoryItemDetail] = useState(null); // Full-page detail view
   const [isEditingInventoryItem, setIsEditingInventoryItem] = useState(false); // Edit mode in detail view
   const [bomComponents, setBomComponents] = useState([]);
@@ -161,6 +162,61 @@ try {
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // Sorting state
+  const reloadInventoryForLocation = useCallback(async (options = {}) => {
+    if (options.skipIfTyping && isUserTypingRef.current) {
+      return;
+    }
+    if (!window.DatabaseAPI?.getInventory) {
+      return;
+    }
+    try {
+      // Save the currently focused element before state update
+      const focusedElement = document.activeElement;
+      const wasInputFocused = focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'TEXTAREA');
+      const inputValue = wasInputFocused ? focusedElement.value : null;
+      const inputKey = wasInputFocused ? focusedElement.getAttribute('key') : null;
+      const inputPlaceholder = wasInputFocused ? focusedElement.placeholder : null;
+
+      const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+      const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, { forceRefresh: options.forceRefresh });
+      const invData = invResponse?.data?.inventory || [];
+      const processed = invData.map(item => ({ ...item, id: item.id }));
+
+      setInventory(processed);
+      safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+
+      // Restore focus after state update if user was typing
+      if (wasInputFocused) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            let inputToFocus = null;
+            if (inputKey) {
+              inputToFocus = document.querySelector(`input[key="${inputKey}"]`);
+            }
+            if (!inputToFocus && inputPlaceholder) {
+              // Try to find by placeholder
+              const inputs = document.querySelectorAll('input[type="text"]');
+              inputs.forEach(input => {
+                if (input.placeholder === inputPlaceholder) {
+                  inputToFocus = input;
+                }
+              });
+            }
+            if (inputToFocus) {
+              inputToFocus.focus();
+              // Restore cursor position
+              if (inputValue !== null) {
+                const cursorPos = Math.min(inputValue.length, inputToFocus.value.length);
+                inputToFocus.setSelectionRange(cursorPos, cursorPos);
+              }
+            }
+          });
+        });
+      }
+    } catch (error) {
+      console.error('Error loading inventory for location:', error);
+    }
+  }, [selectedLocationId]);
   const syncTabToRoute = useCallback((tab, options = {}) => {
     const normalizedTab = normalizeManufacturingTab(tab);
     const segments = normalizedTab === 'dashboard' ? [] : [normalizedTab];
@@ -1877,59 +1933,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       return;
     }
     
-    if (activeTab === 'inventory' && window.DatabaseAPI?.getInventory) {
-      const loadInventoryForLocation = async () => {
-        try {
-          // Save the currently focused element before state update
-          const focusedElement = document.activeElement;
-          const wasInputFocused = focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'TEXTAREA');
-          const inputValue = wasInputFocused ? focusedElement.value : null;
-          const inputKey = wasInputFocused ? focusedElement.getAttribute('key') : null;
-          const inputPlaceholder = wasInputFocused ? focusedElement.placeholder : null;
-          
-          const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
-          const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad);
-          const invData = invResponse?.data?.inventory || [];
-          const processed = invData.map(item => ({ ...item, id: item.id }));
-          
-          setInventory(processed);
-          safeSetItem('manufacturing_inventory', JSON.stringify(processed));
-          
-          // Restore focus after state update if user was typing
-          if (wasInputFocused) {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                let inputToFocus = null;
-                if (inputKey) {
-                  inputToFocus = document.querySelector(`input[key="${inputKey}"]`);
-                }
-                if (!inputToFocus && inputPlaceholder) {
-                  // Try to find by placeholder
-                  const inputs = document.querySelectorAll('input[type="text"]');
-                  inputs.forEach(input => {
-                    if (input.placeholder === inputPlaceholder) {
-                      inputToFocus = input;
-                    }
-                  });
-                }
-                if (inputToFocus) {
-                  inputToFocus.focus();
-                  // Restore cursor position
-                  if (inputValue !== null) {
-                    const cursorPos = Math.min(inputValue.length, inputToFocus.value.length);
-                    inputToFocus.setSelectionRange(cursorPos, cursorPos);
-                  }
-                }
-              });
-            });
-          }
-        } catch (error) {
-          console.error('Error loading inventory for location:', error);
-        }
-      };
-      loadInventoryForLocation();
+    if (activeTab === 'inventory') {
+      reloadInventoryForLocation({ skipIfTyping: true });
     }
-  }, [selectedLocationId, activeTab]);
+  }, [selectedLocationId, activeTab, reloadInventoryForLocation]);
 
   // Reload stock locations when switching to inventory tab
   useEffect(() => {
@@ -2033,6 +2040,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const locationId = selectedLocationId && selectedLocationId !== 'all' 
       ? selectedLocationId 
       : (stockLocations.find(loc => loc.code === 'LOC001')?.id || null);
+    setSelectedItem(null);
     setFormData({
       sku: '', // Will be auto-generated by backend
       name: '',
@@ -3724,6 +3732,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   const handleSaveItem = async () => {
     try {
+      if (!formData.name || !String(formData.name).trim()) {
+        alert('Item name is required.');
+        return;
+      }
       // Don't include quantity in update (it's read-only)
       // Don't include SKU in create (auto-generated) or update (read-only)
       // Don't include location (removed)
@@ -3760,6 +3772,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
 
       if (selectedItem?.id) {
+        setIsSavingItem(true);
         // Update existing - don't send quantity or SKU
         const targetId = getInventoryItemId(selectedItem);
         const response = await safeCallAPI('updateInventoryItem', targetId, itemData);
@@ -3767,6 +3780,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           const updatedInventory = inventory.map(item => getInventoryItemId(item) === targetId ? response.data.item : item);
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          await reloadInventoryForLocation({ forceRefresh: true });
         }
       } else {
         // Create new - include quantity for initial stock, but not SKU (auto-generated)
@@ -3795,11 +3809,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }
 
         // No duplicates found, proceed with creation
+        setIsSavingItem(true);
         const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {
           const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          await reloadInventoryForLocation({ forceRefresh: true });
         }
       }
 
@@ -3809,6 +3825,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     } catch (error) {
       console.error('Error saving inventory item:', error);
       alert('Failed to save inventory item. Please try again.');
+    } finally {
+      setIsSavingItem(false);
     }
   };
 
@@ -3817,11 +3835,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (!pendingCreateData) return;
     
     try {
+      setIsSavingItem(true);
       const response = await safeCallAPI('createInventoryItem', pendingCreateData);
       if (response?.data?.item) {
         const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
         setInventory(updatedInventory);
         safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+        await reloadInventoryForLocation({ forceRefresh: true });
       }
       
       // Close both modals
@@ -3834,6 +3854,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     } catch (error) {
       console.error('Error saving inventory item:', error);
       alert('Failed to save inventory item. Please try again.');
+    } finally {
+      setIsSavingItem(false);
     }
   };
 
@@ -5600,9 +5622,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </button>
                 <button
                   onClick={handleSaveItem}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  disabled={isSavingItem}
+                  className={`px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 ${isSavingItem ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
-                  {modalType === 'edit_item' ? 'Update Item' : 'Add Item'}
+                  {isSavingItem ? 'Saving...' : (modalType === 'edit_item' ? 'Update Item' : 'Add Item')}
                 </button>
               </div>
             </div>

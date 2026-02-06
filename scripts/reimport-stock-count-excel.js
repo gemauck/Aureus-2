@@ -35,6 +35,7 @@ const HEADERS = {
   'Supplier': 'supplier',
   'Thumbnail': 'thumbnail',
   'SUPPLIER Part Number': 'supplierPartNumber',
+  'Abcotronics Part Number': 'legacyPartNumber',
   'Location Code': 'locationCode',
 }
 const QUANTITY_HEADER_PATTERN = /quantity|qty|stock|count|on\s*hand|balance/i
@@ -208,6 +209,7 @@ async function main() {
       locationCode: getStr(row, colIndex, 'locationCode'),
       supplier: getStr(row, colIndex, 'supplier'),
       supplierPartNumber: getStr(row, colIndex, 'supplierPartNumber'),
+      legacyPartNumber: getStr(row, colIndex, 'legacyPartNumber'),
       category: colIndex.category !== undefined ? row[colIndex.category] : '',
       type: colIndex.type !== undefined ? row[colIndex.type] : '',
       unit: getStr(row, colIndex, 'unit') || 'pcs',
@@ -311,7 +313,7 @@ async function main() {
         locationId,
         supplierPartNumbers,
         manufacturingPartNumber: '',
-        legacyPartNumber: '',
+        legacyPartNumber: row.legacyPartNumber || '',
         boxNumber: row.boxNumber || '',
       }
       const item = await prisma.inventoryItem.create({ data: createData })

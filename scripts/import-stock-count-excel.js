@@ -37,6 +37,7 @@ const HEADERS = {
   'Supplier': 'supplier',
   'Thumbnail': 'thumbnail',
   'SUPPLIER Part Number': 'supplierPartNumber',
+  'Abcotronics Part Number': 'legacyPartNumber',
   'SUPPLIER DESCRIPTION (No Longer Supplier Part Number)': 'supplierDescription',
   'Location Code': 'locationCode',
 }
@@ -116,9 +117,10 @@ async function main() {
   const args = process.argv.slice(2)
   const dryRun = args.includes('--dry-run')
   const updateQuantitiesOnly = args.includes('--update-quantities-only')
+  const updateLegacyPartNumbersOnly = args.includes('--update-legacy-part-numbers')
   const pathArg = args.find(a => !a.startsWith('--'))
   if (!pathArg) {
-    console.error('Usage: node scripts/import-stock-count-excel.js "/path/to/ABCOTRONICS STOCK COUNT - 2026.xlsx" [--dry-run]')
+    console.error('Usage: node scripts/import-stock-count-excel.js "/path/to/ABCOTRONICS STOCK COUNT - 2026.xlsx" [--dry-run] [--update-quantities-only] [--update-legacy-part-numbers]')
     process.exit(1)
   }
   const inputPath = resolve(pathArg)
@@ -180,6 +182,13 @@ async function main() {
     return Number.isFinite(n) ? Math.max(0, n) : 0
   }
 
+  const get = (row, key) => {
+    const idx = colIndex[key]
+    if (idx === undefined) return ''
+    const v = row[idx]
+    return v != null ? String(v).trim() : ''
+  }
+
   if (dryRun) {
     const locations = new Set()
     const suppliers = new Set()
@@ -218,12 +227,6 @@ async function main() {
       byKey.get(key).push(item)
     }
     let updated = 0
-    const get = (row, key) => {
-      const idx = colIndex[key]
-      if (idx === undefined) return ''
-      const v = row[idx]
-      return v != null ? String(v).trim() : ''
-    }
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i]
       const name = (row[nameCol] != null ? String(row[nameCol]).trim() : '') || get(row, 'name')
@@ -261,6 +264,55 @@ async function main() {
       if (updated % 100 === 0) console.log('   Updated', updated, 'quantities...')
     }
     console.log('Done. Updated quantities for', updated, 'items.')
+    await prisma.$disconnect()
+    return
+  }
+
+  if (updateLegacyPartNumbersOnly) {
+    console.log('--update-legacy-part-numbers: updating Abcotronics part numbers into legacy field (match by name + box number)...')
+    const existingItems = await prisma.inventoryItem.findMany({
+      where: { sku: { startsWith: 'SKU' } },
+      select: { id: true, name: true, boxNumber: true, manufacturingPartNumber: true, legacyPartNumber: true }
+    })
+    const byKey = new Map()
+    for (const item of existingItems) {
+      const name = (item.name || '').trim().toLowerCase()
+      const box = (item.boxNumber || '').trim()
+      const key = box ? `${name}::${box}` : name
+      if (!byKey.has(key)) byKey.set(key, [])
+      byKey.get(key).push(item)
+    }
+    let updated = 0
+    let skipped = 0
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i]
+      const name = (row[nameCol] != null ? String(row[nameCol]).trim() : '') || get(row, 'name')
+      if (!name) continue
+      const boxNumber = get(row, 'boxNumber')
+      const partNumber = get(row, 'legacyPartNumber')
+      if (!partNumber) {
+        skipped++
+        continue
+      }
+      const key = boxNumber ? `${name.trim().toLowerCase()}::${boxNumber}` : name.trim().toLowerCase()
+      const candidates = byKey.get(key) || byKey.get(name.trim().toLowerCase())
+      if (!candidates || candidates.length === 0) {
+        skipped++
+        continue
+      }
+      const item = candidates[0]
+      await prisma.inventoryItem.update({
+        where: { id: item.id },
+        data: {
+          legacyPartNumber: partNumber,
+          manufacturingPartNumber: item.manufacturingPartNumber === partNumber ? '' : item.manufacturingPartNumber
+        }
+      })
+      updated++
+      if (updated % 100 === 0) console.log('   Updated', updated, 'part numbers...')
+    }
+    console.log('Done. Updated legacy part numbers for', updated, 'items.')
+    if (skipped) console.log('Skipped rows without matches or part numbers:', skipped)
     await prisma.$disconnect()
     return
   }
@@ -347,6 +399,7 @@ async function main() {
     const supplierName = supplierRaw ? (supplierCanonical.get(supplierRaw.toLowerCase()) || supplierRaw) : ''
     const boxNumber = get('boxNumber')
     const supplierPartNum = get('supplierPartNumber')
+    const legacyPartNumber = get('legacyPartNumber')
     const supplierPartNumbers = supplierName && supplierPartNum
       ? JSON.stringify([{ supplier: supplierName, partNumber: supplierPartNum }])
       : '[]'
@@ -375,7 +428,7 @@ async function main() {
         locationId,
         supplierPartNumbers,
         manufacturingPartNumber: '',
-        legacyPartNumber: '',
+        legacyPartNumber: legacyPartNumber || '',
         boxNumber: boxNumber || '',
       }
 

@@ -1583,9 +1583,9 @@ const DatabaseAPI = {
     },
 
     // MANUFACTURING OPERATIONS - INVENTORY
-    async getInventory(locationId = null) {
+    async getInventory(locationId = null, options = {}) {
         const endpoint = locationId && locationId !== 'all' ? `/manufacturing/inventory?locationId=${locationId}` : '/manufacturing/inventory';
-        const raw = await this.makeRequest(endpoint);
+        const raw = await this.makeRequest(endpoint, options);
         const normalized = {
             data: {
                 inventory: Array.isArray(raw?.data?.inventory)
@@ -1600,34 +1600,12 @@ const DatabaseAPI = {
         return normalized;
     },
 
-    async createInventoryItem(itemData) {
-        const response = await this.makeRequest('/manufacturing/inventory', {
-            method: 'POST',
-            body: JSON.stringify(itemData)
-        });
-        return response;
-    },
-
-    async updateInventoryItem(id, itemData) {
-        const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(itemData)
-        });
-        return response;
-    },
-
-    async deleteInventoryItem(id) {
-        const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
-            method: 'DELETE'
-        });
-
-        // Invalidate any cached inventory responses so deleted items
-        // don't "reappear" from the cache and then fail with 404s
+    invalidateInventoryCache() {
         try {
             // Clear generic inventory cache (all locations)
             this.clearEndpointCache('/manufacturing/inventory', 'GET');
 
-            // Also clear any per-location inventory caches
+            // Clear any per-location inventory caches
             if (this._responseCache && typeof this._responseCache.keys === 'function') {
                 const keysToDelete = [];
                 for (const key of this._responseCache.keys()) {
@@ -1657,9 +1635,37 @@ const DatabaseAPI = {
                 });
             }
         } catch (cacheError) {
-            // Never break deletion flow because of cache cleanup issues
-            console.warn('⚠️ Failed to clear inventory cache after delete:', cacheError);
+            // Never break inventory flows because of cache cleanup issues
+            console.warn('⚠️ Failed to clear inventory cache:', cacheError);
         }
+    },
+
+    async createInventoryItem(itemData) {
+        const response = await this.makeRequest('/manufacturing/inventory', {
+            method: 'POST',
+            body: JSON.stringify(itemData)
+        });
+        this.invalidateInventoryCache();
+        return response;
+    },
+
+    async updateInventoryItem(id, itemData) {
+        const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(itemData)
+        });
+        this.invalidateInventoryCache();
+        return response;
+    },
+
+    async deleteInventoryItem(id) {
+        const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
+            method: 'DELETE'
+        });
+
+        // Invalidate any cached inventory responses so deleted items
+        // don't "reappear" from the cache and then fail with 404s
+        this.invalidateInventoryCache();
 
         return response;
     },
