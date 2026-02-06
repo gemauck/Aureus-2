@@ -603,9 +603,14 @@ async function handler(req, res) {
         const result = await prisma.$transaction(async (tx) => {
           // Helper to get or create per-location record
           async function upsertLocationSku(locationId) {
-            let li = await tx.locationInventory.findUnique({ where: { locationId_sku: { locationId, sku: body.sku } } })
-            if (!li) {
-              li = await tx.locationInventory.create({ data: {
+            return await tx.locationInventory.upsert({
+              where: { locationId_sku: { locationId, sku: body.sku } },
+              update: {
+                itemName: body.itemName,
+                unitCost: parseFloat(body.unitCost) || 0,
+                reorderPoint: parseFloat(body.reorderPoint) || 0
+              },
+              create: {
                 locationId,
                 sku: body.sku,
                 itemName: body.itemName,
@@ -613,9 +618,8 @@ async function handler(req, res) {
                 unitCost: parseFloat(body.unitCost) || 0,
                 reorderPoint: parseFloat(body.reorderPoint) || 0,
                 status: 'in_stock'
-              }})
-            }
-            return li
+              }
+            })
           }
 
           // Ensure InventoryItem exists
@@ -1218,6 +1222,11 @@ async function handler(req, res) {
         
         const nextSkuNumber = maxNumber + 1
         const sku = `SKU${String(nextSkuNumber).padStart(4, '0')}`
+
+        // Defensive cleanup: if a previously deleted SKU reused the same number,
+        // remove any orphaned per-location rows before creating the new item.
+        await prisma.locationInventory.deleteMany({ where: { sku } })
+        await prisma.inventoryItem.deleteMany({ where: { sku } })
         
         // Calculate status based on quantity and reorder point
         const quantity = parseFloat(body.quantity) || 0
@@ -1488,6 +1497,11 @@ async function handler(req, res) {
           return forbidden(res, 'Only admins can delete inventory items.')
         }
 
+        const itemToDelete = await prisma.inventoryItem.findUnique({ where: { id } })
+        if (!itemToDelete) {
+          return notFound(res, 'Inventory item not found')
+        }
+
         // IMPORTANT SAFETY CHECK:
         // Don't allow deleting an inventory item that is linked to one or more BOMs
         // as the finished product. Prisma will also enforce this via FK constraints,
@@ -1505,7 +1519,12 @@ async function handler(req, res) {
           )
         }
 
-        await prisma.inventoryItem.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          // Remove per-location aggregates so they cannot drift
+          await tx.locationInventory.deleteMany({ where: { sku: itemToDelete.sku } })
+          // Remove all clones for this SKU across locations
+          await tx.inventoryItem.deleteMany({ where: { sku: itemToDelete.sku } })
+        })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete inventory item:', error)
