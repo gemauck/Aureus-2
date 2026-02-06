@@ -4378,21 +4378,22 @@ Abcotronics`;
 </div>`;
         };
 
-        const handleSend = async () => {
+        const sendEmailRequest = async ({ subjectLine, bodyText, skipGreeting }) => {
             if (contacts.length === 0) {
                 alert('Please add at least one recipient.');
                 return;
             }
-            if (!subject.trim()) {
+            if (!subjectLine || !subjectLine.trim()) {
                 alert('Please enter a subject.');
                 return;
             }
-            if (!body.trim()) {
+            if (!bodyText || !bodyText.trim()) {
                 alert('Please enter the email body.');
                 return;
             }
-            const bodyWithGreeting = applyGreeting(body.trim(), recipientName);
-            const normalizedBody = normalizeGreeting(bodyWithGreeting, recipientName);
+            const trimmedBody = bodyText.trim();
+            const bodyWithGreeting = skipGreeting ? trimmedBody : applyGreeting(trimmedBody, recipientName);
+            const normalizedBody = skipGreeting ? bodyWithGreeting : normalizeGreeting(bodyWithGreeting, recipientName);
             const sanitized = sanitizeBodyText(normalizedBody, removeExternalLinks);
             if (sanitized.cleanedBody.trim().length < MIN_BODY_CHARS) {
                 alert(`Please add more detail to the message (at least ${MIN_BODY_CHARS} characters). This improves deliverability.`);
@@ -4406,7 +4407,7 @@ Abcotronics`;
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
                 const requester = getCurrentUser();
                 const requesterEmail = requester?.email && emailRe.test(requester.email) ? requester.email : '';
-                const htmlPayload = sendPlainTextOnly ? undefined : buildStyledEmailHtml(subject.trim(), sanitized.cleanedBody.trim());
+                const htmlPayload = sendPlainTextOnly ? undefined : buildStyledEmailHtml(subjectLine.trim(), sanitized.cleanedBody.trim());
                 const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
                 const hasCellKeys = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
@@ -4425,7 +4426,7 @@ Abcotronics`;
                     body: JSON.stringify({
                         to: contacts,
                         cc: contactsCc.length > 0 ? contactsCc : undefined,
-                        subject: subject.trim(),
+                        subject: subjectLine.trim(),
                         ...(htmlPayload ? { html: htmlPayload } : {}),
                         text: sanitized.cleanedBody.trim(),
                         ...(requesterEmail ? { requesterEmail } : {}),
@@ -4502,6 +4503,26 @@ Abcotronics`;
             } finally {
                 setSending(false);
             }
+        };
+
+        const handleSend = async () => {
+            await sendEmailRequest({ subjectLine: subject, bodyText: body, skipGreeting: false });
+        };
+
+        const handleResendFromActivity = async (sentItem) => {
+            if (!sentItem) return;
+            const activitySubject = typeof sentItem.subject === 'string' ? sentItem.subject.trim() : '';
+            const activityBody = typeof sentItem.bodyText === 'string' ? sentItem.bodyText.trim() : '';
+            const subjectLine = activitySubject || (subject || '').trim();
+            const bodyText = activityBody || (body || '').trim();
+            if (!subjectLine || !bodyText) {
+                alert('Cannot resend: this email is missing a subject or body.');
+                return;
+            }
+            if (!confirm('Resend this email to the current recipients list?')) return;
+            setSubject(subjectLine);
+            setBody(bodyText);
+            await sendEmailRequest({ subjectLine, bodyText, skipGreeting: !!activityBody });
         };
 
         const hasSuccess = result && result.sent && result.sent.length > 0;
@@ -4839,6 +4860,16 @@ Abcotronics`;
                                                                     {statusLabel}
                                                                 </span>
                                                                 <span className="flex-1"></span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handleResendFromActivity(s); }}
+                                                                    disabled={sending || deletingActivityId === s.id}
+                                                                    className="shrink-0 px-2 py-1 rounded text-[11px] text-sky-700 hover:bg-sky-200/50 disabled:opacity-50"
+                                                                    title="Resend to current recipients"
+                                                                >
+                                                                    <i className="fas fa-redo text-[10px] mr-1"></i>
+                                                                    Resend
+                                                                </button>
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => { e.stopPropagation(); handleDeleteEmailActivity(s.id, 'sent'); }}
@@ -6771,7 +6802,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                     assignmentAnchorRect.left,
                     Math.max(8, viewportWidth - dropdownWidth - 8)
                 );
-                return (
+                const dropdown = (
                     <div
                         ref={assignmentDropdownRef}
                         className="fixed min-w-[180px] overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10000]"
@@ -6817,6 +6848,10 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                         )}
                     </div>
                 );
+                if (window.ReactDOM && typeof ReactDOM.createPortal === 'function') {
+                    return ReactDOM.createPortal(dropdown, document.body);
+                }
+                return dropdown;
             })()}
         </div>
     );
