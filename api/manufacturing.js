@@ -1,6 +1,6 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
-import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
+import { ok, created, badRequest, notFound, serverError, forbidden } from './_lib/response.js'
 import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
@@ -1483,6 +1483,11 @@ async function handler(req, res) {
     // DELETE (DELETE /api/manufacturing/inventory/:id)
     if (req.method === 'DELETE' && id) {
       try {
+        const userRole = (req.user?.role || '').toLowerCase()
+        if (userRole !== 'admin') {
+          return forbidden(res, 'Only admins can delete inventory items.')
+        }
+
         // IMPORTANT SAFETY CHECK:
         // Don't allow deleting an inventory item that is linked to one or more BOMs
         // as the finished product. Prisma will also enforce this via FK constraints,

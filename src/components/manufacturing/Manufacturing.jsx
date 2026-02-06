@@ -73,6 +73,42 @@ try {
   
   const { user } = useAuth();
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
+
+  const getCurrentUser = () => {
+    try {
+      if (window.storage?.getUser) {
+        const stored = window.storage.getUser();
+        if (stored && (stored.id || stored.email)) return stored;
+      }
+
+      const storedUser = localStorage.getItem('abcotronics_user');
+      if (storedUser && storedUser !== 'null' && storedUser !== 'undefined') {
+        const parsed = JSON.parse(storedUser);
+        const stored = parsed.user || parsed.data?.user || parsed;
+        if (stored && (stored.id || stored.email)) return stored;
+      }
+
+      const legacyUser = localStorage.getItem('currentUser');
+      if (legacyUser && legacyUser !== 'null' && legacyUser !== 'undefined') {
+        const parsed = JSON.parse(legacyUser);
+        if (parsed && (parsed.id || parsed.email || parsed.username)) {
+          return {
+            id: parsed.id || parsed.email || parsed.username,
+            name: parsed.name || parsed.username || 'User',
+            email: parsed.email || parsed.username || '',
+            role: parsed.role || ''
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('Manufacturing: Error retrieving current user', error);
+    }
+
+    return { id: 'anonymous', name: 'User', role: '' };
+  };
+
+  const currentUser = useMemo(() => user || getCurrentUser(), [user]);
+  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
   
   // Helper function to safely call DatabaseAPI methods
   const safeCallAPI = async (methodName, ...args) => {
@@ -170,6 +206,7 @@ try {
       return;
     }
     try {
+      const requestSeq = ++inventoryLoadSeqRef.current;
       // Save the currently focused element before state update
       const focusedElement = document.activeElement;
       const wasInputFocused = focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'TEXTAREA');
@@ -181,6 +218,10 @@ try {
       const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, { forceRefresh: options.forceRefresh });
       const invData = invResponse?.data?.inventory || [];
       const processed = invData.map(item => ({ ...item, id: item.id }));
+
+      if (requestSeq !== inventoryLoadSeqRef.current) {
+        return;
+      }
 
       setInventory(processed);
       safeSetItem('manufacturing_inventory', JSON.stringify(processed));
@@ -273,6 +314,7 @@ try {
   // Refs to store current filter values while typing (to prevent re-renders)
   const searchTermRef = useRef('');
   const columnFiltersRef = useRef({});
+  const inventoryLoadSeqRef = useRef(0);
   
   // Sync refs with state
   useEffect(() => {
@@ -3094,13 +3136,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         >
                           <i className="fas fa-edit"></i>
                         </button>
-                        <button
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="text-red-600 hover:text-red-800 text-sm font-medium"
-                          title="Delete Item"
-                        >
-                          <i className="fas fa-trash"></i>
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            title="Delete Item"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -3918,6 +3962,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const handleDeleteItem = async (itemOrId) => {
+    if (!isAdmin) {
+      alert('Only admins can delete inventory items.');
+      return;
+    }
     const itemId = getInventoryItemId(itemOrId);
     if (!itemId) {
       alert('Unable to determine which item to delete. Please refresh and try again.');
@@ -3931,6 +3979,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         setInventory(updatedInventory);
         safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         setShowModal(false);
+        await reloadInventoryForLocation({ forceRefresh: true });
       } catch (error) {
         console.error('Error deleting inventory item:', error);
         const message = error?.message || 'Failed to delete inventory item. Please try again.';
@@ -5604,7 +5653,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
             <div className="p-4 border-t border-gray-200 flex justify-between bg-gray-50">
               <div>
-                {modalType === 'edit_item' && (
+                {modalType === 'edit_item' && isAdmin && (
                   <button
                     onClick={() => handleDeleteItem(selectedItem)}
                     className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
