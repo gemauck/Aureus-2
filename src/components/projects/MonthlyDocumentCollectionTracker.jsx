@@ -1519,7 +1519,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // ============================================================
     
     const statusOptions = [
-        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-slate-700 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-300 shadow-sm' },
+        { value: 'requested', label: 'Requested', color: 'bg-orange-200 text-slate-700 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' },
         { value: 'not-collected', label: 'Not Collected', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
         { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
         { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
