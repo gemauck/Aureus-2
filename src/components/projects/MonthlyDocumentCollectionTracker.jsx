@@ -3827,6 +3827,7 @@ Abcotronics`;
         const [subject, setSubject] = useState(defaultSubject);
         const [body, setBody] = useState(defaultBody);
         const [recipientName, setRecipientName] = useState('');
+        const [saveNotice, setSaveNotice] = useState(null);
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
         const [scheduleStopStatus, setScheduleStopStatus] = useState('collected');
@@ -3846,6 +3847,7 @@ Abcotronics`;
         const [replyNewCc, setReplyNewCc] = useState('');
         const [sendingReply, setSendingReply] = useState(false);
         const activityFetchIdRef = useRef(0);
+        const saveNoticeTimeoutRef = useRef(null);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3889,6 +3891,11 @@ Abcotronics`;
             setNewContact('');
             setNewContactCc('');
             setResult(null);
+            setSaveNotice(null);
+            if (saveNoticeTimeoutRef.current) {
+                clearTimeout(saveNoticeTimeoutRef.current);
+                saveNoticeTimeoutRef.current = null;
+            }
             setReplyingToReceivedId(null);
             setReplyToEmail('');
             setReplySubject('');
@@ -4233,6 +4240,12 @@ Abcotronics`;
             return { cleanedBody, removedUrls: urls, suspiciousUrls: suspicious, allUrls: urls };
         };
 
+        const showSaveNotice = (notice) => {
+            setSaveNotice(notice);
+            if (saveNoticeTimeoutRef.current) clearTimeout(saveNoticeTimeoutRef.current);
+            saveNoticeTimeoutRef.current = setTimeout(() => setSaveNotice(null), 2500);
+        };
+
         const autoSaveTemplateIfChanged = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
             const current = normalizeTemplate({
@@ -4279,10 +4292,12 @@ Abcotronics`;
                 setScheduleFrequency(normalized.schedule.frequency);
                 setScheduleStopStatus(normalized.schedule.stopWhenStatus);
                 setResult({ saved: true, message: 'Saved changes', source: 'save' });
+                showSaveNotice({ type: 'success', message: 'Saved changes' });
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
             } catch (err) {
                 console.error('Failed to save email template:', err);
                 setResult({ error: 'Save failed. Please try again.', source: 'save' });
+                showSaveNotice({ type: 'error', message: 'Save failed. Please try again.' });
             } finally {
                 setSavingTemplate(false);
             }
@@ -4451,6 +4466,9 @@ Abcotronics`;
         const bodyStats = sanitizeBodyText(bodyPreview, false);
         const bodyCharCount = (bodyPreview || '').trim().length;
         const urlCount = bodyStats.allUrls.length;
+        const greetingPreview = recipientName.trim() ? `Hello ${recipientName.trim()},` : '';
+        const firstBodyLine = (body || '').split('\n').find((line) => line.trim().length > 0) || '';
+        const greetingApplies = /^(hello|hi|dear)\b/i.test(firstBodyLine.trim());
 
         return (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -4487,6 +4505,16 @@ Abcotronics`;
                     </div>
 
                     <div className="p-5 overflow-y-auto space-y-5 flex-1 bg-gray-50/50">
+                        {saveNotice && (
+                            <div className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
+                                saveNotice.type === 'error'
+                                    ? 'bg-red-50 border-red-200 text-red-700'
+                                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            }`}>
+                                <i className={`fas ${saveNotice.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'} mt-0.5`}></i>
+                                <span>{saveNotice.message}</span>
+                            </div>
+                        )}
                         {/* Recipients */}
                         <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
                             <div className="flex items-center gap-2 mb-3">
@@ -4610,6 +4638,13 @@ Abcotronics`;
                             <p className="text-xs text-gray-500 mt-2">
                                 Applies when the message starts with “Hello”, “Hi”, or “Dear”.
                             </p>
+                            {recipientName.trim() && (
+                                <p className={`text-xs mt-2 ${greetingApplies ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                    {greetingApplies
+                                        ? `Greeting preview: ${greetingPreview}`
+                                        : `Greeting preview: ${greetingPreview} (will apply when the message starts with Hello/Hi/Dear)`}
+                                </p>
+                            )}
                         </div>
 
                         {/* Body */}
