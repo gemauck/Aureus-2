@@ -4155,7 +4155,7 @@ Abcotronics`;
             setSavingTemplate(true);
             setResult(null);
             try {
-                await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, normalizeTemplate({
+                const normalized = normalizeTemplate({
                     recipients: contacts,
                     cc: contactsCc,
                     subject: subject.trim() || defaultSubject,
@@ -4164,8 +4164,16 @@ Abcotronics`;
                         frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
                         stopWhenStatus: scheduleStopStatus || 'collected'
                     }
-                }));
-                setResult({ saved: true });
+                });
+                await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, normalized);
+                // Keep the latest values on screen after save
+                setContacts(normalized.recipients);
+                setContactsCc(normalized.cc);
+                setSubject(normalized.subject || defaultSubject);
+                setBody(normalized.body || defaultBody);
+                setScheduleFrequency(normalized.schedule.frequency);
+                setScheduleStopStatus(normalized.schedule.stopWhenStatus);
+                setResult({ saved: true, message: 'Information Saved' });
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
             } catch (err) {
                 console.error('Failed to save email template:', err);
@@ -4763,7 +4771,7 @@ Abcotronics`;
                         {result?.saved && (
                             <div className="flex items-start gap-3 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
                                 <i className="fas fa-check-circle text-emerald-500 mt-0.5 shrink-0"></i>
-                                <p className="text-sm text-emerald-700">Saved for this document (all months). Recipients, CC, and email will load next time.</p>
+                                <p className="text-sm text-emerald-700">{result.message || 'Information Saved'}</p>
                             </div>
                         )}
                         {result?.error && (
