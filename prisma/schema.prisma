@@ -794,19 +794,26 @@ model DocumentRequestEmailSent {
 
 // Dedicated log for "Email activity" in document request modal (one row per sent event; read path is simple and reliable)
 model DocumentCollectionEmailLog {
-  id         String   @id @default(cuid())
-  projectId  String
-  sectionId  String?  // DocumentSection.id — disambiguates cell after hard refresh when multiple sections have similar docs
-  documentId String   // DocumentItem.id
-  year       Int
-  month      Int
-  kind       String   @default("sent") // 'sent' for now
-  createdAt  DateTime @default(now())
-  subject    String?  // Email subject — so user can expand and see what was sent
-  bodyText   String?  @db.Text // Plain-text body (or stripped HTML) for expandable view
+  id             String   @id @default(cuid())
+  projectId      String
+  sectionId      String?  // DocumentSection.id — disambiguates cell after hard refresh when multiple sections have similar docs
+  documentId     String   // DocumentItem.id
+  year           Int
+  month          Int
+  kind           String   @default("sent") // 'sent' for now
+  createdAt      DateTime @default(now())
+  subject        String?  // Email subject — so user can expand and see what was sent
+  bodyText       String?  @db.Text // Plain-text body (or stripped HTML) for expandable view
+  messageId      String?  // Provider message id for delivery status updates
+  deliveryStatus String   @default("sent") // sent | delivered | bounced | failed
+  deliveredAt    DateTime?
+  bouncedAt      DateTime?
+  bounceReason   String?  @db.Text
+  lastEventAt    DateTime?
 
   @@index([projectId, documentId, year, month])
   @@index([projectId, sectionId, documentId, year, month])
+  @@index([messageId])
 }
 
 // Per-user read state for document collection email/comment notifications

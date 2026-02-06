@@ -148,14 +148,37 @@ async function handler(req, res) {
   let sent = []
   try {
     if (prisma.documentCollectionEmailLog) {
-      const sentSelect = { id: true, createdAt: true, subject: true, bodyText: true }
+      const sentSelect = {
+        id: true,
+        createdAt: true,
+        subject: true,
+        bodyText: true,
+        messageId: true,
+        deliveryStatus: true,
+        deliveredAt: true,
+        bouncedAt: true,
+        bounceReason: true,
+        lastEventAt: true
+      }
       sent = await prisma.documentCollectionEmailLog.findMany({
         where: sentWhere,
         orderBy: { createdAt: 'asc' },
         select: sentSelect
       })
       if (sent.length === 0) {
-        const fallbackSelect = { id: true, createdAt: true, documentId: true, subject: true, bodyText: true }
+        const fallbackSelect = {
+          id: true,
+          createdAt: true,
+          documentId: true,
+          subject: true,
+          bodyText: true,
+          messageId: true,
+          deliveryStatus: true,
+          deliveredAt: true,
+          bouncedAt: true,
+          bounceReason: true,
+          lastEventAt: true
+        }
         const fallback = await prisma.documentCollectionEmailLog.findMany({
           where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
           orderBy: { createdAt: 'asc' },
@@ -163,7 +186,18 @@ async function handler(req, res) {
         })
         const exactMatch = fallback
           .filter((row) => String(row.documentId).trim() === String(cell.documentId).trim())
-          .map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
+          .map(({ id, createdAt, subject, bodyText, messageId, deliveryStatus, deliveredAt, bouncedAt, bounceReason, lastEventAt }) => ({
+            id,
+            createdAt,
+            subject,
+            bodyText,
+            messageId,
+            deliveryStatus,
+            deliveredAt,
+            bouncedAt,
+            bounceReason,
+            lastEventAt
+          }))
         if (exactMatch.length > 0) {
           sent = exactMatch
         } else if (fallback.length > 0) {
@@ -174,7 +208,18 @@ async function handler(req, res) {
               const subject = (row.subject || '').toLowerCase()
               const body = (row.bodyText || '').toLowerCase()
               return subject.includes(name) || body.includes(name)
-            }).map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
+            }).map(({ id, createdAt, subject, bodyText, messageId, deliveryStatus, deliveredAt, bouncedAt, bounceReason, lastEventAt }) => ({
+              id,
+              createdAt,
+              subject,
+              bodyText,
+              messageId,
+              deliveryStatus,
+              deliveredAt,
+              bouncedAt,
+              bounceReason,
+              lastEventAt
+            }))
             if (matched.length > 0) {
               sent = matched
             } else {

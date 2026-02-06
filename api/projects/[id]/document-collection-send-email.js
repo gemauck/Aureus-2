@@ -145,6 +145,7 @@ async function handler(req, res) {
       messageIdForReply = `docreq-${crypto.randomUUID()}@${domain}`
     }
 
+    let providerMessageId = null
     try {
       const result = await sendEmail({
         to: validTo.map((e) => e.trim()),
@@ -161,6 +162,7 @@ async function handler(req, res) {
           }
         })
       })
+      providerMessageId = result?.messageId || null
       validTo.forEach((e) => sent.push(e.trim()))
       validCc.forEach((e) => sent.push(e.trim()))
     } catch (err) {
@@ -209,7 +211,8 @@ async function handler(req, res) {
               kind: 'sent',
               ...(sectionId ? { sectionId } : {}),
               ...(subject ? { subject: subject.slice(0, 1000) } : {}),
-              ...(bodyForStorage ? { bodyText: bodyForStorage } : {})
+              ...(bodyForStorage ? { bodyText: bodyForStorage } : {}),
+              ...(providerMessageId ? { messageId: providerMessageId } : {})
             }
           })
           activityPersisted = true

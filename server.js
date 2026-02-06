@@ -386,6 +386,23 @@ app.get('/api/inbound/document-request-reply-debug', async (req, res, next) => {
   }
 })
 
+// Email delivery status webhook (Resend/SendGrid). Must run before express.json() for signature verification.
+app.all('/api/inbound/email-delivery-status', express.text({ type: '*/*', limit: '5mb' }), async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'inbound', 'email-delivery-status.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('email-delivery-status webhook error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: e.message || 'Failed' })
+    }
+    return next(e)
+  }
+})
+
 // Increased limit to 100mb to support POA Review file uploads (50MB files + base64 encoding overhead)
 app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ extended: true, limit: '100mb' }))

@@ -4461,7 +4461,7 @@ Abcotronics`;
                     showEmailSentToast();
                     setEmailActivity((prev) => ({
                         ...prev,
-                        sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString() }]
+                        sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString(), deliveryStatus: 'sent' }]
                     }));
                     // Persist selectedYear so after hard refresh the same year is used for activity fetch
                     if (project?.id && selectedYear != null && typeof window !== 'undefined') {
@@ -4813,12 +4813,31 @@ Abcotronics`;
                                                 if (item.type === 'sent') {
                                                     const s = item;
                                                     const isExpanded = expandedSentId === s.id;
+                                                    const status = (s.deliveryStatus || 'sent').toString().toLowerCase();
+                                                    const statusLabel = status === 'bounced'
+                                                        ? 'Bounced'
+                                                        : status === 'delivered'
+                                                            ? 'Delivered'
+                                                            : status === 'failed'
+                                                                ? 'Failed'
+                                                                : 'Sent';
+                                                    const statusClass = status === 'bounced' || status === 'failed'
+                                                        ? 'bg-rose-100 text-rose-700 border-rose-200'
+                                                        : status === 'delivered'
+                                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                                            : 'bg-slate-100 text-slate-600 border-slate-200';
                                                     return (
                                                         <li key={'sent-' + s.id} className="rounded-lg bg-sky-50 border border-sky-100 overflow-hidden">
                                                             <div className="px-3 py-1.5 border-b border-sky-100 bg-sky-100/50 flex items-center gap-2">
                                                                 <i className="fas fa-paper-plane text-sky-600 text-xs shrink-0"></i>
                                                                 <span className="text-xs font-medium text-sky-800">You</span>
                                                                 <span className="text-xs text-gray-500">{formatDateTime(s.createdAt)}</span>
+                                                                <span
+                                                                    className={`text-[10px] px-2 py-0.5 rounded-full border ${statusClass}`}
+                                                                    title={status === 'bounced' && s.bounceReason ? s.bounceReason : statusLabel}
+                                                                >
+                                                                    {statusLabel}
+                                                                </span>
                                                                 <span className="flex-1"></span>
                                                                 <button
                                                                     type="button"
@@ -6741,13 +6760,25 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                 const doc = section?.documents?.find(d => String(d.id) === assignmentOpen.docId);
                 if (!section || !doc) return null;
                 const current = normalizeAssignedTo(doc);
+                const viewportHeight = window.innerHeight || 0;
+                const viewportWidth = window.innerWidth || 0;
+                const spaceBelow = Math.max(0, viewportHeight - assignmentAnchorRect.bottom);
+                const spaceAbove = Math.max(0, assignmentAnchorRect.top);
+                const openUpwards = spaceBelow < 200 && spaceAbove > spaceBelow;
+                const maxHeight = Math.min(192, Math.max(120, (openUpwards ? spaceAbove : spaceBelow) - 8));
+                const dropdownWidth = 220;
+                const left = Math.min(
+                    assignmentAnchorRect.left,
+                    Math.max(8, viewportWidth - dropdownWidth - 8)
+                );
                 return (
                     <div
                         ref={assignmentDropdownRef}
-                        className="fixed min-w-[180px] max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10000]"
+                        className="fixed min-w-[180px] overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10000]"
                         style={{
-                            left: assignmentAnchorRect.left,
-                            top: assignmentAnchorRect.bottom + 4
+                            left,
+                            top: openUpwards ? Math.max(8, assignmentAnchorRect.top - maxHeight - 4) : assignmentAnchorRect.bottom + 4,
+                            maxHeight
                         }}
                     >
                         {users.length === 0 ? (

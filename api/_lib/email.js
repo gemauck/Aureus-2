@@ -212,9 +212,14 @@ async function sendViaSendGridAPI(mailOptions, apiKey) {
         throw new Error(`SendGrid API error: ${response.status} ${response.statusText} - ${errorDetails}`);
     }
 
+    const messageIdHeader =
+        response.headers.get('x-message-id') ||
+        response.headers.get('x-messageid') ||
+        response.headers.get('message-id') ||
+        response.headers.get('messageid');
     return {
         success: true,
-        messageId: `sendgrid-${Date.now()}`,
+        messageId: messageIdHeader || `sendgrid-${Date.now()}`,
         response
     };
 }
