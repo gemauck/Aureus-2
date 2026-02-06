@@ -37,6 +37,38 @@ async function handler(req, res) {
     try {
       const body = await parseJsonBody(req).catch(() => ({})) || {}
       const q = req.query || {}
+      const clear = (body.clear ?? q.clear) != null ? String(body.clear ?? q.clear).trim().toLowerCase() : ''
+      if (clear === 'sent') {
+        const documentId = (body.documentId ?? q.documentId) != null ? String(body.documentId ?? q.documentId).trim() : null
+        const monthParam = body.month ?? q.month
+        const yearParam = body.year ?? q.year
+        const month = monthParam != null ? parseInt(String(monthParam), 10) : null
+        const year = yearParam != null ? parseInt(String(yearParam), 10) : null
+        const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
+        if (!cell) {
+          return badRequest(res, 'documentId, month (1-12), and year are required to clear sent activity')
+        }
+        const [sentLogs, replyComments] = await Promise.all([
+          prisma.documentCollectionEmailLog.deleteMany({
+            where: {
+              projectId: cell.projectId,
+              documentId: cell.documentId,
+              year: cell.year,
+              month: cell.month,
+              kind: 'sent'
+            }
+          }),
+          prisma.documentItemComment.deleteMany({
+            where: {
+              itemId: cell.documentId,
+              year: cell.year,
+              month: cell.month,
+              author: 'Sent reply (platform)'
+            }
+          })
+        ])
+        return ok(res, { cleared: true, sentDeleted: sentLogs.count || 0, replyDeleted: replyComments.count || 0 })
+      }
       const id = (body.id ?? q.id) != null ? String(body.id ?? q.id).trim() : null
       const type = (body.type ?? q.type) === 'received' ? 'received' : (body.type ?? q.type) === 'sent' ? 'sent' : null
       if (!id || !type) {
@@ -128,13 +160,17 @@ async function handler(req, res) {
           orderBy: { createdAt: 'asc' },
           select: fallbackSelect
         })
-        const exactMatch = fallback.filter((row) => String(row.documentId).trim() === String(cell.documentId).trim()).map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
+        const exactMatch = fallback
+          .filter((row) => String(row.documentId).trim() === String(cell.documentId).trim())
+          .map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
         if (exactMatch.length > 0) {
           sent = exactMatch
         } else if (fallback.length > 0) {
-          // No exact documentId match (e.g. different section/doc after refresh) — return all sent for this project+month so activity still shows
-          sent = fallback.map(({ id, createdAt, subject, bodyText }) => ({ id, createdAt, subject, bodyText }))
-          console.log('document-collection-email-activity: using project+month fallback so sent persists after refresh', { requestedDocumentId: cell.documentId, returnedCount: sent.length })
+          // Avoid showing emails from other requests; keep empty and log mismatch for diagnostics.
+          console.log('document-collection-email-activity: no sent match for documentId; returning empty', {
+            requestedDocumentId: cell.documentId,
+            candidateCount: fallback.length
+          })
         }
       }
     }

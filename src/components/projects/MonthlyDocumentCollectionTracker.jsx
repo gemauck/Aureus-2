@@ -3838,6 +3838,7 @@ Abcotronics`;
         const [loadingActivity, setLoadingActivity] = useState(false);
         const [expandedSentId, setExpandedSentId] = useState(null);
         const [deletingActivityId, setDeletingActivityId] = useState(null);
+        const [clearingSentActivity, setClearingSentActivity] = useState(false);
         // Reply to a received email: which item and form fields
         const [replyingToReceivedId, setReplyingToReceivedId] = useState(null);
         const [replyToEmail, setReplyToEmail] = useState('');
@@ -4001,6 +4002,46 @@ Abcotronics`;
                 alert(err.message || 'Failed to delete')
             } finally {
                 setDeletingActivityId(null);
+            }
+        };
+
+        const handleClearSentActivity = async () => {
+            if (!project?.id || !ctx?.doc?.id || !ctx?.month || selectedYear == null) return;
+            if (!confirm('Remove all sent emails for this document and month? This cannot be undone.')) return;
+            const monthNum = months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
+            if (!monthNum) return;
+            setClearingSentActivity(true);
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            try {
+                const q = new URLSearchParams({
+                    documentId: String(ctx.doc.id).trim(),
+                    month: String(monthNum),
+                    year: String(selectedYear),
+                    clear: 'sent'
+                });
+                const url = `${base}/api/projects/${project.id}/document-collection-email-activity?${q}`;
+                const res = await fetch(url, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    }
+                });
+                const json = await res.json().catch(() => ({}));
+                const data = json.data ?? json;
+                if (res.ok && data.cleared) {
+                    setEmailActivity((prev) => ({ ...prev, sent: [] }));
+                    setExpandedSentId(null);
+                } else {
+                    alert(data.error || json.error || 'Failed to clear sent activity');
+                }
+            } catch (err) {
+                alert(err.message || 'Failed to clear sent activity');
+            } finally {
+                setClearingSentActivity(false);
             }
         };
 
@@ -4719,17 +4760,30 @@ Abcotronics`;
                                     <i className="fas fa-inbox text-[#0369a1] text-sm"></i>
                                     <label className="text-sm font-medium text-gray-800">Email activity for this month</label>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => fetchEmailActivity()}
-                                    disabled={loadingActivity}
-                                    className="text-xs text-[#0369a1] hover:text-[#0284c7] disabled:opacity-50 flex items-center gap-1"
-                                    title="Refresh to check for new replies"
-                                    aria-label="Refresh email activity"
-                                >
-                                    {loadingActivity ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-sync-alt"></i>}
-                                    Refresh
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleClearSentActivity}
+                                        disabled={clearingSentActivity || loadingActivity || emailActivity.sent.length === 0}
+                                        className="text-xs text-rose-600 hover:text-rose-700 disabled:opacity-50 flex items-center gap-1"
+                                        title="Remove all sent emails for this document/month"
+                                        aria-label="Clear sent email activity"
+                                    >
+                                        {clearingSentActivity ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
+                                        Clear sent
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => fetchEmailActivity()}
+                                        disabled={loadingActivity}
+                                        className="text-xs text-[#0369a1] hover:text-[#0284c7] disabled:opacity-50 flex items-center gap-1"
+                                        title="Refresh to check for new replies"
+                                        aria-label="Refresh email activity"
+                                    >
+                                        {loadingActivity ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-sync-alt"></i>}
+                                        Refresh
+                                    </button>
+                                </div>
                             </div>
                             {loadingActivity ? (
                                 <p className="text-sm text-gray-500 flex items-center gap-2">
