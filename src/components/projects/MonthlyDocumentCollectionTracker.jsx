@@ -3828,6 +3828,7 @@ Abcotronics`;
         const [body, setBody] = useState(defaultBody);
         const [recipientName, setRecipientName] = useState('');
         const [saveNotice, setSaveNotice] = useState(null);
+        const [justSaved, setJustSaved] = useState(false);
         const [lastSavedTemplate, setLastSavedTemplate] = useState(null);
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [sendPlainTextOnly, setSendPlainTextOnly] = useState(false);
@@ -3851,6 +3852,7 @@ Abcotronics`;
         const [sendingReply, setSendingReply] = useState(false);
         const activityFetchIdRef = useRef(0);
         const saveNoticeTimeoutRef = useRef(null);
+        const justSavedTimeoutRef = useRef(null);
 
         // Replace period in saved template (e.g. "January 2026") with current month when opening modal for a different month
         const withCurrentPeriod = (text) => {
@@ -3942,7 +3944,8 @@ Abcotronics`;
             return fetch(`${base}/api/projects/${project.id}/document-collection-email-activity?${q}`, {
                 method: 'GET',
                 credentials: 'include',
-                headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+                cache: 'no-store',
+                headers: { Accept: 'application/json', 'Cache-Control': 'no-store', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
             })
                 .then((res) => res.json().catch(() => ({})))
                 .then((json) => {
@@ -4365,6 +4368,9 @@ Abcotronics`;
                 setLastSavedTemplate(normalized);
                 setResult({ saved: true, message: 'Saved changes', source: 'save' });
                 showSaveNotice({ type: 'success', message: 'Saved changes' });
+                setJustSaved(true);
+                if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
+                justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500);
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
             } catch (err) {
                 console.error('Failed to save email template:', err);
@@ -4866,7 +4872,9 @@ Abcotronics`;
                                                 if (item.type === 'sent') {
                                                     const s = item;
                                                     const isExpanded = expandedSentId === s.id;
-                                                    const status = (s.deliveryStatus || 'sent').toString().toLowerCase();
+                                                    let status = (s.deliveryStatus || 'sent').toString().toLowerCase();
+                                                    if (status === 'sent' && s.deliveredAt) status = 'delivered';
+                                                    if ((status === 'sent' || status === 'delivered') && s.bouncedAt) status = 'bounced';
                                                     const statusLabel = status === 'bounced'
                                                         ? 'Bounced'
                                                         : status === 'delivered'
@@ -5173,7 +5181,7 @@ Abcotronics`;
                         >
                             {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
                         </button>
-                        {!savingTemplate && lastSavedTemplate && !hasUnsavedChanges && (
+                        {!savingTemplate && (justSaved || (lastSavedTemplate && !hasUnsavedChanges)) && (
                             <span className="text-xs text-emerald-600 font-medium">Saved</span>
                         )}
                         {!savingTemplate && hasUnsavedChanges && (
