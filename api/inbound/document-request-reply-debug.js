@@ -45,8 +45,10 @@ async function handler(req, res) {
       })
     ])
 
+    const stats = global.__docReqReplyStats || null
     return ok(res, {
       hint: 'If recentComments is empty after replying, webhook may not be called or In-Reply-To/thread match failed. Check pm2 logs for document-request-reply.',
+      stats,
       recentSent: recentSent.map((r) => ({
         ...r,
         messageIdPreview: r.messageId.slice(0, 50) + (r.messageId.length > 50 ? '...' : '')

@@ -528,6 +528,25 @@ async function resendApi(method, pathname, apiKey, options = {}) {
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
+const replyMatchStats = global.__docReqReplyStats || {
+  processed: 0,
+  matched_message_id: 0,
+  matched_subject: 0,
+  matched_body: 0,
+  unmatched: 0,
+  comments_created: 0,
+  attachments_saved: 0,
+  errors: 0,
+  lastUpdatedAt: null
+}
+global.__docReqReplyStats = replyMatchStats
+
+function incrementReplyStat(key) {
+  if (!key) return
+  replyMatchStats[key] = (replyMatchStats[key] || 0) + 1
+  replyMatchStats.lastUpdatedAt = new Date().toISOString()
+}
+
 function parseMonthYearFromText(text) {
   if (!text) return { month: null, year: null }
   const raw = String(text)
@@ -951,8 +970,9 @@ async function handler(req, res) {
   }
 }
 
-async function processReceivedEmail(emailId, apiKey, data) {
+async function processReceivedEmail(emailId, apiKey, data, options = {}) {
   try {
+    incrementReplyStat('processed')
     console.log('document-request-reply: processing', { emailId })
     const email = await fetchReceivedEmail(emailId, apiKey)
     console.log('document-request-reply: fetched email', { subject: (email.subject || '').toString().slice(0, 100) })
@@ -963,6 +983,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
     }
 
     let mapping = null
+    let matchMethod = null
     // Try message-ID matching when we have candidates.
     if (allCandidates.length > 0) {
       const messageIdCandidates = new Set(allCandidates)
@@ -974,6 +995,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
       mapping = await prisma.documentRequestEmailSent.findFirst({
         where: { messageId: { in: candidatesArray } }
       })
+      if (mapping) matchMethod = 'matched_message_id'
       if (!mapping) {
         const recent = await prisma.documentRequestEmailSent.findMany({
           take: 300,
@@ -991,6 +1013,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
             ) || null
           if (mapping) break
         }
+        if (mapping) matchMethod = 'matched_message_id'
       }
       if (!mapping) {
         for (const cand of candidatesArray) {
@@ -1001,6 +1024,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
             })
             if (byLocalPart) {
               mapping = byLocalPart
+              matchMethod = 'matched_message_id'
               break
             }
           }
@@ -1091,6 +1115,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
           orderBy: { createdAt: 'desc' }
         })
         if (mapping) {
+          matchMethod = 'matched_subject'
           console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any' })
         } else if (subjectFallbackDocIds.length > 0 && subjectFallbackProjectIds.length > 0) {
           // No DocumentRequestEmailSent row for this doc+month+year (e.g. send log succeeded but reply routing row failed). Still attach reply to the document we matched by name.
@@ -1102,6 +1127,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
             sectionId: null,
             messageId: ''
           }
+          matchMethod = 'matched_subject'
           console.log('document-request-reply: matched by subject fallback (no sent row)', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear })
         }
       }
@@ -1149,6 +1175,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
                 month: parsedContext.month,
                 messageId: ''
               }
+              matchMethod = 'matched_body'
               console.log('document-request-reply: matched by body context fallback', {
                 projectId: mapping.projectId,
                 documentId: mapping.documentId,
@@ -1163,6 +1190,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
       }
     }
     if (!mapping) {
+      incrementReplyStat('unmatched')
       const primaryId = allCandidates[0] || ''
       console.warn('document-request-reply: unknown_thread', {
         candidatesCount: allCandidates.length,
@@ -1175,6 +1203,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
       return
     }
 
+    if (matchMethod) incrementReplyStat(matchMethod)
     console.log('document-request-reply: matched thread', {
       projectId: mapping.projectId,
       itemId: mapping.documentId,
@@ -1188,7 +1217,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const fromStr = (email.from || '').toString().replace(/^.*<([^>]+)>.*$/, '$1').trim() || 'unknown'
 
     // Idempotency: if we've already processed this Resend emailId, skip to avoid duplicates.
-    if (emailId && prisma.documentRequestEmailReceived) {
+    if (emailId && prisma.documentRequestEmailReceived && !options.force) {
       try {
         const existing = await prisma.documentRequestEmailReceived.findUnique({ where: { emailId } })
         if (existing) {
@@ -1203,6 +1232,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const webhookAttachments = data.attachments && Array.isArray(data.attachments) ? data.attachments : null
     const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
     console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
+    if (uploaded.length > 0) incrementReplyStat('attachments_saved')
 
     const ccList = extractCcFromEmail(email)
     const attachmentLine =
@@ -1258,6 +1288,7 @@ async function processReceivedEmail(emailId, apiKey, data) {
       await prisma.documentItemComment.create({ data: commentData })
     }
 
+    incrementReplyStat('comments_created')
     console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
 
     try {
@@ -1284,8 +1315,16 @@ async function processReceivedEmail(emailId, apiKey, data) {
       )
     }
   } catch (e) {
+    incrementReplyStat('errors')
     console.error('document-request-reply: background process error', e)
   }
 }
 
 export default handler
+
+export {
+  parseMonthYearFromText,
+  parseDocMonthYearFromSubject,
+  parseReplyContextFromEmail,
+  processReceivedEmail
+}
