@@ -1145,7 +1145,8 @@ const ManagementMeetingNotes = () => {
         return week.weekKey || week.id || '';
     };
 
-    const getWeekGridColumn = (weekIndex) => (weekIndex === 0 ? 1 : weekIndex + 2);
+    const getWeekGridColumn = (weekIndex) => weekIndex + 1;
+    const getMonthlyGoalsGridColumn = (weekCount) => weekCount + 1;
 
     const scrollToWeekId = useCallback((weekId) => {
         if (!weekId) {
@@ -4564,12 +4565,12 @@ const ManagementMeetingNotes = () => {
                                 );
                             })}
 
-                            {/* Monthly goals header - placed after the first week */}
+                            {/* Monthly goals header - placed after the first week of the month */}
                             <div
                                 key="header-monthly-goals"
                                 style={{
                                     gridRow: '1',
-                                    gridColumn: '2'
+                                    gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
                                 }}
                                 className={`rounded-xl border-2 p-5 transition-all duration-300 ${
                                     isDark
@@ -5107,7 +5108,7 @@ const ManagementMeetingNotes = () => {
                                     style={{ 
                                         minHeight: '200px',
                                         gridRow: `${deptIndex + 2}`,
-                                        gridColumn: '2'
+                                        gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
                                     }}
                                 >
                                     <div className="flex items-center justify-between mb-3">
