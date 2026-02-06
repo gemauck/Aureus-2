@@ -92,27 +92,26 @@ const downloadCommentAttachment = (url, filename) => {
     .catch(() => {});
 };
 
+const SA_TIMEZONE_OFFSET = '+02:00';
+
+const parseDateValue = (dateValue) => {
+    if (!dateValue) return null;
+    if (dateValue instanceof Date) return dateValue;
+    const raw = String(dateValue).trim();
+    if (!raw) return null;
+    const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(raw);
+    const normalized = raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') : raw;
+    const withTimezone = hasTimezone ? normalized : `${normalized}${SA_TIMEZONE_OFFSET}`;
+    const date = new Date(withTimezone);
+    if (isNaN(date.getTime())) return null;
+    return date;
+};
+
 // Helper function to format dates as date and time (without timezone info)
 const formatDateTime = (dateValue) => {
-    if (!dateValue) return '';
     try {
-        // Handle string dates - remove Z if present for consistent parsing
-        const cleanDate = String(dateValue).replace(/Z$/, '');
-        const date = new Date(cleanDate);
-        if (isNaN(date.getTime())) {
-            // Try parsing as ISO string directly
-            const date2 = new Date(dateValue);
-            if (isNaN(date2.getTime())) return '';
-            // Format as: "Jan 23, 2026 6:03 PM" (no timezone, no milliseconds)
-            return date2.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            });
-        }
+        const date = parseDateValue(dateValue);
+        if (!date) return '';
         // Format as: "Jan 23, 2026 6:03 PM" (no timezone, no milliseconds)
         return date.toLocaleString('en-US', {
             year: 'numeric',
@@ -130,10 +129,9 @@ const formatDateTime = (dateValue) => {
 
 // Helper function to format dates as date only (no time)
 const formatDateOnly = (dateValue) => {
-    if (!dateValue) return '';
     try {
-        const date = new Date(dateValue);
-        if (isNaN(date.getTime())) return '';
+        const date = parseDateValue(dateValue);
+        if (!date) return '';
         // Format as: "Jan 23, 2026"
         return date.toLocaleDateString('en-US', {
             year: 'numeric',
