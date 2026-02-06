@@ -206,7 +206,8 @@ async function handler(req, res) {
         if (!replyComment || String(replyComment.item?.section?.projectId) !== projectId) {
           return badRequest(res, 'Sent log not found or access denied')
         }
-        if ((replyComment.author || '').trim() !== 'Sent reply (platform)') {
+        const author = (replyComment.author || '').trim()
+        if (author !== 'Sent reply (platform)' && author !== 'Sent request (platform)') {
           return badRequest(res, 'Sent log not found or access denied')
         }
         await prisma.documentItemComment.delete({ where: { id } })
@@ -373,14 +374,14 @@ async function handler(req, res) {
     console.error('document-collection-email-activity: log query failed (returning empty sent):', logErr.message)
   }
 
-  // Include fallback "sent reply" comments (when DocumentCollectionEmailLog create failed)
+  // Include fallback "sent reply/request" comments (when DocumentCollectionEmailLog create failed)
   try {
     const replyComments = await prisma.documentItemComment.findMany({
       where: {
         itemId: cell.documentId,
         year: cell.year,
         month: cell.month,
-        author: 'Sent reply (platform)'
+        author: { in: ['Sent reply (platform)', 'Sent request (platform)'] }
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true, text: true, createdAt: true }

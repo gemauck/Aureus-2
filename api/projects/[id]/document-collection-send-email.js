@@ -256,6 +256,24 @@ async function handler(req, res) {
             console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId })
           }
         }
+        if (!activityPersisted) {
+          // Fallback: store as comment so activity can still show
+          try {
+            await prisma.documentItemComment.create({
+              data: {
+                itemId: cell.documentId,
+                year: cell.year,
+                month: cell.month,
+                text: commentText,
+                author: 'Sent request (platform)'
+              }
+            })
+            activityPersisted = true
+            console.log('document-collection-send-email: activity fallback saved as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
+          } catch (commentErr) {
+            console.error('document-collection-send-email: fallback comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
+          }
+        }
       }
 
     if (messageIdForReply) {

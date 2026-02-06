@@ -2361,7 +2361,7 @@ const getAssigneeColor = (identifier, users) => {
                 return;
             }
             const author = (commentToDelete.author || '').trim();
-            const type = author === 'Sent reply (platform)' ? 'sent' : 'received';
+            const type = author === 'Sent reply (platform)' || author === 'Sent request (platform)' ? 'sent' : 'received';
             const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
             const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
             try {
@@ -2430,7 +2430,7 @@ const getAssigneeColor = (identifier, users) => {
     const isEmailActivityComment = (comment) => {
         if (!comment) return false;
         const author = (comment.author || '').trim();
-        if (author === 'Email from Client' || author === 'Sent reply (platform)') return true;
+        if (author === 'Email from Client' || author === 'Sent reply (platform)' || author === 'Sent request (platform)') return true;
         const text = (comment.text || '').trim();
         return text.startsWith('Email from Client');
     };
