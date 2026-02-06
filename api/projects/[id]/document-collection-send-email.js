@@ -146,7 +146,19 @@ async function handler(req, res) {
     }
 
     let providerMessageId = null
+    let trackingId = null
     try {
+      if (hasCellContext && html) {
+        const protoHeader = req.headers?.['x-forwarded-proto'] || req.protocol || 'https'
+        const hostHeader = req.headers?.['x-forwarded-host'] || req.headers?.host
+        const proto = String(protoHeader || 'https').split(',')[0].trim()
+        const host = String(hostHeader || '').split(',')[0].trim()
+        if (host) {
+          trackingId = crypto.randomUUID()
+          const pixelUrl = `${proto}://${host}/api/projects/${projectId}/document-collection-email-open?trackingId=${encodeURIComponent(trackingId)}`
+          html = `${html}<img src="${pixelUrl}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;opacity:0;" />`
+        }
+      }
       const result = await sendEmail({
         to: validTo.map((e) => e.trim()),
         cc: validCc.length > 0 ? [...new Set(validCc.map((e) => e.trim()))] : undefined,
@@ -212,7 +224,8 @@ async function handler(req, res) {
               ...(sectionId ? { sectionId } : {}),
               ...(subject ? { subject: subject.slice(0, 1000) } : {}),
               ...(bodyForStorage ? { bodyText: bodyForStorage } : {}),
-              ...(providerMessageId ? { messageId: providerMessageId } : {})
+              ...(providerMessageId ? { messageId: providerMessageId } : {}),
+              ...(trackingId ? { trackingId } : {})
             }
           })
           activityPersisted = true

@@ -805,11 +805,15 @@ model DocumentCollectionEmailLog {
   subject        String?  // Email subject — so user can expand and see what was sent
   bodyText       String?  @db.Text // Plain-text body (or stripped HTML) for expandable view
   messageId      String?  // Provider message id for delivery status updates
+  trackingId     String?  @unique // Open-tracking ID for pixel requests
   deliveryStatus String   @default("sent") // sent | delivered | bounced | failed
   deliveredAt    DateTime?
   bouncedAt      DateTime?
   bounceReason   String?  @db.Text
   lastEventAt    DateTime?
+  openedAt       DateTime?
+  lastOpenedAt   DateTime?
+  openCount      Int      @default(0)
 
   @@index([projectId, documentId, year, month])
   @@index([projectId, sectionId, documentId, year, month])
