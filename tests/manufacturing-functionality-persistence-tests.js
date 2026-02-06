@@ -11,6 +11,7 @@
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { chromium } from 'playwright'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: join(__dirname, '..', '.env.local') })
@@ -293,6 +294,124 @@ function calcDashboardProductionStats(orders) {
     .filter(o => o.status === 'in_production' || o.status === 'in_progress')
     .reduce((sum, o) => sum + ((o.quantity || 0) - (o.quantityProduced || 0)), 0)
   return { activeOrders, completedOrders, totalProduction, pendingUnits }
+}
+
+async function runUiChecks({
+  componentA,
+  componentB,
+  finishedProduct,
+  bom,
+  mainLocation,
+  workOrder,
+  salesOrder,
+  purchaseOrder
+}) {
+  let browser
+  try {
+    browser = await chromium.launch({ headless: true })
+    const context = await browser.newContext()
+    const page = await context.newPage()
+    page.setDefaultTimeout(15000)
+
+    const waitVisible = async (selector, timeout = 15000) => {
+      try {
+        await page.waitForSelector(selector, { timeout })
+        return await page.locator(selector).first().isVisible()
+      } catch {
+        return false
+      }
+    }
+
+    const clickIfVisible = async (selector) => {
+      try {
+        const loc = page.locator(selector).first()
+        if (await loc.isVisible()) {
+          await loc.click()
+          return true
+        }
+      } catch {
+        return false
+      }
+      return false
+    }
+
+    // Login
+    await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' })
+    await page.fill('input[type="email"], input[name="email"]', TEST_EMAIL)
+    await page.fill('input[type="password"], input[name="password"]', TEST_PASSWORD)
+    await page.click('button[type="submit"], button:has-text("Login")')
+    await page.waitForLoadState('networkidle').catch(() => {})
+    await page.waitForTimeout(1000)
+
+    // Navigate to manufacturing
+    await page.goto(`${BASE_URL}/manufacturing`, { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle').catch(() => {})
+    await page.waitForTimeout(1000)
+
+    // Dashboard appearance
+    recordResult('UI: Dashboard card - Total Inventory Value', await waitVisible('text=Total Inventory Value'))
+    recordResult('UI: Dashboard card - Low Stock Alerts', await waitVisible('text=Low Stock Alerts'))
+    recordResult('UI: Dashboard card - Active Production Orders', await waitVisible('text=Active Production Orders'))
+    recordResult('UI: Dashboard card - Total Production (Month)', await waitVisible('text=Total Production (Month)'))
+
+    // Inventory tab
+    await clickIfVisible('button:has-text("Inventory"), a:has-text("Inventory")')
+    await waitVisible('input[placeholder="Search by name or SKU..."]')
+    if (mainLocation) {
+      await page.selectOption('select[title="Select Stock Location"]', {
+        label: `${mainLocation.code} - ${mainLocation.name}`
+      }).catch(() => {})
+    }
+    const inventorySearch = page.locator('input[placeholder="Search by name or SKU..."]')
+    if (await inventorySearch.isVisible()) {
+      await inventorySearch.fill(componentA.sku)
+      await page.waitForTimeout(600)
+      recordResult('UI: Inventory shows component A', await waitVisible(`text=${componentA.sku}`))
+      await inventorySearch.fill(componentB.sku)
+      await page.waitForTimeout(600)
+      recordResult('UI: Inventory shows component B', await waitVisible(`text=${componentB.sku}`))
+      await inventorySearch.fill(finishedProduct.sku)
+      await page.waitForTimeout(600)
+      recordResult('UI: Inventory shows finished product', await waitVisible(`text=${finishedProduct.sku}`))
+      await inventorySearch.fill('')
+    } else {
+      recordResult('UI: Inventory shows component A', false, 'Inventory search input not visible')
+      recordResult('UI: Inventory shows component B', false, 'Inventory search input not visible')
+      recordResult('UI: Inventory shows finished product', false, 'Inventory search input not visible')
+    }
+
+    // BOM tab
+    await clickIfVisible('button:has-text("BOM"), button:has-text("Bill of Materials"), a:has-text("BOM")')
+    await page.waitForTimeout(800)
+    recordResult('UI: BOM list shows product', await waitVisible(`text=${bom.productName}`))
+
+    // Production tab
+    await clickIfVisible('button:has-text("Production"), a:has-text("Production")')
+    await waitVisible('text=Production Orders')
+    recordResult('UI: Production order shows product', await waitVisible(`text=${finishedProduct.name}`))
+
+    // Sales tab
+    await clickIfVisible('button:has-text("Sales"), a:has-text("Sales")')
+    await waitVisible('text=Sales Orders')
+    recordResult('UI: Sales order shows order number', await waitVisible(`text=${salesOrder}`))
+
+    // Purchase tab
+    await clickIfVisible('button:has-text("Purchase"), a:has-text("Purchase")')
+    await waitVisible('text=Purchase Orders')
+    recordResult('UI: Purchase order shows order number', await waitVisible(`text=${purchaseOrder}`))
+
+    // Movements tab
+    await clickIfVisible('button:has-text("Movements"), a:has-text("Movements")')
+    await page.waitForTimeout(800)
+    recordResult('UI: Movements shows production reference', await waitVisible(`text=${workOrder}`))
+
+    await browser.close()
+  } catch (error) {
+    recordResult('UI: Manufacturing checks', false, error.message)
+    if (browser) {
+      await browser.close()
+    }
+  }
 }
 
 async function run() {
@@ -579,8 +698,8 @@ async function run() {
   const compAAfterCompletion = await getInventoryItem(componentA.id)
   const compBAfterCompletion = await getInventoryItem(componentB.id)
   const finishedAfterCompletion = await getInventoryItem(finishedProduct.id)
-  const expectedCompAQty = compAQtyBeforeCompletion - Math.max(allocationQtyA - compAAllocBeforeCompletion, 0)
-  const expectedCompBQty = compBQtyBeforeCompletion - Math.max(allocationQtyB - compBAllocBeforeCompletion, 0)
+  const expectedCompAQty = compAQtyBeforeCompletion - allocationQtyA
+  const expectedCompBQty = compBQtyBeforeCompletion - allocationQtyB
   assertEqual(compAAfterCompletion?.quantity, expectedCompAQty, 'Production completion deducts component A stock')
   assertEqual(compBAfterCompletion?.quantity, expectedCompBQty, 'Production completion deducts component B stock')
   assertEqual(compAAfterCompletion?.allocatedQuantity || 0, 0, 'Allocation released for component A')
@@ -658,7 +777,38 @@ async function run() {
   if (purchaseReceivedOk) {
     const compBAfterPurchase = await getInventoryItem(componentB.id)
     assertEqual(compBAfterPurchase?.quantity, 67, 'Purchase order receipt increases component stock')
+
+    const repeatReceive = await updatePurchaseOrder(purchaseOrder.id, {
+      status: 'received',
+      receivedDate: new Date().toISOString()
+    })
+    recordResult('Purchase order receive is idempotent', repeatReceive.status === 200, repeatReceive.status === 200 ? '' : apiErrorMessage(repeatReceive))
+    const compBAfterRepeat = await getInventoryItem(componentB.id)
+    assertEqual(compBAfterRepeat?.quantity, compBAfterPurchase?.quantity, 'Repeat receive does not double stock')
   }
+
+  // --- Data Integrity: LocationInventory sums match master ---
+  log('\n🔎 Data Integrity', 'info')
+  const allLocations = await listLocations()
+  const sumLocationQty = async (sku) => {
+    let total = 0
+    for (const loc of allLocations) {
+      const items = await listLocationInventory(loc.id)
+      const item = items.find(entry => entry.sku === sku)
+      total += item?.quantity || 0
+    }
+    return total
+  }
+
+  const sumA = await sumLocationQty(componentA.sku)
+  const sumB = await sumLocationQty(componentB.sku)
+  const sumFinished = await sumLocationQty(finishedProduct.sku)
+  const masterA = await getInventoryItem(componentA.id)
+  const masterB = await getInventoryItem(componentB.id)
+  const masterFinished = await getInventoryItem(finishedProduct.id)
+  assertEqual(sumA, masterA?.quantity || 0, 'LocationInventory sum matches master (A)')
+  assertEqual(sumB, masterB?.quantity || 0, 'LocationInventory sum matches master (B)')
+  assertEqual(sumFinished, masterFinished?.quantity || 0, 'LocationInventory sum matches master (Finished)')
 
   // --- Validation & Error Handling ---
   log('\n🧪 Validation & Error Handling', 'info')
@@ -695,6 +845,32 @@ async function run() {
     'Sale requires locationId',
     saleMissingLocationRes.status === 400,
     saleMissingLocationRes.status === 400 ? '' : apiErrorMessage(saleMissingLocationRes)
+  )
+
+  // Sales order should block shipping when insufficient stock
+  const insufficientOrder = await createSalesOrder({
+    orderNumber: `SO-INSUFFICIENT-${testId}`,
+    clientName: 'Test Client',
+    status: 'draft',
+    items: [
+      {
+        sku: finishedProduct.sku,
+        name: finishedProduct.name,
+        quantity: 9999,
+        unitPrice: 100
+      }
+    ],
+    subtotal: 0,
+    total: 0
+  })
+  const insufficientShip = await updateSalesOrder(insufficientOrder.id, {
+    status: 'shipped',
+    shippedDate: new Date().toISOString()
+  })
+  recordResult(
+    'Sales order shipping blocked when stock insufficient',
+    insufficientShip.status >= 400,
+    insufficientShip.status >= 400 ? '' : 'Expected error when shipping with insufficient stock'
   )
 
   const transferTooMuchRes = await apiRequest('/api/manufacturing/stock-transactions', 'POST', {
@@ -769,6 +945,19 @@ async function run() {
   assertEqual(supplierUpdate.status, 200, 'Supplier update')
   const supplierDelete = await apiRequest(`/api/manufacturing/suppliers/${supplierCrud.id}`, 'DELETE')
   assertEqual(supplierDelete.status, 200, 'Supplier delete')
+
+  // --- UI Checks (appearance + basic functionality) ---
+  log('\n🧭 UI Checks', 'info')
+  await runUiChecks({
+    componentA,
+    componentB,
+    finishedProduct,
+    bom,
+    mainLocation,
+    workOrder: refs.workOrder,
+    salesOrder: refs.salesOrder,
+    purchaseOrder: refs.purchaseOrder
+  })
 
   // --- Dashboard Stats (matches Manufacturing.jsx calculations) ---
   log('\n📊 Dashboard Stats', 'info')

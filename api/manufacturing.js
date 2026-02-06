@@ -2102,34 +2102,26 @@ async function handler(req, res) {
                   )
                 }
                 
-                // Deduct from allocatedQuantity first (if allocated), then from quantity
+                // Always deduct consumed quantity from on-hand stock.
+                // Allocation is a reservation and must be released separately.
                 const allocatedQty = inventoryItem.allocatedQuantity || 0
-                const updateData = {}
+                const updateData = {
+                  quantity: { decrement: requiredQty }
+                }
                 
                 if (allocatedQty > 0) {
-                  // Deduct from allocated quantity first
                   const deductFromAllocated = Math.min(requiredQty, allocatedQty)
                   updateData.allocatedQuantity = { decrement: deductFromAllocated }
-                  
-                  // If requiredQty > allocatedQty, deduct the remainder from quantity
-                  if (requiredQty > allocatedQty) {
-                    updateData.quantity = { decrement: requiredQty - allocatedQty }
-                  }
-                } else {
-                  // No allocation, deduct directly from quantity
-                  updateData.quantity = { decrement: requiredQty }
                 }
                 
                 // Update inventory item
+                const newQuantity = Math.max(0, (inventoryItem.quantity || 0) - requiredQty)
                 await tx.inventoryItem.update({
                   where: { id: inventoryItem.id },
                   data: {
                     ...updateData,
-                    totalValue: Math.max(0, ((inventoryItem.quantity || 0) - (updateData.quantity?.decrement || 0)) * (inventoryItem.unitCost || 0)),
-                    status: getStatusFromQuantity(
-                      (inventoryItem.quantity || 0) - (updateData.quantity?.decrement || 0),
-                      inventoryItem.reorderPoint || 0
-                    )
+                    totalValue: Math.max(0, newQuantity * (inventoryItem.unitCost || 0)),
+                    status: getStatusFromQuantity(newQuantity, inventoryItem.reorderPoint || 0)
                   }
                 })
                 
