@@ -5168,7 +5168,7 @@ Abcotronics`;
                         <button
                             type="button"
                             onClick={handleSaveTemplate}
-                            disabled={savingTemplate}
+                            disabled={savingTemplate || contacts.length === 0}
                             className="px-4 py-2.5 text-sm font-medium text-[#0369a1] bg-[#e0f2fe] hover:bg-[#bae6fd] rounded-xl transition-colors border border-[#7dd3fc]"
                         >
                             {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
