@@ -1504,7 +1504,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        return saveToDatabase();
+        return saveToDatabase({ skipParentUpdate: true });
     };
 
     // ============================================================
