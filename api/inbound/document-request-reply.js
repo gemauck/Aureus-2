@@ -439,6 +439,57 @@ function emailBodyText(email) {
   return ''
 }
 
+function parseReplyContextFromEmail(email, subject) {
+  const out = { projectName: null, docName: null, month: null, year: null }
+  const body = emailBodyText(email)
+  if (body) {
+    const lines = body.split(/\r?\n/).map((line) => line.replace(/^[\s*•\-\u2022]+/, '').trim())
+    for (const line of lines) {
+      if (!line) continue
+      if (!out.projectName) {
+        const pm = line.match(/^project\s*:\s*(.+)$/i)
+        if (pm && pm[1]) out.projectName = pm[1].trim()
+      }
+      if (!out.docName) {
+        const dm = line.match(/^document\s*(?:\/\s*data)?(?:\s*request)?\s*:\s*(.+)$/i)
+        if (dm && dm[1]) out.docName = dm[1].trim()
+      }
+      if (!out.month || !out.year) {
+        const period = line.match(/^(period|month)\s*:\s*(.+)$/i)
+        if (period && period[2]) {
+          const parsed = parseMonthYearFromText(period[2])
+          if (parsed.month && parsed.year) {
+            out.month = parsed.month
+            out.year = parsed.year
+          }
+        }
+      }
+    }
+    if (!out.projectName) {
+      const pm = body.match(/project\s*:\s*([^\n\r]+)/i)
+      if (pm && pm[1]) out.projectName = pm[1].trim()
+    }
+    if (!out.docName) {
+      const dm = body.match(/document\s*(?:\/\s*data)?(?:\s*request)?\s*:\s*([^\n\r]+)/i)
+      if (dm && dm[1]) out.docName = dm[1].trim()
+    }
+    if (!out.month || !out.year) {
+      const parsed = parseMonthYearFromText(body)
+      if (parsed.month && parsed.year) {
+        out.month = parsed.month
+        out.year = parsed.year
+      }
+    }
+  }
+  if (!out.docName || !out.month || !out.year) {
+    const subjParsed = parseDocMonthYearFromSubject(subject || '')
+    if (!out.docName && subjParsed.docName) out.docName = subjParsed.docName
+    if (!out.month && subjParsed.month) out.month = subjParsed.month
+    if (!out.year && subjParsed.year) out.year = subjParsed.year
+  }
+  return out
+}
+
 async function fetchReceivedEmail(emailId, apiKey) {
   const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
     method: 'GET',
@@ -476,6 +527,66 @@ async function resendApi(method, pathname, apiKey, options = {}) {
 }
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+function parseMonthYearFromText(text) {
+  if (!text) return { month: null, year: null }
+  const raw = String(text)
+  const direct = raw.match(/\b(20\d{2})[-/](\d{1,2})\b/)
+  if (direct) {
+    const year = parseInt(direct[1], 10)
+    const month = parseInt(direct[2], 10)
+    if (month >= 1 && month <= 12) return { month, year }
+  }
+  const monthNames = MONTH_NAMES.map((m) => m.toLowerCase())
+  const abbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+  for (let i = 0; i < monthNames.length; i++) {
+    const fullRe = new RegExp(`\\b${monthNames[i]}\\b\\s*,?\\s*(20\\d{2})\\b`, 'i')
+    const fullMatch = fullRe.exec(raw)
+    if (fullMatch && fullMatch[1]) {
+      return { month: i + 1, year: parseInt(fullMatch[1], 10) }
+    }
+    const reverseRe = new RegExp(`\\b(20\\d{2})\\s+${monthNames[i]}\\b`, 'i')
+    const reverseMatch = reverseRe.exec(raw)
+    if (reverseMatch && reverseMatch[1]) {
+      return { month: i + 1, year: parseInt(reverseMatch[1], 10) }
+    }
+    const abbrRe = new RegExp(`\\b${abbr[i]}\\w*\\s*(20\\d{2})\\b`, 'i')
+    const abbrMatch = abbrRe.exec(raw)
+    if (abbrMatch && abbrMatch[1]) {
+      return { month: i + 1, year: parseInt(abbrMatch[1], 10) }
+    }
+  }
+  return { month: null, year: null }
+}
+
+function parseDocMonthYearFromSubject(subject) {
+  if (!subject) return { docName: null, month: null, year: null }
+  const monthNames = MONTH_NAMES.map((m) => m.toLowerCase())
+  const dash = '[\\s\\u002D\\u2013\\u2014]+'
+  let docNameFromSubject = null
+  let month = null
+  let year = null
+  let lastMatchIndex = -1
+  const subj = String(subject || '')
+  for (let i = 0; i < monthNames.length; i++) {
+    const re = new RegExp(`${dash}([^\\u002D\\u2013\\u2014]+)${dash}${monthNames[i]}\\s+(20\\d{2})\\b`, 'gi')
+    let m
+    while ((m = re.exec(subj)) !== null) {
+      if (m.index > lastMatchIndex) {
+        lastMatchIndex = m.index
+        docNameFromSubject = m[1].trim()
+        month = i + 1
+        year = parseInt(m[2], 10)
+      }
+    }
+  }
+  if (!month || !year) {
+    const parsed = parseMonthYearFromText(subj)
+    month = parsed.month
+    year = parsed.year
+  }
+  return { docName: docNameFromSubject, month, year }
+}
 
 /**
  * Create an in-app notification for the requester so they see "Document request reply received" when they log in.
@@ -996,6 +1107,59 @@ async function processReceivedEmail(emailId, apiKey, data) {
       }
       if (!mapping && (email.subject || '').toString().length > 0) {
         console.warn('document-request-reply: subject fallback did not find mapping', { subject: (email.subject || '').toString().slice(0, 120) })
+      }
+    }
+    if (!mapping) {
+      const parsedContext = parseReplyContextFromEmail(email, email.subject || '')
+      if (parsedContext.projectName && parsedContext.docName && parsedContext.month && parsedContext.year) {
+        try {
+          let project = await prisma.project.findFirst({
+            where: { name: { equals: parsedContext.projectName, mode: 'insensitive' } },
+            select: { id: true, name: true }
+          })
+          if (!project) {
+            project = await prisma.project.findFirst({
+              where: { name: { contains: parsedContext.projectName, mode: 'insensitive' } },
+              select: { id: true, name: true }
+            })
+          }
+          if (project) {
+            let docs = await prisma.documentItem.findMany({
+              where: {
+                name: { equals: parsedContext.docName, mode: 'insensitive' },
+                section: { projectId: project.id }
+              },
+              select: { id: true, sectionId: true }
+            })
+            if (docs.length === 0) {
+              docs = await prisma.documentItem.findMany({
+                where: {
+                  name: { contains: parsedContext.docName, mode: 'insensitive' },
+                  section: { projectId: project.id }
+                },
+                select: { id: true, sectionId: true }
+              })
+            }
+            if (docs.length > 0) {
+              mapping = {
+                documentId: docs[0].id,
+                projectId: project.id,
+                sectionId: docs[0].sectionId || null,
+                year: parsedContext.year,
+                month: parsedContext.month,
+                messageId: ''
+              }
+              console.log('document-request-reply: matched by body context fallback', {
+                projectId: mapping.projectId,
+                documentId: mapping.documentId,
+                month: mapping.month,
+                year: mapping.year
+              })
+            }
+          }
+        } catch (fallbackErr) {
+          console.warn('document-request-reply: body context fallback failed', fallbackErr.message)
+        }
       }
     }
     if (!mapping) {
