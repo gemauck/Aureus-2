@@ -4237,14 +4237,15 @@ Abcotronics`;
             });
         }
 
-        function buildTemplateFromState() {
+        function buildTemplateFromState(overrides = {}) {
+            const nextPlainTextOnly = overrides.sendPlainTextOnly ?? sendPlainTextOnly;
             return normalizeTemplate({
                 recipients: contacts,
                 cc: contactsCc,
                 subject: subject.trim() || defaultSubject,
                 body: body.trim() || defaultBody,
                 recipientName: recipientName.trim(),
-                sendPlainTextOnly,
+                sendPlainTextOnly: nextPlainTextOnly,
                 schedule: {
                     frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
                     stopWhenStatus: scheduleStopStatus || 'collected'
@@ -4791,7 +4792,16 @@ Abcotronics`;
                                 <input
                                     type="checkbox"
                                     checked={sendPlainTextOnly}
-                                    onChange={(e) => setSendPlainTextOnly(e.target.checked)}
+                                    onChange={(e) => {
+                                        const nextValue = e.target.checked;
+                                        setSendPlainTextOnly(nextValue);
+                                        if (ctx?.section?.id && ctx?.doc?.id && ctx?.month) {
+                                            const nextTemplate = buildTemplateFromState({ sendPlainTextOnly: nextValue });
+                                            saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, nextTemplate).catch((err) => {
+                                                console.warn('Failed to save plain text preference:', err);
+                                            });
+                                        }
+                                    }}
                                     className="rounded border-gray-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
                                 />
                                 Send as plain text only (improves deliverability)
