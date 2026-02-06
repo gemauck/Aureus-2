@@ -64,6 +64,16 @@ else
   npx prisma db push 2>/dev/null || echo "  (schema already up to date or DB not configured)"
 fi
 
+if [ -f add-document-request-email-received-migration.sql ]; then
+  echo
+  echo "-> Applying manual SQL migration (DocumentRequestEmailReceived)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f add-document-request-email-received-migration.sql || echo "  (manual migration failed; check DB access)"
+  else
+    echo "  (psql or DATABASE_URL not available; run the SQL migration manually)"
+  fi
+fi
+
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
