@@ -3828,6 +3828,7 @@ Abcotronics`;
         const [body, setBody] = useState(defaultBody);
         const [recipientName, setRecipientName] = useState('');
         const [saveNotice, setSaveNotice] = useState(null);
+        const [lastSavedTemplate, setLastSavedTemplate] = useState(null);
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [sendPlainTextOnly, setSendPlainTextOnly] = useState(true);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
@@ -3877,24 +3878,21 @@ Abcotronics`;
 
         useEffect(() => {
             const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
-            setContacts(Array.isArray(s.recipients) && s.recipients.length > 0 ? s.recipients : []);
-            setContactsCc(Array.isArray(s.cc) && s.cc.length > 0 ? s.cc : []);
-            const savedSubject = typeof s.subject === 'string' && s.subject.trim() ? s.subject : null;
-            const savedBody = typeof s.body === 'string' && s.body.trim() ? s.body : null;
-            setSubject(savedSubject ? ensureAbcoSubject(withCurrentPeriod(savedSubject)) : defaultSubject);
-            setBody(savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody);
-            const savedRecipientName = typeof s.recipientName === 'string'
-                ? s.recipientName
-                : (typeof s.recipient_name === 'string' ? s.recipient_name : '');
-            setRecipientName(savedRecipientName);
+            const initialTemplate = buildTemplateFromSaved(s);
+            setContacts(initialTemplate.recipients);
+            setContactsCc(initialTemplate.cc);
+            setSubject(initialTemplate.subject || defaultSubject);
+            setBody(initialTemplate.body || defaultBody);
+            setRecipientName(initialTemplate.recipientName || '');
             setRemoveExternalLinks(true);
             setSendPlainTextOnly(true);
-            setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
-            setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
+            setScheduleFrequency(initialTemplate.schedule.frequency);
+            setScheduleStopStatus(initialTemplate.schedule.stopWhenStatus);
             setNewContact('');
             setNewContactCc('');
             setResult(null);
             setSaveNotice(null);
+            setLastSavedTemplate(initialTemplate);
             if (saveNoticeTimeoutRef.current) {
                 clearTimeout(saveNoticeTimeoutRef.current);
                 saveNoticeTimeoutRef.current = null;
@@ -4055,7 +4053,7 @@ Abcotronics`;
             return match && match[1] && emailRe.test(match[1].trim()) ? match[1].trim() : null;
         };
 
-        const normalizeEmailList = (list) => {
+        function normalizeEmailList(list) {
             if (!Array.isArray(list)) return [];
             const map = new Map();
             list.forEach((val) => {
@@ -4065,7 +4063,7 @@ Abcotronics`;
                 if (!map.has(key)) map.set(key, t);
             });
             return [...map.values()];
-        };
+        }
 
         const openReply = (r) => {
             const toAddr = getReplyToFromReceived(r);
@@ -4185,19 +4183,54 @@ Abcotronics`;
             }
         };
 
-        const normalizeTemplate = (tpl) => ({
-            recipients: normalizeEmailList(tpl?.recipients || []),
-            cc: normalizeEmailList(tpl?.cc || []),
-            subject: (tpl?.subject || '').trim(),
-            body: (tpl?.body || '').trim(),
-            recipientName: (tpl?.recipientName || '').trim(),
-            schedule: {
-                frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
-                    ? tpl.schedule.frequency
-                    : 'none',
-                stopWhenStatus: (tpl?.schedule?.stopWhenStatus || 'collected')
-            }
-        });
+        function normalizeTemplate(tpl) {
+            return {
+                recipients: normalizeEmailList(tpl?.recipients || []),
+                cc: normalizeEmailList(tpl?.cc || []),
+                subject: (tpl?.subject || '').trim(),
+                body: (tpl?.body || '').trim(),
+                recipientName: (tpl?.recipientName || '').trim(),
+                schedule: {
+                    frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
+                        ? tpl.schedule.frequency
+                        : 'none',
+                    stopWhenStatus: (tpl?.schedule?.stopWhenStatus || 'collected')
+                }
+            };
+        }
+
+        function buildTemplateFromSaved(saved) {
+            const savedSubject = typeof saved?.subject === 'string' && saved.subject.trim() ? saved.subject : null;
+            const savedBody = typeof saved?.body === 'string' && saved.body.trim() ? saved.body : null;
+            const savedRecipientName = typeof saved?.recipientName === 'string'
+                ? saved.recipientName
+                : (typeof saved?.recipient_name === 'string' ? saved.recipient_name : '');
+            return normalizeTemplate({
+                recipients: Array.isArray(saved?.recipients) ? saved.recipients : [],
+                cc: Array.isArray(saved?.cc) ? saved.cc : [],
+                subject: savedSubject ? ensureAbcoSubject(withCurrentPeriod(savedSubject)) : defaultSubject,
+                body: savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody,
+                recipientName: savedRecipientName,
+                schedule: {
+                    frequency: saved?.schedule?.frequency,
+                    stopWhenStatus: saved?.schedule?.stopWhenStatus
+                }
+            });
+        }
+
+        function buildTemplateFromState() {
+            return normalizeTemplate({
+                recipients: contacts,
+                cc: contactsCc,
+                subject: subject.trim() || defaultSubject,
+                body: body.trim() || defaultBody,
+                recipientName: recipientName.trim(),
+                schedule: {
+                    frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
+                    stopWhenStatus: scheduleStopStatus || 'collected'
+                }
+            });
+        }
 
         const MIN_BODY_CHARS = 140;
         const URL_RE = /(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/gi;
@@ -4292,18 +4325,8 @@ Abcotronics`;
 
         const autoSaveTemplateIfChanged = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
-            const current = normalizeTemplate({
-                recipients: contacts,
-                cc: contactsCc,
-                subject: subject.trim() || defaultSubject,
-                body: body.trim() || defaultBody,
-                recipientName: recipientName.trim(),
-                schedule: {
-                    frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
-                    stopWhenStatus: scheduleStopStatus || 'collected'
-                }
-            });
-            const saved = normalizeTemplate(getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear));
+            const current = buildTemplateFromState();
+            const saved = lastSavedTemplate || buildTemplateFromSaved(getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear));
             const hasInput = current.recipients.length > 0 || current.cc.length > 0 || current.subject || current.body;
             if (!hasInput) return;
             if (JSON.stringify(current) === JSON.stringify(saved)) return;
@@ -4315,17 +4338,7 @@ Abcotronics`;
             setSavingTemplate(true);
             setResult(null);
             try {
-                const normalized = normalizeTemplate({
-                    recipients: contacts,
-                    cc: contactsCc,
-                    subject: subject.trim() || defaultSubject,
-                    body: body.trim() || defaultBody,
-                    recipientName: recipientName.trim(),
-                    schedule: {
-                        frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
-                        stopWhenStatus: scheduleStopStatus || 'collected'
-                    }
-                });
+                const normalized = buildTemplateFromState();
                 await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, normalized);
                 // Keep the latest values on screen after save
                 setContacts(normalized.recipients);
@@ -4335,6 +4348,7 @@ Abcotronics`;
                 setRecipientName(normalized.recipientName || '');
                 setScheduleFrequency(normalized.schedule.frequency);
                 setScheduleStopStatus(normalized.schedule.stopWhenStatus);
+                setLastSavedTemplate(normalized);
                 setResult({ saved: true, message: 'Saved changes', source: 'save' });
                 showSaveNotice({ type: 'success', message: 'Saved changes' });
                 setTimeout(() => setResult(prev => (prev?.saved ? null : prev)), 2000);
@@ -4527,6 +4541,10 @@ Abcotronics`;
 
         const hasSuccess = result && result.sent && result.sent.length > 0;
         const hasFailures = result && result.failed && result.failed.length > 0;
+        const currentTemplate = buildTemplateFromState();
+        const hasUnsavedChanges = lastSavedTemplate
+            ? JSON.stringify(currentTemplate) !== JSON.stringify(lastSavedTemplate)
+            : false;
         const bodyPreview = applyGreeting(body || '', recipientName);
         const bodyStats = sanitizeBodyText(bodyPreview, false);
         const bodyCharCount = (bodyPreview || '').trim().length;
@@ -5135,6 +5153,12 @@ Abcotronics`;
                         >
                             {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
                         </button>
+                        {!savingTemplate && lastSavedTemplate && !hasUnsavedChanges && (
+                            <span className="text-xs text-emerald-600 font-medium">Saved</span>
+                        )}
+                        {!savingTemplate && hasUnsavedChanges && (
+                            <span className="text-xs text-amber-600 font-medium">Unsaved changes</span>
+                        )}
                         {result?.source === 'save' && result?.saved && (
                             <span className="text-xs text-emerald-600 font-medium">Saved changes</span>
                         )}

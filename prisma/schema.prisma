@@ -792,6 +792,20 @@ model DocumentRequestEmailSent {
   @@index([messageId])
 }
 
+// Tracks processed inbound reply emails to prevent duplicate comments on retries
+model DocumentRequestEmailReceived {
+  id         String   @id @default(cuid())
+  emailId    String   @unique // Resend receiving email ID
+  projectId  String
+  documentId String   // DocumentItem.id (itemId)
+  year       Int
+  month      Int
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, documentId, year, month])
+  @@index([createdAt])
+}
+
 // Dedicated log for "Email activity" in document request modal (one row per sent event; read path is simple and reliable)
 model DocumentCollectionEmailLog {
   id             String   @id @default(cuid())

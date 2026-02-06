@@ -97,6 +97,12 @@ function normalizeIdentifier(value) {
   return String(value || '').trim()
 }
 
+function isMissingTableError(err) {
+  const code = err && err.code
+  const msg = String(err && err.message ? err.message : '')
+  return code === 'P2021' || msg.toLowerCase().includes('does not exist') || msg.toLowerCase().includes('unknown table')
+}
+
 function matchUserFromIdentifier(user, identifier) {
   if (!user || !identifier) return false
   const id = user.id || user._id
@@ -1017,6 +1023,19 @@ async function processReceivedEmail(emailId, apiKey, data) {
     const bodyText = emailBodyText(email)
     const fromStr = (email.from || '').toString().replace(/^.*<([^>]+)>.*$/, '$1').trim() || 'unknown'
 
+    // Idempotency: if we've already processed this Resend emailId, skip to avoid duplicates.
+    if (emailId && prisma.documentRequestEmailReceived) {
+      try {
+        const existing = await prisma.documentRequestEmailReceived.findUnique({ where: { emailId } })
+        if (existing) {
+          console.log('document-request-reply: duplicate received email, skipping', { emailId })
+          return
+        }
+      } catch (dupCheckErr) {
+        if (!isMissingTableError(dupCheckErr)) throw dupCheckErr
+      }
+    }
+
     const webhookAttachments = data.attachments && Array.isArray(data.attachments) ? data.attachments : null
     const uploaded = await pullAttachmentsFromResendAndSave(emailId, apiKey, webhookAttachments, email, __dirname)
     console.log('document-request-reply: attachments', { emailId, savedCount: uploaded.length })
@@ -1035,17 +1054,45 @@ async function processReceivedEmail(emailId, apiKey, data) {
       .join('')
       .trim()
 
-    await prisma.documentItemComment.create({
-      data: {
-        itemId,
-        year,
-        month,
-        text: commentText,
-        author: 'Email from Client',
-        authorId: null,
-        attachments: JSON.stringify(uploaded)
+    const commentData = {
+      itemId,
+      year,
+      month,
+      text: commentText,
+      author: 'Email from Client',
+      authorId: null,
+      attachments: JSON.stringify(uploaded)
+    }
+
+    let commentCreated = false
+    if (emailId && prisma.documentRequestEmailReceived) {
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          const existing = await tx.documentRequestEmailReceived.findUnique({ where: { emailId } })
+          if (existing) return { skipped: true }
+          const created = await tx.documentItemComment.create({ data: commentData })
+          await tx.documentRequestEmailReceived.create({
+            data: { emailId, projectId, documentId: itemId, year, month }
+          })
+          return { skipped: false, id: created.id }
+        })
+        if (result && result.skipped) {
+          console.log('document-request-reply: duplicate received email, skipping', { emailId })
+          return
+        }
+        commentCreated = true
+      } catch (txErr) {
+        if (txErr && txErr.code === 'P2002') {
+          console.log('document-request-reply: duplicate received email, skipping', { emailId })
+          return
+        }
+        if (!isMissingTableError(txErr)) throw txErr
       }
-    })
+    }
+
+    if (!commentCreated) {
+      await prisma.documentItemComment.create({ data: commentData })
+    }
 
     console.log('document-request-reply: comment created', { projectId, itemId, year, month, attachmentsAdded: uploaded.length })
 
