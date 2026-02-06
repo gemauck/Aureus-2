@@ -3798,14 +3798,16 @@ const getAssigneeColor = (identifier, users) => {
         const projectName = project?.name || 'Project';
         const currentPeriodText = `${month} ${selectedYear}`.trim();
         const defaultSubject = `Abco Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
-        const defaultBody = `Dear Sir/Madam,
+        const defaultBody = `Hello,
 
-We kindly request the following document(s) / data for our records:
+We are following up regarding the documents below. This request is for our internal records and audit trail.
 
+Requested details:
 • Document / Data: ${docName}
 • Period: ${currentPeriodText}
 • Project: ${projectName}
 
+If any items are unavailable, please let us know so we can update our records accordingly.
 Please send these at your earliest convenience.
 
 Kind regards,
@@ -3817,6 +3819,8 @@ Abcotronics`;
         const [newContactCc, setNewContactCc] = useState('');
         const [subject, setSubject] = useState(defaultSubject);
         const [body, setBody] = useState(defaultBody);
+        const [recipientName, setRecipientName] = useState('');
+        const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
         const [scheduleStopStatus, setScheduleStopStatus] = useState('collected');
         const [sending, setSending] = useState(false);
@@ -3868,6 +3872,8 @@ Abcotronics`;
             const savedBody = typeof s.body === 'string' && s.body.trim() ? s.body : null;
             setSubject(savedSubject ? ensureAbcoSubject(withCurrentPeriod(savedSubject)) : defaultSubject);
             setBody(savedBody ? withoutSectionLine(withCurrentPeriod(savedBody)) : defaultBody);
+            setRecipientName('');
+            setRemoveExternalLinks(true);
             setScheduleFrequency(s.schedule?.frequency === 'weekly' || s.schedule?.frequency === 'monthly' ? s.schedule.frequency : 'none');
             setScheduleStopStatus(typeof s.schedule?.stopWhenStatus === 'string' ? s.schedule.stopWhenStatus : 'collected');
             setNewContact('');
@@ -4131,6 +4137,77 @@ Abcotronics`;
             }
         });
 
+        const MIN_BODY_CHARS = 140;
+        const URL_RE = /(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/gi;
+        const SHORTENER_HOSTS = new Set([
+            'bit.ly',
+            'tinyurl.com',
+            't.co',
+            'goo.gl',
+            'ow.ly',
+            'buff.ly',
+            'is.gd',
+            'cutt.ly'
+        ]);
+
+        const extractUrls = (text) => {
+            if (!text || typeof text !== 'string') return [];
+            const matches = text.match(URL_RE) || [];
+            return matches.map((m) => m.replace(/[),.;]+$/g, ''));
+        };
+
+        const toUrl = (value) => {
+            if (!value) return null;
+            const raw = value.startsWith('http') ? value : `https://${value}`;
+            try {
+                return new URL(raw);
+            } catch (_) {
+                return null;
+            }
+        };
+
+        const isSuspiciousUrl = (raw) => {
+            const u = toUrl(raw);
+            if (!u) return true;
+            const host = (u.hostname || '').toLowerCase();
+            if (!host) return true;
+            if (SHORTENER_HOSTS.has(host)) return true;
+            if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;
+            if (/[a-f0-9]{16,}/i.test(host)) return true;
+            if (/[a-f0-9]{20,}/i.test(u.pathname || '')) return true;
+            return false;
+        };
+
+        const applyGreeting = (text, name) => {
+            if (!text || typeof text !== 'string') return text;
+            const n = (name || '').trim();
+            if (!n) return text;
+            const lines = text.split('\n');
+            const firstIdx = lines.findIndex((l) => l.trim().length > 0);
+            if (firstIdx === -1) return text;
+            const first = lines[firstIdx].trim();
+            if (/^(hello|hi|dear)\b/i.test(first)) {
+                lines[firstIdx] = `Hello ${n},`;
+                return lines.join('\n');
+            }
+            return text;
+        };
+
+        const sanitizeBodyText = (text, shouldRemoveLinks) => {
+            const urls = extractUrls(text);
+            const suspicious = urls.filter((u) => isSuspiciousUrl(u));
+            if (!shouldRemoveLinks || urls.length === 0) {
+                return { cleanedBody: text, removedUrls: [], suspiciousUrls: suspicious, allUrls: urls };
+            }
+            let cleanedBody = text;
+            urls.forEach((u) => {
+                const escaped = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                cleanedBody = cleanedBody.replace(new RegExp(escaped, 'g'), '').replace(/\(\s*\)/g, '');
+            });
+            cleanedBody = cleanedBody.replace(/\n{3,}/g, '\n\n').trim();
+            return { cleanedBody, removedUrls: urls, suspiciousUrls: suspicious, allUrls: urls };
+        };
+
         const autoSaveTemplateIfChanged = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
             const current = normalizeTemplate({
@@ -4227,6 +4304,12 @@ Abcotronics`;
                 alert('Please enter the email body.');
                 return;
             }
+            const bodyWithGreeting = applyGreeting(body.trim(), recipientName);
+            const sanitized = sanitizeBodyText(bodyWithGreeting, removeExternalLinks);
+            if (sanitized.cleanedBody.trim().length < MIN_BODY_CHARS) {
+                alert(`Please add more detail to the message (at least ${MIN_BODY_CHARS} characters). This improves deliverability.`);
+                return;
+            }
             setSending(true);
             setResult(null);
             try {
@@ -4235,7 +4318,7 @@ Abcotronics`;
                 const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
                 const requester = getCurrentUser();
                 const requesterEmail = requester?.email && emailRe.test(requester.email) ? requester.email : '';
-                const htmlPayload = buildStyledEmailHtml(subject.trim(), body.trim());
+                const htmlPayload = buildStyledEmailHtml(subject.trim(), sanitized.cleanedBody.trim());
                 const monthNum = ctx?.month && months.indexOf(ctx.month) >= 0 ? months.indexOf(ctx.month) + 1 : null;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
                 const hasCellKeys = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
@@ -4256,7 +4339,7 @@ Abcotronics`;
                         cc: contactsCc.length > 0 ? contactsCc : undefined,
                         subject: subject.trim(),
                         html: htmlPayload,
-                        text: body.trim(),
+                        text: sanitized.cleanedBody.trim(),
                         ...(requesterEmail ? { requesterEmail } : {}),
                         ...(hasCellKeys
                             ? {
@@ -4277,10 +4360,14 @@ Abcotronics`;
                     setResult({ error: data.error || json.error || 'Failed to send' });
                     return;
                 }
+                const deliveryWarning = sanitized.suspiciousUrls.length > 0
+                    ? `Warning: ${sanitized.suspiciousUrls.length} URL(s) look risky for spam filters. Consider removing them.`
+                    : null;
                 setResult({
                     sent: sentList,
                     failed: failedList,
-                    ...((data.warning || json.warning || (res.status === 503 ? (data.error || json.error) : null)) ? { warning: data.warning || json.warning || data.error || json.error || 'Activity could not be saved.' } : {})
+                    ...((data.warning || json.warning || (res.status === 503 ? (data.error || json.error) : null)) ? { warning: data.warning || json.warning || data.error || json.error || 'Activity could not be saved.' } : {}),
+                    ...(deliveryWarning ? { warning: [data.warning || json.warning, deliveryWarning].filter(Boolean).join(' ') } : {})
                 });
                 if (sentList.length > 0) {
                     showEmailSentToast();
@@ -4331,6 +4418,10 @@ Abcotronics`;
 
         const hasSuccess = result && result.sent && result.sent.length > 0;
         const hasFailures = result && result.failed && result.failed.length > 0;
+        const bodyPreview = applyGreeting(body || '', recipientName);
+        const bodyStats = sanitizeBodyText(bodyPreview, false);
+        const bodyCharCount = (bodyPreview || '').trim().length;
+        const urlCount = bodyStats.allUrls.length;
 
         return (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -4474,6 +4565,24 @@ Abcotronics`;
                             />
                         </div>
 
+                        {/* Recipient name */}
+                        <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-2">
+                                <i className="fas fa-user text-[#0369a1] text-sm"></i>
+                                <label className="text-sm font-medium text-gray-800">Recipient name (optional)</label>
+                            </div>
+                            <input
+                                type="text"
+                                value={recipientName}
+                                onChange={(e) => setRecipientName(e.target.value)}
+                                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 transition-shadow"
+                                placeholder="e.g., Thabo"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                                Applies when the message starts with “Hello”, “Hi”, or “Dear”.
+                            </p>
+                        </div>
+
                         {/* Body */}
                         <div className="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
                             <div className="flex items-center gap-2 mb-2">
@@ -4487,6 +4596,21 @@ Abcotronics`;
                                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9] placeholder-gray-400 resize-y font-sans leading-relaxed"
                                 placeholder="Draft your request..."
                             />
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+                                <span>{bodyCharCount} characters {bodyCharCount < MIN_BODY_CHARS ? `(min ${MIN_BODY_CHARS})` : ''}</span>
+                                <span>{urlCount} link{urlCount === 1 ? '' : 's'} detected</span>
+                            </div>
+                            {urlCount > 0 && (
+                                <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
+                                    <input
+                                        type="checkbox"
+                                        checked={removeExternalLinks}
+                                        onChange={(e) => setRemoveExternalLinks(e.target.checked)}
+                                        className="rounded border-gray-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
+                                    />
+                                    Remove external links before sending (recommended)
+                                </label>
+                            )}
                         </div>
 
                         {/* Schedule: repeat until status */}
