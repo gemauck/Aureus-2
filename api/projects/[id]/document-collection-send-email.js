@@ -213,26 +213,48 @@ async function handler(req, res) {
         }
       } else {
         // Initial sends: use DocumentCollectionEmailLog
+        const logData = {
+          projectId: cell.projectId,
+          documentId: cell.documentId,
+          year: cell.year,
+          month: cell.month,
+          kind: 'sent',
+          ...(sectionId ? { sectionId } : {}),
+          ...(subject ? { subject: subject.slice(0, 1000) } : {}),
+          ...(bodyForStorage ? { bodyText: bodyForStorage } : {}),
+          ...(providerMessageId ? { messageId: providerMessageId } : {}),
+          ...(trackingId ? { trackingId } : {})
+        }
+        const minimalLogData = {
+          projectId: cell.projectId,
+          documentId: cell.documentId,
+          year: cell.year,
+          month: cell.month,
+          kind: 'sent'
+        }
         try {
-          const log = await prisma.documentCollectionEmailLog.create({
-            data: {
-              projectId: cell.projectId,
-              documentId: cell.documentId,
-              year: cell.year,
-              month: cell.month,
-              kind: 'sent',
-              ...(sectionId ? { sectionId } : {}),
-              ...(subject ? { subject: subject.slice(0, 1000) } : {}),
-              ...(bodyForStorage ? { bodyText: bodyForStorage } : {}),
-              ...(providerMessageId ? { messageId: providerMessageId } : {}),
-              ...(trackingId ? { trackingId } : {})
-            }
-          })
+          const log = await prisma.documentCollectionEmailLog.create({ data: logData })
           activityPersisted = true
           logId = log.id
           console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
         } catch (logErr) {
-          console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId })
+          const msg = String(logErr?.message || '')
+          const isSchemaMismatch =
+            msg.includes('Unknown field') ||
+            msg.toLowerCase().includes('unknown column') ||
+            msg.toLowerCase().includes('does not exist')
+          if (isSchemaMismatch) {
+            try {
+              const log = await prisma.documentCollectionEmailLog.create({ data: minimalLogData })
+              activityPersisted = true
+              logId = log.id
+              console.log('document-collection-send-email: activity log created (minimal)', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
+            } catch (retryErr) {
+              console.error('document-collection-send-email: log create failed (minimal):', retryErr.message, { projectId: cell.projectId, documentId: cell.documentId })
+            }
+          } else {
+            console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId })
+          }
         }
       }
 

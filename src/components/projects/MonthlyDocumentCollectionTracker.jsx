@@ -4455,6 +4455,11 @@ Abcotronics`;
                     headers: {
                         'Content-Type': 'application/json',
                         Accept: 'application/json',
+                        ...(hasCellKeys ? {
+                            'X-Document-Id': String(ctx.doc.id).trim(),
+                            'X-Month': String(monthNum),
+                            'X-Year': String(yearNum)
+                        } : {}),
                         ...(token ? { Authorization: `Bearer ${token}` } : {})
                     },
                     body: JSON.stringify({
