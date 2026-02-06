@@ -3805,7 +3805,7 @@ const getAssigneeColor = (identifier, users) => {
         const projectName = project?.name || 'Project';
         const currentPeriodText = `${month} ${selectedYear}`.trim();
         const defaultSubject = `Abco Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
-        const defaultBody = `Hello,
+        const defaultBody = `Hello Recipient Name,
 
 We are following up regarding the documents below. This request is for our internal records and audit trail.
 
@@ -3830,7 +3830,7 @@ Abcotronics`;
         const [saveNotice, setSaveNotice] = useState(null);
         const [lastSavedTemplate, setLastSavedTemplate] = useState(null);
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
-        const [sendPlainTextOnly, setSendPlainTextOnly] = useState(true);
+        const [sendPlainTextOnly, setSendPlainTextOnly] = useState(false);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
         const [scheduleStopStatus, setScheduleStopStatus] = useState('collected');
         const [sending, setSending] = useState(false);
@@ -3876,8 +3876,21 @@ Abcotronics`;
             return `Abco ${t}`;
         };
 
+        const getLatestEmailRequest = () => {
+            if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return {};
+            const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0
+                ? sectionsRef.current
+                : sectionsByYear;
+            const currentYearSections = latestSectionsByYear?.[selectedYear] || [];
+            const sectionMatch = currentYearSections.find((s) => String(s.id) === String(ctx.section.id));
+            const docMatch = (sectionMatch?.documents || []).find((d) => String(d.id) === String(ctx.doc.id));
+            if (!docMatch) return {};
+            const monthKey = getMonthKey(ctx.month, selectedYear);
+            return docMatch.emailRequestByMonth?.[monthKey] || {};
+        };
+
         useEffect(() => {
-            const s = getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear);
+            const s = getLatestEmailRequest();
             const initialTemplate = buildTemplateFromSaved(s);
             setContacts(initialTemplate.recipients);
             setContactsCc(initialTemplate.cc);
@@ -3885,7 +3898,7 @@ Abcotronics`;
             setBody(initialTemplate.body || defaultBody);
             setRecipientName(initialTemplate.recipientName || '');
             setRemoveExternalLinks(true);
-            setSendPlainTextOnly(true);
+            setSendPlainTextOnly(false);
             setScheduleFrequency(initialTemplate.schedule.frequency);
             setScheduleStopStatus(initialTemplate.schedule.stopWhenStatus);
             setNewContact('');
@@ -4326,7 +4339,7 @@ Abcotronics`;
         const autoSaveTemplateIfChanged = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
             const current = buildTemplateFromState();
-            const saved = lastSavedTemplate || buildTemplateFromSaved(getEmailRequestForYear(ctx?.doc, ctx?.month, selectedYear));
+            const saved = lastSavedTemplate || buildTemplateFromSaved(getLatestEmailRequest());
             const hasInput = current.recipients.length > 0 || current.cc.length > 0 || current.subject || current.body;
             if (!hasInput) return;
             if (JSON.stringify(current) === JSON.stringify(saved)) return;

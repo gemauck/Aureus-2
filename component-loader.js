@@ -306,6 +306,11 @@
                 }
             }
 
+            if (path.includes('components/projects/MonthlyDocumentCollectionTracker')) {
+                const buildVersion = window.__APP_BUILD_VERSION__ || window.BUILD_VERSION || Date.now();
+                applyDynamicCacheBust(`doc-collection-tracker-${buildVersion}`);
+            }
+
             if (path.includes('components/manufacturing/JobCards.jsx')) {
                 applyDynamicCacheBust('jobcards-mobile-toggle-v20251111');
             }
