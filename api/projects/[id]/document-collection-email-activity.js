@@ -27,6 +27,25 @@ function parseCcFromText(text) {
   return [...new Set(emails)]
 }
 
+function buildSentSelect({ includeMessageId = true } = {}) {
+  const select = {
+    id: true,
+    createdAt: true,
+    subject: true,
+    bodyText: true,
+    messageId: true,
+    deliveryStatus: true,
+    deliveredAt: true,
+    bouncedAt: true,
+    bounceReason: true,
+    lastEventAt: true
+  }
+  if (!includeMessageId) {
+    delete select.messageId
+  }
+  return select
+}
+
 async function handler(req, res) {
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
   if (!projectId) {
@@ -148,42 +167,58 @@ async function handler(req, res) {
   let sent = []
   try {
     if (prisma.documentCollectionEmailLog) {
-      const sentSelect = {
-        id: true,
-        createdAt: true,
-        subject: true,
-        bodyText: true,
-        messageId: true,
-        deliveryStatus: true,
-        deliveredAt: true,
-        bouncedAt: true,
-        bounceReason: true,
-        lastEventAt: true
+      let includeMessageId = true
+      try {
+        sent = await prisma.documentCollectionEmailLog.findMany({
+          where: sentWhere,
+          orderBy: { createdAt: 'asc' },
+          select: buildSentSelect({ includeMessageId })
+        })
+      } catch (logErr) {
+        const msg = String(logErr?.message || '')
+        if (msg.includes('Unknown field `messageId`')) {
+          includeMessageId = false
+          try {
+            sent = await prisma.documentCollectionEmailLog.findMany({
+              where: sentWhere,
+              orderBy: { createdAt: 'asc' },
+              select: buildSentSelect({ includeMessageId: false })
+            })
+          } catch (retryErr) {
+            console.error('document-collection-email-activity: log query failed (returning empty sent):', retryErr.message)
+          }
+        } else {
+          console.error('document-collection-email-activity: log query failed (returning empty sent):', logErr.message)
+        }
       }
-      sent = await prisma.documentCollectionEmailLog.findMany({
-        where: sentWhere,
-        orderBy: { createdAt: 'asc' },
-        select: sentSelect
-      })
       if (sent.length === 0) {
         const fallbackSelect = {
-          id: true,
-          createdAt: true,
           documentId: true,
-          subject: true,
-          bodyText: true,
-          messageId: true,
-          deliveryStatus: true,
-          deliveredAt: true,
-          bouncedAt: true,
-          bounceReason: true,
-          lastEventAt: true
+          ...buildSentSelect({ includeMessageId })
         }
-        const fallback = await prisma.documentCollectionEmailLog.findMany({
-          where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
-          orderBy: { createdAt: 'asc' },
-          select: fallbackSelect
-        })
+        let fallback = []
+        try {
+          fallback = await prisma.documentCollectionEmailLog.findMany({
+            where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+            orderBy: { createdAt: 'asc' },
+            select: fallbackSelect
+          })
+        } catch (fallbackErr) {
+          const msg = String(fallbackErr?.message || '')
+          if (msg.includes('Unknown field `messageId`')) {
+            const fallbackSelectNoMessageId = {
+              documentId: true,
+              ...buildSentSelect({ includeMessageId: false })
+            }
+            fallback = await prisma.documentCollectionEmailLog.findMany({
+              where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+              orderBy: { createdAt: 'asc' },
+              select: fallbackSelectNoMessageId
+            })
+          } else {
+            throw fallbackErr
+          }
+        }
         const exactMatch = fallback
           .filter((row) => String(row.documentId).trim() === String(cell.documentId).trim())
           .map(({ id, createdAt, subject, bodyText, messageId, deliveryStatus, deliveredAt, bouncedAt, bounceReason, lastEventAt }) => ({

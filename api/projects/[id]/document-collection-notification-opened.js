@@ -37,6 +37,9 @@ async function handler(req, res) {
   }
 
   try {
+    if (!prisma.documentCollectionNotificationRead) {
+      return ok(res, { success: false, skipped: true, reason: 'notifications_table_unavailable' })
+    }
     const now = new Date()
     await prisma.documentCollectionNotificationRead.upsert({
       where: {
@@ -64,6 +67,9 @@ async function handler(req, res) {
     return ok(res, { success: true })
   } catch (e) {
     console.error('POST document-collection-notification-opened error:', e)
+    if (e?.code === 'P2021' || /notificationread|does not exist/i.test(String(e?.message || ''))) {
+      return ok(res, { success: false, skipped: true, reason: 'notifications_table_unavailable' })
+    }
     return serverError(res, e.message || 'Failed to mark notification opened')
   }
 }
