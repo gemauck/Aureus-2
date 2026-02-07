@@ -3,7 +3,6 @@ const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
-const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
@@ -1193,48 +1192,16 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return `${year}-${monthStr}-W${weekStr}`;
     };
 
-const getMonthKeyForWeek = (week, year = selectedYear) => {
-    const weekKey = getWeekKey(week, year);
-    if (!weekKey) return null;
-    const parts = String(weekKey).split('-');
-    if (parts.length < 2) return null;
-    return `${parts[0]}-${parts[1]}`;
-};
-
-const getMonthLabelFromKey = (monthKey) => {
-    if (!monthKey) return '';
-    const parts = String(monthKey).split('-');
-    if (parts.length < 2) return '';
-    const monthIndex = parseInt(parts[1], 10) - 1;
-    if (Number.isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return '';
-    return MONTH_ABBREVIATIONS[monthIndex] || '';
-};
-
-const gridColumns = React.useMemo(() => {
-    const seenMonths = new Set();
-    const columns = [];
-    
-    weeks.forEach((week) => {
+const gridColumns = React.useMemo(() => (
+    weeks.map((week) => {
         const weekKey = getWeekKey(week, selectedYear);
-        columns.push({
+        return {
             type: 'week',
             week,
             key: `week-${weekKey || week.label || week.number}`
-        });
-        
-        const monthKey = getMonthKeyForWeek(week, selectedYear);
-        if (monthKey && !seenMonths.has(monthKey)) {
-            seenMonths.add(monthKey);
-            columns.push({
-                type: 'monthGoal',
-                monthKey,
-                key: `month-goal-${monthKey}`
-            });
-        }
-    });
-    
-    return columns;
-}, [weeks, selectedYear]);
+        };
+    })
+), [weeks, selectedYear]);
     
     // Get status for a specific week in the selected year only
     const getStatusForYear = (collectionStatus, week, year = selectedYear) => {
@@ -1421,7 +1388,6 @@ const gridColumns = React.useMemo(() => {
             const newSection = {
                 id: Date.now() + Math.random(),
                 ...sectionData,
-                monthlyGoals: sectionData.monthlyGoals || {},
                 documents: [],
                 reviewer: sectionData.reviewer || ''
             };
@@ -1472,44 +1438,6 @@ const gridColumns = React.useMemo(() => {
         saveToDatabase();
     };
 
-const handleMonthlyGoalChange = (sectionId, monthKey, value) => {
-    if (!sectionId || !monthKey) return;
-    
-    const currentState = sectionsRef.current || {};
-    const currentSections = currentState[selectedYear] || [];
-    const nextValue = String(value || '');
-    
-    const updated = currentSections.map(section => {
-        if (String(section.id) !== String(sectionId)) return section;
-        const currentGoals = section.monthlyGoals || {};
-        const updatedGoals = { ...currentGoals };
-        
-        if (nextValue.trim()) {
-            updatedGoals[monthKey] = nextValue;
-        } else {
-            delete updatedGoals[monthKey];
-        }
-        
-        return {
-            ...section,
-            monthlyGoals: updatedGoals
-        };
-    });
-    
-    const updatedSectionsByYear = {
-        ...currentState,
-        [selectedYear]: updated
-    };
-    
-    sectionsRef.current = updatedSectionsByYear;
-    setSectionsByYear(updatedSectionsByYear);
-};
-
-const getMonthlyGoalValue = (section, monthKey) => {
-    if (!section || !monthKey) return '';
-    return (section.monthlyGoals && section.monthlyGoals[monthKey]) || '';
-};
-    
     // Actual deletion logic extracted to separate function
     const performDeletion = async (sectionId, event) => {
         // Prevent event propagation to avoid interfering with other handlers
@@ -4566,34 +4494,19 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 Document / Data
                                             </th>
                                             {gridColumns.map((col) => {
-                                                if (col.type === 'week') {
-                                                    const week = col.week;
-                                                    return (
-                                                        <th
-                                                            key={col.key}
-                                                            className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
-                                                                workingWeeks.includes(week.number) && selectedYear === currentYear
-                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
-                                                                    : 'text-gray-700'
-                                                            }`}
-                                                            title={week.dateRange}
-                                                        >
-                                                            <div className="flex flex-col items-center gap-0.5">
-                                                                <span className="text-[10px]">{week.label}</span>
-                                                            </div>
-                                                        </th>
-                                                    );
-                                                }
-                                                
-                                                const monthLabel = getMonthLabelFromKey(col.monthKey);
+                                                const week = col.week;
                                                 return (
                                                     <th
                                                         key={col.key}
-                                                        className="px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider border-l-2 border-gray-200 bg-indigo-50 text-indigo-700"
+                                                        className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                            workingWeeks.includes(week.number) && selectedYear === currentYear
+                                                                ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                : 'text-gray-700'
+                                                        }`}
+                                                        title={week.dateRange}
                                                     >
                                                         <div className="flex flex-col items-center gap-0.5">
-                                                            <span>Goals</span>
-                                                            <span className="text-[10px] font-normal">{monthLabel}</span>
+                                                            <span className="text-[10px]">{week.label}</span>
                                                         </div>
                                                     </th>
                                                 );
@@ -4607,41 +4520,6 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                         className="bg-white divide-y divide-gray-200"
                                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                     >
-                                        <tr className="bg-gray-50">
-                                            <td
-                                                className="px-4 py-3 sticky left-0 bg-gray-50 z-20 border-r-2 border-gray-300"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
-                                            >
-                                                <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Monthly Goals</div>
-                                            </td>
-                                            {gridColumns.map((col) => {
-                                                if (col.type === 'week') {
-                                                    return (
-                                                        <td
-                                                            key={col.key}
-                                                            className="px-2 py-2 border-l border-gray-100 bg-gray-50"
-                                                        ></td>
-                                                    );
-                                                }
-                                                
-                                                const monthLabel = getMonthLabelFromKey(col.monthKey);
-                                                return (
-                                                    <td
-                                                        key={col.key}
-                                                        className="px-2 py-2 border-l-2 border-gray-200 bg-white"
-                                                    >
-                                                        <textarea
-                                                            className="w-full min-w-[160px] h-16 text-xs text-gray-800 border border-gray-200 rounded-md p-2 resize-y focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                                                            value={getMonthlyGoalValue(section, col.monthKey)}
-                                                            onChange={(e) => handleMonthlyGoalChange(section.id, col.monthKey, e.target.value)}
-                                                            placeholder={monthLabel ? `Goals for ${monthLabel}` : 'Monthly goals'}
-                                                            aria-label={`Monthly goals for ${section.name || 'section'} - ${monthLabel || 'month'} ${selectedYear}`}
-                                                        />
-                                                    </td>
-                                                );
-                                            })}
-                                            <td className="px-4 py-3 border-l-2 border-gray-200 bg-gray-50"></td>
-                                        </tr>
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={gridColumns.length + 2} className="px-8 py-12 text-center">
@@ -4811,22 +4689,11 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             </div>
                                                             </div>
                                                     </td>
-                                                    {gridColumns.map((col) => {
-                                                        if (col.type === 'week') {
-                                                            return (
-                                                                <React.Fragment key={`${doc.id}-${col.key}`}>
-                                                                    {renderStatusCell(section, doc, col.week)}
-                                                                </React.Fragment>
-                                                            );
-                                                        }
-                                                        
-                                                        return (
-                                                            <td
-                                                                key={`${doc.id}-${col.key}`}
-                                                                className="px-2 py-2 text-xs border-l border-gray-100 bg-gray-50"
-                                                            ></td>
-                                                        );
-                                                    })}
+                                                    {gridColumns.map((col) => (
+                                                        <React.Fragment key={`${doc.id}-${col.key}`}>
+                                                            {renderStatusCell(section, doc, col.week)}
+                                                        </React.Fragment>
+                                                    ))}
                                                     <td className="px-4 py-3 border-l-2 border-gray-200">
                                                         <div className="flex items-center gap-2 justify-center">
                                                             <button
