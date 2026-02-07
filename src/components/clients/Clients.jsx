@@ -6,11 +6,26 @@ const SectionCommentWidget = window.SectionCommentWidget;
 const safeStorage = {
     getClients: () => {
         const s = window.storage || {};
-        return typeof s.getClients === 'function' ? s.getClients() : null;
+        if (typeof s.getClients === 'function') {
+            return s.getClients();
+        }
+        try {
+            const cached = localStorage.getItem('abcotronics_clients');
+            return cached ? JSON.parse(cached) : null;
+        } catch (e) {
+            return null;
+        }
     },
     setClients: (data) => {
         const s = window.storage || {};
-        return typeof s.setClients === 'function' ? s.setClients(data) : null;
+        if (typeof s.setClients === 'function') {
+            return s.setClients(data);
+        }
+        try {
+            localStorage.setItem('abcotronics_clients', JSON.stringify(data));
+        } catch (e) {
+            return null;
+        }
     },
     getProjects: () => {
         const s = window.storage || {};
@@ -2678,6 +2693,80 @@ const Clients = React.memo(() => {
             }
         }, 1000);
     }, []); // Empty deps - only run on mount
+
+    // Listen for storage readiness to hydrate counts immediately
+    useEffect(() => {
+        const hydrateFromStorage = () => {
+            // Clients
+            if (clientsRef.current.length === 0) {
+                const cachedClients = safeStorage.getClients();
+                if (cachedClients && Array.isArray(cachedClients) && cachedClients.length > 0) {
+                    const filteredClients = cachedClients
+                        .filter(c => c.type === 'client' || !c.type)
+                        .map(client => {
+                            // Preserve restored group memberships if available
+                            let baseGroupMemberships = null;
+                            if (restoredGroupMembershipsRef.current.has(client.id)) {
+                                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                    baseGroupMemberships = [...restoredGroups];
+                                }
+                            }
+
+                            if (baseGroupMemberships === null) {
+                                baseGroupMemberships = client.groupMemberships;
+                            }
+
+                            const finalGroupMemberships = normalizeGroupMemberships(
+                                baseGroupMemberships,
+                                client.companyGroup || client.company_group || client.groups || client.group
+                            );
+
+                            return {
+                                ...client,
+                                isStarred: resolveStarredState(client),
+                                groupMemberships: finalGroupMemberships
+                            };
+                        });
+                    if (filteredClients.length > 0) {
+                        setClients(filteredClients);
+                    }
+                }
+            }
+
+            // Leads
+            if (leadsRef.current.length === 0) {
+                let cachedLeads = window.storage?.getLeads?.();
+                if (!cachedLeads || cachedLeads.length === 0) {
+                    const cachedClients = safeStorage.getClients() || [];
+                    cachedLeads = cachedClients.filter(c => c.type === 'lead');
+                }
+                if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
+                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads).map(lead => ({
+                        ...lead,
+                        isStarred: resolveStarredState(lead)
+                    }));
+                    setLeads(normalizedCachedLeads);
+                }
+            }
+
+            // Groups
+            if (groups.length === 0) {
+                const cachedGroups = safeStorage.getGroups();
+                if (cachedGroups && Array.isArray(cachedGroups) && cachedGroups.length > 0) {
+                    setGroups(cachedGroups);
+                }
+            }
+        };
+
+        window.addEventListener('storageReady', hydrateFromStorage);
+        // Run once in case storage is already available
+        hydrateFromStorage();
+
+        return () => {
+            window.removeEventListener('storageReady', hydrateFromStorage);
+        };
+    }, []); // One-time subscription
 
     // Calculate counts using useMemo to prevent flickering during data loads
     // Removed useEffect that was causing flickering - now calculated directly
