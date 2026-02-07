@@ -123,7 +123,7 @@ async function handler(req, res) {
           type: type || null,
           size: size ? parseInt(size) : null,
           mimeType: mimeType || null,
-          uploaderId: finalUploadedBy,
+          ...(finalUploadedBy ? { uploader: { connect: { id: String(finalUploadedBy) } } } : {}),
           tags: Array.isArray(tags) ? JSON.stringify(tags) : '[]',
         },
         include: {
