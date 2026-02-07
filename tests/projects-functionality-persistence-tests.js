@@ -308,6 +308,23 @@ async function testProjectDefaultsAndShape() {
   recordResult('Project Defaults & Shape', ok, ok ? 'Defaults and shapes OK' : details)
 }
 
+async function testAuthRequiredForSubresources() {
+  log('\n🧪 Testing: Subresource auth protection', 'info')
+  const endpoints = [
+    { name: 'Project Task Lists Auth', path: '/api/project-task-lists' },
+    { name: 'Project Custom Fields Auth', path: '/api/project-custom-fields' },
+    { name: 'Project Team Members Auth', path: '/api/project-team-members' },
+    { name: 'Project Documents Auth', path: '/api/project-documents' },
+    { name: 'Project Comments Auth', path: '/api/project-comments' },
+    { name: 'Project Activity Logs Auth', path: '/api/project-activity-logs' }
+  ]
+  for (const endpoint of endpoints) {
+    const res = await apiRequest(endpoint.path, 'POST', { projectId: 'unauth-test', name: 'X', text: 'X', type: 'test' }, null)
+    const ok = res.status === 401 || res.status === 403
+    recordResult(endpoint.name, ok, ok ? 'Auth required' : `Status: ${res.status}`)
+  }
+}
+
 async function testGetSingleProject() {
   log('\n🧪 Testing: Get Single Project', 'info')
   if (testResults.createdProjectIds.length === 0) {
@@ -453,6 +470,24 @@ async function testProjectTasksListSync() {
   recordResult('Project Tasks/Comments Persistence', ok, ok ? 'Tasks & comments persisted' : details)
 }
 
+async function testSubresourceInvalidProjectId() {
+  log('\n🧪 Testing: Subresources invalid projectId', 'info')
+  const badId = 'invalid-project-id'
+  const cases = [
+    { name: 'Task Lists Invalid Project', path: '/api/project-task-lists', body: { projectId: badId, name: 'X' } },
+    { name: 'Custom Fields Invalid Project', path: '/api/project-custom-fields', body: { projectId: badId, name: 'X', type: 'text' } },
+    { name: 'Team Members Invalid Project', path: '/api/project-team-members', body: { projectId: badId, userId: 'invalid-user' } },
+    { name: 'Documents Invalid Project', path: '/api/project-documents', body: { projectId: badId, name: 'X' } },
+    { name: 'Comments Invalid Project', path: '/api/project-comments', body: { projectId: badId, text: 'X' } },
+    { name: 'Activity Logs Invalid Project', path: '/api/project-activity-logs', body: { projectId: badId, type: 'test', description: 'X' } }
+  ]
+  for (const testCase of cases) {
+    const res = await apiRequest(testCase.path, 'POST', testCase.body)
+    const ok = res.status === 404
+    recordResult(testCase.name, ok, ok ? 'Rejected missing project' : `Status: ${res.status}`)
+  }
+}
+
 async function testProjectTaskListsCrud() {
   log('\n🧪 Testing: Project task lists CRUD', 'info')
   if (testResults.createdProjectIds.length === 0) return
@@ -485,6 +520,17 @@ async function testProjectTaskListsCrud() {
     updateRes.status === 200 && updated?.name === 'Test List Updated',
     updateRes.status === 200 ? 'List updated' : `Status: ${updateRes.status}`
   )
+
+  if (created?.listId != null) {
+    const dupRes = await apiRequest('/api/project-task-lists', 'POST', {
+      projectId,
+      listId: created.listId,
+      name: 'Duplicate List',
+      color: 'blue'
+    })
+    const dupOk = dupRes.status === 400
+    recordResult('Project Task Lists Duplicate', dupOk, dupOk ? 'Duplicate rejected' : `Status: ${dupRes.status}`)
+  }
 
   const delRes = await apiRequest(`/api/project-task-lists?id=${encodeURIComponent(created.id)}`, 'DELETE')
   recordResult('Project Task Lists Delete', delRes.status === 200, delRes.status === 200 ? 'List deleted' : `Status: ${delRes.status}`)
@@ -525,6 +571,18 @@ async function testProjectCustomFieldsCrud() {
     updateRes.status === 200 && updated?.name === 'Test Field Updated' && updated?.required === true,
     updateRes.status === 200 ? 'Field updated' : `Status: ${updateRes.status}`
   )
+
+  const fieldId = created?.fieldId || (Array.isArray(fields) ? fields.find((f) => f.id === created.id)?.fieldId : null)
+  if (fieldId) {
+    const dupRes = await apiRequest('/api/project-custom-fields', 'POST', {
+      projectId,
+      fieldId,
+      name: 'Duplicate Field',
+      type: 'text'
+    })
+    const dupOk = dupRes.status === 400
+    recordResult('Project Custom Fields Duplicate', dupOk, dupOk ? 'Duplicate rejected' : `Status: ${dupRes.status}`)
+  }
 
   const delRes = await apiRequest(`/api/project-custom-fields?id=${encodeURIComponent(created.id)}`, 'DELETE')
   recordResult('Project Custom Fields Delete', delRes.status === 200, delRes.status === 200 ? 'Field deleted' : `Status: ${delRes.status}`)
@@ -571,6 +629,14 @@ async function testProjectTeamMembersCrud() {
     updateRes.status === 200 ? 'Member updated' : `Status: ${updateRes.status}`
   )
 
+  const dupRes = await apiRequest('/api/project-team-members', 'POST', {
+    projectId,
+    userId,
+    role: 'member'
+  })
+  const dupOk = dupRes.status === 400
+  recordResult('Project Team Members Duplicate', dupOk, dupOk ? 'Duplicate rejected' : `Status: ${dupRes.status}`)
+
   const delRes = await apiRequest(`/api/project-team-members?id=${encodeURIComponent(created.id)}`, 'DELETE')
   recordResult('Project Team Members Delete', delRes.status === 200, delRes.status === 200 ? 'Member removed' : `Status: ${delRes.status}`)
 }
@@ -616,6 +682,12 @@ async function testProjectDocumentsCrud() {
   const docsAfter = apiData(listAfterRes).documents || []
   const removed = Array.isArray(docsAfter) && !docsAfter.some((d) => d.id === created.id)
   recordResult('Project Documents Soft Delete Filter', listAfterRes.status === 200 && removed, removed ? 'Document hidden' : 'Document still visible')
+
+  const missingNameRes = await apiRequest('/api/project-documents', 'POST', {
+    projectId
+  })
+  const missingNameOk = missingNameRes.status === 400
+  recordResult('Project Documents Validation', missingNameOk, missingNameOk ? 'Rejects missing name' : `Status: ${missingNameRes.status}`)
 }
 
 async function testProjectCommentsCrud() {
@@ -664,6 +736,10 @@ async function testProjectCommentsCrud() {
 
   const delRes = await apiRequest(`/api/project-comments?id=${encodeURIComponent(created.id)}`, 'DELETE')
   recordResult('Project Comments Delete', delRes.status === 200, delRes.status === 200 ? 'Comment deleted' : `Status: ${delRes.status}`)
+
+  const missingTextRes = await apiRequest('/api/project-comments', 'POST', { projectId })
+  const missingTextOk = missingTextRes.status === 400
+  recordResult('Project Comments Validation', missingTextOk, missingTextOk ? 'Rejects missing text' : `Status: ${missingTextRes.status}`)
 }
 
 async function testProjectActivityLogs() {
@@ -687,6 +763,13 @@ async function testProjectActivityLogs() {
   const logs = apiData(listRes).logs || []
   const logFound = Array.isArray(logs) && logs.some((l) => l.id === created.id)
   recordResult('Project Activity Logs Get', listRes.status === 200 && logFound, logFound ? 'Log found' : 'Log missing')
+
+  const missingTypeRes = await apiRequest('/api/project-activity-logs', 'POST', {
+    projectId,
+    description: 'Missing type'
+  })
+  const missingTypeOk = missingTypeRes.status === 400
+  recordResult('Project Activity Logs Validation', missingTypeOk, missingTypeOk ? 'Rejects missing type' : `Status: ${missingTypeRes.status}`)
 }
 
 async function testModuleFlagsPersistence() {
@@ -888,6 +971,7 @@ async function runAllTests() {
   await testCreateProjectValidation()
   await testCreateProject()
   await testProjectDefaultsAndShape()
+  await testAuthRequiredForSubresources()
   await testGetSingleProject()
   await testUpdateProjectBasic()
   await testModuleFlagsPersistence()
@@ -900,6 +984,7 @@ async function runAllTests() {
   await testGetTaskComments()
   await testUpdateTaskComment()
   await testProjectTasksListSync()
+  await testSubresourceInvalidProjectId()
   await testProjectTaskListsCrud()
   await testProjectCustomFieldsCrud()
   await testProjectTeamMembersCrud()
