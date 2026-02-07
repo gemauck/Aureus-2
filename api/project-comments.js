@@ -8,11 +8,26 @@ import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
 
+let projectCommentColumnsEnsured = false;
+async function ensureProjectCommentColumns() {
+  if (projectCommentColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectComment" ADD COLUMN IF NOT EXISTS "author" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectComment" ADD COLUMN IF NOT EXISTS "userName" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectComment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT \'comment\'');
+  } catch (e) {
+    console.warn('⚠️ ProjectComment column ensure failed:', e.message);
+  } finally {
+    projectCommentColumnsEnsured = true;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id: commentId, projectId } = req.query;
 
   try {
+    await ensureProjectCommentColumns();
     if (method === 'GET') {
       // Get comments for a project
       if (commentId) {

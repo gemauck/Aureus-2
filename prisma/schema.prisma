@@ -490,13 +490,17 @@ model Project {
 model ProjectTaskList {
   id        String   @id @default(cuid())
   projectId String
+  listId    Int      @default(0)
   name      String   @default("")
+  color     String   @default("blue")
   order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, listId])
   @@index([projectId])
+  @@index([listId])
 }
 
 model ProjectComment {
@@ -505,6 +509,9 @@ model ProjectComment {
   parentId  String?
   text      String          @default("")
   authorId  String?
+  author    String          @default("")
+  userName  String?         @default("")
+  type      String          @default("comment")
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   project   Project         @relation("ProjectComments", fields: [projectId], references: [id], onDelete: Cascade)
@@ -521,7 +528,13 @@ model ProjectDocument {
   id         String   @id @default(cuid())
   projectId  String
   name       String   @default("")
+  description String  @default("")
+  url        String?  @default("")
   filePath   String   @default("")
+  type       String?  @default("")
+  size       Int?
+  mimeType   String?  @default("")
+  tags       String   @default("[]")
   isActive   Boolean  @default(true)
   uploadDate DateTime @default(now())
   uploaderId String?
@@ -535,16 +548,19 @@ model ProjectDocument {
 }
 
 model ProjectTeamMember {
-  id        String   @id @default(cuid())
-  projectId String
-  userId    String?
-  addedById String?
-  addedDate DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user      User?    @relation("ProjectTeamMemberUser", fields: [userId], references: [id])
-  adder     User?    @relation("ProjectTeamMemberAdder", fields: [addedById], references: [id])
+  id          String   @id @default(cuid())
+  projectId   String
+  userId      String?
+  role        String   @default("member")
+  permissions String   @default("[]")
+  notes       String   @default("")
+  addedById   String?
+  addedDate   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User?    @relation("ProjectTeamMemberUser", fields: [userId], references: [id])
+  adder       User?    @relation("ProjectTeamMemberAdder", fields: [addedById], references: [id])
 
   @@index([projectId])
   @@index([userId])
@@ -552,27 +568,38 @@ model ProjectTeamMember {
 }
 
 model ProjectCustomFieldDefinition {
-  id        String   @id @default(cuid())
-  projectId String
-  name      String   @default("")
-  type      String   @default("text")
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  projectId    String
+  fieldId      String?
+  name         String   @default("")
+  type         String   @default("text")
+  required     Boolean  @default(false)
+  options      String   @default("[]")
+  defaultValue String?
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, fieldId])
   @@index([projectId])
 }
 
 model ProjectActivityLog {
-  id        String   @id @default(cuid())
-  projectId String
-  userId    String?
-  action    String   @default("")
-  details   String   @default("")
-  createdAt DateTime @default(now())
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user      User?    @relation("ProjectActivityLogUser", fields: [userId], references: [id])
+  id         String   @id @default(cuid())
+  projectId  String
+  userId     String?
+  userName   String?  @default("")
+  type       String   @default("")
+  description String  @default("")
+  metadata   String   @default("{}")
+  ipAddress  String?  @default("")
+  userAgent  String?  @default("")
+  action     String   @default("")
+  details    String   @default("")
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User?    @relation("ProjectActivityLogUser", fields: [userId], references: [id])
 
   @@index([projectId])
   @@index([userId])

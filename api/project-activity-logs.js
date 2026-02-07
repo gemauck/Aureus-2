@@ -7,11 +7,29 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 
+let activityLogColumnsEnsured = false;
+async function ensureActivityLogColumns() {
+  if (activityLogColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "userName" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "description" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "metadata" TEXT DEFAULT \'{}\'' );
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "ipAddress" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "userAgent" TEXT');
+  } catch (e) {
+    console.warn('⚠️ ProjectActivityLog column ensure failed:', e.message);
+  } finally {
+    activityLogColumnsEnsured = true;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id: logId, projectId, type, userId, startDate, endDate } = req.query;
 
   try {
+    await ensureActivityLogColumns();
     if (method === 'GET') {
       if (logId) {
         // Get single activity log entry

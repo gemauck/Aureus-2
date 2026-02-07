@@ -7,11 +7,27 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 
+let customFieldColumnsEnsured = false;
+async function ensureCustomFieldColumns() {
+  if (customFieldColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "fieldId" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "required" BOOLEAN DEFAULT false');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "options" TEXT DEFAULT \'[]\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "defaultValue" TEXT');
+  } catch (e) {
+    console.warn('⚠️ ProjectCustomFieldDefinition column ensure failed:', e.message);
+  } finally {
+    customFieldColumnsEnsured = true;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id, projectId } = req.query;
 
   try {
+    await ensureCustomFieldColumns();
     if (method === 'GET') {
       if (id) {
         // Get single custom field definition

@@ -7,11 +7,26 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 
+let teamMemberColumnsEnsured = false;
+async function ensureTeamMemberColumns() {
+  if (teamMemberColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTeamMember" ADD COLUMN IF NOT EXISTS "role" TEXT DEFAULT \'member\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTeamMember" ADD COLUMN IF NOT EXISTS "permissions" TEXT DEFAULT \'[]\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTeamMember" ADD COLUMN IF NOT EXISTS "notes" TEXT DEFAULT \'\'');
+  } catch (e) {
+    console.warn('⚠️ ProjectTeamMember column ensure failed:', e.message);
+  } finally {
+    teamMemberColumnsEnsured = true;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id, projectId, userId } = req.query;
 
   try {
+    await ensureTeamMemberColumns();
     if (method === 'GET') {
       if (id) {
         // Get single team member
@@ -145,7 +160,7 @@ async function handler(req, res) {
           role: String(role || 'member'),
           permissions: Array.isArray(permissions) ? JSON.stringify(permissions) : '[]',
           notes: notes || '',
-          addedBy: finalAddedBy,
+          addedById: finalAddedBy,
         },
         include: {
           user: {

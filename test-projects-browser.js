@@ -1,9 +1,10 @@
 /**
  * Browser-based test script for Projects functionality
  * Run this in the browser console after logging in
+ * Recommended: start from the Projects list page (#/projects)
  * 
  * Usage:
- * 1. Log in to https://abcoafrica.co.za
+ * 1. Log in to the ERP app
  * 2. Open browser console (F12)
  * 3. Copy and paste this entire script
  * 4. Press Enter to run
@@ -32,6 +33,63 @@
       results.errors.push({ test: testName, error: error?.message || error || 'Unknown error' });
       log(`${testName}: ${error?.message || error}`, 'fail');
     }
+  }
+
+  function findElementByText(selector, text) {
+    const elements = Array.from(document.querySelectorAll(selector));
+    return elements.find(el => (el.textContent || '').trim().toLowerCase().includes(text.toLowerCase()));
+  }
+
+  function hasProjectListVisible() {
+    const projectLinks = document.querySelectorAll('a[href*="#/projects/"], a[href*="/projects/"]');
+    const projectCards = document.querySelectorAll('[class*="project"], [data-project], [data-project-id]');
+    const tableRows = document.querySelectorAll('table tbody tr');
+    const emptyState = findElementByText('div, p, span', 'no projects') || findElementByText('div, p, span', 'create your first project');
+    return projectLinks.length > 0 || projectCards.length > 0 || tableRows.length > 0 || !!emptyState;
+  }
+
+  function hasProjectDetailTabs() {
+    const tabLabels = ['tasks', 'documents', 'comments', 'activity', 'timeline', 'kanban'];
+    const elements = Array.from(document.querySelectorAll('button, a, span, div'));
+    const matches = new Set();
+    elements.forEach(el => {
+      const text = (el.textContent || '').trim().toLowerCase();
+      tabLabels.forEach(label => {
+        if (text === label || text.includes(` ${label}`) || text.includes(`${label} `)) {
+          matches.add(label);
+        }
+      });
+    });
+    return matches.size >= 2;
+  }
+
+  // UI checks (Projects list and detail)
+  try {
+    const onProjectsRoute = window.location.hash.includes('#/projects') || window.location.pathname.includes('/projects');
+    recordResult('UI: On Projects Route', onProjectsRoute);
+    if (onProjectsRoute) {
+      const headerFound = !!findElementByText('h1, h2, h3', 'projects');
+      recordResult('UI: Projects Header', headerFound, headerFound ? null : 'Projects header not found');
+
+      const newButtonFound =
+        !!findElementByText('button, a', 'new project') ||
+        !!findElementByText('button, a', 'add project') ||
+        !!findElementByText('button, a', 'create project');
+      recordResult('UI: New Project Button', newButtonFound, newButtonFound ? null : 'New Project button not found');
+
+      const listVisible = hasProjectListVisible();
+      recordResult('UI: Project List Visible', listVisible, listVisible ? null : 'No project list or empty state detected');
+    }
+
+    const onProjectDetailRoute = /#\/projects\/[^/]+/.test(window.location.hash) || /\/projects\/[^/]+/.test(window.location.pathname);
+    if (onProjectDetailRoute) {
+      const tabsOk = hasProjectDetailTabs();
+      recordResult('UI: Project Detail Tabs', tabsOk, tabsOk ? null : 'Expected detail tabs not found');
+    } else {
+      log('UI: Project Detail Tabs skipped (not on detail page)', 'warn');
+    }
+  } catch (error) {
+    recordResult('UI: Projects Page Checks', false, error);
   }
 
   // Test 1: Check if DatabaseAPI is available

@@ -7,11 +7,29 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 
+let documentColumnsEnsured = false;
+async function ensureDocumentColumns() {
+  if (documentColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "description" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "url" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "type" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "size" INTEGER');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "mimeType" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "tags" TEXT DEFAULT \'[]\'');
+  } catch (e) {
+    console.warn('⚠️ ProjectDocument column ensure failed:', e.message);
+  } finally {
+    documentColumnsEnsured = true;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id: documentId, projectId, type } = req.query;
 
   try {
+    await ensureDocumentColumns();
     if (method === 'GET') {
       if (documentId) {
         // Get single document
@@ -105,7 +123,7 @@ async function handler(req, res) {
           type: type || null,
           size: size ? parseInt(size) : null,
           mimeType: mimeType || null,
-          uploadedBy: finalUploadedBy,
+          uploaderId: finalUploadedBy,
           tags: Array.isArray(tags) ? JSON.stringify(tags) : '[]',
         },
         include: {

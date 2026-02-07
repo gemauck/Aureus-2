@@ -7,11 +7,25 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 
+let taskListColumnsEnsured = false;
+async function ensureTaskListColumns() {
+  if (taskListColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTaskList" ADD COLUMN IF NOT EXISTS "listId" INTEGER DEFAULT 0');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTaskList" ADD COLUMN IF NOT EXISTS "color" TEXT DEFAULT \'blue\'');
+  } catch (e) {
+    console.warn('⚠️ ProjectTaskList column ensure failed:', e.message);
+  } finally {
+    taskListColumnsEnsured = true;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id, projectId } = req.query;
 
   try {
+    await ensureTaskListColumns();
     if (method === 'GET') {
       if (id) {
         // Get single task list
