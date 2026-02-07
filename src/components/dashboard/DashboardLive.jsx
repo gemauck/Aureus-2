@@ -50,6 +50,26 @@ const WidgetWrapper = ({ widgetDef, dashboardData }) => {
     return widgetDef.render(dashboardData);
 };
 
+const isDashboardTasksDebugEnabled = () => {
+    try {
+        return localStorage.getItem('DEBUG_DASHBOARD_TASKS') === 'true';
+    } catch (_error) {
+        return false;
+    }
+};
+
+const logTaskDebug = (...args) => {
+    if (isDashboardTasksDebugEnabled()) {
+        console.log(...args);
+    }
+};
+
+const warnTaskDebug = (...args) => {
+    if (isDashboardTasksDebugEnabled()) {
+        console.warn(...args);
+    }
+};
+
 // MyProjectTasksWidget - Separate component to properly use hooks
 const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     const [projectTasks, setProjectTasks] = React.useState([]);
@@ -64,14 +84,14 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.warn('⚠️ No token available for task loading');
+                warnTaskDebug('⚠️ No token available for task loading');
                 setProjectTasks([]);
                 setUserTasks([]);
                 setIsLoading(false);
                 return;
             }
             
-            console.log('🔑 Token available, loading tasks...');
+            logTaskDebug('🔑 Token available, loading tasks...');
 
             // Get current user ID
             const user = window.storage?.getUser?.();
@@ -98,11 +118,11 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                     if (Array.isArray(parsed)) {
                         cachedProjectTasks = parsed;
                         setProjectTasks(cachedProjectTasks); // Show cached project tasks immediately
-                        console.log('📋 Loaded cached project tasks:', cachedProjectTasks.length);
+                        logTaskDebug('📋 Loaded cached project tasks:', cachedProjectTasks.length);
                     }
                 }
             } catch (e) {
-                console.warn('Error reading offline tasks:', e);
+                warnTaskDebug('Error reading offline tasks:', e);
             }
             
             // IMMEDIATE: Hide loading spinner if we have any cached data
@@ -137,7 +157,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 throw new Error(`HTTP ${response.status}: ${errorText}`);
                             }
                             const data = await response.json();
-                            console.log('📋 Project tasks API response:', { 
+                            logTaskDebug('📋 Project tasks API response:', { 
                                 hasData: !!data, 
                                 hasDataData: !!data?.data, 
                                 hasDataDataTasks: !!data?.data?.tasks,
@@ -150,7 +170,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 : Array.isArray(data?.tasks)
                                     ? data.tasks
                                     : [];
-                            console.log('📋 Parsed project tasks:', tasks.length, tasks);
+                            logTaskDebug('📋 Parsed project tasks:', tasks.length, tasks);
                             // Save to localStorage for offline use
                             if (tasks.length > 0) {
                                 try {
@@ -158,12 +178,12 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                     const userId = user?.id || user?.email || 'anonymous';
                                     const projectTasksKey = `offline_project_tasks_${userId}`;
                                     localStorage.setItem(projectTasksKey, JSON.stringify(tasks));
-                                    console.log('💾 Saved project tasks to localStorage:', tasks.length);
+                                    logTaskDebug('💾 Saved project tasks to localStorage:', tasks.length);
                                 } catch (e) {
-                                    console.warn('Error saving project tasks to localStorage:', e);
+                                    warnTaskDebug('Error saving project tasks to localStorage:', e);
                                 }
                             } else {
-                                console.warn('⚠️ No project tasks found in API response');
+                                warnTaskDebug('⚠️ No project tasks found in API response');
                             }
                             
                             return {
@@ -179,10 +199,10 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                             });
                             // Use cached project tasks if API fails (for local development)
                             if (cachedProjectTasks.length > 0) {
-                                console.log('📦 Using cached project tasks:', cachedProjectTasks.length);
+                                logTaskDebug('📦 Using cached project tasks:', cachedProjectTasks.length);
                                 return { type: 'project', data: cachedProjectTasks };
                             }
-                            console.warn('⚠️ No cached project tasks available, returning empty array');
+                            warnTaskDebug('⚠️ No cached project tasks available, returning empty array');
                             return { type: 'project', data: [] };
                         }),
                     10000 // 10 second timeout (increased for database issues)
@@ -213,7 +233,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 try {
                                     localStorage.setItem(offlineUserTasksKey, JSON.stringify(apiTasks));
                                 } catch (e) {
-                                    console.warn('Error saving tasks to localStorage:', e);
+                                    warnTaskDebug('Error saving tasks to localStorage:', e);
                                 }
                             }
                             
@@ -223,7 +243,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                             };
                         })
                         .catch(err => {
-                            console.warn('Error loading user tasks from API:', err);
+                            warnTaskDebug('Error loading user tasks from API:', err);
                             // Keep cached data if API fails
                             return { type: 'user', data: cachedUserTasks };
                         }),
@@ -235,7 +255,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             // If we already have cached data, this runs in the background
             // If we don't have cached data, this will update when complete
             Promise.allSettled(loadPromises).then((results) => {
-                console.log('📊 Task loading results:', results.map(r => ({
+                logTaskDebug('📊 Task loading results:', results.map(r => ({
                     status: r.status,
                     type: r.status === 'fulfilled' ? r.value?.type : 'error',
                     taskCount: r.status === 'fulfilled' ? r.value?.data?.length : 0,
@@ -245,21 +265,21 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                     if (result.status === 'fulfilled') {
                         const { type, data } = result.value;
                         if (type === 'project') {
-                            console.log('✅ Setting project tasks:', data.length, '(cached:', cachedProjectTasks.length, ')');
+                            logTaskDebug('✅ Setting project tasks:', data.length, '(cached:', cachedProjectTasks.length, ')');
                             // Only update if we got fresh data (not just cached/empty)
                             // This prevents overwriting cached tasks with empty arrays from API
                             if (data.length > 0 || cachedProjectTasks.length === 0) {
                                 setProjectTasks(data);
                             } else {
-                                console.log('⚠️ Keeping cached project tasks (API returned empty, but we have cached data)');
+                                logTaskDebug('⚠️ Keeping cached project tasks (API returned empty, but we have cached data)');
                             }
                         } else if (type === 'user') {
                             // Only update if we got fresh data (not just cached)
                             if (data.length > 0 || cachedUserTasks.length === 0) {
-                                console.log('✅ Setting user tasks:', data.length);
+                                logTaskDebug('✅ Setting user tasks:', data.length);
                                 setUserTasks(data);
                             } else {
-                                console.log('⚠️ Keeping cached user tasks (API returned empty, but we have cached data)');
+                                logTaskDebug('⚠️ Keeping cached user tasks (API returned empty, but we have cached data)');
                             }
                         }
                     } else {
@@ -284,13 +304,13 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
 
     // Combine and sort tasks
     const allTasks = React.useMemo(() => {
-        console.log('🔄 Combining tasks - projectTasks:', projectTasks.length, 'userTasks:', userTasks.length);
+        logTaskDebug('🔄 Combining tasks - projectTasks:', projectTasks.length, 'userTasks:', userTasks.length);
         const combined = [
             ...projectTasks.map(t => ({ ...t, type: 'project' })),
             ...userTasks.map(t => ({ ...t, type: 'user', id: t.id || `user-task-${Date.now()}-${Math.random()}` }))
         ];
         
-        console.log('🔄 Combined tasks:', combined.length, combined);
+        logTaskDebug('🔄 Combined tasks:', combined.length, combined);
         
         // Sort by due date (overdue first, then by date)
         return combined.sort((a, b) => {

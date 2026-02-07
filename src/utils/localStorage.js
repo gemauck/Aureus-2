@@ -1,12 +1,171 @@
 // Local Storage Utilities
 
+function trimText(value, maxLength) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function minimizeClientForCache(client) {
+  if (!client || typeof client !== 'object') {
+    return client;
+  }
+  const {
+    id,
+    name,
+    type,
+    industry,
+    status,
+    stage,
+    revenue,
+    value,
+    probability,
+    lastContact,
+    address,
+    website,
+    ownerId,
+    ownerName,
+    externalAgentId,
+    externalAgent,
+    createdAt,
+    updatedAt,
+    thumbnail,
+    isStarred,
+    starredBy,
+    groupMemberships,
+    companyGroup,
+    company_group,
+    groups,
+    group,
+    notes
+  } = client;
+  return {
+    id,
+    name: trimText(name, 200),
+    type,
+    industry: trimText(industry, 100),
+    status,
+    stage,
+    revenue,
+    value,
+    probability,
+    lastContact,
+    address: trimText(address, 300),
+    website: trimText(website, 200),
+    ownerId,
+    ownerName,
+    externalAgentId,
+    externalAgent,
+    createdAt,
+    updatedAt,
+    thumbnail,
+    isStarred,
+    starredBy,
+    groupMemberships,
+    companyGroup,
+    company_group,
+    groups,
+    group,
+    notes: trimText(notes, 1000)
+  };
+}
+
+function minimizeLeadForCache(lead) {
+  if (!lead || typeof lead !== 'object') {
+    return lead;
+  }
+  const {
+    id,
+    name,
+    type,
+    industry,
+    status,
+    stage,
+    revenue,
+    value,
+    probability,
+    lastContact,
+    address,
+    website,
+    ownerId,
+    ownerName,
+    externalAgentId,
+    externalAgent,
+    createdAt,
+    updatedAt,
+    thumbnail,
+    isStarred,
+    starredBy,
+    groupMemberships,
+    companyGroup,
+    company_group,
+    groups,
+    group,
+    notes
+  } = lead;
+  return {
+    id,
+    name: trimText(name, 200),
+    type,
+    industry: trimText(industry, 100),
+    status,
+    stage,
+    revenue,
+    value,
+    probability,
+    lastContact,
+    address: trimText(address, 300),
+    website: trimText(website, 200),
+    ownerId,
+    ownerName,
+    externalAgentId,
+    externalAgent,
+    createdAt,
+    updatedAt,
+    thumbnail,
+    isStarred,
+    starredBy,
+    groupMemberships,
+    companyGroup,
+    company_group,
+    groups,
+    group,
+    notes: trimText(notes, 1000)
+  };
+}
+
+function minimizeCachePayload(key, value) {
+  if (key === 'abcotronics_clients' && Array.isArray(value)) {
+    return value.map(minimizeClientForCache);
+  }
+  if (key === 'abcotronics_leads' && Array.isArray(value)) {
+    return value.map(minimizeLeadForCache);
+  }
+  return value;
+}
+
 function safeSetItem(key, value) {
   try {
     localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
   } catch (e) {
     const isQuota = e && (e.name === 'QuotaExceededError' || e.code === 22);
     if (isQuota) {
-      console.warn('⚠️ localStorage quota exceeded, skipping cache for', key);
+      const minimized = minimizeCachePayload(key, value);
+      if (minimized !== value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(minimized));
+          console.warn('⚠️ localStorage quota exceeded, stored trimmed cache for', key);
+          return;
+        } catch (retryError) {
+          console.warn('⚠️ localStorage quota exceeded, skipping cache for', key);
+        }
+      } else {
+        console.warn('⚠️ localStorage quota exceeded, skipping cache for', key);
+      }
     } else {
       console.warn('⚠️ localStorage setItem failed for', key, e?.message || e);
     }

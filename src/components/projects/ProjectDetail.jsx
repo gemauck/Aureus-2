@@ -782,6 +782,210 @@ function initializeProjectDetail() {
             return propsEqual; // Return true if equal (skip re-render), false if different (re-render)
         });
     })();
+
+    // Extract MonthlyDataReviewProcessSection to handle loading and avoid remounts
+    const MonthlyDataReviewProcessSection = (() => {
+        const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
+
+        const MonthlyDataReviewProcessSectionInner = ({
+            project,
+            hasMonthlyDataReviewProcess,
+            activeSection,
+            onBack
+        }) => {
+            useEffectSection(() => {
+                return () => {
+                };
+            }, []);
+
+            const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
+            const { useCallback: useCallbackSection } = window.React;
+
+            const [trackerReady, setTrackerReady] = useStateSection(() => {
+                return !!(window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function');
+            });
+            const [isLoading, setIsLoading] = useStateSection(false);
+
+            useEffectSection(() => {
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    if (!trackerReady) {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                    }
+                    return;
+                }
+
+                if (trackerReady) {
+                    setTrackerReady(false);
+                }
+
+                setIsLoading(true);
+                let checkAttempts = 0;
+                const maxCheckAttempts = 50;
+                const checkInterval = setInterval(() => {
+                    checkAttempts++;
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        clearInterval(checkInterval);
+                    } else if (checkAttempts >= maxCheckAttempts) {
+                        clearInterval(checkInterval);
+                        setIsLoading(false);
+                    }
+                }, 100);
+
+                const handleViteReady = () => {
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        clearInterval(checkInterval);
+                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                    }
+                };
+                window.addEventListener('viteProjectsReady', handleViteReady);
+
+                return () => {
+                    clearInterval(checkInterval);
+                    window.removeEventListener('viteProjectsReady', handleViteReady);
+                };
+            }, []);
+
+            const loadTrackerComponent = useCallbackSection(() => {
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    setTrackerReady(true);
+                    return Promise.resolve(true);
+                }
+
+                if (window._monthlyTrackerLoadPromise) {
+                    return window._monthlyTrackerLoadPromise;
+                }
+
+                setIsLoading(true);
+
+                const loadPromise = new Promise((resolve) => {
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        window._monthlyTrackerLoadPromise = null;
+                        resolve(true);
+                        return;
+                    }
+
+                    const handleViteReady = () => {
+                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                            setTrackerReady(true);
+                            setIsLoading(false);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                            window._monthlyTrackerLoadPromise = null;
+                            resolve(true);
+                        }
+                    };
+                    window.addEventListener('viteProjectsReady', handleViteReady);
+
+                    if (window.loadComponent && typeof window.loadComponent === 'function') {
+                        window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
+                            .then(() => {
+                                let checkAttempts = 0;
+                                const maxCheckAttempts = 10;
+                                const checkInterval = setInterval(() => {
+                                    checkAttempts++;
+                                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                        setTrackerReady(true);
+                                        setIsLoading(false);
+                                        clearInterval(checkInterval);
+                                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                                        window._monthlyTrackerLoadPromise = null;
+                                        resolve(true);
+                                    } else if (checkAttempts >= maxCheckAttempts) {
+                                        clearInterval(checkInterval);
+                                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                                        setIsLoading(false);
+                                        window._monthlyTrackerLoadPromise = null;
+                                        resolve(false);
+                                    }
+                                }, 100);
+                            })
+                            .catch(() => {
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                setIsLoading(false);
+                                window._monthlyTrackerLoadPromise = null;
+                                resolve(false);
+                            });
+                    } else {
+                        let checkAttempts = 0;
+                        const maxCheckAttempts = 20;
+                        const checkInterval = setInterval(() => {
+                            checkAttempts++;
+                            if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                setTrackerReady(true);
+                                setIsLoading(false);
+                                clearInterval(checkInterval);
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                window._monthlyTrackerLoadPromise = null;
+                                resolve(true);
+                            } else if (checkAttempts >= maxCheckAttempts) {
+                                clearInterval(checkInterval);
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                setIsLoading(false);
+                                window._monthlyTrackerLoadPromise = null;
+                                resolve(false);
+                            }
+                        }, 100);
+                    }
+                });
+
+                window._monthlyTrackerLoadPromise = loadPromise;
+                return loadPromise;
+            }, []);
+
+            useEffectSection(() => {
+                if (trackerReady) return;
+                if (activeSection === 'monthlyDataReview' || hasMonthlyDataReviewProcess) {
+                    loadTrackerComponent();
+                }
+            }, [activeSection, hasMonthlyDataReviewProcess, trackerReady, loadTrackerComponent]);
+
+            if (activeSection !== 'monthlyDataReview') {
+                return null;
+            }
+
+            const currentTracker = window.MonthlyDocumentCollectionTracker;
+            const isComponentAvailable = currentTracker && typeof currentTracker === 'function';
+            const isComponentReady = trackerReady || isComponentAvailable;
+
+            if (!isComponentReady) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            {isLoading
+                                ? 'The Monthly Data Review tracker is loading...'
+                                : 'The component is being prepared...'}
+                        </p>
+                    </div>
+                );
+            }
+
+            const TrackerComponent = window.MonthlyDocumentCollectionTracker;
+            return (
+                <TrackerComponent
+                    key={`monthly-data-review-${project?.id || 'default'}`}
+                    project={project}
+                    onBack={handleBackToOverview}
+                    dataSource="monthlyDataReview"
+                />
+            );
+        };
+
+        return memo(MonthlyDataReviewProcessSectionInner, (prevProps, nextProps) => {
+            const projectIdEqual = prevProps.project?.id === nextProps.project?.id;
+            const hasProcessEqual = prevProps.hasMonthlyDataReviewProcess === nextProps.hasMonthlyDataReviewProcess;
+            const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
+            const onBackEqual = prevProps.onBack === nextProps.onBack;
+            return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual;
+        });
+    })();
     
     // Extract MonthlyFMSReviewProcessSection outside ProjectDetail to prevent recreation on every render
     const MonthlyFMSReviewProcessSection = (() => {
@@ -7752,25 +7956,15 @@ function initializeProjectDetail() {
             )}
 
             {/* Monthly Data Review tab - same functionality as Document Collection (tracker with year, sections, documents, status, comments) */}
-            {activeSection === 'monthlyDataReview' && hasMonthlyDataReviewProcess && (() => {
-                const TrackerComponent = window.MonthlyDocumentCollectionTracker;
-                if (TrackerComponent && typeof TrackerComponent === 'function') {
-                    return (
-                        <div key={`monthly-data-review-${project?.id || 'default'}`}>
-                            {window.React.createElement(TrackerComponent, {
-                                project: project,
-                                onBack: handleBackToOverview,
-                                dataSource: 'monthlyDataReview'
-                            })}
-                        </div>
-                    );
-                }
-                return (
-                    <div className="flex items-center justify-center p-8 text-gray-500">
-                        <span>Loading Monthly Data Review...</span>
-                    </div>
-                );
-            })()}
+            {hasMonthlyDataReviewProcess && (
+                <MonthlyDataReviewProcessSection
+                    key={`monthly-data-review-${project?.id || 'default'}`}
+                    project={project}
+                    hasMonthlyDataReviewProcess={hasMonthlyDataReviewProcess}
+                    activeSection={activeSection}
+                    onBack={handleBackToOverview}
+                />
+            )}
 
             {/* Modals */}
             {showListModal && listModalComponent && window.React && window.React.createElement(

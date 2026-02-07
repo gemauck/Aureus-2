@@ -60,6 +60,20 @@ const safeStorage = {
     }
 };
 
+const isClientsDebugEnabled = () => {
+    try {
+        return localStorage.getItem('DEBUG_CLIENTS') === 'true';
+    } catch (_error) {
+        return false;
+    }
+};
+
+const logClientsDebug = (...args) => {
+    if (isClientsDebugEnabled()) {
+        console.log(...args);
+    }
+};
+
 // Map of critical modal bundles to ensure they can be recovered if the initial script tag failed to load
 const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
@@ -2175,7 +2189,7 @@ const Clients = React.memo(() => {
                 // Debug: Check first entity from raw API response
                 if (apiClients.length > 0) {
                     const firstRaw = apiClients[0];
-                    console.log('🔍 First entity from raw API response:', {
+                    logClientsDebug('🔍 First entity from raw API response:', {
                         name: firstRaw.name,
                         type: firstRaw.type,
                         hasGroupMemberships: !!firstRaw.groupMemberships,
@@ -2195,7 +2209,7 @@ const Clients = React.memo(() => {
                         Array.isArray(c.groupMemberships) && 
                         c.groupMemberships.length > 0
                     );
-                    console.log(`📊 API Response Summary: ${apiClients.length} total, ${entitiesWithGroups.length} with groups`);
+                    logClientsDebug(`📊 API Response Summary: ${apiClients.length} total, ${entitiesWithGroups.length} with groups`);
                 }
                 
                 // If API returns no clients, use cached data
@@ -2215,7 +2229,7 @@ const Clients = React.memo(() => {
                 // Debug: Check first processed client/lead to see if data is preserved
                 if (processedClients.length > 0) {
                     const first = processedClients[0];
-                    console.log('🔍 First processed entity after processClientData:', {
+                    logClientsDebug('🔍 First processed entity after processClientData:', {
                         name: first.name,
                         type: first.type,
                         hasGroupMemberships: !!first.groupMemberships,
@@ -3528,27 +3542,27 @@ const Clients = React.memo(() => {
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             
             // Debug: Log raw API response to see what we're getting
-            console.log('🔍 Raw API response for leads:');
-            console.log('  - Total leads:', rawLeads.length);
+            logClientsDebug('🔍 Raw API response for leads:');
+            logClientsDebug('  - Total leads:', rawLeads.length);
             if (rawLeads.length > 0) {
                 // Check ALL leads for groupMemberships, not just first
                 rawLeads.forEach((lead, index) => {
                     if (lead.groupMemberships && Array.isArray(lead.groupMemberships) && lead.groupMemberships.length > 0) {
-                        console.log(`✅ Lead ${index + 1} (${lead.name}) HAS groupMemberships:`, JSON.stringify(lead.groupMemberships, null, 2));
+                        logClientsDebug(`✅ Lead ${index + 1} (${lead.name}) HAS groupMemberships:`, JSON.stringify(lead.groupMemberships, null, 2));
                     }
                 });
                 
                 const firstLead = rawLeads[0];
-                console.log('  - First lead name:', firstLead.name);
-                console.log('  - First lead ID:', firstLead.id);
-                console.log('  - First lead groupMemberships:', JSON.stringify(firstLead.groupMemberships, null, 2));
-                console.log('  - First lead has groupMemberships:', !!firstLead.groupMemberships);
-                console.log('  - First lead groupMemberships type:', typeof firstLead.groupMemberships);
-                console.log('  - First lead groupMemberships isArray:', Array.isArray(firstLead.groupMemberships));
+                logClientsDebug('  - First lead name:', firstLead.name);
+                logClientsDebug('  - First lead ID:', firstLead.id);
+                logClientsDebug('  - First lead groupMemberships:', JSON.stringify(firstLead.groupMemberships, null, 2));
+                logClientsDebug('  - First lead has groupMemberships:', !!firstLead.groupMemberships);
+                logClientsDebug('  - First lead groupMemberships type:', typeof firstLead.groupMemberships);
+                logClientsDebug('  - First lead groupMemberships isArray:', Array.isArray(firstLead.groupMemberships));
                 if (firstLead.groupMemberships && Array.isArray(firstLead.groupMemberships)) {
-                    console.log('  - First lead groupMemberships length:', firstLead.groupMemberships.length);
+                    logClientsDebug('  - First lead groupMemberships length:', firstLead.groupMemberships.length);
                     firstLead.groupMemberships.forEach((gm, i) => {
-                        console.log(`    [${i}] group:`, gm.group?.name || 'no name', 'id:', gm.group?.id || 'no id');
+                        logClientsDebug(`    [${i}] group:`, gm.group?.name || 'no name', 'id:', gm.group?.id || 'no id');
                     });
                 }
             }
@@ -3578,14 +3592,14 @@ const Clients = React.memo(() => {
                 // Lead ID normalized (generated fallback if needed)
                 // Debug: Log groupMemberships for first lead to verify API data
                 if (rawLeads.indexOf(lead) === 0) {
-                    console.log('🔍 First lead from API:', lead.name);
-                    console.log('  - Lead ID:', lead.id);
-                    console.log('  - groupMemberships:', JSON.stringify(lead.groupMemberships, null, 2));
-                    console.log('  - companyGroup:', lead.companyGroup);
-                    console.log('  - hasGroupMemberships:', !!lead.groupMemberships);
-                    console.log('  - groupMemberships type:', typeof lead.groupMemberships);
-                    console.log('  - groupMemberships isArray:', Array.isArray(lead.groupMemberships));
-                    console.log('  - All lead keys:', Object.keys(lead));
+                    logClientsDebug('🔍 First lead from API:', lead.name);
+                    logClientsDebug('  - Lead ID:', lead.id);
+                    logClientsDebug('  - groupMemberships:', JSON.stringify(lead.groupMemberships, null, 2));
+                    logClientsDebug('  - companyGroup:', lead.companyGroup);
+                    logClientsDebug('  - hasGroupMemberships:', !!lead.groupMemberships);
+                    logClientsDebug('  - groupMemberships type:', typeof lead.groupMemberships);
+                    logClientsDebug('  - groupMemberships isArray:', Array.isArray(lead.groupMemberships));
+                    logClientsDebug('  - All lead keys:', Object.keys(lead));
                 }
 
                 const parseArrayField = (value, fallback = []) => {
