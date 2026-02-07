@@ -136,12 +136,10 @@ async function handler(req, res) {
       }
 
       // Check if already a member
-      const existing = await prisma.projectTeamMember.findUnique({
+      const existing = await prisma.projectTeamMember.findFirst({
         where: {
-          projectId_userId: {
-            projectId: String(projectId),
-            userId: String(userId)
-          }
+          projectId: String(projectId),
+          userId: String(userId)
         }
       });
 

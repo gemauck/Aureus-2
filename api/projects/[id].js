@@ -10,6 +10,42 @@ import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMo
 let projectColumnsMigrated = false;
 /** Run Task order column migration at most once per process. */
 let taskOrderColumnMigrated = false;
+/** Run project subresource column migrations at most once per process. */
+let projectSubresourceColumnsMigrated = false;
+
+async function ensureProjectSubresourceColumns() {
+  if (projectSubresourceColumnsMigrated) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTaskList" ADD COLUMN IF NOT EXISTS "listId" INTEGER DEFAULT 0');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTaskList" ADD COLUMN IF NOT EXISTS "color" TEXT DEFAULT \'blue\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "fieldId" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "required" BOOLEAN DEFAULT false');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "options" TEXT DEFAULT \'[]\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectCustomFieldDefinition" ADD COLUMN IF NOT EXISTS "defaultValue" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTeamMember" ADD COLUMN IF NOT EXISTS "role" TEXT DEFAULT \'member\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTeamMember" ADD COLUMN IF NOT EXISTS "permissions" TEXT DEFAULT \'[]\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectTeamMember" ADD COLUMN IF NOT EXISTS "notes" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "description" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "url" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "type" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "size" INTEGER');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "mimeType" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectDocument" ADD COLUMN IF NOT EXISTS "tags" TEXT DEFAULT \'[]\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectComment" ADD COLUMN IF NOT EXISTS "author" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectComment" ADD COLUMN IF NOT EXISTS "userName" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectComment" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT \'comment\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "userName" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "description" TEXT DEFAULT \'\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "metadata" TEXT DEFAULT \'{}\'');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "ipAddress" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "ProjectActivityLog" ADD COLUMN IF NOT EXISTS "userAgent" TEXT');
+  } catch (migrationError) {
+    console.warn('⚠️ Project subresource column migration (non-critical):', migrationError.message?.substring(0, 120));
+  } finally {
+    projectSubresourceColumnsMigrated = true;
+  }
+}
 
 /**
  * Safely load project with all relations. Uses step-by-step loading so a missing
@@ -210,6 +246,8 @@ async function handler(req, res) {
             }
           }
         }
+
+        await ensureProjectSubresourceColumns();
 
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();

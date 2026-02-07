@@ -115,7 +115,7 @@ async function handler(req, res) {
 
       const document = await prisma.projectDocument.create({
         data: {
-          projectId: String(projectId),
+          project: { connect: { id: String(projectId) } },
           name: String(name),
           description: description || '',
           url: url || null,
