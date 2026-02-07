@@ -68,6 +68,7 @@ model User {
   sessions                  Session[]
   starredClients            StarredClient[]
   starredOpportunities      StarredOpportunity[]
+  ownedTags                 Tag[]                        @relation("TagOwner")
   tasks                     Task[]                       @relation("TaskAssignee")
   twoFactor                 TwoFactor?
   userTasks                 UserTask[]                   @relation("UserTaskOwner")
@@ -190,6 +191,7 @@ model Client {
   projects          Project[]
   salesOrders       SalesOrder[]
   starredBy         StarredClient[]
+  tags              ClientTag[]
   tickets           Ticket[]
 
   // Company Group fields (Multiple group memberships)
@@ -210,6 +212,36 @@ model Client {
   @@index([status])
   @@index([ownerId])
   @@index([externalAgentId])
+}
+
+model Tag {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  color       String      @default("#3B82F6")
+  description String      @default("")
+  ownerId     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  owner   User?        @relation("TagOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  clients ClientTag[]
+
+  @@index([ownerId])
+  @@index([name])
+}
+
+model ClientTag {
+  id        String   @id @default(cuid())
+  clientId  String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, tagId])
+  @@index([clientId])
+  @@index([tagId])
 }
 
 model ClientCompanyGroup {
