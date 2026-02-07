@@ -1064,7 +1064,7 @@ const ManagementMeetingNotes = () => {
         const sorted = [...normalizedWeeks].sort((a, b) => {
             const dateA = a.weekStart ? new Date(a.weekStart) : new Date(0);
             const dateB = b.weekStart ? new Date(b.weekStart) : new Date(0);
-            return dateB - dateA;
+            return dateA - dateB;
         });
         
         console.log('✅ Final processed weeks:', {

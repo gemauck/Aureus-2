@@ -25,7 +25,7 @@ const storage = {
         }
     },
     setToken: (token) => {
-        if (token) localStorage.setItem('abcotronics_token', token);
+        if (token) safeSetItem('abcotronics_token', token);
     },
     removeToken: () => {
         localStorage.removeItem('abcotronics_token');
@@ -42,7 +42,7 @@ const storage = {
     },
     
     setUser: (user) => {
-        localStorage.setItem('abcotronics_user', JSON.stringify(user));
+        safeSetItem('abcotronics_user', user);
     },
     
     removeUser: () => {
@@ -179,7 +179,7 @@ const storage = {
     },
     
     setTimeEntries: (entries) => {
-        localStorage.setItem('abcotronics_time_entries', JSON.stringify(entries));
+        safeSetItem('abcotronics_time_entries', entries);
     },
 
     // Invoices
@@ -194,7 +194,7 @@ const storage = {
     },
     
     setInvoices: (invoices) => {
-        localStorage.setItem('abcotronics_invoices', JSON.stringify(invoices));
+        safeSetItem('abcotronics_invoices', invoices);
     },
 
     // Users
@@ -209,7 +209,7 @@ const storage = {
     },
     
         setUsers: (users) => {
-            localStorage.setItem('abcotronics_users', JSON.stringify(users));
+            safeSetItem('abcotronics_users', users);
         },
 
         // User Invitations
@@ -224,7 +224,7 @@ const storage = {
         },
         
         setInvitations: (invitations) => {
-            localStorage.setItem('abcotronics_invitations', JSON.stringify(invitations));
+            safeSetItem('abcotronics_invitations', invitations);
         },
 
     // Team Documents
@@ -239,7 +239,7 @@ const storage = {
     },
     
     setTeamDocuments: (documents) => {
-        localStorage.setItem('abcotronics_team_documents', JSON.stringify(documents));
+        safeSetItem('abcotronics_team_documents', documents);
     },
 
     // Team Workflows
@@ -254,7 +254,7 @@ const storage = {
     },
     
     setTeamWorkflows: (workflows) => {
-        localStorage.setItem('abcotronics_team_workflows', JSON.stringify(workflows));
+        safeSetItem('abcotronics_team_workflows', workflows);
     },
 
     // Team Checklists
@@ -269,7 +269,7 @@ const storage = {
     },
     
     setTeamChecklists: (checklists) => {
-        localStorage.setItem('abcotronics_team_checklists', JSON.stringify(checklists));
+        safeSetItem('abcotronics_team_checklists', checklists);
     },
 
     // Team Notices
@@ -284,7 +284,7 @@ const storage = {
     },
     
     setTeamNotices: (notices) => {
-        localStorage.setItem('abcotronics_team_notices', JSON.stringify(notices));
+        safeSetItem('abcotronics_team_notices', notices);
     },
 
     // Management Meeting Notes
@@ -301,7 +301,7 @@ const storage = {
     },
     
     setManagementMeetingNotes: (notes) => {
-        localStorage.setItem('abcotronics_management_meeting_notes', JSON.stringify(notes));
+        safeSetItem('abcotronics_management_meeting_notes', notes);
     },
 
     // HR - Employees
@@ -316,7 +316,7 @@ const storage = {
     },
     
     setEmployees: (employees) => {
-        localStorage.setItem('abcotronics_employees', JSON.stringify(employees));
+        safeSetItem('abcotronics_employees', employees);
     },
 
     // HR - Leave Applications
@@ -331,7 +331,7 @@ const storage = {
     },
     
     setLeaveApplications: (applications) => {
-        localStorage.setItem('abcotronics_leave_applications', JSON.stringify(applications));
+        safeSetItem('abcotronics_leave_applications', applications);
     },
 
     // HR - Leave Balances
@@ -346,7 +346,7 @@ const storage = {
     },
     
     setLeaveBalances: (balances) => {
-        localStorage.setItem('abcotronics_leave_balances', JSON.stringify(balances));
+        safeSetItem('abcotronics_leave_balances', balances);
     },
 
     // HR - Attendance Records
@@ -361,7 +361,7 @@ const storage = {
     },
     
     setAttendanceRecords: (records) => {
-        localStorage.setItem('abcotronics_attendance_records', JSON.stringify(records));
+        safeSetItem('abcotronics_attendance_records', records);
     },
 
     // HR - Payroll Records
@@ -376,7 +376,7 @@ const storage = {
     },
     
     setPayrollRecords: (records) => {
-        localStorage.setItem('abcotronics_payroll_records', JSON.stringify(records));
+        safeSetItem('abcotronics_payroll_records', records);
     },
 
     // Job Cards
@@ -391,7 +391,7 @@ const storage = {
     },
     
     setJobCards: (jobCards) => {
-        localStorage.setItem('abcotronics_job_cards', JSON.stringify(jobCards));
+        safeSetItem('abcotronics_job_cards', jobCards);
     },
 
     // QuickBooks Integration
@@ -406,7 +406,7 @@ const storage = {
     },
     
     setQBConnection: (connection) => {
-        localStorage.setItem('abcotronics_qb_connection', JSON.stringify(connection));
+        safeSetItem('abcotronics_qb_connection', connection);
     },
 
     removeQBConnection: () => {
@@ -424,7 +424,7 @@ const storage = {
     },
     
     setQBSyncSettings: (settings) => {
-        localStorage.setItem('abcotronics_qb_sync_settings', JSON.stringify(settings));
+        safeSetItem('abcotronics_qb_sync_settings', settings);
     },
 
     getQBEmployeeMapping: () => {
@@ -438,7 +438,7 @@ const storage = {
     },
     
     setQBEmployeeMapping: (mapping) => {
-        localStorage.setItem('abcotronics_qb_employee_mapping', JSON.stringify(mapping));
+        safeSetItem('abcotronics_qb_employee_mapping', mapping);
     }
 };
 

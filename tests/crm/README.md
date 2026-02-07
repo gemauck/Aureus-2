@@ -105,6 +105,37 @@ npm run test:crm:business
 4. Load the UI test script or paste the code from `crm-ui-tests.js`
 5. Run: `window.runCRMUITests()`
 
+## Production Automated Checks
+
+Run a comprehensive CRM production check (API + UI):
+
+```bash
+TEST_URL=https://abcoafrica.co.za \
+TEST_EMAIL=admin@abcoafrica.co.za \
+TEST_PASSWORD=your_password \
+npm run test:prod:crm
+```
+
+Optional environment variables:
+- `AUTH_TOKEN` - Use an existing JWT access token (skips login)
+- `CRM_SKIP_UI=true` - Skip Playwright UI checks
+- `CRM_SKIP_API=true` - Skip API checks
+- `CRM_TEST_CLEANUP=false` - Keep created test data
+- `CRM_TEST_PREFIX` - Prefix for test records in production
+
+Coverage includes:
+- Leads and clients CRUD + persistence
+- Contacts CRUD (normalized table)
+- Opportunities CRUD
+- Tags CRUD + client tag association
+- Company groups CRUD
+- RSS subscription toggling
+- KYC persistence
+- Diagnostics endpoints (`/diagnose`, `/fix` with diagnose action)
+- Starred clients
+- External agents listing
+- UI checks for CRM components, pipeline, list/search, and localStorage
+
 ## Configuration
 
 Tests use environment variables:
