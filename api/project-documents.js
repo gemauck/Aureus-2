@@ -119,7 +119,7 @@ async function handler(req, res) {
           name: String(name),
           description: description || '',
           url: url || null,
-          filePath: filePath || null,
+          filePath: filePath ? String(filePath) : '',
           type: type || null,
           size: size ? parseInt(size) : null,
           mimeType: mimeType || null,
