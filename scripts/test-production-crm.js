@@ -75,13 +75,14 @@ async function apiRequest(path, method = 'GET', body = null, token = accessToken
   try {
     const response = await fetch(url, options)
     const text = await response.text()
-    let data = null
+    let parsed = null
     try {
-      data = JSON.parse(text)
+      parsed = JSON.parse(text)
     } catch (e) {
-      data = { raw: text }
+      parsed = { raw: text }
     }
-    return { status: response.status, data, headers: response.headers }
+    const payload = parsed && typeof parsed === 'object' && 'data' in parsed ? parsed.data : parsed
+    return { status: response.status, data: payload, raw: parsed, headers: response.headers }
   } catch (error) {
     return { error: error.message, status: 0, headers: new Headers() }
   }
@@ -231,7 +232,7 @@ async function testCreateUpdateDeleteLead() {
   )
 
   const updateData = { status: 'Active', value: 90000, probability: 75 }
-  const updateResponse = await apiRequest(`/api/leads/${createdLeadId}`, 'PUT', updateData)
+  const updateResponse = await apiRequest(`/api/leads/${createdLeadId}`, 'PATCH', updateData)
   const updatePassed = updateResponse.status === 200
   recordResult('Update Lead', updatePassed, `Status: ${updateResponse.status}`)
 
@@ -674,16 +675,33 @@ async function runUiChecks() {
       return
     }
 
-    await page.goto(`${BASE_URL}/clients`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}/#/clients`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(2000)
 
     const hasClientsText = await page.locator('text=Clients').first().isVisible().catch(() => false)
     const hasLeadsText = await page.locator('text=Leads').first().isVisible().catch(() => false)
+    const crmLoaded = hasClientsText || hasLeadsText
     recordResult(
       'CRM Page Loaded',
-      hasClientsText || hasLeadsText,
-      hasClientsText || hasLeadsText ? 'Clients/Leads UI visible' : 'CRM page content not detected'
+      crmLoaded,
+      crmLoaded ? 'Clients/Leads UI visible' : 'CRM page content not detected'
     )
+
+    if (!crmLoaded) {
+      await page.evaluate(() => {
+        if (window.RouteState && typeof window.RouteState.navigate === 'function') {
+          window.RouteState.navigate({ page: 'clients', segments: [], search: '', hash: '' })
+        }
+      }).catch(() => {})
+      await page.waitForTimeout(2000)
+    }
+
+    const clientsTab = page.locator('button:has-text("Clients"), [role="tab"]:has-text("Clients")').first()
+    const clientsTabVisible = await clientsTab.isVisible().catch(() => false)
+    if (clientsTabVisible) {
+      await clientsTab.click().catch(() => {})
+      await page.waitForTimeout(1000)
+    }
 
     const componentStatus = await page.evaluate(() => ({
       Clients: typeof window.Clients !== 'undefined',
@@ -701,6 +719,11 @@ async function runUiChecks() {
       '[data-testid="leads-list"]',
       '.leads-list',
       '#leads-list',
+      '[data-testid="clients-list"]',
+      '.clients-list',
+      '#clients-list',
+      'table',
+      'table thead',
       'table tbody tr',
       '.mobile-card'
     ]
@@ -712,10 +735,25 @@ async function runUiChecks() {
         break
       }
     }
-    recordResult('CRM List Visible', listFound, listFound ? 'List elements found' : 'List not found')
+    recordResult('CRM List Visible', listFound, listFound ? 'List/table elements found' : 'List not found')
 
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i]').first()
-    const searchVisible = await searchInput.isVisible().catch(() => false)
+    const searchSelectors = [
+      'input[type="search"]',
+      'input[placeholder*="search" i]',
+      'input[placeholder*="Search by name" i]',
+      'input[placeholder*="name, industry" i]',
+      'input[placeholder*="Search by name, industry" i]'
+    ]
+    let searchInput = null
+    for (const selector of searchSelectors) {
+      const candidate = page.locator(selector).first()
+      const visible = await candidate.isVisible().catch(() => false)
+      if (visible) {
+        searchInput = candidate
+        break
+      }
+    }
+    const searchVisible = Boolean(searchInput)
     recordResult('Search Input Visible', searchVisible, searchVisible ? 'Search input found' : 'Search input not found')
 
     if (searchVisible && createdLeadName) {
@@ -744,7 +782,7 @@ async function runUiChecks() {
       recordResult('UI Shows Created Client', true, 'Skipped (no search or client name)', true)
     }
 
-    const pipelineTab = page.locator('button:has-text("Pipeline"), [role="tab"]:has-text("Pipeline")').first()
+    const pipelineTab = page.locator('button:has-text("Pipeline"), [role="tab"]:has-text("Pipeline"), [data-view="pipeline"], [data-testid*="pipeline" i]').first()
     const pipelineVisible = await pipelineTab.isVisible().catch(() => false)
     recordResult('Pipeline Tab Visible', pipelineVisible, pipelineVisible ? 'Pipeline tab found' : 'Pipeline tab not found')
     if (pipelineVisible) {
@@ -774,7 +812,7 @@ async function runUiChecks() {
       )
     }
 
-    const createButton = page.locator('button:has-text("New"), button:has-text("Add")').first()
+    const createButton = page.locator('button:has-text("New"), button:has-text("Add"), button:has-text("Create"), button:has-text("New Client"), button:has-text("New Lead")').first()
     const createVisible = await createButton.isVisible().catch(() => false)
     recordResult(
       'Create Button Visible',

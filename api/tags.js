@@ -86,7 +86,7 @@ async function handler(req, res) {
             name,
             color: body.color || '#3B82F6',
             description: body.description || '',
-            ownerId: req.user?.id
+            ownerId: req.user?.sub || req.user?.id || null
           }
         })
         console.log('✅ Tag created successfully:', tag.id)

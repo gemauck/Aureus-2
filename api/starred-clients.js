@@ -108,25 +108,29 @@ async function handler(req, res) {
 
     // Get starred clients/leads for current user (GET /api/starred-clients)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'starred-clients') {
-      const starred = await prisma.starredClient.findMany({
-        where: {
-          userId
-        },
-        include: {
-          client: {
-            include: {
-              tags: {
-                include: {
-                  tag: true
+      let starred = []
+      try {
+        starred = await prisma.starredClient.findMany({
+          where: { userId },
+          include: {
+            client: {
+              include: {
+                tags: {
+                  include: { tag: true }
                 }
               }
             }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      })
+          },
+          orderBy: { createdAt: 'desc' }
+        })
+      } catch (error) {
+        console.warn('⚠️ Starred clients tags include failed, falling back:', error.message)
+        starred = await prisma.starredClient.findMany({
+          where: { userId },
+          include: { client: true },
+          orderBy: { createdAt: 'desc' }
+        })
+      }
 
       return ok(res, {
         starredClients: starred.map(s => ({

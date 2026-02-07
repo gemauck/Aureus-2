@@ -739,11 +739,17 @@ async function handler(req, res) {
       // Only include fields that exist in the database schema
       // CRITICAL: Always set type to lowercase 'lead' to ensure consistency
       // Ignore any type value from request body - leads must always be type='lead'
+      const normalizedStatus = (() => {
+        if (body.status === undefined || body.status === null) return 'Potential'
+        const trimmed = String(body.status).trim()
+        return trimmed ? trimmed : 'Potential'
+      })()
+
       const leadData = {
         name: String(body.name).trim(),
         type: 'lead', // Always lowercase 'lead' - never allow override (ignores body.type if present)
         industry: String(body.industry || 'Other').trim(),
-        status: 'active',
+        status: normalizedStatus,
         stage: String(body.stage || 'Awareness').trim(),
         revenue: (() => {
           const val = parseFloat(body.revenue)
