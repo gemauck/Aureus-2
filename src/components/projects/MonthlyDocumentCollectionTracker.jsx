@@ -702,12 +702,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setIsLoading(true);
         
         try {
-            // 1) For document collection only: use v2 endpoint (different path = no cached response)
+            // 1) Prefer uncached endpoint fetches
             let sectionsField = null;
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            const authHeaders = { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
             if (!isMonthlyDataReview) {
-                const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-                const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
-                const authHeaders = { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
                 const endpointV2 = `/api/projects/${project.id}/document-sections-v2?_=${Date.now()}`;
                 const endpointV1 = `/api/projects/${project.id}/document-sections?_=${Date.now()}`;
                 try {
@@ -740,6 +740,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         console.warn('📥 document-sections endpoint failed, trying fetchProject:', fetchErr?.message);
                     }
                 }
+            } else {
+                const endpoint = `/api/projects/${project.id}?_=${Date.now()}`;
+                try {
+                    const res = await fetch(base + endpoint, {
+                        method: 'GET',
+                        credentials: 'include',
+                        cache: 'no-store',
+                        headers: authHeaders
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        const freshProject = json?.data?.project || json?.project || json?.data;
+                        sectionsField = freshProject?.monthlyDataReviewSections;
+                    }
+                } catch (fetchErr) {
+                    console.warn('📥 project fetch failed, trying fallbacks:', fetchErr?.message);
+                }
             }
             
             // 2) Fallback: full project fetch (may be cached in some browsers)
@@ -747,6 +764,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 console.log('📥 Loading from fetchProject...', { projectId: project.id });
                 const freshProject = await apiRef.current.fetchProject(project.id);
                 sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
+            }
+
+            // 3) Fallback: DatabaseAPI fetch if available
+            if (sectionsField == null && window.DatabaseAPI?.getProject) {
+                try {
+                    const fresh = await window.DatabaseAPI.getProject(project.id);
+                    const freshProject = fresh?.data?.project || fresh?.project || fresh?.data;
+                    sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
+                } catch (fetchErr) {
+                    console.warn('📥 DatabaseAPI.getProject failed:', fetchErr?.message);
+                }
             }
             
             // Use docYear from URL when normalizing so deep-link year has data (avoids blank comment box)
@@ -788,7 +816,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 return;
             }
             
-            // 3) Fallback to prop data
+            // 4) Fallback to prop data
             const propSections = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
             if (propSections) {
                 let normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
@@ -1093,6 +1121,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     console.warn('⚠️ Failed to save snapshot to localStorage:', storageError);
                 }
             }
+
+            // Keep parent project state in sync for Monthly Data Review
+            if (isMonthlyDataReview && typeof window !== 'undefined') {
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({
+                        ...project,
+                        monthlyDataReviewSections: serialized
+                    });
+                }
+                if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+                    const keysToDelete = [];
+                    window.DatabaseAPI._responseCache.forEach((_, key) => {
+                        if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                            keysToDelete.push(key);
+                        }
+                    });
+                    keysToDelete.forEach(k => window.DatabaseAPI._responseCache.delete(k));
+                }
+            }
         } catch (error) {
             console.error('❌ Error saving to database:', error);
             console.error('❌ Error details:', {
@@ -1101,6 +1148,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 projectId: project.id,
                 payloadSize: serialized.length
             });
+            if (typeof window !== 'undefined' && window.showNotification) {
+                window.showNotification('Failed to save changes. Please try again.', 'error');
+            }
             // Reset saved data ref so it will retry on next change
             lastSavedDataRef.current = null;
         } finally {
@@ -1537,7 +1587,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // SECTION CRUD
     // ============================================================
     
-    const handleAddSection = () => {
+    const handleAddSection = (event) => {
+        if (event?.preventDefault) event.preventDefault();
+        if (event?.stopPropagation) event.stopPropagation();
         setEditingSection(null);
         setShowSectionModal(true);
     };
@@ -1563,6 +1615,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         
         setShowSectionModal(false);
         setEditingSection(null);
+        // Save immediately to avoid losing new sections on refresh/navigation
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase({ skipParentUpdate: true });
     };
 
     // Actual deletion logic extracted to separate function
@@ -6303,6 +6361,7 @@ Abcotronics`;
                                 </select>
                             </div>
                             <button
+                                type="button"
                                 onClick={handleAddSection}
                                 className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold flex items-center gap-1.5"
                             >
@@ -6473,6 +6532,7 @@ Abcotronics`;
                                     {isLoading ? 'Loading…' : 'Retry load'}
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={handleAddSection}
                                     className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
                                 >
