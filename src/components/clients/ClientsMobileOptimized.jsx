@@ -501,7 +501,7 @@ const ClientsMobileOptimized = () => {
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
-                    Clients ({filteredClients.length})
+                    Clients
                 </button>
                 <button
                     onClick={() => setViewMode('leads')}
@@ -514,7 +514,7 @@ const ClientsMobileOptimized = () => {
                     }`}
                 >
                     <i className="fas fa-user-plus mr-2"></i>
-                    Leads ({filteredLeads.length})
+                    Leads
                 </button>
             </div>
         </div>

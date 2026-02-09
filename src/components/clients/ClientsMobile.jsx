@@ -486,7 +486,7 @@ const ClientsMobile = () => {
                                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
                             }`}
                         >
-                            Clients ({clients.length})
+                            Clients
                         </button>
                         <button
                             onClick={() => setViewMode('leads')}
@@ -496,7 +496,7 @@ const ClientsMobile = () => {
                                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
                             }`}
                         >
-                            Leads ({leads.length})
+                            Leads
                         </button>
                     </div>
                 </div>

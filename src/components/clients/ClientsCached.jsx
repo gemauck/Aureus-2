@@ -1128,7 +1128,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
-                    Clients ({clients.length})
+                    Clients
                 </button>
                 <button
                     onClick={() => setViewMode('leads')}
@@ -1139,7 +1139,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
-                    Leads ({leads.length})
+                    Leads
                 </button>
                 <button
                     onClick={() => setViewMode('pipeline')}

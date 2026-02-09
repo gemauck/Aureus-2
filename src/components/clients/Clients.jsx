@@ -8025,7 +8025,7 @@ const Clients = React.memo(() => {
                                 <div>
                                     <h4 className={`text-md font-semibold mb-3 px-6 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                                         <i className="fas fa-building mr-2"></i>
-                                        Clients ({groupClients.length})
+                                        Clients
                                     </h4>
                                     <div className="space-y-2">
                                         {groupClients.map(client => (
@@ -8156,7 +8156,7 @@ const Clients = React.memo(() => {
                                 <div>
                                     <h4 className={`text-md font-semibold mb-3 px-6 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                                         <i className="fas fa-user-tie mr-2"></i>
-                                        Leads ({groupLeads.length})
+                                        Leads
                                     </h4>
                                     <div className="space-y-2">
                                         {groupLeads.map(lead => (
@@ -9414,7 +9414,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>
-                    <span className="hidden sm:inline">Groups ({groupsCount})</span>
+                    <span className="hidden sm:inline">Groups</span>
                     <span className="sm:hidden">Groups</span>
                 </button>
                 <button
@@ -9450,7 +9450,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
-                    <span className="hidden sm:inline">Clients ({clientsCount})</span>
+                    <span className="hidden sm:inline">Clients</span>
                     <span className="sm:hidden">Clients</span>
                 </button>
                 <button
@@ -9486,7 +9486,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
-                    <span className="hidden sm:inline">Leads ({leadsCount})</span>
+                    <span className="hidden sm:inline">Leads</span>
                     <span className="sm:hidden">Leads</span>
                 </button>
                 <button
