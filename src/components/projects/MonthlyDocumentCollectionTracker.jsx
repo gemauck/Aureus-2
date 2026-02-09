@@ -180,6 +180,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     const loadRetryTimeoutRef = useRef(null); // Timeout for single retry when load returns empty
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
+    const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
     
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
@@ -193,9 +194,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     // Year selection with persistence
     const YEAR_STORAGE_PREFIX = isMonthlyDataReview ? 'monthlyDataReviewSelectedYear_' : 'documentCollectionSelectedYear_';
+    const MIN_YEAR = 2015;
+    const FUTURE_YEAR_BUFFER = 5;
     const isValidYear = (value) => {
         const parsed = typeof value === 'string' ? parseInt(value, 10) : value;
-        return Number.isFinite(parsed);
+        return Number.isFinite(parsed) && parsed >= MIN_YEAR && parsed <= currentYear + FUTURE_YEAR_BUFFER;
     };
     const getInitialSelectedYear = () => {
         if (typeof window !== 'undefined') {
@@ -216,12 +219,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
             if (urlYear) {
                 const y = parseInt(String(urlYear).trim(), 10);
-                if (!Number.isNaN(y)) return y;
+                if (isValidYear(y)) return y;
             }
             if (project?.id) {
                 const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
                 const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
-                if (!Number.isNaN(parsedYear)) {
+                if (isValidYear(parsedYear)) {
                     return parsedYear;
                 }
             }
@@ -230,6 +233,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     };
     
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
+    useEffect(() => {
+        userSelectedYearRef.current = false;
+    }, [project?.id]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
     // Close section Actions dropdown when clicking outside (effect lives near state to avoid TDZ)
@@ -917,7 +923,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const urlYear = p.get('docYear') || p.get('year');
             if (!urlYear) return;
             const y = parseInt(String(urlYear).trim(), 10);
-            if (Number.isNaN(y) || y < 1900 || y > 3000) return;
+            if (!isValidYear(y)) return;
             setSelectedYear(prev => (prev !== y ? y : prev));
         };
         syncYearFromUrl();
@@ -929,6 +935,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Skip when URL has docYear (deep link) so we don't overwrite the year the user opened from email
     useEffect(() => {
         if (isLoading || !project?.id || !sectionsByYear || typeof sectionsByYear !== 'object') return;
+        if (userSelectedYearRef.current) return;
         if (typeof window !== 'undefined') {
             const hash = window.location.hash || '';
             if (hash.includes('?')) {
@@ -950,7 +957,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const yearsWithData = Object.keys(sectionsByYear).filter((y) => {
             const arr = sectionsByYear[y];
             return Array.isArray(arr) && arr.length > 0;
-        }).map((y) => parseInt(y, 10)).filter((y) => !Number.isNaN(y)).sort((a, b) => b - a);
+        }).map((y) => parseInt(y, 10)).filter((y) => isValidYear(y)).sort((a, b) => b - a);
         if (yearsWithData.length === 0) return;
         const currentSections = Array.isArray(sectionsByYear[selectedYear]) ? sectionsByYear[selectedYear] : [];
         if (currentSections.length > 0) return;
@@ -1439,19 +1446,80 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // ============================================================
     
     const handleYearChange = useCallback((year) => {
-        if (!year || isNaN(year)) {
+        if (!isValidYear(year)) {
             console.warn('Invalid year provided:', year);
             return;
         }
         
+        userSelectedYearRef.current = true;
         setSelectedYear(year);
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
         }
-    }, [project?.id]);
-    
-    const MIN_YEAR = 2015;
-    const FUTURE_YEAR_BUFFER = 5;
+    }, [project?.id, isValidYear]);
+
+    const remapYearKey = (key, fromYear, toYear) => {
+        if (!key) return null;
+        const match = String(key).match(/^(\d{4})-(\d{2})$/);
+        if (!match) return null;
+        const keyYear = parseInt(match[1], 10);
+        if (Number.isNaN(keyYear) || keyYear !== fromYear) return null;
+        return `${toYear}-${match[2]}`;
+    };
+
+    const remapYearKeys = (dataMap, fromYear, toYear) => {
+        if (!dataMap || typeof dataMap !== 'object') return {};
+        const entries = Object.entries(dataMap);
+        if (entries.length === 0) return {};
+        const next = {};
+        entries.forEach(([key, value]) => {
+            const nextKey = remapYearKey(key, fromYear, toYear);
+            if (nextKey) next[nextKey] = value;
+        });
+        return next;
+    };
+
+    const copyYearData = useCallback((sourceYear, targetYear) => {
+        if (!isValidYear(sourceYear) || !isValidYear(targetYear)) {
+            console.warn('Invalid source/target year:', sourceYear, targetYear);
+            return;
+        }
+        if (sourceYear === targetYear) return;
+
+        const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0
+            ? sectionsRef.current
+            : sectionsByYear;
+        const sourceSections = latestSectionsByYear?.[String(sourceYear)];
+        if (!Array.isArray(sourceSections) || sourceSections.length === 0) {
+            console.warn('No sections to copy for year:', sourceYear);
+            return;
+        }
+
+        const clonedSections = cloneSectionsArray(sourceSections).map(section => ({
+            ...section,
+            documents: (section.documents || []).map(doc => ({
+                ...doc,
+                collectionStatus: remapYearKeys(doc.collectionStatus, sourceYear, targetYear),
+                comments: remapYearKeys(doc.comments, sourceYear, targetYear),
+                emailRequestByMonth: remapYearKeys(doc.emailRequestByMonth, sourceYear, targetYear)
+            }))
+        }));
+
+        const updated = {
+            ...latestSectionsByYear,
+            [String(targetYear)]: clonedSections
+        };
+
+        sectionsRef.current = updated;
+        setSectionsByYear(updated);
+        lastSavedDataRef.current = null;
+
+        userSelectedYearRef.current = true;
+        setSelectedYear(targetYear);
+        if (project?.id && typeof window !== 'undefined') {
+            localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(targetYear));
+        }
+    }, [isValidYear, project?.id, sectionsByYear, setSelectedYear, setSectionsByYear]);
     const yearOptions = [];
     for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
         yearOptions.push(i);
@@ -6526,6 +6594,15 @@ Abcotronics`;
                                 )}
                             </div>
                             <div className="flex flex-wrap gap-2 justify-center">
+                                {hasDataInOtherYears && bestYear != null && bestYear !== selectedYear && (
+                                    <button
+                                        onClick={() => copyYearData(bestYear, selectedYear)}
+                                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-semibold flex items-center gap-2"
+                                    >
+                                        <i className="fas fa-arrow-right"></i>
+                                        <span>Copy {bestYear} → {selectedYear}</span>
+                                    </button>
+                                )}
                                 {hasDataInOtherYears && bestYear != null && (
                                     <button
                                         onClick={() => handleYearChange(bestYear)}
