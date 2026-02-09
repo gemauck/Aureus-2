@@ -193,6 +193,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     // Year selection with persistence
     const YEAR_STORAGE_PREFIX = isMonthlyDataReview ? 'monthlyDataReviewSelectedYear_' : 'documentCollectionSelectedYear_';
+    const isValidYear = (value) => {
+        const parsed = typeof value === 'string' ? parseInt(value, 10) : value;
+        return Number.isFinite(parsed);
+    };
     const getInitialSelectedYear = () => {
         if (typeof window !== 'undefined') {
             // Deep link: prefer docYear from URL so the comment opens on the correct year
