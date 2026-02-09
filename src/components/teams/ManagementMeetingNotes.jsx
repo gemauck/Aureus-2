@@ -50,6 +50,31 @@ const DEPARTMENTS = [
     { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' }
 ];
 
+const normalizeDepartmentKeyCandidate = (value) => {
+    if (!value) return '';
+    return String(value)
+        .trim()
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+};
+
+const DEPARTMENT_KEY_MAP = DEPARTMENTS.reduce((acc, dept) => {
+    const id = dept.id || '';
+    const name = dept.name || '';
+    if (id) {
+        acc[id] = id;
+        acc[id.toLowerCase()] = id;
+        acc[normalizeDepartmentKeyCandidate(id)] = id;
+    }
+    if (name) {
+        acc[name.toLowerCase()] = id;
+        acc[normalizeDepartmentKeyCandidate(name)] = id;
+    }
+    return acc;
+}, {});
+
 const padTwo = (value) => String(value).padStart(2, '0');
 
 const isValidDate = (date) => date instanceof Date && !Number.isNaN(date.getTime());
@@ -175,7 +200,19 @@ const normalizeMonthlyGoalsByDepartment = (value) => {
     try {
         const parsed = JSON.parse(trimmed);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return parsed;
+            const normalized = {};
+            Object.entries(parsed).forEach(([rawKey, rawValue]) => {
+                const mappedKey =
+                    DEPARTMENT_KEY_MAP[rawKey] ||
+                    DEPARTMENT_KEY_MAP[String(rawKey).toLowerCase()] ||
+                    DEPARTMENT_KEY_MAP[normalizeDepartmentKeyCandidate(rawKey)];
+                if (mappedKey) {
+                    normalized[mappedKey] = rawValue;
+                } else {
+                    normalized[rawKey] = rawValue;
+                }
+            });
+            return normalized;
         }
     } catch (error) {
         // Fall through to legacy fallback
@@ -541,6 +578,9 @@ const ManagementMeetingNotes = () => {
     const savedCursorPositions = useRef({}); // { [fieldKey]: { start: number, end: number, element: HTMLElement } }
 
     const weekCardRefs = useRef({});
+    const headerScrollRef = useRef(null);
+    const bodyScrollRef = useRef(null);
+    const isSyncingHorizontalScroll = useRef(false);
     
     // Ref to store scroll position that needs to be preserved after state updates
     const preservedScrollPosition = useRef(null);
@@ -620,6 +660,39 @@ const ManagementMeetingNotes = () => {
             }, 500);
         }
     }, [scrollRestoreTrigger]); // Only depend on scrollRestoreTrigger, not on data updates
+
+    useEffect(() => {
+        const headerScroller = headerScrollRef.current;
+        const bodyScroller = bodyScrollRef.current;
+
+        if (!headerScroller || !bodyScroller) {
+            return undefined;
+        }
+
+        const syncScroll = (source, target) => {
+            if (isSyncingHorizontalScroll.current) {
+                return;
+            }
+
+            isSyncingHorizontalScroll.current = true;
+            target.scrollLeft = source.scrollLeft;
+
+            requestAnimationFrame(() => {
+                isSyncingHorizontalScroll.current = false;
+            });
+        };
+
+        const handleHeaderScroll = () => syncScroll(headerScroller, bodyScroller);
+        const handleBodyScroll = () => syncScroll(bodyScroller, headerScroller);
+
+        headerScroller.addEventListener('scroll', handleHeaderScroll, { passive: true });
+        bodyScroller.addEventListener('scroll', handleBodyScroll, { passive: true });
+
+        return () => {
+            headerScroller.removeEventListener('scroll', handleHeaderScroll);
+            bodyScroller.removeEventListener('scroll', handleBodyScroll);
+        };
+    }, [weeks.length, selectedMonth]);
     
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null, preserveScroll = false) => {
         // Preserve scroll position if requested
@@ -4465,59 +4538,57 @@ const ManagementMeetingNotes = () => {
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto pb-2">
-                        {/* Grid layout: Departments as rows, Weeks as columns for perfect alignment */}
-                        <div 
-                            className="inline-grid gap-4"
-                            style={{
-                                gridTemplateColumns: `repeat(${weeks.length + 1}, minmax(520px, 560px))`,
-                                gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
-                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
-                                gridAutoFlow: 'row' // Ensure items flow row by row
-                            }}
-                        >
-                            {/* Week headers row */}
-                            {weeks.map((week, index) => {
-                                const rawId = getWeekIdentifier(week);
-                                const identifier = rawId || `week-${index}`;
-                                const isActualCurrentWeek = identifier === currentWeekId;
-                                const isActualNextWeek = identifier === nextWeekId;
-                                const isSelected = identifier === selectedWeek;
-                                const summary = getWeekSummaryStats(week);
+                    <div className="sticky top-4 z-30">
+                        <div ref={headerScrollRef} className="overflow-x-auto pb-2">
+                            <div 
+                                className="inline-grid gap-4"
+                                style={{
+                                    gridTemplateColumns: `repeat(${weeks.length + 1}, minmax(520px, 560px))`,
+                                    gridTemplateRows: 'auto'
+                                }}
+                            >
+                                {/* Week headers row */}
+                                {weeks.map((week, index) => {
+                                    const rawId = getWeekIdentifier(week);
+                                    const identifier = rawId || `week-${index}`;
+                                    const isActualCurrentWeek = identifier === currentWeekId;
+                                    const isActualNextWeek = identifier === nextWeekId;
+                                    const isSelected = identifier === selectedWeek;
+                                    const summary = getWeekSummaryStats(week);
 
-                                return (
-                                    <div
-                                        key={`header-${identifier}`}
-                                        ref={(node) => {
-                                            if (!weekCardRefs.current) {
-                                                weekCardRefs.current = {};
-                                            }
-                                            if (node && index === 0) {
-                                                weekCardRefs.current[identifier] = node;
-                                            }
-                                        }}
-                                        style={{
-                                            gridRow: '1',
-                                            gridColumn: `${getWeekGridColumn(index)}`
-                                        }}
-                                        className={`rounded-xl border-2 p-5 transition-all duration-300 ${
-                                            isActualCurrentWeek
-                                                ? isDark
-                                                    ? 'border-primary-400 shadow-xl shadow-primary-900/50 bg-gradient-to-br from-slate-800 to-slate-900'
-                                                    : 'border-primary-500 shadow-xl shadow-primary-200/60 bg-gradient-to-br from-white to-primary-50/30'
-                                                : isActualNextWeek
+                                    return (
+                                        <div
+                                            key={`header-${identifier}`}
+                                            ref={(node) => {
+                                                if (!weekCardRefs.current) {
+                                                    weekCardRefs.current = {};
+                                                }
+                                                if (node && index === 0) {
+                                                    weekCardRefs.current[identifier] = node;
+                                                }
+                                            }}
+                                            style={{
+                                                gridRow: '1',
+                                                gridColumn: `${getWeekGridColumn(index)}`
+                                            }}
+                                            className={`rounded-xl border-2 p-5 transition-all duration-300 ${
+                                                isActualCurrentWeek
                                                     ? isDark
-                                                        ? 'border-amber-400 shadow-lg shadow-amber-900/40 bg-gradient-to-br from-slate-800 to-slate-900'
-                                                        : 'border-amber-400 shadow-lg shadow-amber-100/60 bg-gradient-to-br from-white to-amber-50/30'
-                                                    : isSelected
+                                                        ? 'border-primary-400 shadow-xl shadow-primary-900/50 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                        : 'border-primary-500 shadow-xl shadow-primary-200/60 bg-gradient-to-br from-white to-primary-50/30'
+                                                    : isActualNextWeek
                                                         ? isDark
-                                                            ? 'border-slate-500 shadow-lg shadow-slate-900/30 bg-gradient-to-br from-slate-800 to-slate-900'
-                                                            : 'border-slate-400 shadow-lg shadow-slate-200/50 bg-gradient-to-br from-white to-slate-50'
-                                                        : isDark
-                                                            ? 'border-slate-700 bg-slate-800 hover:border-slate-600 hover:shadow-md'
-                                                            : 'border-gray-300 bg-white hover:border-gray-400 hover:shadow-md'
-                                        }`}
-                                    >
+                                                            ? 'border-amber-400 shadow-lg shadow-amber-900/40 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                            : 'border-amber-400 shadow-lg shadow-amber-100/60 bg-gradient-to-br from-white to-amber-50/30'
+                                                        : isSelected
+                                                            ? isDark
+                                                                ? 'border-slate-500 shadow-lg shadow-slate-900/30 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                                : 'border-slate-400 shadow-lg shadow-slate-200/50 bg-gradient-to-br from-white to-slate-50'
+                                                            : isDark
+                                                                ? 'border-slate-700 bg-slate-800 hover:border-slate-600 hover:shadow-md'
+                                                                : 'border-gray-300 bg-white hover:border-gray-400 hover:shadow-md'
+                                            }`}
+                                        >
                                             <div className="flex items-start justify-between gap-3 mb-4">
                                                 <div className="flex-1">
                                                     <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -4561,39 +4632,53 @@ const ManagementMeetingNotes = () => {
                                                     </button>
                                                 </div>
                                             </div>
-                                    </div>
-                                );
-                            })}
+                                        </div>
+                                    );
+                                })}
 
-                            {/* Monthly goals header - placed after the first week of the month */}
-                            <div
-                                key="header-monthly-goals"
-                                style={{
-                                    gridRow: '1',
-                                    gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
-                                }}
-                                className={`rounded-xl border-2 p-5 transition-all duration-300 ${
-                                    isDark
-                                        ? 'border-slate-600 bg-slate-800/80'
-                                        : 'border-slate-300 bg-white'
-                                }`}
-                            >
-                                <div className="flex items-start justify-between gap-3 mb-2">
-                                    <div className="flex-1">
-                                        <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>
-                                            Monthly Goals
-                                        </p>
-                                        <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                            <i className={`fas fa-bullseye mr-2 ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
-                                            Department Focus
-                                        </h3>
+                                {/* Monthly goals header - placed after the first week of the month */}
+                                <div
+                                    key="header-monthly-goals"
+                                    style={{
+                                        gridRow: '1',
+                                        gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
+                                    }}
+                                    className={`rounded-xl border-2 p-5 transition-all duration-300 ${
+                                        isDark
+                                            ? 'border-slate-600 bg-slate-800/80'
+                                            : 'border-slate-300 bg-white'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-3 mb-2">
+                                        <div className="flex-1">
+                                            <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>
+                                                Monthly Goals
+                                            </p>
+                                            <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                <i className={`fas fa-bullseye mr-2 ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
+                                                Department Focus
+                                            </h3>
+                                        </div>
                                     </div>
+                                    <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                        Capture month-level goals for each department.
+                                    </p>
                                 </div>
-                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    Capture month-level goals for each department.
-                                </p>
                             </div>
-                            
+                        </div>
+                    </div>
+
+                    <div ref={bodyScrollRef} className="overflow-x-auto pb-2">
+                        {/* Grid layout: Departments as rows, Weeks as columns for perfect alignment */}
+                        <div 
+                            className="inline-grid gap-4"
+                            style={{
+                                gridTemplateColumns: `repeat(${weeks.length + 1}, minmax(520px, 560px))`,
+                                gridTemplateRows: `repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
+                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
+                                gridAutoFlow: 'row' // Ensure items flow row by row
+                            }}
+                        >
                             {/* Department rows - each department spans all weeks */}
                             {DEPARTMENTS.map((dept, deptIndex) => {
                                 const deptMonthlyGoal = monthlyGoalsByDepartment?.[dept.id] || '';
@@ -4616,7 +4701,7 @@ const ManagementMeetingNotes = () => {
                                                     }`}
                                                     style={{ 
                                                         minHeight: '200px',
-                                                        gridRow: `${deptIndex + 2}`, // +2 because row 1 is headers
+                                                        gridRow: `${deptIndex + 1}`,
                                                         gridColumn: `${getWeekGridColumn(weekIndex)}`
                                                     }}
                                                 >
@@ -5107,7 +5192,7 @@ const ManagementMeetingNotes = () => {
                                     }`}
                                     style={{ 
                                         minHeight: '200px',
-                                        gridRow: `${deptIndex + 2}`,
+                                        gridRow: `${deptIndex + 1}`,
                                         gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
                                     }}
                                 >
