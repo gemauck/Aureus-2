@@ -1153,6 +1153,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const statusOptions = [
         { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 font-semibold', cellColor: 'bg-white border border-gray-300' },
         { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
+        { value: 'sent', label: 'Sent', color: 'bg-sky-200 text-slate-700 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-300 shadow-sm' },
         { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' }
     ];
     
