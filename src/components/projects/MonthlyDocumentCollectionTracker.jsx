@@ -936,6 +936,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 }
             }
         }
+        // If the user has a stored year selection, don't auto-switch away from it
+        if (typeof window !== 'undefined' && project?.id) {
+            const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
+            const parsedStoredYear = storedYear ? parseInt(storedYear, 10) : NaN;
+            if (isValidYear(parsedStoredYear) && parsedStoredYear === selectedYear) return;
+        }
+
         const yearsWithData = Object.keys(sectionsByYear).filter((y) => {
             const arr = sectionsByYear[y];
             return Array.isArray(arr) && arr.length > 0;
