@@ -1513,6 +1513,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         sectionsRef.current = updated;
         setSectionsByYear(updated);
         lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase();
 
         userSelectedYearRef.current = true;
         setSelectedYear(targetYear);
