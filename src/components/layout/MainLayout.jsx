@@ -1453,7 +1453,7 @@ const MainLayout = () => {
                 <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'}`}>
                     {sidebarOpen && (
                         <h1 className={`abcotronics-logo font-semibold text-lg tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {companyName}
+                            Praxis ERP
                         </h1>
                     )}
                     <button 
