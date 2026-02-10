@@ -2419,7 +2419,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               
               return (
                 <div 
-                  key={item.id} 
+                  key={getInventoryItemId(item) || item.sku} 
                   className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} mobile-card rounded-xl border p-4 shadow-sm cursor-pointer hover:shadow-md transition-all duration-200`}
                   onClick={() => setViewingInventoryItemDetail(item)}
                 >
@@ -2998,7 +2998,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
                   return (
                     <tr 
-                      key={item.id} 
+                      key={getInventoryItemId(item) || item.sku} 
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => setViewingInventoryItemDetail(item)}
                     >
@@ -3138,7 +3138,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         </button>
                         {isAdmin && (
                           <button
-                            onClick={() => handleDeleteItem(item.id)}
+                            onClick={() => handleDeleteItem(item)}
                             className="text-red-600 hover:text-red-800 text-sm font-medium"
                             title="Delete Item"
                           >
@@ -8918,12 +8918,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const [localShowCategoryInput, setLocalShowCategoryInput] = useState(false);
     const [localNewCategoryName, setLocalNewCategoryName] = useState('');
     const [selectedMovementTemplateId, setSelectedMovementTemplateId] = useState('');
+    const [selectedDetailLocationId, setSelectedDetailLocationId] = useState(item.locationId || (item.locations && item.locations[0]?.locationId) || '');
+
+    const detailLocations = Array.isArray(item.locations) ? item.locations : (item.locationId && item.location ? [{ locationId: item.locationId, locationName: item.location, locationCode: '', quantity: item.quantity || 0, status: item.status }] : []);
 
     const itemMovementsForDetail = useMemo(() => {
       if (!item?.sku) return [];
-      return (movements || [])
-        .filter(m => m.sku === item.sku)
-        .sort((a, b) => {
+      let list = (movements || []).filter(m => m.sku === item.sku);
+      if (selectedDetailLocationId) {
+        list = list.filter(m => m.fromLocation === selectedDetailLocationId || m.toLocation === selectedDetailLocationId);
+      }
+      return list.sort((a, b) => {
           // Primary sort: by date (oldest first)
           const dateA = new Date(a.date || a.createdAt || 0);
           const dateB = new Date(b.date || b.createdAt || 0);
@@ -8939,7 +8944,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           // Tertiary sort: by ID (for absolute ordering)
           return (a.id || '').localeCompare(b.id || '');
         });
-    }, [movements, item?.sku]);
+    }, [movements, item?.sku, selectedDetailLocationId]);
 
     const recentMovementTemplates = useMemo(() => {
       if (!itemMovementsForDetail.length) return [];
@@ -9014,10 +9019,42 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
     }, [item, itemMovementsForDetail, openAddMovementModal]);
 
-    // Sync editFormData when item changes
+    // Sync editFormData and selectedDetailLocationId when item changes
     useEffect(() => {
       setEditFormData({ ...item });
+      const locs = Array.isArray(item.locations) ? item.locations : [];
+      const firstId = item.locationId || (locs[0]?.locationId) || '';
+      setSelectedDetailLocationId(prev => (locs.some(l => l.locationId === prev) || !prev ? prev : firstId));
     }, [item]);
+
+    // Best practice: sync location with URL so selected location is shareable and survives refresh
+    const validLocationIds = useMemo(() => new Set(detailLocations.map(l => l.locationId)), [detailLocations]);
+    useEffect(() => {
+      if (!window.RouteState?.getRoute) return;
+      const route = window.RouteState.getRoute();
+      const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
+      const urlLocation = search.get('location');
+      if (urlLocation && validLocationIds.has(urlLocation)) {
+        setSelectedDetailLocationId(urlLocation);
+      }
+    }, [item?.id, validLocationIds]);
+    useEffect(() => {
+      if (!window.RouteState?.navigate) return;
+      const route = window.RouteState.getRoute();
+      const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
+      const currentUrlLocation = search.get('location') || '';
+      if (currentUrlLocation === (selectedDetailLocationId || '')) return;
+      const params = new URLSearchParams(search.toString());
+      if (selectedDetailLocationId) params.set('location', selectedDetailLocationId);
+      else params.delete('location');
+      window.RouteState.navigate({
+        page: 'manufacturing',
+        segments: ['inventory'],
+        search: params.toString() || undefined,
+        replace: true,
+        preserveHash: false
+      });
+    }, [selectedDetailLocationId]);
 
     const supplierParts = (() => {
       try {
@@ -9029,7 +9066,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
     })();
 
-    const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+    const selectedLocationInfo = selectedDetailLocationId && detailLocations.find(l => l.locationId === selectedDetailLocationId);
+    const displayQuantity = selectedLocationInfo ? selectedLocationInfo.quantity : (item.quantity || 0);
+    const availableQty = displayQuantity - (item.allocatedQuantity || 0);
 
     const handleSaveEdit = async () => {
       try {
@@ -9190,6 +9229,76 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
             </div>
           </div>
+
+          {/* Location selector: view ledger and quantities for a specific location */}
+          {detailLocations.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Location</h2>
+              <p className="text-sm text-gray-500 mb-3">Select a location to view quantity and ledger for that location.</p>
+              <select
+                value={selectedDetailLocationId || ''}
+                onChange={(e) => setSelectedDetailLocationId(e.target.value)}
+                className="w-full max-w-xs px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All locations (combined)</option>
+                {detailLocations.map(loc => (
+                  <option key={loc.locationId} value={loc.locationId}>
+                    {loc.locationName || loc.locationCode || loc.locationId} — {loc.quantity} {item.unit || 'pcs'}
+                  </option>
+                ))}
+              </select>
+              {detailLocations.length >= 1 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">All locations</h3>
+                  <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Location</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Quantity</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {detailLocations.map(loc => (
+                        <tr key={loc.locationId} className={selectedDetailLocationId === loc.locationId ? 'bg-blue-50' : ''}>
+                          <td className="px-3 py-2 text-gray-900">{loc.locationName || loc.locationCode || loc.locationId}</td>
+                          <td className="px-3 py-2 text-right font-medium">{loc.quantity} {item.unit || 'pcs'}</td>
+                          <td className="px-3 py-2 text-right">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(loc.status || '')}`}>
+                              {(loc.status || '').replace('_', ' ')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {detailLocations.length > 1 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openAddMovementModal({
+                          type: 'transfer',
+                          sku: item.sku,
+                          itemName: item.name,
+                          quantity: '',
+                          fromLocation: '',
+                          toLocation: '',
+                          reference: '',
+                          notes: '',
+                          date: new Date().toISOString().split('T')[0]
+                        })}
+                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      >
+                        <i className="fas fa-exchange-alt"></i>
+                        Transfer between locations
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
 
         {/* Main Content */}
@@ -9201,9 +9310,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Information</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Total Quantity</p>
-                  <p className={`text-xl font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                    {item.quantity || 0} {item.unit}
+                  <p className="text-xs text-gray-500 mb-1">{selectedDetailLocationId ? 'Quantity (selected location)' : 'Total Quantity'}</p>
+                  <p className={`text-xl font-bold ${displayQuantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    {displayQuantity} {item.unit}
                   </p>
                 </div>
                 {item.type === 'final_product' ? (
@@ -9673,7 +9782,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               return { movement, qty, openingBalance, balanceAfter };
             });
             const ledgerClosingBalance = opening;
-            const currentQuantity = item.quantity || 0;
+            const currentQuantity = displayQuantity;
             const mismatch = Math.abs(ledgerClosingBalance - currentQuantity) > 0.001;
 
             // Display newest-first

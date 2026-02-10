@@ -289,6 +289,107 @@ async function buildLocationInventoryResponse(locationId) {
   })
 }
 
+/**
+ * Build inventory list with one row per SKU (aggregated across all locations).
+ * Used when no location filter is applied so the UI shows a single entry per stock item.
+ * Includes items that have no LocationInventory yet (templates with 0 stock everywhere).
+ */
+async function buildAllLocationsInventoryResponse() {
+  const locationInventoryRecords = await prisma.locationInventory.findMany({
+    include: { location: true },
+    orderBy: { itemName: 'asc' }
+  })
+
+  // Load all InventoryItem templates (we need metadata for every SKU, including those with no LocationInventory)
+  const allTemplates = await prisma.inventoryItem.findMany({
+    orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
+  })
+
+  // One template per SKU (prefer row with null locationId, else first by order)
+  const templateBySku = new Map()
+  for (const meta of allTemplates) {
+    if (!templateBySku.has(meta.sku)) {
+      templateBySku.set(meta.sku, meta)
+    }
+  }
+
+  const bySku = new Map()
+  for (const record of locationInventoryRecords) {
+    const sku = record.sku
+    const template = templateBySku.get(sku) || {}
+    const quantity = record.quantity ?? 0
+    const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
+    const unitCost = record.unitCost ?? template.unitCost ?? 0
+    const status = record.status || getStatusFromQuantity(quantity, reorderPoint)
+
+    if (!bySku.has(sku)) {
+      bySku.set(sku, {
+        ...template,
+        id: template.id || null,
+        inventoryItemId: template.id || null,
+        sku,
+        name: record.itemName || template.name || record.sku,
+        quantity: 0,
+        totalValue: 0,
+        // Allocation is template-level (InventoryItem); LocationInventory has no allocatedQuantity
+        allocatedQuantity: template.allocatedQuantity || 0,
+        inProductionQuantity: template.inProductionQuantity || 0,
+        completedQuantity: template.completedQuantity || 0,
+        unit: template.unit || 'pcs',
+        reorderPoint: template.reorderPoint ?? 0,
+        reorderQty: template.reorderQty ?? 0,
+        location: '',
+        locationId: null,
+        locations: []
+      })
+    }
+    const row = bySku.get(sku)
+    row.quantity += quantity
+    row.totalValue += (record.unitCost ?? unitCost) * quantity
+    row.locations.push({
+      locationId: record.locationId,
+      locationName: record.location?.name || '',
+      locationCode: record.location?.code || '',
+      quantity,
+      unitCost: record.unitCost ?? unitCost,
+      status
+    })
+  }
+
+  // Add rows for SKUs that have a template but no LocationInventory (0 stock everywhere)
+  for (const [sku, template] of templateBySku) {
+    if (!bySku.has(sku)) {
+      bySku.set(sku, {
+        ...template,
+        id: template.id || null,
+        inventoryItemId: template.id || null,
+        sku,
+        name: template.name || sku,
+        quantity: 0,
+        totalValue: 0,
+        allocatedQuantity: template.allocatedQuantity || 0, // template-level only
+        inProductionQuantity: template.inProductionQuantity || 0,
+        completedQuantity: template.completedQuantity || 0,
+        unit: template.unit || 'pcs',
+        reorderPoint: template.reorderPoint ?? 0,
+        reorderQty: template.reorderQty ?? 0,
+        location: '',
+        locationId: template.locationId || null,
+        locations: []
+      })
+    }
+  }
+
+  const result = Array.from(bySku.values())
+  for (const row of result) {
+    row.status = getStatusFromQuantity(row.quantity, row.reorderPoint ?? 0)
+    if (row.locations.length === 0) row.location = ''
+    else if (row.locations.length === 1) row.location = row.locations[0].locationName || row.locations[0].locationCode || ''
+    else row.location = 'Multiple locations'
+  }
+  return result
+}
+
 async function syncInventoryAcrossAllLocations(force = false) {
   const now = Date.now()
   if (!force && lastGlobalLocationSync && (now - lastGlobalLocationSync) < GLOBAL_LOCATION_SYNC_INTERVAL_MS) {
@@ -821,105 +922,12 @@ async function handler(req, res) {
         if (locationFilterActive) {
           items = await buildLocationInventoryResponse(locationId)
         } else {
-          items = await prisma.inventoryItem.findMany({
-            orderBy: { createdAt: 'desc' }
-          })
+          // One row per SKU (aggregated across locations); no per-location duplicate rows
+          items = await buildAllLocationsInventoryResponse()
         }
-        
-        // Deduplicate by SKU and locationId - merge duplicates intelligently
-        // When locationId is not filtered, we still deduplicate items with same SKU+locationId
-        // This handles true duplicates (same SKU, same locationId, appearing twice)
-        const itemMap = new Map();
-        for (const item of items) {
-          // Normalize locationId: treat null, undefined, and empty string the same
-          const locationKey = (item.locationId && item.locationId !== 'null' && item.locationId !== 'undefined') 
-            ? String(item.locationId) 
-            : 'null';
-          const key = `${item.sku}::${locationKey}`;
-          
-          if (!itemMap.has(key)) {
-            itemMap.set(key, { ...item });
-          } else {
-            // Merge duplicate: combine quantities and use best metadata
-            const existing = itemMap.get(key);
-            
-            // Store original quantities before merging
-            const existingQty = existing.quantity || 0;
-            const itemQty = item.quantity || 0;
-            
-            // Merge quantities and allocated quantities
-            existing.quantity = existingQty + itemQty;
-            existing.allocatedQuantity = (existing.allocatedQuantity || 0) + (item.allocatedQuantity || 0);
-            existing.totalValue = (existing.totalValue || 0) + (item.totalValue || 0);
-            
-            // Use metadata from the item with non-zero quantity if available
-            if (itemQty > 0 && existingQty === 0) {
-              existing.thumbnail = item.thumbnail || existing.thumbnail;
-              existing.supplier = item.supplier || existing.supplier;
-              existing.location = item.location || existing.location;
-              existing.unitCost = item.unitCost || existing.unitCost;
-              existing.category = item.category || existing.category;
-              existing.type = item.type || existing.type;
-              existing.boxNumber = item.boxNumber || existing.boxNumber;
-            }
-            
-            // Prefer valid locationId if one has it and the other doesn't
-            if (item.locationId && !existing.locationId) {
-              existing.locationId = item.locationId;
-            }
-            
-            // Update status based on merged quantity
-            if (existing.quantity === 0) {
-              existing.status = 'out_of_stock';
-            } else if (existing.quantity < (existing.reorderPoint || 0)) {
-              existing.status = 'low_stock';
-            } else {
-              existing.status = 'in_stock';
-            }
-            
-            // Use most recent updatedAt
-            if (new Date(item.updatedAt) > new Date(existing.updatedAt)) {
-              existing.updatedAt = item.updatedAt;
-              existing.createdAt = existing.createdAt < item.createdAt ? existing.createdAt : item.createdAt;
-            }
-            
-            itemMap.set(key, existing);
-          }
-        }
-        
-        let deduplicatedItems = Array.from(itemMap.values());
-
-        if (deduplicatedItems.length < items.length) {
-          const removedCount = items.length - deduplicatedItems.length;
-        } else {
-        }
-
-        // When showing "All Locations" we don't want to surface legacy
-        // template items that have no locationId if there are
-        // location-specific records for the same SKU. Those template
-        // rows are used for metadata only and cause confusing
-        // "blank location" duplicates in the UI.
-        const skuHasLocation = new Set();
-        for (const item of deduplicatedItems) {
-          if (item.locationId && item.locationId !== 'null' && item.locationId !== 'undefined') {
-            skuHasLocation.add(item.sku);
-          }
-        }
-
-        deduplicatedItems = deduplicatedItems.filter(item => {
-          const hasRealLocation = item.locationId && item.locationId !== 'null' && item.locationId !== 'undefined';
-          // Keep all items that have a real locationId.
-          if (hasRealLocation) return true;
-          // Drop legacy template rows (no locationId) when there is
-          // at least one location-scoped row for the same SKU.
-          if (!hasRealLocation && skuHasLocation.has(item.sku)) {
-            return false;
-          }
-          return true;
-        });
 
         // Format dates for response
-        const formatted = deduplicatedItems.map(item => ({
+        const formatted = items.map(item => ({
           ...item,
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
@@ -3240,16 +3248,36 @@ async function handler(req, res) {
 
         // Perform movement and inventory adjustment atomically (basic aggregate store)
         const result = await prisma.$transaction(async (tx) => {
+          // Resolve location IDs first (best practice: always persist IDs in movement for consistent filtering/ledger)
+          let fromLocationId = body.fromLocationId || null
+          let toLocationId = body.toLocationId || null
+          if (!fromLocationId && (body.fromLocation || '').trim()) {
+            const fromLoc = await tx.stockLocation.findFirst({
+              where: { OR: [{ id: body.fromLocation.trim() }, { code: body.fromLocation.trim() }] }
+            })
+            if (fromLoc) fromLocationId = fromLoc.id
+          }
+          if (!toLocationId && (body.toLocation || '').trim()) {
+            const toLoc = await tx.stockLocation.findFirst({
+              where: { OR: [{ id: body.toLocation.trim() }, { code: body.toLocation.trim() }] }
+            })
+            if (toLoc) toLocationId = toLoc.id
+          }
+          if (!toLocationId && type === 'receipt') {
+            const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
+            if (mainWarehouse) toLocationId = mainWarehouse.id
+          }
+
           // Helper to get or create LocationInventory record
           async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
             if (!locationId) return null
-            
-            let li = await tx.locationInventory.findUnique({ 
-              where: { locationId_sku: { locationId, sku } } 
+
+            let li = await tx.locationInventory.findUnique({
+              where: { locationId_sku: { locationId, sku } }
             })
-            
+
             if (!li) {
-              li = await tx.locationInventory.create({ 
+              li = await tx.locationInventory.create({
                 data: {
                   locationId,
                   sku,
@@ -3261,10 +3289,10 @@ async function handler(req, res) {
                 }
               })
             }
-            
+
             const newQty = (li.quantity || 0) + quantityDelta
             const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
-            
+
             return await tx.locationInventory.update({
               where: { id: li.id },
               data: {
@@ -3278,17 +3306,17 @@ async function handler(req, res) {
             })
           }
 
-          // Create movement record
+          // Create movement record (persist location IDs so ledger filtering by location is consistent)
           const movement = await tx.stockMovement.create({
             data: {
               movementId,
               date: body.date ? new Date(body.date) : new Date(),
-              type: body.type, // expected: receipt | consumption | production | transfer | adjustment
+              type: body.type,
               itemName: body.itemName.trim(),
               sku: body.sku.trim(),
               quantity,
-              fromLocation: (body.fromLocation || body.fromLocationId || '').trim(),
-              toLocation: (body.toLocation || body.toLocationId || '').trim(),
+              fromLocation: fromLocationId || '',
+              toLocation: toLocationId || '',
               reference: (body.reference || '').trim(),
               performedBy: (body.performedBy || req.user?.name || 'System').trim(),
               notes: (body.notes || '').trim(),
@@ -3300,32 +3328,6 @@ async function handler(req, res) {
           let item = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
 
           let newQuantity = item?.quantity || 0
-          
-          // Get location IDs from body or fromLocation/toLocation strings
-          let fromLocationId = body.fromLocationId || null
-          let toLocationId = body.toLocationId || null
-          
-          // If location IDs are provided as strings (location codes), resolve them
-          if (!fromLocationId && body.fromLocation) {
-            const fromLoc = await tx.stockLocation.findFirst({ 
-              where: { code: body.fromLocation.trim() } 
-            })
-            if (fromLoc) fromLocationId = fromLoc.id
-          }
-          if (!toLocationId && body.toLocation) {
-            const toLoc = await tx.stockLocation.findFirst({ 
-              where: { code: body.toLocation.trim() } 
-            })
-            if (toLoc) toLocationId = toLoc.id
-          }
-          
-          // Default to main warehouse if no location specified for receipts
-          if (!toLocationId && type === 'receipt') {
-            const mainWarehouse = await tx.stockLocation.findFirst({ 
-              where: { code: 'LOC001' } 
-            })
-            if (mainWarehouse) toLocationId = mainWarehouse.id
-          }
 
           // Handle transfer type separately
           if (type === 'transfer') {
