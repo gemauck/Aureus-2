@@ -4231,13 +4231,13 @@ const Projects = () => {
                     ) : viewMode === 'list' ? (
                         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
                             <div className="overflow-x-auto">
-                                <table className="w-full table-fixed">
+                                <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                     <colgroup>
-                                        <col style={{ width: '28%' }} />
+                                        <col style={{ width: '30%' }} />
                                         <col style={{ width: '18%' }} />
                                         <col style={{ width: '12%' }} />
                                         <col style={{ width: '16%' }} />
-                                        <col style={{ width: '18%' }} />
+                                        <col style={{ width: '16%' }} />
                                         <col style={{ width: '8%' }} />
                                     </colgroup>
                                     <thead className={isDark ? 'bg-gray-800 border-b border-gray-800' : 'bg-gray-50 border-b border-gray-100'}>
@@ -4303,23 +4303,23 @@ const Projects = () => {
                                         </span>
                                     </div>
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-[1000px] w-[1000px] table-fixed">
+                                        <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                             <colgroup>
-                                                <col style={{ width: '280px' }} />
-                                                <col style={{ width: '180px' }} />
-                                                <col style={{ width: '120px' }} />
-                                                <col style={{ width: '160px' }} />
-                                                <col style={{ width: '180px' }} />
-                                                <col style={{ width: '80px' }} />
+                                                <col style={{ width: '30%' }} />
+                                                <col style={{ width: '18%' }} />
+                                                <col style={{ width: '12%' }} />
+                                                <col style={{ width: '16%' }} />
+                                                <col style={{ width: '16%' }} />
+                                                <col style={{ width: '8%' }} />
                                             </colgroup>
                                             <thead className={isDark ? 'bg-gray-900 border-b border-gray-800' : 'bg-white border-b border-gray-100'}>
                                                 <tr>
-                                                    <th style={{ width: '280px', maxWidth: '280px' }} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
-                                                    <th style={{ width: '180px', maxWidth: '180px' }} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
-                                                    <th style={{ width: '120px', maxWidth: '120px' }} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
-                                                    <th style={{ width: '160px', maxWidth: '160px' }} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
-                                                    <th style={{ width: '180px', maxWidth: '180px' }} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
-                                                    <th style={{ width: '80px', maxWidth: '80px' }} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
                                                 </tr>
                                             </thead>
                                             <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -4329,26 +4329,26 @@ const Projects = () => {
                                                         onClick={() => handleViewProject(project)}
                                                         className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
                                                     >
-                                                        <td style={{ width: '280px', maxWidth: '280px' }} className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
                                                         </td>
-                                                        <td style={{ width: '180px', maxWidth: '180px' }} className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.type}</div>
                                                         </td>
-                                                        <td style={{ width: '120px', maxWidth: '120px' }} className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-6 py-3 whitespace-nowrap">
                                                             <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
                                                                 {project.status}
                                                             </span>
                                                         </td>
-                                                        <td style={{ width: '160px', maxWidth: '160px' }} className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>
                                                                 {formatProjectDateRange(project.startDate, project.dueDate)}
                                                             </div>
                                                         </td>
-                                                        <td style={{ width: '180px', maxWidth: '180px' }} className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.assignedTo || 'Unassigned'}</div>
                                                         </td>
-                                                        <td style={{ width: '80px', maxWidth: '80px' }} className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
                                                         </td>
                                                     </tr>
