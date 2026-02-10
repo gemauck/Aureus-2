@@ -4666,23 +4666,35 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       };
 
       
-      // Retry logic for API call
+      // Retry logic for API call (do not retry on 400 - validation/business errors)
       let response;
       let retries = 0;
       const maxRetries = 3;
-      
+      let lastApiError = null;
+
       while (retries < maxRetries) {
         try {
           response = await safeCallAPI('createStockMovement', movementData);
-          break; // Success, exit retry loop
+          lastApiError = null;
+          break;
         } catch (apiError) {
+          lastApiError = apiError;
+          const msg = (apiError?.message || '').toLowerCase();
+          const isClientError = msg.includes('required for transfer') || msg.includes('insufficient stock') || msg.includes('please select');
+          if (apiError?.response?.status === 400 || isClientError) {
+            throw apiError;
+          }
           retries++;
           if (retries >= maxRetries) {
             throw apiError;
           }
           console.warn(`⚠️ API call failed, retrying (${retries}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, 500 * retries)); // Exponential backoff
+          await new Promise(resolve => setTimeout(resolve, 500 * retries));
         }
+      }
+
+      if (!response && lastApiError) {
+        throw lastApiError;
       }
       
       
@@ -4758,7 +4770,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     } catch (error) {
       console.error('❌ Error creating stock movement:', error);
       const errorMessage = error?.message || error?.response?.data?.message || 'Failed to create stock movement. Please try again.';
-      alert(`Error: ${errorMessage}`);
+      alert(errorMessage);
     }
   };
 
