@@ -1893,9 +1893,11 @@ const Clients = React.memo(() => {
     
     // Function to load clients (can be called to refresh) - MOVED BEFORE useEffects
     const loadClients = async (forceRefresh = false) => {
-        // On first load, always force refresh to get fresh data with groups
+        const cachedClients = safeStorage.getClients();
+        const hasCachedClients = Array.isArray(cachedClients) && cachedClients.length > 0;
+        // On first load, only force refresh if we have no cached data
         if (isFirstLoad) {
-            forceRefresh = true;
+            forceRefresh = forceRefresh || !hasCachedClients;
             isFirstLoad = false;
         }
         
@@ -1926,7 +1928,6 @@ const Clients = React.memo(() => {
             }
             
             // IMMEDIATELY show cached data without waiting for API (unless force refresh)
-            const cachedClients = safeStorage.getClients();
             
             if (cachedClients && cachedClients.length > 0 && !forceRefresh) {
                 // Separate clients and leads from cache

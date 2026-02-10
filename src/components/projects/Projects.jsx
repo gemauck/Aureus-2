@@ -197,7 +197,7 @@ const Projects = () => {
     const [viewMode, setViewMode] = useState(() => {
         try {
             const saved = localStorage.getItem('projectsViewMode');
-            return saved === 'grid' || saved === 'list' ? saved : 'list';
+            return saved === 'grid' || saved === 'list' || saved === 'client' ? saved : 'list';
         } catch (e) {
             return 'list';
         }
@@ -3311,6 +3311,23 @@ const Projects = () => {
         });
     }, [projects, selectedClient, debouncedSearchTerm, filterStatus]);
 
+    const groupedProjectsByClient = useMemo(() => {
+        const groups = new Map();
+        filteredProjects.forEach(project => {
+            const clientName = (project.client || '').trim() || 'Unassigned';
+            if (!groups.has(clientName)) {
+                groups.set(clientName, []);
+            }
+            groups.get(clientName).push(project);
+        });
+        return Array.from(groups.entries())
+            .sort(([clientA], [clientB]) => clientA.localeCompare(clientB))
+            .map(([client, projectsForClient]) => ({
+                client,
+                projects: projectsForClient
+            }));
+    }, [filteredProjects]);
+
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
         
@@ -3912,6 +3929,26 @@ const Projects = () => {
                         >
                             <i className="fas fa-list" aria-hidden="true"></i>
                         </button>
+                        <button
+                            onClick={() => {
+                                setViewMode('client');
+                                try {
+                                    localStorage.setItem('projectsViewMode', 'client');
+                                } catch (e) {
+                                    console.warn('Failed to save view mode preference:', e);
+                                }
+                            }}
+                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                viewMode === 'client'
+                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            }`}
+                            title="Group by Client"
+                            aria-label="Switch to client grouped view"
+                            aria-pressed={viewMode === 'client'}
+                        >
+                            <i className="fas fa-user-tag" aria-hidden="true"></i>
+                        </button>
                     </div>
                     <button 
                         onClick={() => {
@@ -4191,7 +4228,7 @@ const Projects = () => {
                                 </div>
                             ))}
                         </div>
-                    ) : (
+                    ) : viewMode === 'list' ? (
                         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
                             <div className="overflow-x-auto">
                                 <table className="w-full">
@@ -4243,6 +4280,68 @@ const Projects = () => {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {groupedProjectsByClient.map(group => (
+                                <div key={group.client} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border shadow-sm overflow-hidden`}>
+                                    <div className={`flex items-center justify-between px-5 py-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                                        <div className="flex items-center gap-2">
+                                            <i className={`fas fa-building ${isDark ? 'text-gray-300' : 'text-gray-600'}`} aria-hidden="true"></i>
+                                            <span className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{group.client}</span>
+                                        </div>
+                                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            {group.projects.length} project{group.projects.length === 1 ? '' : 's'}
+                                        </span>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className={isDark ? 'bg-gray-900 border-b border-gray-800' : 'bg-white border-b border-gray-100'}>
+                                                <tr>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
+                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
+                                                {group.projects.map(project => (
+                                                    <tr
+                                                        key={project.id}
+                                                        onClick={() => handleViewProject(project)}
+                                                        className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
+                                                    >
+                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{project.name}</div>
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.type}</div>
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                            <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
+                                                                {project.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                                {formatProjectDateRange(project.startDate, project.dueDate)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.assignedTo || 'Unassigned'}</div>
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </>
