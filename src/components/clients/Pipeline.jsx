@@ -111,7 +111,14 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
         stage: 'All',
         source: 'All'
     });
-    const [showStarredOnly, setShowStarredOnly] = useState(false);
+    const [showStarredOnly, setShowStarredOnly] = useState(() => {
+        try {
+            const v = localStorage.getItem('pipeline.showStarredOnly');
+            return v !== null ? v === 'true' : false;
+        } catch (e) {
+            return false;
+        }
+    });
     const [sortBy, setSortBy] = useState('value-desc');
     // Load view mode from localStorage, defaulting to 'list' if not set
     const [viewMode, setViewMode] = useState(() => {
@@ -175,6 +182,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             console.warn('⚠️ Pipeline: Failed to save list page size:', error);
         }
     }, [listPageSize]);
+
+    // Persist Starred Only preference
+    useEffect(() => {
+        try {
+            localStorage.setItem('pipeline.showStarredOnly', String(showStarredOnly));
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Failed to save starred-only preference:', error);
+        }
+    }, [showStarredOnly]);
 
     // Reset to page 1 when filters or sort change
     useEffect(() => {

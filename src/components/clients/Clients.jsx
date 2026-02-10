@@ -991,7 +991,14 @@ const Clients = React.memo(() => {
     });
     
     // State declarations moved before useEffect hooks to avoid temporal dead zone errors
-    const [showStarredOnly, setShowStarredOnly] = useState(false);
+    const [showStarredOnly, setShowStarredOnly] = useState(() => {
+        try {
+            const v = localStorage.getItem('clients.showStarredOnly');
+            return v !== null ? v === 'true' : false;
+        } catch {
+            return false;
+        }
+    });
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
     const [leadSortField, setLeadSortField] = useState('name');
@@ -1029,6 +1036,11 @@ const Clients = React.memo(() => {
             localStorage.setItem('clients.clients.showSitesInList', String(showSitesInClientsList));
         } catch (_) {}
     }, [showSitesInClientsList]);
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients.showStarredOnly', String(showStarredOnly));
+        } catch (_) {}
+    }, [showStarredOnly]);
 
     // Persist filterServices to localStorage whenever it changes
     useEffect(() => {
