@@ -1773,6 +1773,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     return colors[status] || 'text-gray-600 bg-gray-50';
   };
 
+  const getLocationLabel = (idOrCode) => {
+    if (!idOrCode) return '';
+    const loc = stockLocations.find(l => l.id === idOrCode || l.code === idOrCode);
+    return loc ? `${loc.code} – ${loc.name}` : idOrCode;
+  };
+
   const getInventoryStats = () => {
     const totalValue = inventory.reduce((sum, item) => sum + item.totalValue, 0);
     // Use available quantity (quantity - allocatedQuantity) for low stock calculation
@@ -1956,7 +1962,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{movement.sku}</div>
                     </td>
                     <td className={`px-4 py-3 text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{movement.quantity > 0 ? '+' : ''}{movement.quantity}</td>
-                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{movement.fromLocation} → {movement.toLocation || 'N/A'}</td>
+                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{getLocationLabel(movement.fromLocation)} → {getLocationLabel(movement.toLocation) || 'N/A'}</td>
                     <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{movement.reference}</td>
                   </tr>
                 ))}
@@ -4558,6 +4564,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         itemName: prefill.itemName || '',
         quantity: prefill.quantity !== undefined ? prefill.quantity : '',
         unitCost: prefill.unitCost !== undefined ? prefill.unitCost : '',
+        fromLocationId: prefill.fromLocationId || '',
+        toLocationId: prefill.toLocationId || '',
         fromLocation: prefill.fromLocation || '',
         toLocation: prefill.toLocation || '',
         reference: prefill.reference || '',
@@ -4619,17 +4627,42 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }
       }
 
+      // Require location selection for transfer/consumption/receipt/production
+      const type = formData.type || 'receipt';
+      if (type === 'transfer') {
+        if (!formData.fromLocationId || !formData.toLocationId) {
+          alert('Please select From Location and To Location for the transfer.');
+          return;
+        }
+        if (formData.fromLocationId === formData.toLocationId) {
+          alert('From and To location must be different for a transfer.');
+          return;
+        }
+      } else if (type === 'consumption') {
+        if (!formData.fromLocationId) {
+          alert('Please select From Location for consumption.');
+          return;
+        }
+      } else if (type === 'receipt' || type === 'production') {
+        if (!formData.toLocationId) {
+          alert('Please select To Location for ' + (type === 'receipt' ? 'receipt' : 'production') + '.');
+          return;
+        }
+      }
+
       const movementData = {
-        type: formData.type || 'receipt',
+        type,
         sku: formData.sku.trim(),
         itemName: formData.itemName.trim(),
         quantity: quantity,
         unitCost: unitCost,
-        fromLocation: (formData.fromLocation || '').trim(),
-        toLocation: (formData.toLocation || '').trim(),
         reference: (formData.reference || '').trim(),
         notes: (formData.notes || '').trim(),
-        date: formData.date || new Date().toISOString().split('T')[0]
+        date: formData.date || new Date().toISOString().split('T')[0],
+        fromLocationId: formData.fromLocationId || undefined,
+        toLocationId: formData.toLocationId || undefined,
+        fromLocation: (formData.fromLocation || '').trim() || undefined,
+        toLocation: (formData.toLocation || '').trim() || undefined
       };
 
       
@@ -6986,30 +7019,54 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                 )}
 
-                {/* Locations */}
+                {/* Locations: dropdowns so user selects from stock locations (IDs sent to API) */}
                 <div className="grid grid-cols-2 gap-4">
-                  {(formData.type === 'transfer' || formData.type === 'consumption') && (
+                  {(formData.type === 'transfer' || formData.type === 'consumption' || formData.type === 'adjustment') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">From Location</label>
-                      <input
-                        type="text"
-                        value={formData.fromLocation || ''}
-                        onChange={(e) => setFormData({ ...formData, fromLocation: e.target.value })}
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        From Location {formData.type === 'transfer' || formData.type === 'consumption' ? '*' : ''}
+                      </label>
+                      <select
+                        value={formData.fromLocationId || ''}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const loc = stockLocations.find(l => l.id === id);
+                          setFormData({
+                            ...formData,
+                            fromLocationId: id,
+                            fromLocation: loc ? loc.name : ''
+                          });
+                        }}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="e.g., Warehouse A"
-                      />
+                      >
+                        <option value="">Select location...</option>
+                        {stockLocations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.code} – {loc.name}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
                   {(formData.type === 'transfer' || formData.type === 'receipt' || formData.type === 'production') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">To Location</label>
-                      <input
-                        type="text"
-                        value={formData.toLocation || ''}
-                        onChange={(e) => setFormData({ ...formData, toLocation: e.target.value })}
+                      <label className="block text-sm font-medium text-gray-700 mb-1">To Location *</label>
+                      <select
+                        value={formData.toLocationId || ''}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const loc = stockLocations.find(l => l.id === id);
+                          setFormData({
+                            ...formData,
+                            toLocationId: id,
+                            toLocation: loc ? loc.name : ''
+                          });
+                        }}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="e.g., Warehouse B"
-                      />
+                      >
+                        <option value="">Select location...</option>
+                        {stockLocations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.code} – {loc.name}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
                 </div>
@@ -8875,8 +8932,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             }
                           })()}
                         </td>
-                        <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation}</td>
-                        <td className="px-3 py-2 text-sm text-gray-600">{movement.toLocation || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{getLocationLabel(movement.fromLocation)}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{getLocationLabel(movement.toLocation) || '-'}</td>
                         <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
                         <td className="px-3 py-2 text-sm text-gray-600">{movement.performedBy}</td>
                         <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
@@ -8978,11 +9035,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
       
       if (movement.fromLocation && movement.toLocation) {
-        desc += ` (${movement.fromLocation} → ${movement.toLocation})`;
+        desc += ` (${getLocationLabel(movement.fromLocation)} → ${getLocationLabel(movement.toLocation)})`;
       } else if (movement.fromLocation) {
-        desc += ` (from ${movement.fromLocation})`;
+        desc += ` (from ${getLocationLabel(movement.fromLocation)})`;
       } else if (movement.toLocation) {
-        desc += ` (to ${movement.toLocation})`;
+        desc += ` (to ${getLocationLabel(movement.toLocation)})`;
       }
       
       if (movement.notes) {

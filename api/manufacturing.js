@@ -3251,15 +3251,29 @@ async function handler(req, res) {
           // Resolve location IDs first (best practice: always persist IDs in movement for consistent filtering/ledger)
           let fromLocationId = body.fromLocationId || null
           let toLocationId = body.toLocationId || null
-          if (!fromLocationId && (body.fromLocation || '').trim()) {
+          const fromStr = (body.fromLocation || '').trim()
+          const toStr = (body.toLocation || '').trim()
+          if (!fromLocationId && fromStr) {
             const fromLoc = await tx.stockLocation.findFirst({
-              where: { OR: [{ id: body.fromLocation.trim() }, { code: body.fromLocation.trim() }] }
+              where: {
+                OR: [
+                  { id: fromStr },
+                  { code: fromStr },
+                  { name: { equals: fromStr, mode: 'insensitive' } }
+                ]
+              }
             })
             if (fromLoc) fromLocationId = fromLoc.id
           }
-          if (!toLocationId && (body.toLocation || '').trim()) {
+          if (!toLocationId && toStr) {
             const toLoc = await tx.stockLocation.findFirst({
-              where: { OR: [{ id: body.toLocation.trim() }, { code: body.toLocation.trim() }] }
+              where: {
+                OR: [
+                  { id: toStr },
+                  { code: toStr },
+                  { name: { equals: toStr, mode: 'insensitive' } }
+                ]
+              }
             })
             if (toLoc) toLocationId = toLoc.id
           }
@@ -3762,6 +3776,12 @@ async function handler(req, res) {
         }
         if (error.code === 'P2034') {
           return serverError(res, 'Transaction conflict. Please try again.')
+        }
+        if (error.message?.includes('fromLocationId and toLocationId are required for transfers')) {
+          return badRequest(res, 'Please select From Location and To Location for the transfer.')
+        }
+        if (error.message?.includes('Insufficient stock at source location')) {
+          return badRequest(res, 'Insufficient stock at source location for this transfer.')
         }
         
         const message = error?.message || 'Failed to create stock movement'
