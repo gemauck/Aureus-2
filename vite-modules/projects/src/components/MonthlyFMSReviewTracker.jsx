@@ -950,7 +950,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         { value: 'issue', label: 'Issue', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
         { value: 'not-complete', label: 'Not Complete', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-600 shadow-sm' },
         { value: 'in-progress', label: 'In progress', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-400 border-l-4 border-yellow-500 shadow-sm' },
-        { value: 'completed', label: 'Completed', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-600 shadow-sm' }
+        { value: 'completed', label: 'Completed', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-600 shadow-sm' },
+        { value: 'sent', label: 'Sent', color: 'bg-purple-200 text-slate-700 font-semibold', cellColor: 'bg-purple-200 border-l-4 border-purple-300 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {

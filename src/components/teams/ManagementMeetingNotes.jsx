@@ -661,39 +661,6 @@ const ManagementMeetingNotes = () => {
         }
     }, [scrollRestoreTrigger]); // Only depend on scrollRestoreTrigger, not on data updates
 
-    useEffect(() => {
-        const headerScroller = headerScrollRef.current;
-        const bodyScroller = bodyScrollRef.current;
-
-        if (!headerScroller || !bodyScroller) {
-            return undefined;
-        }
-
-        const syncScroll = (source, target) => {
-            if (isSyncingHorizontalScroll.current) {
-                return;
-            }
-
-            isSyncingHorizontalScroll.current = true;
-            target.scrollLeft = source.scrollLeft;
-
-            requestAnimationFrame(() => {
-                isSyncingHorizontalScroll.current = false;
-            });
-        };
-
-        const handleHeaderScroll = () => syncScroll(headerScroller, bodyScroller);
-        const handleBodyScroll = () => syncScroll(bodyScroller, headerScroller);
-
-        headerScroller.addEventListener('scroll', handleHeaderScroll, { passive: true });
-        bodyScroller.addEventListener('scroll', handleBodyScroll, { passive: true });
-
-        return () => {
-            headerScroller.removeEventListener('scroll', handleHeaderScroll);
-            bodyScroller.removeEventListener('scroll', handleBodyScroll);
-        };
-    }, [weeks.length, selectedMonth]);
-    
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null, preserveScroll = false) => {
         // Preserve scroll position if requested
         const currentScrollPosition = preserveScroll ? (window.scrollY || window.pageYOffset) : null;
@@ -1148,6 +1115,39 @@ const ManagementMeetingNotes = () => {
         
         return sorted;
     }, [currentMonthlyNotes]);
+
+    useEffect(() => {
+        const headerScroller = headerScrollRef.current;
+        const bodyScroller = bodyScrollRef.current;
+
+        if (!headerScroller || !bodyScroller) {
+            return undefined;
+        }
+
+        const syncScroll = (source, target) => {
+            if (isSyncingHorizontalScroll.current) {
+                return;
+            }
+
+            isSyncingHorizontalScroll.current = true;
+            target.scrollLeft = source.scrollLeft;
+
+            requestAnimationFrame(() => {
+                isSyncingHorizontalScroll.current = false;
+            });
+        };
+
+        const handleHeaderScroll = () => syncScroll(headerScroller, bodyScroller);
+        const handleBodyScroll = () => syncScroll(bodyScroller, headerScroller);
+
+        headerScroller.addEventListener('scroll', handleHeaderScroll, { passive: true });
+        bodyScroller.addEventListener('scroll', handleBodyScroll, { passive: true });
+
+        return () => {
+            headerScroller.removeEventListener('scroll', handleHeaderScroll);
+            bodyScroller.removeEventListener('scroll', handleBodyScroll);
+        };
+    }, [weeks.length, selectedMonth]);
 
     const monthlyGoalsRef = useRef({});
     const monthlyGoalsByDepartment = useMemo(
