@@ -8991,11 +8991,20 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     const detailLocations = Array.isArray(item.locations) ? item.locations : (item.locationId && item.location ? [{ locationId: item.locationId, locationName: item.location, locationCode: '', quantity: item.quantity || 0, status: item.status }] : []);
 
+    const selectedDetailLocationCode = useMemo(() => {
+      const loc = detailLocations.find(l => l.locationId === selectedDetailLocationId);
+      return loc?.locationCode || loc?.locationName || '';
+    }, [detailLocations, selectedDetailLocationId]);
+
     const itemMovementsForDetail = useMemo(() => {
       if (!item?.sku) return [];
       let list = (movements || []).filter(m => m.sku === item.sku);
       if (selectedDetailLocationId) {
-        list = list.filter(m => m.fromLocation === selectedDetailLocationId || m.toLocation === selectedDetailLocationId);
+        list = list.filter(m => {
+          const fromMatch = m.fromLocation === selectedDetailLocationId || (selectedDetailLocationCode && m.fromLocation === selectedDetailLocationCode);
+          const toMatch = m.toLocation === selectedDetailLocationId || (selectedDetailLocationCode && m.toLocation === selectedDetailLocationCode);
+          return fromMatch || toMatch;
+        });
       }
       return list.sort((a, b) => {
           // Primary sort: by date (oldest first)
@@ -9013,7 +9022,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           // Tertiary sort: by ID (for absolute ordering)
           return (a.id || '').localeCompare(b.id || '');
         });
-    }, [movements, item?.sku, selectedDetailLocationId]);
+    }, [movements, item?.sku, selectedDetailLocationId, selectedDetailLocationCode]);
 
     const recentMovementTemplates = useMemo(() => {
       if (!itemMovementsForDetail.length) return [];
