@@ -22,7 +22,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 // Column header mapping (Excel header -> our field)
 const HEADERS = {
   'BOX NUMBER (NO LONGER SKU)': 'boxNumber',
+  'Box Number': 'boxNumber',
+  'BOX NUMBER': 'boxNumber',
   'PART NAME (NO LONGER NAME)': 'name',
+  'Part Name': 'name',
+  'PART NAME': 'name',
   'Category': 'category',
   'Type': 'type',
   'Quantity': 'quantity',
@@ -31,13 +35,18 @@ const HEADERS = {
   'Unit': 'unit',
   'Unit Cost': 'unitCost',
   'Total Value': 'totalValue',
+  'Total Value (R)': 'totalValue',
+  'Value': 'totalValue',
   'Reorder Point': 'reorderPoint',
   'Reorder Qty': 'reorderQty',
   'Location': 'location',
   'Supplier': 'supplier',
   'Thumbnail': 'thumbnail',
   'SUPPLIER Part Number': 'supplierPartNumber',
+  'Supplier Part Number': 'supplierPartNumber',
   'Abcotronics Part Number': 'legacyPartNumber',
+  'ABCOTRONICS DESCRIPTION (NO LONGER LEGACY PAR NUMBER)': 'legacyPartNumber',
+  'ABCOTRONICS DESCRIPTION (NO LONGER LEGACY PART NUMBER)': 'legacyPartNumber',
   'SUPPLIER DESCRIPTION (No Longer Supplier Part Number)': 'supplierDescription',
   'Location Code': 'locationCode',
 }
@@ -63,6 +72,33 @@ function normalizeType(val) {
   const v = String(val).trim().toLowerCase()
   if (v === 'final_product' || v.includes('final') || v.includes('product')) return 'final_product'
   return 'component'
+}
+
+// Parse numeric cells: support both "362,593.29" (US) and "362 158,29" (SA: space=thousands, comma=decimal)
+function parseDecimal(val) {
+  if (val == null || val === '') return 0
+  if (typeof val === 'number' && !Number.isNaN(val)) return val
+  let s = String(val).trim().replace(/\s/g, '')
+  if (!s) return 0
+  // SA/EU format: comma is decimal only when no dot (e.g. "362 158,29" -> 362158.29)
+  // If there's a dot, treat as US (comma = thousands), e.g. "362,593.29" -> 362593.29
+  if (!/\.\d/.test(s) && /,\d+$/.test(s)) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else {
+    s = s.replace(/,/g, '')
+  }
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : 0
+}
+
+// US format only for currency (comma = thousands): "362,593.29" -> 362593.29. Use for Total Value / Unit Cost when spreadsheet uses US.
+function parseDecimalUS(val) {
+  if (val == null || val === '') return 0
+  if (typeof val === 'number' && !Number.isNaN(val)) return val
+  const s = String(val).trim().replace(/\s/g, '').replace(/,/g, '')
+  if (!s) return 0
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : 0
 }
 
 async function ensureLocation(prisma, codeOrName) {
@@ -118,13 +154,18 @@ async function main() {
   const dryRun = args.includes('--dry-run')
   const updateQuantitiesOnly = args.includes('--update-quantities-only')
   const updateLegacyPartNumbersOnly = args.includes('--update-legacy-part-numbers')
+  const onlyLocationArg = args.find(a => a.startsWith('--only-location='))
+  const onlyLocation = onlyLocationArg
+    ? onlyLocationArg.replace('--only-location=', '').trim()
+    : (process.env.ONLY_LOCATION || '').trim()
   const pathArg = args.find(a => !a.startsWith('--'))
   if (!pathArg) {
-    console.error('Usage: node scripts/import-stock-count-excel.js "/path/to/ABCOTRONICS STOCK COUNT - 2026.xlsx" [--dry-run] [--update-quantities-only] [--update-legacy-part-numbers]')
+    console.error('Usage: node scripts/import-stock-count-excel.js "/path/to/ABCOTRONICS STOCK COUNT - 2026.xlsx" [--dry-run] [--only-location=PMB] [--update-quantities-only] [--update-legacy-part-numbers]')
     process.exit(1)
   }
   const inputPath = resolve(pathArg)
   if (dryRun) console.log('(Dry run: no database changes)\n')
+  if (onlyLocation) console.log('Only location:', onlyLocation, '(skipping rows for other locations)\n')
   let workbook
   try {
     workbook = XLSX.read(readFileSync(inputPath), { type: 'buffer' })
@@ -168,18 +209,26 @@ async function main() {
     console.log('Using quantity column:', JSON.stringify(qtyHeader), 'at index', colIndex.quantity)
   }
 
-  const dataRows = rows.slice(1).filter(row => row && (row[nameCol] != null && String(row[nameCol]).trim() !== ''))
-  console.log('Rows to import:', dataRows.length)
+  let dataRows = rows.slice(1).filter(row => row && (row[nameCol] != null && String(row[nameCol]).trim() !== ''))
+  if (onlyLocation) {
+    const locMatch = (row) => {
+      const code = (row[colIndex.locationCode] != null ? String(row[colIndex.locationCode]).trim() : '').toUpperCase()
+      const name = (row[colIndex.location] != null ? String(row[colIndex.location]).trim() : '')
+      return code === onlyLocation.toUpperCase() || (name && name.toUpperCase() === onlyLocation.toUpperCase())
+    }
+    const before = dataRows.length
+    dataRows = dataRows.filter(locMatch)
+    console.log('Rows for location', onlyLocation + ':', dataRows.length, '(skipped', before - dataRows.length, 'other locations)')
+  } else {
+    console.log('Rows to import:', dataRows.length)
+  }
 
   // Helper to parse quantity from a row (used in both import and update-quantities-only)
   function parseQuantity(row) {
     if (colIndex.quantity === undefined) return 0
     const rawQty = row[colIndex.quantity]
     if (typeof rawQty === 'number' && !Number.isNaN(rawQty)) return Math.max(0, rawQty)
-    const s = String(rawQty != null ? rawQty : '').trim()
-    if (s === '') return 0
-    const n = parseFloat(s)
-    return Number.isFinite(n) ? Math.max(0, n) : 0
+    return Math.max(0, parseDecimal(rawQty))
   }
 
   const get = (row, key) => {
@@ -333,16 +382,22 @@ async function main() {
 
   console.log('Ensuring locations...')
   const locationMap = {}
-  for (const codeOrName of locationCodes) {
+  const locationsToEnsure = onlyLocation ? [onlyLocation] : [...locationCodes]
+  for (const codeOrName of locationsToEnsure) {
     if (!codeOrName) continue
     const loc = await ensureLocation(prisma, codeOrName)
     locationMap[normalizeCode(codeOrName)] = loc
     locationMap[String(codeOrName).trim()] = loc
   }
-  const mainWarehouse = await prisma.stockLocation.findFirst({ where: { code: 'LOC001' } })
-  if (mainWarehouse) {
-    locationMap[''] = mainWarehouse
-    locationMap['LOC001'] = mainWarehouse
+  if (onlyLocation) {
+    const singleLoc = locationMap[normalizeCode(onlyLocation)] || locationMap[String(onlyLocation).trim()]
+    if (singleLoc) locationMap[''] = singleLoc
+  } else {
+    const mainWarehouse = await prisma.stockLocation.findFirst({ where: { code: 'LOC001' } })
+    if (mainWarehouse) {
+      locationMap[''] = mainWarehouse
+      locationMap['LOC001'] = mainWarehouse
+    }
   }
 
   console.log('Ensuring suppliers...')
@@ -377,12 +432,12 @@ async function main() {
 
     const quantity = parseQuantity(row)
     const totalValue = (colIndex.totalValue !== undefined && row[colIndex.totalValue] != null)
-      ? parseFloat(String(row[colIndex.totalValue]).trim()) || 0
+      ? parseDecimal(row[colIndex.totalValue])
       : 0
     const unitCostNum = colIndex.unitCost !== undefined && row[colIndex.unitCost] != null
-      ? parseFloat(String(row[colIndex.unitCost]).trim())
+      ? parseDecimal(row[colIndex.unitCost])
       : NaN
-    const unitCost = Number.isFinite(unitCostNum) ? unitCostNum : (quantity > 0 ? Math.round((totalValue / quantity) * 100) / 100 : 0)
+    const unitCost = Number.isFinite(unitCostNum) ? unitCostNum : (quantity > 0 && totalValue > 0 ? Math.round((totalValue / quantity) * 100) / 100 : 0)
     const reorderPoint = colIndex.reorderPoint !== undefined ? parseFloat(row[colIndex.reorderPoint]) : NaN
     const reorderQty = colIndex.reorderQty !== undefined ? parseFloat(row[colIndex.reorderQty]) : NaN
     const reorderPointVal = Number.isFinite(reorderPoint) && reorderPoint >= 0 ? reorderPoint : Math.max(0, Math.floor(quantity * 0.2))

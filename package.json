@@ -27,6 +27,7 @@
     "test:all": "npm run test:safety && npm run test:deploy",
     "test:manufacturing": "node tests/manufacturing-browser-test.js",
     "test:prod:manufacturing": "node scripts/test-production-manufacturing.js",
+    "test:manufacturing:production:full": "node scripts/test-manufacturing-production-full.js",
     "test:prod:crm": "node scripts/test-production-crm.js",
     "test:crm": "node tests/crm/run-all-crm-tests.js",
     "test:crm:break": "node tests/crm/crm-break-tests.js",

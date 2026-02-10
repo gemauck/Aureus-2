@@ -197,7 +197,7 @@ try {
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // Sorting state
+  const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const reloadInventoryForLocation = useCallback(async (options = {}) => {
     if (options.skipIfTyping && isUserTypingRef.current) {
       return;

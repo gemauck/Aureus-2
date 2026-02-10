@@ -1,162 +1,99 @@
 #!/usr/bin/env node
 /**
- * Purge all manufacturing data
- * 
- * This script deletes all data from:
- * - StockMovement
- * - ProductionOrder
- * - SalesOrder (affects inventory)
- * - PurchaseOrder
- * - Supplier
- * - LocationInventory
- * - BOM
- * - InventoryItem
- * - StockLocation
- * 
- * WARNING: This is a destructive operation and cannot be undone!
+ * Purge all manufacturing data (inventory, movements, BOMs, production orders, locations, suppliers, purchase orders).
+ * Requires: CONFIRM_PURGE=yes and auth (TEST_EMAIL / TEST_PASSWORD for API, or run against local server).
+ *
+ * Usage:
+ *   CONFIRM_PURGE=yes TEST_URL=https://abcoafrica.co.za TEST_EMAIL=... TEST_PASSWORD=... node scripts/purge-manufacturing-data.js
+ *   CONFIRM_PURGE=yes node scripts/purge-manufacturing-data.js   # uses localhost + .env credentials
  */
 
-import { PrismaClient } from '@prisma/client'
-import { readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(__dirname, '..', '.env.local') });
+dotenv.config({ path: join(__dirname, '..', '.env') });
 
-// Load environment variables
-const envPath = join(__dirname, '..', '.env')
-try {
-  const envContent = readFileSync(envPath, 'utf-8')
-  envContent.split('\n').forEach(line => {
-    const [key, ...valueParts] = line.split('=')
-    if (key && valueParts.length > 0) {
-      const value = valueParts.join('=').trim().replace(/^["']|["']$/g, '')
-      if (!process.env[key.trim()]) {
-        process.env[key.trim()] = value
-      }
-    }
-  })
-} catch (e) {
-  console.warn('⚠️ Could not load .env file, using environment variables')
-}
+const BASE_URL = process.env.TEST_URL || process.env.APP_URL || 'http://localhost:3000';
+const EMAIL = process.env.TEST_EMAIL || '';
+const PASSWORD = process.env.TEST_PASSWORD || '';
+const CONFIRM = process.env.CONFIRM_PURGE === 'yes' || process.env.CONFIRM_PURGE === 'true';
 
-const prisma = new PrismaClient()
-
-async function purgeManufacturingData() {
-  console.log('🗑️  Starting manufacturing data purge...')
-  console.log('⚠️  WARNING: This will delete ALL manufacturing data!')
-  
-  try {
-    // Start transaction with increased timeout (60 seconds)
-    await prisma.$transaction(async (tx) => {
-      // 1. Delete Stock Movements (no dependencies)
-      console.log('📦 Deleting stock movements...')
-      await tx.stockMovement.deleteMany({})
-      console.log(`   ✅ Deleted stock movements`)
-
-      // 2. Delete Production Orders (no dependencies on manufacturing models)
-      console.log('🏭 Deleting production orders...')
-      await tx.productionOrder.deleteMany({})
-      console.log(`   ✅ Deleted production orders`)
-
-      // 3. Delete Sales Orders (affects inventory via stock movements)
-      console.log('🛒 Deleting sales orders...')
-      await tx.salesOrder.deleteMany({})
-      console.log(`   ✅ Deleted sales orders`)
-
-      // 4. Delete Purchase Orders (depends on Supplier)
-      console.log('📋 Deleting purchase orders...')
-      await tx.purchaseOrder.deleteMany({})
-      console.log(`   ✅ Deleted purchase orders`)
-
-      // 5. Delete Suppliers (no dependencies after PurchaseOrders are deleted)
-      console.log('🏢 Deleting suppliers...')
-      await tx.supplier.deleteMany({})
-      console.log(`   ✅ Deleted suppliers`)
-
-      // 6. Delete Location Inventory (depends on StockLocation)
-      console.log('📍 Deleting location inventory...')
-      await tx.locationInventory.deleteMany({})
-      console.log(`   ✅ Deleted location inventory records`)
-
-      // 7. Delete BOMs (depends on InventoryItem, but we'll handle the foreign key)
-      console.log('📋 Deleting BOMs...')
-      // First, remove the foreign key relationship
-      await tx.bOM.updateMany({
-        data: { inventoryItemId: null }
-      })
-      // Then delete all BOMs
-      await tx.bOM.deleteMany({})
-      console.log(`   ✅ Deleted BOMs`)
-
-      // 8. Delete Inventory Items (depends on StockLocation and BOM)
-      console.log('📦 Deleting inventory items...')
-      // First, remove the foreign key relationship to StockLocation
-      await tx.inventoryItem.updateMany({
-        data: { locationId: null }
-      })
-      // Then delete all inventory items
-      await tx.inventoryItem.deleteMany({})
-      console.log(`   ✅ Deleted inventory items`)
-
-      // 9. Delete Stock Locations (depends on InventoryItem and LocationInventory, both now deleted)
-      console.log('🏢 Deleting stock locations...')
-      await tx.stockLocation.deleteMany({})
-      console.log(`   ✅ Deleted stock locations`)
-
-      console.log('\n✅ All manufacturing data purged successfully!')
-    }, {
-      timeout: 60000 // 60 seconds
-    })
-
-    // Verify deletion
-    console.log('\n📊 Verification:')
-    const counts = {
-      stockMovements: await prisma.stockMovement.count(),
-      productionOrders: await prisma.productionOrder.count(),
-      salesOrders: await prisma.salesOrder.count(),
-      purchaseOrders: await prisma.purchaseOrder.count(),
-      suppliers: await prisma.supplier.count(),
-      locationInventory: await prisma.locationInventory.count(),
-      boms: await prisma.bOM.count(),
-      inventoryItems: await prisma.inventoryItem.count(),
-      stockLocations: await prisma.stockLocation.count()
-    }
-
-    console.log('   Stock Movements:', counts.stockMovements)
-    console.log('   Production Orders:', counts.productionOrders)
-    console.log('   Sales Orders:', counts.salesOrders)
-    console.log('   Purchase Orders:', counts.purchaseOrders)
-    console.log('   Suppliers:', counts.suppliers)
-    console.log('   Location Inventory:', counts.locationInventory)
-    console.log('   BOMs:', counts.boms)
-    console.log('   Inventory Items:', counts.inventoryItems)
-    console.log('   Stock Locations:', counts.stockLocations)
-
-    const totalRemaining = Object.values(counts).reduce((sum, count) => sum + count, 0)
-    if (totalRemaining === 0) {
-      console.log('\n✅ All manufacturing data successfully purged!')
-    } else {
-      console.log(`\n⚠️  Warning: ${totalRemaining} records still remain`)
-    }
-
-  } catch (error) {
-    console.error('❌ Error purging manufacturing data:', error)
-    throw error
-  } finally {
-    await prisma.$disconnect()
+async function login() {
+  const res = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Login failed: ${res.status} ${text}`);
   }
+  const body = await res.json();
+  const token = body.data?.accessToken ?? body.accessToken;
+  if (!token) throw new Error('No accessToken in login response');
+  return token;
 }
 
-// Run the purge
-purgeManufacturingData()
-  .then(() => {
-    console.log('\n✅ Purge complete!')
-    process.exit(0)
-  })
-  .catch((error) => {
-    console.error('\n❌ Purge failed:', error)
-    process.exit(1)
-  })
+async function purge(token) {
+  const url = `${BASE_URL}/api/manufacturing/purge?confirm=true`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
+  return { status: res.status, data };
+}
 
+async function main() {
+  if (!CONFIRM) {
+    console.error('Aborted. Set CONFIRM_PURGE=yes to purge all manufacturing data.');
+    process.exit(1);
+  }
+  if (!EMAIL || !PASSWORD) {
+    console.error('Set TEST_EMAIL and TEST_PASSWORD (e.g. in .env) to authenticate.');
+    process.exit(1);
+  }
+
+  console.log('Manufacturing purge –', BASE_URL);
+  let token;
+  try {
+    token = await login();
+    console.log('Authenticated.');
+  } catch (e) {
+    console.error('Login failed:', e.message);
+    process.exit(1);
+  }
+
+  const result = await purge(token);
+  if (result.status !== 200) {
+    console.error('Purge failed:', result.status, result.data);
+    process.exit(1);
+  }
+
+  const { existing, deleted } = result.data || {};
+  console.log('Purge completed.');
+  if (existing) {
+    console.log('Previous counts:', existing);
+  }
+  if (deleted) {
+    console.log('Deleted:', deleted);
+  }
+  process.exit(0);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
