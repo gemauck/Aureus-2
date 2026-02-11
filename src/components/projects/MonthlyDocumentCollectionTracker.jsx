@@ -3640,7 +3640,7 @@ const getAssigneeColor = (identifier, users) => {
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
                 role="gridcell"
             >
-                <div className="min-w-[200px] relative">
+                <div className="min-w-[180px] relative">
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -6734,7 +6734,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                             : 'text-gray-700'
                                                     }`}
-                                                    style={{ minWidth: '200px' }}
+                                                    style={{ minWidth: '180px' }}
                                                 >
                                                     <div className="flex flex-col items-center gap-0.5">
                                                         <span>{month.slice(0, 3)}</span>

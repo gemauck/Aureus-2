@@ -2626,7 +2626,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
-                <div className="min-w-[200px] relative">
+                <div className="min-w-[180px] relative">
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -3704,7 +3704,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             ? 'bg-primary-50 text-primary-700'
                                                             : 'text-gray-600'
                                                     }`}
-                                                    style={{ minWidth: '200px' }}
+                                                    style={{ minWidth: '180px' }}
                                                 >
                                                     {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
                                                 </th>
