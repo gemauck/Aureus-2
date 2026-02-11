@@ -85,6 +85,36 @@ async function handler(req, res) {
       }
     })
 
+    // Include fallback sent comments (when DocumentCollectionEmailLog create failed)
+    try {
+      const sentCommentRows = await prisma.documentItemComment.groupBy({
+        by: ['itemId', 'month'],
+        where: {
+          year,
+          item: { section: { projectId } },
+          author: { in: ['Sent reply (platform)', 'Sent request (platform)'] }
+        },
+        _count: { id: true }
+      })
+      sentCommentRows.forEach((r) => {
+        const key = `${r.itemId}-${r.month}`
+        const existing = receivedMap.get(key)
+        if (existing) {
+          existing.sentCount = (existing.sentCount || 0) + r._count.id
+        } else {
+          receivedMap.set(key, {
+            documentId: r.itemId,
+            month: r.month,
+            receivedCount: 0,
+            sentCount: r._count.id,
+            latestReceivedAt: null
+          })
+        }
+      })
+    } catch (e) {
+      console.warn('document-collection-received-counts: sent comment fallback query failed:', e?.message)
+    }
+
     const counts = Array.from(receivedMap.values()).filter(
       (c) => c.receivedCount > 0 || c.sentCount > 0
     )
