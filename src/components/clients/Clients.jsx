@@ -1006,17 +1006,17 @@ const Clients = React.memo(() => {
     const [showSitesInLeadsList, setShowSitesInLeadsList] = useState(() => {
         try {
             const v = localStorage.getItem('clients.leads.showSitesInList');
-            return v !== null ? v === 'true' : true;
+            return v !== null ? v === 'true' : false;
         } catch {
-            return true;
+            return false;
         }
     });
     const [showSitesInClientsList, setShowSitesInClientsList] = useState(() => {
         try {
             const v = localStorage.getItem('clients.clients.showSitesInList');
-            return v !== null ? v === 'true' : true;
+            return v !== null ? v === 'true' : false;
         } catch {
-            return true;
+            return false;
         }
     });
     // Sites loaded via GET /api/sites/client/:id when "Show sites" is on (so list always shows sites even if list API omits them)
