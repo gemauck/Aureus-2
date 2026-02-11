@@ -4150,10 +4150,34 @@ Abcotronics`;
                 .then((json) => {
                     if (fetchId !== activityFetchIdRef.current) return;
                     const data = json.data || json;
-                    setEmailActivity({
-                        sent: Array.isArray(data.sent) ? data.sent : [],
-                        received: Array.isArray(data.received) ? data.received : []
-                    });
+                    const sent = Array.isArray(data.sent) ? data.sent : [];
+                    const received = Array.isArray(data.received) ? data.received : [];
+                    setEmailActivity({ sent, received });
+                    // Update badge with actual count from activity (single source of truth for this cell)
+                    if (ctx?.doc?.id && monthNum >= 1 && monthNum <= 12) {
+                        const docMonthKey = buildDocMonthKey(ctx.doc.id, monthNum);
+                        const total = sent.length + received.length;
+                        setReceivedMetaByCell((prev) => {
+                            const existing = prev[docMonthKey] || {};
+                            if (total === 0 && !existing.count && !existing.sentCount) return prev; // no change needed
+                            return {
+                                ...prev,
+                                [docMonthKey]: {
+                                    ...existing,
+                                    count: received.length,
+                                    sentCount: sent.length,
+                                    latestReceivedAt: received.length > 0
+                                        ? received.reduce((latest, r) => {
+                                            const t = r?.createdAt;
+                                            if (!t) return latest;
+                                            if (!latest) return t;
+                                            return new Date(t) > new Date(latest) ? t : latest;
+                                          }, null)
+                                        : existing.latestReceivedAt
+                                }
+                            };
+                        });
+                    }
                 })
                 .catch(() => { if (fetchId === activityFetchIdRef.current) setEmailActivity({ sent: [], received: [] }); })
                 .finally(() => { if (fetchId === activityFetchIdRef.current) setLoadingActivity(false); });
