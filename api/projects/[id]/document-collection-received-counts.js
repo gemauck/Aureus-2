@@ -1,8 +1,7 @@
 /**
  * GET /api/projects/:id/document-collection-received-counts?year=YYYY
- * Returns received email counts per document/month for the project and year.
+ * Returns received and sent email counts per document/month for the project and year.
  * Used to show notification badges on the "Request documents via email" cells.
- * Only received (inbound) emails are counted; sent counts are not included.
  */
 import { authRequired } from '../../_lib/authRequired.js'
 import { normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
@@ -46,12 +45,49 @@ async function handler(req, res) {
       _max: { createdAt: true }
     })
 
-    const counts = rows.map((r) => ({
-      documentId: r.itemId,
-      month: r.month,
-      receivedCount: r._count.id,
-      latestReceivedAt: r._max?.createdAt || null
-    }))
+    const receivedMap = new Map()
+    rows.forEach((r) => {
+      const key = `${r.itemId}-${r.month}`
+      receivedMap.set(key, {
+        documentId: r.itemId,
+        month: r.month,
+        receivedCount: r._count.id,
+        sentCount: 0,
+        latestReceivedAt: r._max?.createdAt || null
+      })
+    })
+
+    let sentRows = []
+    try {
+      if (prisma.documentCollectionEmailLog) {
+        sentRows = await prisma.documentCollectionEmailLog.groupBy({
+          by: ['documentId', 'month'],
+          where: { projectId: String(projectId), year, kind: 'sent' },
+          _count: { id: true }
+        })
+      }
+    } catch (e) {
+      console.warn('document-collection-received-counts: sent counts query failed:', e?.message)
+    }
+    sentRows.forEach((r) => {
+      const key = `${r.documentId}-${r.month}`
+      const existing = receivedMap.get(key)
+      if (existing) {
+        existing.sentCount = r._count.id
+      } else {
+        receivedMap.set(key, {
+          documentId: r.documentId,
+          month: r.month,
+          receivedCount: 0,
+          sentCount: r._count.id,
+          latestReceivedAt: null
+        })
+      }
+    })
+
+    const counts = Array.from(receivedMap.values()).filter(
+      (c) => c.receivedCount > 0 || c.sentCount > 0
+    )
 
     let opened = []
     if (userId) {

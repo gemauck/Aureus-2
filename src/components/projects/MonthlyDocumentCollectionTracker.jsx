@@ -615,10 +615,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 const data = json.data || json;
                 const list = Array.isArray(data.counts) ? data.counts : [];
                 const map = {};
-                list.forEach(({ documentId, month, receivedCount, latestReceivedAt }) => {
-                    if (documentId != null && month != null && receivedCount > 0) {
+                list.forEach(({ documentId, month, receivedCount, sentCount, latestReceivedAt }) => {
+                    if (documentId != null && month != null && (receivedCount > 0 || (sentCount != null && sentCount > 0))) {
                         map[buildDocMonthKey(documentId, month)] = {
-                            count: receivedCount,
+                            count: receivedCount || 0,
+                            sentCount: sentCount != null ? sentCount : 0,
                             latestReceivedAt: latestReceivedAt || null
                         };
                     }
@@ -3712,11 +3713,17 @@ const getAssigneeColor = (identifier, users) => {
                                     const docMonthKey = buildDocMonthKey(doc.id, monthNum);
                                     const receivedMeta = receivedMetaByCell[docMonthKey] || {};
                                     const receivedCount = receivedMeta.count || 0;
-                                    const hasReceived = receivedCount > 0;
+                                    const sentCount = receivedMeta.sentCount ?? 0;
+                                    const hasActivity = receivedCount > 0 || sentCount > 0;
                                     const latestReceivedAt = receivedMeta.latestReceivedAt ? new Date(receivedMeta.latestReceivedAt).getTime() : null;
                                     const openedAt = openedNotificationByCell[docMonthKey]?.email ? new Date(openedNotificationByCell[docMonthKey].email).getTime() : null;
                                     const isEmailUnread = !!latestReceivedAt && (!openedAt || latestReceivedAt > openedAt);
                                     const emailBadgeClass = isEmailUnread ? 'bg-amber-300 text-slate-800' : 'bg-rose-300 text-slate-800';
+                                    const totalCount = sentCount + receivedCount;
+                                    const badgeLabel = totalCount > 0
+                                        ? `${totalCount} email(s) (${sentCount} sent, ${receivedCount} received)`
+                                        : 'Request documents via email';
+                                    const badgeText = String(totalCount);
                                     return (
                                         <button
                                             type="button"
@@ -3728,13 +3735,13 @@ const getAssigneeColor = (identifier, users) => {
                                                 setEmailModalContext({ section, doc, month });
                                             }}
                                             className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
-                                            title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
-                                            aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
+                                            title={hasActivity ? badgeLabel : 'Request documents via email'}
+                                            aria-label={hasActivity ? badgeLabel : 'Request documents via email'}
                                         >
                                             <i className="fas fa-envelope text-base"></i>
-                                            {hasReceived && (
+                                            {hasActivity && (
                                                 <span className={`absolute top-0 right-0 ${emailBadgeClass} text-[8px] rounded-full min-w-[0.75rem] h-3 px-0.5 flex items-center justify-center font-bold leading-none`}>
-                                                    {receivedCount}
+                                                    {badgeText}
                                                 </span>
                                             )}
                                         </button>
@@ -3856,9 +3863,11 @@ const getAssigneeColor = (identifier, users) => {
                             const monthNum = months.indexOf(month) + 1;
                             const receivedMeta = receivedMetaByCell[buildDocMonthKey(doc.id, monthNum)] || {};
                             const receivedCount = receivedMeta.count || 0;
-                            const hasActivity = hasComments || (!isMonthlyDataReview && receivedCount > 0);
+                            const sentCount = receivedMeta.sentCount ?? 0;
+                            const emailCount = receivedCount + sentCount;
+                            const hasActivity = hasComments || (!isMonthlyDataReview && emailCount > 0);
                             if (!hasActivity) return null;
-                            const total = (hasComments ? comments.length : 0) + (!isMonthlyDataReview ? receivedCount : 0);
+                            const total = (hasComments ? comments.length : 0) + (!isMonthlyDataReview ? emailCount : 0);
                             return (
                                 <span
                                     className="text-[10px] text-gray-400 tabular-nums"
