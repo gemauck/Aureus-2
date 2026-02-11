@@ -31,7 +31,12 @@ async function handler(req, res) {
 
   try {
     const userId = req.user?.sub || req.user?.id
-    const rows = await prisma.documentItemComment.groupBy({
+
+    // Raw counts per (documentId, month) - documentId may be from log (not in project) or item
+    const rawReceived = new Map()
+    const rawSent = new Map()
+
+    const receivedRows = await prisma.documentItemComment.groupBy({
       by: ['itemId', 'month'],
       where: {
         year,
@@ -44,17 +49,9 @@ async function handler(req, res) {
       _count: { id: true },
       _max: { createdAt: true }
     })
-
-    const receivedMap = new Map()
-    rows.forEach((r) => {
+    receivedRows.forEach((r) => {
       const key = `${r.itemId}-${r.month}`
-      receivedMap.set(key, {
-        documentId: r.itemId,
-        month: r.month,
-        receivedCount: r._count.id,
-        sentCount: 0,
-        latestReceivedAt: r._max?.createdAt || null
-      })
+      rawReceived.set(key, { count: r._count.id, latestReceivedAt: r._max?.createdAt || null })
     })
 
     let sentRows = []
@@ -71,21 +68,9 @@ async function handler(req, res) {
     }
     sentRows.forEach((r) => {
       const key = `${r.documentId}-${r.month}`
-      const existing = receivedMap.get(key)
-      if (existing) {
-        existing.sentCount = r._count.id
-      } else {
-        receivedMap.set(key, {
-          documentId: r.documentId,
-          month: r.month,
-          receivedCount: 0,
-          sentCount: r._count.id,
-          latestReceivedAt: null
-        })
-      }
+      rawSent.set(key, (rawSent.get(key) || 0) + r._count.id)
     })
 
-    // Include fallback sent comments (when DocumentCollectionEmailLog create failed)
     try {
       const sentCommentRows = await prisma.documentItemComment.groupBy({
         by: ['itemId', 'month'],
@@ -98,26 +83,106 @@ async function handler(req, res) {
       })
       sentCommentRows.forEach((r) => {
         const key = `${r.itemId}-${r.month}`
-        const existing = receivedMap.get(key)
-        if (existing) {
-          existing.sentCount = (existing.sentCount || 0) + r._count.id
-        } else {
-          receivedMap.set(key, {
-            documentId: r.itemId,
-            month: r.month,
-            receivedCount: 0,
-            sentCount: r._count.id,
-            latestReceivedAt: null
-          })
-        }
+        rawSent.set(key, (rawSent.get(key) || 0) + r._count.id)
       })
     } catch (e) {
       console.warn('document-collection-received-counts: sent comment fallback query failed:', e?.message)
     }
 
-    const counts = Array.from(receivedMap.values()).filter(
-      (c) => c.receivedCount > 0 || c.sentCount > 0
-    )
+    // Get project documents (section may be year-scoped; include all for orphan fallback)
+    const documents = await prisma.documentItem.findMany({
+      where: { section: { projectId } },
+      select: { id: true, name: true }
+    })
+    const nameToDocIds = new Map()
+    documents.forEach((d) => {
+      const n = (d.name || '').trim().toLowerCase()
+      if (!n) return
+      if (!nameToDocIds.has(n)) nameToDocIds.set(n, [])
+      nameToDocIds.get(n).push(d.id)
+    })
+
+    const documentIds = new Set(documents.map((d) => d.id))
+    const aggregatedByDocMonth = new Map()
+
+    documents.forEach((doc) => {
+      const normName = (doc.name || '').trim().toLowerCase()
+      const siblingIds = normName ? (nameToDocIds.get(normName) || [doc.id]) : [doc.id]
+      const allKeys = [...rawReceived.keys(), ...rawSent.keys()]
+      const months = new Set(
+        allKeys
+          .filter((k) => {
+            const idx = k.lastIndexOf('-')
+            const idPart = idx >= 0 ? k.slice(0, idx) : ''
+            return siblingIds.includes(idPart)
+          })
+          .map((k) => {
+            const idx = k.lastIndexOf('-')
+            return idx >= 0 ? parseInt(k.slice(idx + 1), 10) : 0
+          })
+          .filter((m) => m >= 1 && m <= 12)
+      )
+      months.forEach((month) => {
+        let receivedCount = 0
+        let latestReceivedAt = null
+        siblingIds.forEach((id) => {
+          const r = rawReceived.get(`${id}-${month}`)
+          if (r) {
+            receivedCount += r.count
+            if (r.latestReceivedAt && (!latestReceivedAt || new Date(r.latestReceivedAt) > new Date(latestReceivedAt))) {
+              latestReceivedAt = r.latestReceivedAt
+            }
+          }
+        })
+        let sentCount = 0
+        siblingIds.forEach((id) => {
+          sentCount += rawSent.get(`${id}-${month}`) || 0
+        })
+        if (receivedCount > 0 || sentCount > 0) {
+          aggregatedByDocMonth.set(`${doc.id}-${month}`, {
+            documentId: doc.id,
+            month,
+            receivedCount,
+            sentCount,
+            latestReceivedAt
+          })
+        }
+      })
+    })
+
+    // Include "orphan" document IDs from raw data (e.g. JSON documentSections use client-generated IDs not in DocumentItem table)
+    const allRawKeys = [...new Set([...rawReceived.keys(), ...rawSent.keys()])]
+    allRawKeys.forEach((key) => {
+      const idx = key.lastIndexOf('-')
+      const idPart = idx >= 0 ? key.slice(0, idx) : ''
+      const month = idx >= 0 ? parseInt(key.slice(idx + 1), 10) : 0
+      if (!idPart || month < 1 || month > 12) return
+      if (documentIds.has(idPart)) return
+      const r = rawReceived.get(key)
+      const receivedCount = r ? r.count : 0
+      const latestReceivedAt = r?.latestReceivedAt || null
+      const sentCount = rawSent.get(key) || 0
+      if (receivedCount > 0 || sentCount > 0) {
+        const existing = aggregatedByDocMonth.get(`${idPart}-${month}`)
+        if (existing) {
+          existing.receivedCount += receivedCount
+          existing.sentCount += sentCount
+          if (latestReceivedAt && (!existing.latestReceivedAt || new Date(latestReceivedAt) > new Date(existing.latestReceivedAt))) {
+            existing.latestReceivedAt = latestReceivedAt
+          }
+        } else {
+          aggregatedByDocMonth.set(`${idPart}-${month}`, {
+            documentId: idPart,
+            month,
+            receivedCount,
+            sentCount,
+            latestReceivedAt
+          })
+        }
+      }
+    })
+
+    const counts = Array.from(aggregatedByDocMonth.values())
 
     let opened = []
     if (userId) {
