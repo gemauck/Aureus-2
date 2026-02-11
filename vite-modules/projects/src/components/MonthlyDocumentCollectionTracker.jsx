@@ -1303,7 +1303,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     const statusOptions = [
         { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
+        { value: 'ongoing', label: 'Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
         { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
         { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
     ];
@@ -2626,7 +2626,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
-                <div className="min-w-[160px] relative">
+                <div className="min-w-[200px] relative">
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -3704,6 +3704,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             ? 'bg-primary-50 text-primary-700'
                                                             : 'text-gray-600'
                                                     }`}
+                                                    style={{ minWidth: '200px' }}
                                                 >
                                                     {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
                                                 </th>

@@ -66,7 +66,7 @@ After cache clear, the status dropdown should show:
 
 Instead of the old:
 - Not Collected
-- Collection Ongoing
+- Ongoing
 - Collected
 - Unavailable
 

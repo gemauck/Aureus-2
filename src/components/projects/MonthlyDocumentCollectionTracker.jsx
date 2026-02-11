@@ -1655,7 +1655,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const statusOptions = [
         { value: 'requested', label: 'Requested', color: 'bg-orange-200 text-slate-700 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' },
         { value: 'not-collected', label: 'Not Collected', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
+        { value: 'ongoing', label: 'Ongoing', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
         { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
         { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-300 shadow-sm' }
     ];
@@ -3640,7 +3640,7 @@ const getAssigneeColor = (identifier, users) => {
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
                 role="gridcell"
             >
-                <div className="min-w-[160px] relative">
+                <div className="min-w-[200px] relative">
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -6734,6 +6734,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                             : 'text-gray-700'
                                                     }`}
+                                                    style={{ minWidth: '200px' }}
                                                 >
                                                     <div className="flex flex-col items-center gap-0.5">
                                                         <span>{month.slice(0, 3)}</span>
