@@ -574,6 +574,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [emailModalContext, setEmailModalContext] = useState(null);
     // Received email counts per cell (key: `${documentId}-${month}` where month is 1-12) for badge on envelope
     const [receivedMetaByCell, setReceivedMetaByCell] = useState({});
+    // Activity-derived counts (from modal fetch) take precedence; not overwritten by counts API
+    const activityDerivedCountsRef = useRef({});
     const [openedNotificationByCell, setOpenedNotificationByCell] = useState({});
     const previousEmailModalContextRef = useRef(null);
     // Cell hover: show email/comment actions only on hover to reduce visual clutter
@@ -648,6 +650,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     useEffect(() => {
         fetchReceivedCounts();
     }, [fetchReceivedCounts]);
+
+    useEffect(() => {
+        activityDerivedCountsRef.current = {};
+    }, [project?.id, selectedYear]);
 
     const markNotificationOpened = useCallback((documentId, month, type) => {
         if (!documentId || !month || !type) return;
@@ -3711,7 +3717,8 @@ const getAssigneeColor = (identifier, users) => {
                                 {!isMonthlyDataReview && (() => {
                                     const monthNum = months.indexOf(month) + 1;
                                     const docMonthKey = buildDocMonthKey(doc.id, monthNum);
-                                    const receivedMeta = receivedMetaByCell[docMonthKey] || {};
+                                    // Prefer activity-derived count (from modal) when available
+                                    const receivedMeta = activityDerivedCountsRef.current[docMonthKey] || receivedMetaByCell[docMonthKey] || {};
                                     const receivedCount = receivedMeta.count || 0;
                                     const sentCount = receivedMeta.sentCount ?? 0;
                                     const hasActivity = receivedCount > 0 || sentCount > 0;
@@ -3861,7 +3868,8 @@ const getAssigneeColor = (identifier, users) => {
                             </>
                         ) : (() => {
                             const monthNum = months.indexOf(month) + 1;
-                            const receivedMeta = receivedMetaByCell[buildDocMonthKey(doc.id, monthNum)] || {};
+                            const dmKey = buildDocMonthKey(doc.id, monthNum);
+                            const receivedMeta = activityDerivedCountsRef.current[dmKey] || receivedMetaByCell[dmKey] || {};
                             const receivedCount = receivedMeta.count || 0;
                             const sentCount = receivedMeta.sentCount ?? 0;
                             const emailCount = receivedCount + sentCount;
@@ -4153,30 +4161,20 @@ Abcotronics`;
                     const sent = Array.isArray(data.sent) ? data.sent : [];
                     const received = Array.isArray(data.received) ? data.received : [];
                     setEmailActivity({ sent, received });
-                    // Update badge with actual count from activity (single source of truth for this cell)
+                    // Store activity-derived count (takes precedence; persists after modal close)
                     if (ctx?.doc?.id && monthNum >= 1 && monthNum <= 12) {
                         const docMonthKey = buildDocMonthKey(ctx.doc.id, monthNum);
-                        const total = sent.length + received.length;
-                        setReceivedMetaByCell((prev) => {
-                            const existing = prev[docMonthKey] || {};
-                            if (total === 0 && !existing.count && !existing.sentCount) return prev; // no change needed
-                            return {
-                                ...prev,
-                                [docMonthKey]: {
-                                    ...existing,
-                                    count: received.length,
-                                    sentCount: sent.length,
-                                    latestReceivedAt: received.length > 0
-                                        ? received.reduce((latest, r) => {
-                                            const t = r?.createdAt;
-                                            if (!t) return latest;
-                                            if (!latest) return t;
-                                            return new Date(t) > new Date(latest) ? t : latest;
-                                          }, null)
-                                        : existing.latestReceivedAt
-                                }
-                            };
-                        });
+                        const latestReceivedAt = received.length > 0
+                            ? received.reduce((latest, r) => {
+                                const t = r?.createdAt;
+                                if (!t) return latest;
+                                if (!latest) return t;
+                                return new Date(t) > new Date(latest) ? t : latest;
+                              }, null)
+                            : null;
+                        const meta = { count: received.length, sentCount: sent.length, latestReceivedAt };
+                        activityDerivedCountsRef.current = { ...activityDerivedCountsRef.current, [docMonthKey]: meta };
+                        setReceivedMetaByCell((prev) => ({ ...prev, [docMonthKey]: meta }));
                     }
                 })
                 .catch(() => { if (fetchId === activityFetchIdRef.current) setEmailActivity({ sent: [], received: [] }); })
