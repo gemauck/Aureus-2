@@ -167,6 +167,7 @@ try {
 
   const [activeTab, setActiveTab] = useState(getInitialTabFromURL);
   const [inventory, setInventory] = useState([]);
+  const [inventoryLoadedFromAPI, setInventoryLoadedFromAPI] = useState(false);
   const [boms, setBoms] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
@@ -205,6 +206,7 @@ try {
     if (!window.DatabaseAPI?.getInventory) {
       return;
     }
+    setInventoryLoadedFromAPI(false);
     try {
       const requestSeq = ++inventoryLoadSeqRef.current;
       // Save the currently focused element before state update
@@ -224,6 +226,7 @@ try {
       }
 
       setInventory(processed);
+      setInventoryLoadedFromAPI(true);
       safeSetItem('manufacturing_inventory', JSON.stringify(processed));
 
       // Restore focus after state update if user was typing
@@ -454,6 +457,7 @@ try {
                 const invData = invResponse?.data?.inventory || [];
                 const processed = invData.map(item => ({ ...item, id: item.id }));
                 setInventory(processed);
+                setInventoryLoadedFromAPI(true);
                 safeSetItem('manufacturing_inventory', JSON.stringify(processed));
                 return { type: 'inventory', data: processed };
               })
@@ -1815,8 +1819,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="flex items-center justify-between">
               <div>
                 <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Inventory Value</p>
-                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{formatCurrency(invStats.totalValue)}</p>
-                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{invStats.totalItems.toLocaleString()} items</p>
+                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  {inventoryLoadedFromAPI ? formatCurrency(invStats.totalValue) : '—'}
+                </p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} items
+                </p>
               </div>
               <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
                 <i className={`fas fa-boxes ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
