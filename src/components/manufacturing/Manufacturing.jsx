@@ -190,6 +190,9 @@ try {
   const [viewingInventoryItemDetail, setViewingInventoryItemDetail] = useState(null); // Full-page detail view
   const [isEditingInventoryItem, setIsEditingInventoryItem] = useState(false); // Edit mode in detail view
   const [bomComponents, setBomComponents] = useState([]);
+  const [openBomComponentSelectIndex, setOpenBomComponentSelectIndex] = useState(null);
+  const [bomComponentSearchTerm, setBomComponentSearchTerm] = useState('');
+  const bomComponentSelectRef = useRef(null);
   const [salesOrderItems, setSalesOrderItems] = useState([]);
   const [newSalesOrderItem, setNewSalesOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
   const [purchaseOrderItems, setPurchaseOrderItems] = useState([]);
@@ -3653,13 +3656,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setShowModal(true);
   };
 
-  const openEditBomModal = (bom) => {
+  const openEditBomModal = async (bom) => {
+    // Refresh full inventory (no location filter) so BOM component dropdown has all items
+    try {
+      if (window.DatabaseAPI?.getInventory) {
+        const response = await window.DatabaseAPI.getInventory();
+        if (response?.data?.inventory) {
+          const updatedInventory = response.data.inventory.map(item => ({ ...item, id: item.id }));
+          setInventory(updatedInventory);
+          safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not refresh inventory for BOM edit:', error.message);
+    }
     // Ensure components have location field
     const componentsWithLocation = bom.components.map(comp => ({
       ...comp,
       location: comp.location || ''
     }));
-    setFormData({ 
+    setFormData({
       ...bom,
       inventoryItemId: bom.inventoryItemId || '', // Include inventoryItemId
       thumbnail: bom.thumbnail || '',
@@ -4078,6 +4094,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       setSelectedItem(null);
       setFormData({});
       setBomComponents([]);
+      setOpenBomComponentSelectIndex(null);
+      setBomComponentSearchTerm('');
     } catch (error) {
       console.error('Error saving BOM:', error);
       alert('Failed to save BOM. Please try again.');
@@ -5147,6 +5165,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setBomComponents(bomComponents.filter((_, i) => i !== index));
   };
 
+  // Close BOM component dropdown when clicking outside
+  useEffect(() => {
+    if (openBomComponentSelectIndex === null) return;
+    const handleClickOutside = (e) => {
+      if (bomComponentSelectRef.current && !bomComponentSelectRef.current.contains(e.target)) {
+        setOpenBomComponentSelectIndex(null);
+        setBomComponentSearchTerm('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openBomComponentSelectIndex]);
+
   const renderModal = () => {
     
     // Debug: Check if modal should be visible
@@ -5759,7 +5790,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 {modalType === 'edit_bom' ? 'Edit Bill of Materials' : 'Create Bill of Materials'}
               </h2>
               <button
-                onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); setBomComponents([]); }}
+                onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); setBomComponents([]); setOpenBomComponentSelectIndex(null); setBomComponentSearchTerm(''); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <i className="fas fa-times"></i>
@@ -6059,25 +6090,66 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {bomComponents.map((comp, index) => (
+                    {bomComponents.map((comp, index) => {
+                      const eligibleInventory = inventory.filter(item => item.sku && item.sku !== (formData.productSku || ''));
+                      const searchLower = (bomComponentSearchTerm || '').toLowerCase().trim();
+                      const filteredForDropdown = searchLower
+                        ? eligibleInventory.filter(item =>
+                            (item.sku || '').toLowerCase().includes(searchLower) ||
+                            (item.name || '').toLowerCase().includes(searchLower)
+                          )
+                        : eligibleInventory;
+                      const selectedInvItem = comp.sku ? eligibleInventory.find(item => item.sku === comp.sku) : null;
+                      const isDropdownOpen = openBomComponentSelectIndex === index;
+                      return (
                       <div key={index} className="grid grid-cols-12 gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 items-end">
-                        <div className="col-span-2">
+                        <div className="col-span-2 relative" ref={isDropdownOpen ? bomComponentSelectRef : null}>
                           <label className="block text-xs font-medium text-gray-700 mb-1">SKU / Select from Inventory</label>
-                          <select
-                            value={comp.sku}
-                            onChange={(e) => updateBomComponent(index, 'sku', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select or type...</option>
-                            {inventory
-                              .filter(item => item.type !== 'final_product')
-                              .map(item => (
-                                <option key={item.sku} value={item.sku}>
-                                  {item.sku} - {item.name}
-                                  {item.status === 'out_of_stock' ? ' (Out of stock)' : ''}
-                                </option>
-                              ))}
-                          </select>
+                          <input
+                            type="text"
+                            readOnly
+                            value={selectedInvItem ? `${selectedInvItem.sku} - ${selectedInvItem.name}` : ''}
+                            placeholder="Select or type..."
+                            onClick={() => {
+                              setOpenBomComponentSelectIndex(index);
+                              setBomComponentSearchTerm('');
+                            }}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white cursor-pointer"
+                          />
+                          {isDropdownOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-300 rounded-lg shadow-lg overflow-hidden">
+                              <div className="p-2 border-b border-gray-200 bg-gray-50">
+                                <input
+                                  type="text"
+                                  placeholder="Search by SKU or name..."
+                                  value={bomComponentSearchTerm}
+                                  onChange={(e) => setBomComponentSearchTerm(e.target.value)}
+                                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  autoFocus
+                                />
+                              </div>
+                              <ul className="max-h-48 overflow-y-auto py-1">
+                                {filteredForDropdown.length === 0 ? (
+                                  <li className="px-3 py-2 text-sm text-gray-500">No matching items</li>
+                                ) : (
+                                  filteredForDropdown.map(item => (
+                                    <li
+                                      key={item.sku}
+                                      onClick={() => {
+                                        updateBomComponent(index, 'sku', item.sku);
+                                        setOpenBomComponentSelectIndex(null);
+                                        setBomComponentSearchTerm('');
+                                      }}
+                                      className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 flex justify-between items-center"
+                                    >
+                                      <span>{item.sku} - {item.name}</span>
+                                      {item.status === 'out_of_stock' && <span className="text-xs text-red-600">Out of stock</span>}
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-2">
                           <label className="block text-xs font-medium text-gray-700 mb-1">Component Name</label>
@@ -6144,7 +6216,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           </button>
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 )}
               </div>
@@ -6198,7 +6271,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); setBomComponents([]); }}
+                  onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); setBomComponents([]); setOpenBomComponentSelectIndex(null); setBomComponentSearchTerm(''); }}
                   className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
                   Cancel
