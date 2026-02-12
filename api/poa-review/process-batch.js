@@ -68,6 +68,13 @@ async function handler(req, res) {
         const scriptsDir = path.join(rootDir, 'scripts', 'poa-review');
         const tempDir = path.join(rootDir, 'uploads', 'poa-review-temp');
 
+        // Resolve Python: use venv if present, otherwise system python3
+        const venvPythonPath = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
+        const venvPython = fs.existsSync(venvPythonPath) ? venvPythonPath : 'python3';
+        if (venvPython === 'python3') {
+            console.log('POA Review Batch API - venv-poareview not found, using system python3');
+        }
+
         // Ensure directories exist
         [outputDir, scriptsDir, tempDir].forEach(dir => {
             if (!fs.existsSync(dir)) {
@@ -405,8 +412,9 @@ except Exception as e:
 
                 // Execute Python script
                 console.log('POA Review Batch API - Executing Python script...');
-                const venvPython = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
-                const pythonCommand = `"${venvPython}" "${tempProcessScript}" 2>&1`;
+                const pythonCommand = venvPython === 'python3'
+                    ? `python3 "${tempProcessScript}" 2>&1`
+                    : `"${venvPython}" "${tempProcessScript}" 2>&1`;
                 
                 let stdout, stderr, exitCode;
                 try {

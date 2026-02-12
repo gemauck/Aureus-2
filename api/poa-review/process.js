@@ -216,10 +216,18 @@ except Exception as e:
 
         fs.writeFileSync(tempProcessScript, pythonScript);
 
-        // Execute Python script using virtual environment
+        // Resolve Python: use venv if present, otherwise system python3
+        const venvPythonPath = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
+        const venvPython = fs.existsSync(venvPythonPath) ? venvPythonPath : 'python3';
+        if (venvPython === 'python3') {
+            console.log('POA Review process API - venv-poareview not found, using system python3');
+        }
+
+        // Execute Python script
         console.log('Executing Python script...');
-        const venvPython = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
-        const pythonCommand = `"${venvPython}" "${tempProcessScript}" 2>&1`;
+        const pythonCommand = venvPython === 'python3'
+            ? `python3 "${tempProcessScript}" 2>&1`
+            : `"${venvPython}" "${tempProcessScript}" 2>&1`;
         console.log('Python command:', pythonCommand);
         console.log('Working directory:', scriptsDir);
         
