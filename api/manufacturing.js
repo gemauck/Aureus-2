@@ -1455,6 +1455,15 @@ async function handler(req, res) {
           updateData.status = 'out_of_stock'
         }
         
+        // When name changes, also update LocationInventory.itemName for this SKU
+        // so list views (which use record.itemName || template.name) show the new name.
+        if (body.name !== undefined && body.name !== existing.name) {
+          await prisma.locationInventory.updateMany({
+            where: { sku: existing.sku },
+            data: { itemName: body.name }
+          })
+        }
+
         // Try to update - if new fields cause error, retry without them
         let item;
         try {
