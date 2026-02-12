@@ -6069,9 +6069,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
                             <option value="">Select or type...</option>
-                            {inventory.filter(item => item.type === 'component').map(item => (
-                              <option key={item.sku} value={item.sku}>{item.sku} - {item.name}</option>
-                            ))}
+                            {inventory
+                              .filter(item => item.type !== 'final_product')
+                              .map(item => (
+                                <option key={item.sku} value={item.sku}>
+                                  {item.sku} - {item.name}
+                                  {item.status === 'out_of_stock' ? ' (Out of stock)' : ''}
+                                </option>
+                              ))}
                           </select>
                         </div>
                         <div className="col-span-2">
