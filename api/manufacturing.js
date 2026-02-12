@@ -266,7 +266,7 @@ async function buildLocationInventoryResponse(locationId) {
       inventoryItemId: template.id || null,
       locationInventoryId: record.id,
       sku: record.sku,
-      name: record.itemName || template.name || record.sku,
+      name: template.name || record.itemName || record.sku,
       quantity,
       allocatedQuantity: template.allocatedQuantity || 0,
       inProductionQuantity: template.inProductionQuantity || 0,
@@ -328,7 +328,7 @@ async function buildAllLocationsInventoryResponse() {
         id: template.id || null,
         inventoryItemId: template.id || null,
         sku,
-        name: record.itemName || template.name || record.sku,
+        name: template.name || record.itemName || record.sku,
         quantity: 0,
         totalValue: 0,
         // Allocation is template-level (InventoryItem); LocationInventory has no allocatedQuantity

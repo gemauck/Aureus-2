@@ -1982,6 +1982,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     );
   };
 
+  // When inventory list is refetched (e.g. after load), keep the viewed item in sync
+  // so the detail view shows the same name/data as the API (avoids brief correct then revert).
+  useEffect(() => {
+    if (!viewingInventoryItemDetail || !inventory.length) return;
+    const viewedId = getInventoryItemId(viewingInventoryItemDetail);
+    const fromList = inventory.find(inv => getInventoryItemId(inv) === viewedId);
+    if (fromList && fromList !== viewingInventoryItemDetail) {
+      setViewingInventoryItemDetail(fromList);
+    }
+  }, [inventory]);
+
   // Reload inventory when location changes - BUT NOT if user is actively typing
   useEffect(() => {
     // CRITICAL: Skip reload if user is actively typing in an input field
