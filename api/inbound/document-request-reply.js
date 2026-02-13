@@ -440,7 +440,7 @@ function emailBodyText(email) {
 }
 
 function parseReplyContextFromEmail(email, subject) {
-  const out = { projectName: null, docName: null, month: null, year: null }
+  const out = { projectName: null, docName: null, sectionName: null, month: null, year: null }
   const body = emailBodyText(email)
   if (body) {
     const lines = body.split(/\r?\n/).map((line) => line.replace(/^[\s*•\-\u2022]+/, '').trim())
@@ -449,6 +449,10 @@ function parseReplyContextFromEmail(email, subject) {
       if (!out.projectName) {
         const pm = line.match(/^project\s*:\s*(.+)$/i)
         if (pm && pm[1]) out.projectName = pm[1].trim()
+      }
+      if (!out.sectionName) {
+        const sm = line.match(/^(?:section|location)\s*:\s*(.+)$/i)
+        if (sm && sm[1]) out.sectionName = sm[1].trim()
       }
       if (!out.docName) {
         const dm = line.match(/^document\s*(?:\/\s*data)?(?:\s*request)?\s*:\s*(.+)$/i)
@@ -468,6 +472,10 @@ function parseReplyContextFromEmail(email, subject) {
     if (!out.projectName) {
       const pm = body.match(/project\s*:\s*([^\n\r]+)/i)
       if (pm && pm[1]) out.projectName = pm[1].trim()
+    }
+    if (!out.sectionName) {
+      const sm = body.match(/(?:section|location)\s*:\s*([^\n\r]+)/i)
+      if (sm && sm[1]) out.sectionName = sm[1].trim()
     }
     if (!out.docName) {
       const dm = body.match(/document\s*(?:\/\s*data)?(?:\s*request)?\s*:\s*([^\n\r]+)/i)
@@ -1032,8 +1040,9 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
       }
     }
     // Fallback: match by subject (e.g. "Re: ... - CIPC Documents - February 2026"). Works even when In-Reply-To is missing.
-    // Reply subject is often "Re: Abco Document / Data request: ProjectName - DocumentName - February 2026".
-    // Use the LAST " - Month Year" so we get DocumentName (segment before it), not ProjectName.
+    // Reply subject: "Re: Abco Document / Data request: ProjectName - DocumentName - February 2026"
+    // Or with section (location): "Re: Abco Document / Data request: ProjectName - SectionName - DocumentName - February 2026"
+    // Use the LAST " - Month Year" so we get the segment before it (DocumentName or "SectionName - DocumentName").
     if (!mapping) {
       const subject = (email.subject || '').toString()
       const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
@@ -1073,11 +1082,21 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
           }
         }
       }
+      // Parse "SectionName – DocumentName" from segment when subject includes section (avoids routing replies to wrong location)
+      let sectionNameFromSubject = null
+      let cleanDocName = docNameFromSubject ? docNameFromSubject.replace(/\s+/g, ' ').trim() : null
+      if (cleanDocName && /[\u002D\u2013\u2014]/.test(cleanDocName)) {
+        const dashSplit = cleanDocName.split(/\s+[\u002D\u2013\u2014]\s+/)
+        if (dashSplit.length >= 2) {
+          sectionNameFromSubject = dashSplit[0].trim()
+          cleanDocName = dashSplit.slice(1).join(' – ').trim()
+        }
+      }
       let subjectFallbackDocIds = []
       let subjectFallbackProjectIds = []
+      let docsWithNameFromSubject = []
       if (fallbackMonth && fallbackYear) {
         let whereClause = { month: fallbackMonth, year: fallbackYear }
-        const cleanDocName = docNameFromSubject ? docNameFromSubject.replace(/\s+/g, ' ').trim() : null
         if (cleanDocName && cleanDocName.length > 1) {
           const recentProjects = await prisma.documentRequestEmailSent.findMany({
             where: { month: fallbackMonth, year: fallbackYear },
@@ -1087,28 +1106,33 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
           })
           const projectIds = recentProjects.map((p) => p.projectId)
           subjectFallbackProjectIds = projectIds
+          const sectionFilter = sectionNameFromSubject
+            ? { name: { equals: sectionNameFromSubject, mode: 'insensitive' } }
+            : {}
           let docsWithName = await prisma.documentItem.findMany({
             where: {
               name: { equals: cleanDocName, mode: 'insensitive' },
-              section: { projectId: { in: projectIds } }
+              section: { projectId: { in: projectIds }, ...sectionFilter }
             },
-            select: { id: true }
+            select: { id: true, section: { select: { projectId: true } } }
           })
           if (docsWithName.length === 0 && projectIds.length > 0) {
             docsWithName = await prisma.documentItem.findMany({
               where: {
                 name: { contains: cleanDocName, mode: 'insensitive' },
-                section: { projectId: { in: projectIds } }
+                section: { projectId: { in: projectIds }, ...sectionFilter }
               },
-              select: { id: true }
+              select: { id: true, section: { select: { projectId: true } } }
             })
           }
           const matchingDocIds = docsWithName.map((d) => d.id)
           subjectFallbackDocIds = matchingDocIds
+          subjectFallbackProjectIds = docsWithName.length > 0 ? [...new Set(docsWithName.map((d) => d.section?.projectId).filter(Boolean))] : projectIds
+          docsWithNameFromSubject = docsWithName
           if (matchingDocIds.length > 0) {
             whereClause = { ...whereClause, documentId: { in: matchingDocIds } }
           }
-          console.log('document-request-reply: subject fallback lookup', { fallbackMonth, fallbackYear, cleanDocName, projectCount: projectIds.length, matchingDocIds: matchingDocIds.length })
+          console.log('document-request-reply: subject fallback lookup', { fallbackMonth, fallbackYear, cleanDocName, sectionNameFromSubject: sectionNameFromSubject || null, projectCount: projectIds.length, matchingDocIds: matchingDocIds.length })
         }
         mapping = await prisma.documentRequestEmailSent.findFirst({
           where: whereClause,
@@ -1116,12 +1140,14 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
         })
         if (mapping) {
           matchMethod = 'matched_subject'
-          console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any' })
+          console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any', sectionName: sectionNameFromSubject || null })
         } else if (subjectFallbackDocIds.length > 0 && subjectFallbackProjectIds.length > 0) {
-          // No DocumentRequestEmailSent row for this doc+month+year (e.g. send log succeeded but reply routing row failed). Still attach reply to the document we matched by name.
+          // No DocumentRequestEmailSent row for this doc+month+year (e.g. send log succeeded but reply routing row failed). Still attach reply to the document we matched by name (and section when present).
+          const chosenDocId = subjectFallbackDocIds[0]
+          const chosenProjectId = docsWithNameFromSubject.find((d) => d.id === chosenDocId)?.section?.projectId ?? subjectFallbackProjectIds[0]
           mapping = {
-            documentId: subjectFallbackDocIds[0],
-            projectId: subjectFallbackProjectIds[0],
+            documentId: chosenDocId,
+            projectId: chosenProjectId,
             year: fallbackYear,
             month: fallbackMonth,
             sectionId: null,
@@ -1150,10 +1176,13 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
             })
           }
           if (project) {
+            const sectionFilter = parsedContext.sectionName
+              ? { name: { equals: parsedContext.sectionName, mode: 'insensitive' } }
+              : {}
             let docs = await prisma.documentItem.findMany({
               where: {
                 name: { equals: parsedContext.docName, mode: 'insensitive' },
-                section: { projectId: project.id }
+                section: { projectId: project.id, ...sectionFilter }
               },
               select: { id: true, sectionId: true }
             })
@@ -1161,7 +1190,7 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
               docs = await prisma.documentItem.findMany({
                 where: {
                   name: { contains: parsedContext.docName, mode: 'insensitive' },
-                  section: { projectId: project.id }
+                  section: { projectId: project.id, ...sectionFilter }
                 },
                 select: { id: true, sectionId: true }
               })
@@ -1180,7 +1209,8 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
                 projectId: mapping.projectId,
                 documentId: mapping.documentId,
                 month: mapping.month,
-                year: mapping.year
+                year: mapping.year,
+                sectionName: parsedContext.sectionName || null
               })
             }
           }

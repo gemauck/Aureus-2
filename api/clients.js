@@ -1540,6 +1540,75 @@ async function handler(req, res) {
           }
         }
         
+        // Phase 6: Sync proposals to normalized ClientProposal table (same as leads API)
+        if (body.proposals !== undefined) {
+          let proposalsArray = []
+          if (Array.isArray(body.proposals)) {
+            proposalsArray = body.proposals
+          } else if (typeof body.proposals === 'string' && body.proposals.trim()) {
+            try {
+              proposalsArray = JSON.parse(body.proposals)
+            } catch (e) {
+              proposalsArray = []
+            }
+          }
+          try {
+            const existingProposals = await prisma.clientProposal.findMany({
+              where: { clientId: id },
+              select: { id: true }
+            })
+            const existingProposalIds = new Set(existingProposals.map(p => p.id))
+            const proposalsToKeep = new Set()
+            for (const proposal of proposalsArray) {
+              const proposalData = {
+                clientId: id,
+                title: proposal.title || '',
+                amount: proposal.amount || 0,
+                status: proposal.status || 'Pending',
+                workingDocumentLink: proposal.workingDocumentLink || '',
+                createdDate: proposal.createdDate ? new Date(proposal.createdDate) : null,
+                expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
+                notes: proposal.notes || ''
+              }
+              if (proposal.id && existingProposalIds.has(proposal.id)) {
+                await prisma.clientProposal.update({
+                  where: { id: proposal.id },
+                  data: proposalData
+                })
+                proposalsToKeep.add(proposal.id)
+              } else if (proposal.id) {
+                try {
+                  await prisma.clientProposal.create({
+                    data: { id: proposal.id, ...proposalData }
+                  })
+                  proposalsToKeep.add(proposal.id)
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientProposal.update({
+                      where: { id: proposal.id },
+                      data: proposalData
+                    })
+                    proposalsToKeep.add(proposal.id)
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                const created = await prisma.clientProposal.create({ data: proposalData })
+                proposalsToKeep.add(created.id)
+              }
+            }
+            await prisma.clientProposal.deleteMany({
+              where: {
+                clientId: id,
+                NOT: { id: { in: Array.from(proposalsToKeep) } }
+              }
+            })
+          } catch (proposalSyncError) {
+            console.warn('⚠️ Failed to sync proposals to normalized table:', proposalSyncError.message)
+          }
+        }
+        
         // Phase 4: Handle projectIds as deprecated field (backward compatibility only)
         // Projects should be managed via Project.clientId relation, not JSON array
         if (body.projectIds !== undefined) {

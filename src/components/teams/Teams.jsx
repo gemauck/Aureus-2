@@ -6,6 +6,7 @@ const WorkflowModal = window.WorkflowModal;
 const ChecklistModal = window.ChecklistModal;
 const NoticeModal = window.NoticeModal;
 const WorkflowExecutionModal = window.WorkflowExecutionModal;
+const EngagementMandateDetailModal = window.EngagementMandateDetailModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
 const Teams = () => {
@@ -319,6 +320,12 @@ const Teams = () => {
     const [executingWorkflow, setExecutingWorkflow] = useState(null);
     const [viewingDocument, setViewingDocument] = useState(null);
     
+    // Engagement mandates (Business Development)
+    const [mandates, setMandates] = useState([]);
+    const [mandatesLoading, setMandatesLoading] = useState(false);
+    const [showMandateModal, setShowMandateModal] = useState(false);
+    const [editingMandate, setEditingMandate] = useState(null);
+    
     // State to track ManagementMeetingNotes availability
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
     
@@ -619,6 +626,33 @@ const Teams = () => {
         loadData();
     }, []);
 
+    // Load engagement mandates when Business Development team is selected
+    useEffect(() => {
+        if (selectedTeam?.id !== 'business-development') return;
+        const fetchMandates = async () => {
+            setMandatesLoading(true);
+            try {
+                const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+                if (!token) { setMandates([]); return; }
+                const res = await fetch('/api/engagement-mandates', {
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setMandates(data.data?.mandates || data.mandates || []);
+                } else {
+                    setMandates([]);
+                }
+            } catch (err) {
+                console.warn('Teams: Error loading engagement mandates', err);
+                setMandates([]);
+            } finally {
+                setMandatesLoading(false);
+            }
+        };
+        fetchMandates();
+    }, [selectedTeam?.id]);
+
     const accessibleDocuments = useMemo(() => {
         return isAdminUser
             ? documents
@@ -854,6 +888,74 @@ const Teams = () => {
             return;
         }
         setEditingNotice(null);
+    };
+
+    const handleSaveMandate = async (mandateData) => {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) {
+            alert('Not authenticated');
+            return;
+        }
+        const url = mandateData.id ? `/api/engagement-mandates/${mandateData.id}` : '/api/engagement-mandates';
+        const method = mandateData.id ? 'PUT' : 'POST';
+        const body = {
+            clientName: mandateData.clientName,
+            siteName: mandateData.siteName,
+            dateOfVisit: mandateData.dateOfVisit,
+            typeOfOperation: mandateData.typeOfOperation,
+            siteLocation: mandateData.siteLocation,
+            servicesRequired: Array.isArray(mandateData.servicesRequired) ? mandateData.servicesRequired : [],
+            status: mandateData.status || 'draft',
+            clientId: mandateData.clientId || null,
+            opportunityId: mandateData.opportunityId || null,
+            workflowStages: mandateData.workflowStages || []
+        };
+        const res = await fetch(url, {
+            method,
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err?.error || err?.message || `Save failed: ${res.status}`);
+        }
+        const data = await res.json();
+        const saved = data.data?.mandate || data.mandate;
+        if (saved) {
+            setMandates(prev => {
+                const idx = prev.findIndex(m => m.id === saved.id);
+                if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = saved;
+                    return next;
+                }
+                return [saved, ...prev];
+            });
+        }
+        setShowMandateModal(false);
+        setEditingMandate(null);
+    };
+
+    const handleDeleteMandate = async (id) => {
+        if (!confirm('Delete this engagement mandate?')) return;
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) return;
+        try {
+            const res = await fetch(`/api/engagement-mandates/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setMandates(prev => prev.filter(m => m.id !== id));
+                setShowMandateModal(false);
+                setEditingMandate(null);
+            } else {
+                alert('Failed to delete mandate');
+            }
+        } catch (err) {
+            console.error('Delete mandate error:', err);
+            alert(err?.message || 'Failed to delete');
+        }
     };
 
     const handleWorkflowExecutionComplete = (executionData) => {
@@ -1115,6 +1217,20 @@ const Teams = () => {
                                     <i className="fas fa-file-excel mr-1.5"></i>
                                     <span className="hidden sm:inline">POA Review</span>
                                     <span className="sm:hidden">POA</span>
+                                </button>
+                            )}
+                            {selectedTeam?.id === 'business-development' && (
+                                <button
+                                    onClick={() => setActiveTab('engagement-mandates')}
+                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                        activeTab === 'engagement-mandates'
+                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <i className="fas fa-handshake mr-1.5"></i>
+                                    <span className="hidden sm:inline">Engagement mandates</span>
+                                    <span className="sm:hidden">Mandates</span>
                                 </button>
                             )}
                         </div>
@@ -1650,6 +1766,91 @@ const Teams = () => {
                             </div>
                         )}
 
+                        {activeTab === 'engagement-mandates' && selectedTeam?.id === 'business-development' && (
+                            <div>
+                                <h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Customer engagement mandates</h3>
+                                {mandatesLoading ? (
+                                    <div className="text-center py-12">
+                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading mandates…</p>
+                                    </div>
+                                ) : mandates.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {mandates.map(m => (
+                                            <div
+                                                key={m.id}
+                                                className={`border rounded-xl p-4 ${isDark ? 'bg-gray-900 border-gray-800 hover:border-gray-600' : 'bg-white border-gray-100 hover:border-gray-300'} transition-colors cursor-pointer`}
+                                                onClick={() => {
+                                                    setEditingMandate(m);
+                                                    setShowMandateModal(true);
+                                                }}
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{m.clientName}</h4>
+                                                        {m.siteName ? <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{m.siteName}</p> : null}
+                                                        <div className="flex flex-wrap gap-2 mt-2">
+                                                            <span className={`px-2 py-0.5 text-xs rounded ${
+                                                                m.status === 'won' ? (isDark ? 'bg-green-900/50 text-green-300' : 'bg-green-100 text-green-800') :
+                                                                m.status === 'lost' ? (isDark ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-800') :
+                                                                m.status === 'in_progress' ? (isDark ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-800') :
+                                                                (isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700')
+                                                            }`}>{m.status === 'in_progress' ? 'In progress' : (m.status || 'draft')}</span>
+                                                            {m.dateOfVisit ? <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{m.dateOfVisit}</span> : null}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setEditingMandate(m); setShowMandateModal(true); }}
+                                                            className={`p-2 rounded-lg ${isDark ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-500 hover:bg-gray-100'}`}
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit text-sm"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteMandate(m.id)}
+                                                            className={`p-2 rounded-lg ${isDark ? 'text-gray-400 hover:bg-gray-800 hover:text-red-400' : 'text-gray-500 hover:bg-gray-100 hover:text-red-600'}`}
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash text-sm"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {(m.workflowStages || []).length > 0 && (
+                                                    <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                                        {m.workflowStages.filter(s => s.status === 'reviewed').length} / {m.workflowStages.length} stages reviewed
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className={`fas fa-handshake text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No engagement mandates yet</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setEditingMandate(null); setShowMandateModal(true); }}
+                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                        >
+                                            Create first mandate
+                                        </button>
+                                    </div>
+                                )}
+                                {!mandatesLoading && mandates.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setEditingMandate(null); setShowMandateModal(true); }}
+                                        className="mt-4 px-4 py-2 text-sm font-medium rounded-lg border border-primary-600 text-primary-600 hover:bg-primary-50 transition"
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>New mandate
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
                         {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
                             const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;
                             
@@ -1770,6 +1971,17 @@ const Teams = () => {
                     team={selectedTeam}
                     notice={editingNotice}
                     onSave={handleSaveNotice}
+                />
+            )}
+
+            {showMandateModal && EngagementMandateDetailModal && (
+                <EngagementMandateDetailModal
+                    mandate={editingMandate}
+                    onClose={() => {
+                        setShowMandateModal(false);
+                        setEditingMandate(null);
+                    }}
+                    onSave={handleSaveMandate}
                 />
             )}
 

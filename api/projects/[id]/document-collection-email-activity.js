@@ -232,8 +232,54 @@ async function handler(req, res) {
     }
   }
 
+  if (req.method === 'PATCH') {
+    try {
+      const body = await parseJsonBody(req).catch(() => ({})) || {}
+      const id = (body.id ?? req.query?.id) != null ? String(body.id ?? req.query.id).trim() : null
+      const type = (body.type ?? req.query?.type) === 'received' ? 'received' : null
+      const targetDocumentId = (body.targetDocumentId ?? req.query?.targetDocumentId) != null ? String(body.targetDocumentId ?? req.query.targetDocumentId).trim() : null
+      if (!id || type !== 'received' || !targetDocumentId) {
+        return badRequest(res, 'PATCH body must include id, type: "received", and targetDocumentId')
+      }
+      const comment = await prisma.documentItemComment.findUnique({
+        where: { id },
+        include: { item: { select: { section: { select: { projectId: true } } } } } }
+      })
+      if (!comment || String(comment.item?.section?.projectId) !== projectId) {
+        return badRequest(res, 'Received comment not found or access denied')
+      }
+      const author = (comment.author || '').trim()
+      const text = (comment.text || '').trim()
+      const isReceived = author === 'Email from Client' || text.startsWith('Email from Client')
+      if (!isReceived) {
+        return badRequest(res, 'Only received (Email from Client) comments can be moved')
+      }
+      const targetDoc = await prisma.documentItem.findUnique({
+        where: { id: targetDocumentId },
+        include: { section: { select: { projectId: true, name: true } } }
+      })
+      if (!targetDoc || String(targetDoc.section?.projectId) !== projectId) {
+        return badRequest(res, 'Target document not found or must belong to the same project')
+      }
+      if (targetDocumentId === comment.itemId) {
+        return badRequest(res, 'Comment is already under this document')
+      }
+      await prisma.documentItemComment.update({
+        where: { id },
+        data: { itemId: targetDocumentId }
+      })
+      return ok(res, { moved: true, id, targetDocumentId, targetSectionName: targetDoc.section?.name ?? null })
+    } catch (e) {
+      if (e.code === 'P2025') {
+        return badRequest(res, 'Record not found')
+      }
+      console.error('PATCH document-collection-email-activity error:', e)
+      return serverError(res, e.message || 'Move failed')
+    }
+  }
+
   if (req.method !== 'GET') {
-    return res.status(405).setHeader('Allow', 'GET, DELETE').json({ error: 'Method not allowed' })
+    return res.status(405).setHeader('Allow', 'GET, DELETE, PATCH').json({ error: 'Method not allowed' })
   }
 
   const fullUrl = req.originalUrl || req.url || ''

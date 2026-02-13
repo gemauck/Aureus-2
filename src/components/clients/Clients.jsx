@@ -4299,6 +4299,7 @@ const Clients = React.memo(() => {
                 sites: Array.isArray(clientFormData.sites) ? clientFormData.sites : [],
                 opportunities: clientFormData.opportunities || [],
                 contracts: clientFormData.contracts || [],
+                proposals: Array.isArray(clientFormData.proposals) ? clientFormData.proposals : [],
                 activityLog: clientFormData.activityLog || [],
                     services: Array.isArray(clientFormData.services) ? clientFormData.services : [],
                 billingTerms: clientFormData.billingTerms || {
@@ -4359,6 +4360,7 @@ const Clients = React.memo(() => {
                             sites: comprehensiveClient.sites,
                             // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
+                            proposals: comprehensiveClient.proposals,
                             activityLog: comprehensiveClient.activityLog,
                             services: comprehensiveClient.services,
                             billingTerms: comprehensiveClient.billingTerms,

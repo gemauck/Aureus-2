@@ -152,6 +152,7 @@
         'components/teams/ChecklistModal.jsx',
         'components/teams/NoticeModal.jsx',
         'components/teams/WorkflowExecutionModal.jsx',
+        'components/teams/EngagementMandateDetailModal.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
         'components/teams/POAReview.jsx',
         'components/teams/TeamModals.jsx',

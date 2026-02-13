@@ -3953,10 +3953,14 @@ const getAssigneeColor = (identifier, users) => {
     const DocumentRequestEmailModal = () => {
         const ctx = emailModalContext;
         const docName = ctx?.doc?.name || 'Document';
+        const sectionName = ctx?.section?.name || '';
         const month = ctx?.month || '';
         const projectName = project?.name || 'Project';
         const currentPeriodText = `${month} ${selectedYear}`.trim();
-        const defaultSubject = `Abco Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
+        // Include section (location) in subject so reply matching can route to the correct section's document (e.g. Barberton vs Mafube)
+        const defaultSubject = sectionName
+            ? `Abco Document / Data request: ${projectName} – ${sectionName} – ${docName} – ${currentPeriodText}`
+            : `Abco Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
         const defaultBody = `Hello Recipient Name,
 
 We are following up regarding the documents below. This request is for our internal records and audit trail.
@@ -3964,10 +3968,10 @@ We are following up regarding the documents below. This request is for our inter
 Requested details:
 • Document / Data: ${docName}
 • Period: ${currentPeriodText}
-• Project: ${projectName}
+• Project: ${projectName}${sectionName ? `\n• Section: ${sectionName}` : ''}
 
 If any items are unavailable, please let us know so we can update our records accordingly.
-Please send these at your earliest convenience.
+Please send these at your earliest convenience. When replying, please keep the subject line unchanged so we can file your response correctly.
 
 Kind regards,
 Abcotronics`;
@@ -4596,7 +4600,7 @@ Abcotronics`;
       <div style="font-size: 14px; color: #334155; line-height: 1.6;">
         <strong>Document / Data:</strong> ${escapeHtml(docName)}<br>
         <strong>Period:</strong> ${escapeHtml(currentPeriodText)}<br>
-        <strong>Project:</strong> ${escapeHtml(projectName)}
+        <strong>Project:</strong> ${escapeHtml(projectName)}${sectionName ? `<br><strong>Section:</strong> ${escapeHtml(sectionName)}` : ''}
       </div>
     </div>
     <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px;">

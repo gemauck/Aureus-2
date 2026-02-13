@@ -4111,10 +4111,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             // Determine if lead has been converted to client
                             const isConverted = !isLead || formData.type === 'client';
                             
-                            // Base tabs - for leads, exclude calendar and notes
+                            // Base tabs - for leads and clients
                             const baseTabs = isLead 
-                                ? ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc']  // Leads: all tabs including KYC
-                                : ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc'];  // Clients: all tabs including KYC
+                                ? ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc']
+                                : ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc'];
                             
                             // Tabs that should only show for clients or converted leads
                             const clientOnlyTabs = [];
