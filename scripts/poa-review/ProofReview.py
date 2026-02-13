@@ -274,6 +274,9 @@ class POAReview:
 			- Maps the total to transactions with matching labels
 			- Transactions with no matching SMR data get 0
 		"""
+		# Ensure "total smr" is a float column (CSV may have created it as str, causing assign to fail)
+		self.data["total smr"] = np.nan
+
 		# Sum SMR usage by label for the specified sources
 		hours = (
 			self.data.loc[self.data["Source"].isin(sources)]
