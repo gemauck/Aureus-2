@@ -14,7 +14,7 @@ import { withHttp } from '../_lib/withHttp.js';
 import { withLogging } from '../_lib/logger.js';
 import { authRequired } from '../_lib/authRequired.js';
 import { badRequest, serverError, ok } from '../_lib/response.js';
-import { createReadStream } from 'fs';
+import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 
@@ -30,58 +30,103 @@ async function handler(req, res) {
             return badRequest(res, 'Method not allowed');
         }
 
-        // Parse multipart form data using busboy
+        // Resolve directories first so we can stream upload to disk
+        const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+        const inputDir = path.join(rootDir, 'uploads', 'poa-review-inputs');
+        const outputDir = path.join(rootDir, 'uploads', 'poa-review-outputs');
+        const scriptsDir = path.join(rootDir, 'scripts', 'poa-review');
+        [inputDir, outputDir, scriptsDir].forEach(dir => {
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        });
+
+        // Parse multipart and stream file directly to disk (no full-file buffer in memory)
         const Busboy = (await import('busboy')).default;
         const bb = Busboy({ headers: req.headers });
-        let fileBuffer = null;
+        let inputFilePath = null;
         let fileName = null;
+        let safeFileName = '';
+        let timestamp = 0;
         let sources = ['Inmine: Daily Diesel Issues'];
         let fileReceived = false;
+        let writeStream = null;
 
         await new Promise((resolve, reject) => {
             bb.on('file', (name, file, info) => {
-                const { filename, encoding, mimeType } = info;
+                const { filename } = info;
                 fileName = filename;
                 fileReceived = true;
-                
+                const ext = path.extname(filename).toLowerCase();
+                if (!['.xlsx', '.xls'].includes(ext)) {
+                    file.resume();
+                    reject(new Error('Only Excel files (.xlsx, .xls) are supported'));
+                    return;
+                }
+                timestamp = Date.now();
+                safeFileName = path.basename(filename, ext).replace(/[^a-z0-9_-]/gi, '_').slice(0, 60);
+                const inputFileName = `${safeFileName}_${timestamp}${ext}`;
+                inputFilePath = path.join(inputDir, inputFileName);
+                writeStream = createWriteStream(inputFilePath);
                 let totalBytes = 0;
-                const chunks = [];
+
                 file.on('data', (chunk) => {
                     totalBytes += chunk.length;
                     if (totalBytes > MAX_FILE_SIZE_BYTES) {
                         file.destroy();
+                        if (writeStream) {
+                            writeStream.destroy();
+                            try { fs.unlinkSync(inputFilePath); } catch (_) {}
+                        }
                         reject(new Error(`File too large. Maximum size is ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB. Upload a smaller file or split your data.`));
                         return;
                     }
-                    chunks.push(chunk);
+                    if (writeStream && !writeStream.destroyed) writeStream.write(chunk);
                 });
-                
                 file.on('end', () => {
-                    if (totalBytes > MAX_FILE_SIZE_BYTES) return;
-                    fileBuffer = Buffer.concat(chunks);
+                    if (writeStream && !writeStream.destroyed) {
+                        writeStream.end();
+                    }
+                });
+                file.on('error', (err) => {
+                    if (writeStream && !writeStream.destroyed) writeStream.destroy(err);
+                });
+                writeStream.on('error', (err) => reject(err));
+                writeStream.on('finish', () => {
+                    writeStream = null;
+                    streamFinished = true;
+                    if (bbFinished) resolve();
                 });
             });
 
+            let bbFinished = false;
+            let streamFinished = false;
             bb.on('field', (name, value) => {
                 if (name === 'sources') {
                     try {
                         sources = JSON.parse(value);
-                    } catch (e) {
-                        // Keep default sources
-                    }
+                    } catch (e) { /* keep default */ }
                 }
             });
 
-            bb.on('finish', resolve);
+            bb.on('finish', () => {
+                bbFinished = true;
+                if (!fileReceived || streamFinished) resolve();
+            });
             bb.on('error', reject);
             req.pipe(bb);
         });
 
-        if (!fileReceived || !fileBuffer) {
+        if (!fileReceived || !inputFilePath || !fs.existsSync(inputFilePath)) {
             return badRequest(res, 'No file uploaded');
         }
 
-        if (fileBuffer.length > MAX_FILE_SIZE_BYTES) {
+        if (!fileName) {
+            return badRequest(res, 'No filename provided');
+        }
+
+        const ext = path.extname(fileName).toLowerCase();
+        const fileSize = fs.statSync(inputFilePath).size;
+        if (fileSize > MAX_FILE_SIZE_BYTES) {
+            try { fs.unlinkSync(inputFilePath); } catch (_) {}
             return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
                 error: {
                     code: 'POA_FILE_TOO_LARGE',
@@ -90,44 +135,7 @@ async function handler(req, res) {
             }));
         }
 
-        if (!fileName) {
-            return badRequest(res, 'No filename provided');
-        }
-
-        // Validate file type
-        const ext = path.extname(fileName).toLowerCase();
-        if (!['.xlsx', '.xls'].includes(ext)) {
-            return badRequest(res, 'Only Excel files (.xlsx, .xls) are supported');
-        }
-
-        // Get root directory
-        const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
-        const inputDir = path.join(rootDir, 'uploads', 'poa-review-inputs');
-        const outputDir = path.join(rootDir, 'uploads', 'poa-review-outputs');
-        const scriptsDir = path.join(rootDir, 'scripts', 'poa-review');
-
-        // Resolve Python: use venv if present, otherwise system python3
-        const venvPythonPath = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
-        const venvPython = fs.existsSync(venvPythonPath) ? venvPythonPath : 'python3';
-        if (venvPython === 'python3') {
-            console.log('POA Review Excel API - venv-poareview not found, using system python3');
-        }
-
-        // Ensure directories exist
-        [inputDir, outputDir, scriptsDir].forEach(dir => {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
-        });
-
-        // Save uploaded file
-        const timestamp = Date.now();
-        const safeFileName = path.basename(fileName, ext).replace(/[^a-z0-9_-]/gi, '_').slice(0, 60);
-        const inputFileName = `${safeFileName}_${timestamp}${ext}`;
-        const inputFilePath = path.join(inputDir, inputFileName);
-        
-        fs.writeFileSync(inputFilePath, fileBuffer);
-        console.log('POA Review Excel API - File saved:', inputFilePath, 'Size:', fileBuffer.length, 'bytes');
+        console.log('POA Review Excel API - File saved (streamed):', inputFilePath, 'Size:', fileSize, 'bytes');
 
         // Generate output filename
         const outputFileName = `${safeFileName}_review_${timestamp}.xlsx`;

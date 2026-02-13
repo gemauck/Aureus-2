@@ -36,6 +36,7 @@
     "test:crm:business": "node tests/crm/crm-business-logic-tests.js",
     "test:weekly-fms-put": "node tests/test-weekly-fms-put.js",
     "test:projects": "node tests/projects-functionality-persistence-tests.js",
+    "stress:poa": "node scripts/stress-test-poa-review.js",
     "predeploy": "npm run test:safety",
     "validate:deps": "node scripts/validate-component-deps.js",
     "precommit": "npm run validate:deps",

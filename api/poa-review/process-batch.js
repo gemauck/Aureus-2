@@ -22,8 +22,62 @@ const execAsync = promisify(exec);
 const MAX_TOTAL_ROWS = 400000;   // Reject job if total rows exceed this
 const MAX_ROWS_PER_BATCH = 25000; // Reject single batch if it has more rows
 
-// Store batch data in memory (in production, use Redis or database)
+// Store batch metadata only (no row data); batches are streamed to disk
 const batchStore = new Map();
+
+/** Escape a value for CSV (commas, quotes, newlines) */
+function escapeCsv(val) {
+    const str = String(val ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+}
+
+/** Build CSV header line from headers array */
+function csvHeaderLine(headers) {
+    return headers.map(h => escapeCsv(String(h || '').trim())).join(',');
+}
+
+/** Build CSV row line from row object and headers */
+function csvRowLine(row, headers) {
+    return headers.map(header => {
+        const val = row[header] !== undefined ? row[header] : '';
+        return escapeCsv(val);
+    }).join(',');
+}
+
+/** Get unique column headers from an array of row objects */
+function getHeadersFromRows(rows) {
+    const allHeaders = new Set();
+    for (const row of rows) {
+        if (row && typeof row === 'object') {
+            for (const key of Object.keys(row)) {
+                const trimmed = String(key || '').trim();
+                if (trimmed && trimmed !== '' && !trimmed.match(/^Unnamed:/i)) {
+                    allHeaders.add(trimmed);
+                }
+            }
+        }
+    }
+    const headers = Array.from(allHeaders);
+    if (headers.length === 0) throw new Error('No valid column headers found in data rows');
+    return headers;
+}
+
+/**
+ * Write one batch to a CSV file (header + rows for first batch, rows only otherwise).
+ * Uses no extra in-memory copy of the full dataset.
+ */
+function writeBatchToCsvFile(batchNumber, rows, headers, csvPath) {
+    const includeHeader = batchNumber === 1;
+    const lines = [];
+    if (includeHeader) lines.push(csvHeaderLine(headers));
+    for (const row of rows) {
+        lines.push(csvRowLine(row, headers));
+    }
+    fs.writeFileSync(csvPath, lines.join('\n') + '\n', 'utf8');
+}
 
 async function handler(req, res) {
     try {
@@ -82,44 +136,60 @@ async function handler(req, res) {
             }
         });
 
-        // Initialize or get batch store
+        // Initialize or get batch store (metadata only; batches streamed to disk)
         if (!batchStore.has(batchId)) {
             batchStore.set(batchId, {
-                batches: [],
+                csvDir: tempDir,
+                headers: null,
+                batchFilePaths: [], // index i = path for batch (i+1)
                 totalBatches: totalBatches || 1,
                 sources: sources || ['Inmine: Daily Diesel Issues'],
                 fileName: fileName || 'poa-review',
                 receivedBatches: 0,
+                receivedRowCount: 0,
                 startTime: Date.now()
             });
         }
 
         const batchData = batchStore.get(batchId);
-        batchData.batches.push({
-            batchNumber,
-            rows
-        });
+
+        // Batch 1 must arrive first so we can derive headers; no row data is kept in memory
+        if (batchData.headers === null && batchNumber !== 1) {
+            return badRequest(res, 'Send batch 1 first so the server can detect column headers.');
+        }
+
+        if (batchNumber === 1) {
+            batchData.headers = getHeadersFromRows(rows);
+            console.log('POA Review Batch API - CSV Headers (from batch 1):', batchData.headers.length);
+        }
+
+        const batchCsvPath = path.join(batchData.csvDir, `${batchId}_batch_${batchNumber}.csv`);
+        writeBatchToCsvFile(batchNumber, rows, batchData.headers, batchCsvPath);
+        batchData.batchFilePaths[batchNumber - 1] = batchCsvPath;
         batchData.receivedBatches++;
+        batchData.receivedRowCount += rows.length;
 
         // If this is the final batch or we've received all batches, process everything
         const allBatchesReceived = isFinal || batchData.receivedBatches >= batchData.totalBatches;
 
         if (allBatchesReceived) {
-            const totalRowsReceived = batchData.batches.reduce((sum, b) => sum + b.rows.length, 0);
+            const totalRowsReceived = batchData.receivedRowCount;
             const expectedBatches = batchData.totalBatches;
             const receivedBatches = batchData.receivedBatches;
-            
-            console.log('POA Review Batch API - All batches received, processing...', {
+
+            console.log('POA Review Batch API - All batches received, merging CSV files...', {
                 batchId,
                 expectedBatches,
                 receivedBatches,
                 totalRowsReceived,
-                isFinal,
-                batchNumbers: batchData.batches.map(b => b.batchNumber).sort((a, b) => a - b)
+                isFinal
             });
 
             // Enforce total row limit to avoid server OOM/crash
             if (totalRowsReceived > MAX_TOTAL_ROWS) {
+                for (const p of batchData.batchFilePaths) {
+                    if (p && fs.existsSync(p)) try { fs.unlinkSync(p); } catch (_) {}
+                }
                 batchStore.delete(batchId);
                 return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
                     error: {
@@ -128,121 +198,35 @@ async function handler(req, res) {
                     }
                 }));
             }
-            
-            // Validate we have all expected batches
+
             if (receivedBatches < expectedBatches && !isFinal) {
-                console.warn(`POA Review Batch API - WARNING: Only received ${receivedBatches} of ${expectedBatches} batches, but processing anyway due to allBatchesReceived condition`);
+                console.warn(`POA Review Batch API - WARNING: Only received ${receivedBatches} of ${expectedBatches} batches, processing anyway`);
             }
-            
-            // Check for missing batch numbers
-            const batchNumbers = batchData.batches.map(b => b.batchNumber).sort((a, b) => a - b);
+
             const missingBatches = [];
-            for (let i = 1; i <= expectedBatches; i++) {
-                if (!batchNumbers.includes(i)) {
-                    missingBatches.push(i);
-                }
+            for (let i = 0; i < expectedBatches; i++) {
+                if (!batchData.batchFilePaths[i]) missingBatches.push(i + 1);
             }
             if (missingBatches.length > 0) {
                 console.warn(`POA Review Batch API - WARNING: Missing batch numbers: ${missingBatches.join(', ')}`);
             }
 
             try {
-                // Combine all batches into single array
-                const sortedBatches = batchData.batches.sort((a, b) => a.batchNumber - b.batchNumber);
-                const allRows = sortedBatches.flatMap(batch => batch.rows);
-
-                console.log('POA Review Batch API - Combined rows:', allRows.length);
-                console.log('POA Review Batch API - Batch count:', sortedBatches.length);
-                console.log('POA Review Batch API - Expected batches:', batchData.totalBatches);
-                console.log('POA Review Batch API - Rows per batch:', sortedBatches.map(b => ({ batch: b.batchNumber, rows: b.rows.length })));
-                
-                // Calculate total rows from all batches
-                const totalRowsFromBatches = sortedBatches.reduce((sum, b) => sum + b.rows.length, 0);
-                console.log('POA Review Batch API - Total rows from batches:', totalRowsFromBatches);
-                console.log('POA Review Batch API - All rows array length:', allRows.length);
-                
-                if (totalRowsFromBatches !== allRows.length) {
-                    console.error('POA Review Batch API - ERROR: Row count mismatch!', {
-                        totalRowsFromBatches,
-                        allRowsLength: allRows.length
-                    });
-                }
-                
-                // Validate that we have data
-                if (allRows.length === 0) {
-                    throw new Error('No data rows to process after combining batches');
-                }
-
-                // Create temporary CSV file for processing
+                // Merge batch CSV files in order into one file (no full dataset in memory)
                 const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
-                
-                // Write CSV header - preserve original column names
-                if (allRows.length > 0) {
-                    // Get all unique headers from all rows (in case some rows have different keys)
-                    const allHeaders = new Set();
-                    allRows.forEach(row => {
-                        if (row && typeof row === 'object') {
-                            Object.keys(row).forEach(key => {
-                                // Filter out empty column names
-                                const trimmed = String(key || '').trim();
-                                if (trimmed && trimmed !== '' && !trimmed.match(/^Unnamed:/i)) {
-                                    allHeaders.add(trimmed);
-                                }
-                            });
-                        }
-                    });
-                    const headers = Array.from(allHeaders);
-                    
-                    // Validate we have headers
-                    if (headers.length === 0) {
-                        throw new Error('No valid column headers found in data rows');
-                    }
-                    
-                    // Log headers for debugging
-                    console.log('POA Review Batch API - CSV Headers:', headers);
-                    console.log('POA Review Batch API - Header count:', headers.length);
-                    console.log('POA Review Batch API - First row keys:', Object.keys(allRows[0]));
-                    console.log('POA Review Batch API - First row sample:', JSON.stringify(allRows[0]).substring(0, 200));
-                    
-                    const headerRow = headers.map(h => {
-                        // Escape header names if needed
-                        const header = String(h || '').trim();
-                        if (header.includes(',') || header.includes('"') || header.includes('\n')) {
-                            return `"${header.replace(/"/g, '""')}"`;
-                        }
-                        return header;
-                    }).join(',');
-                    
-                    const csvRows = allRows.map(row => {
-                        return headers.map(header => {
-                            const val = row[header] !== undefined ? row[header] : '';
-                            // Escape commas and quotes in CSV values
-                            const str = String(val || '');
-                            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                                return `"${str.replace(/"/g, '""')}"`;
-                            }
-                            return str;
-                        }).join(',');
-                    });
-                    
-                    const csvContent = [headerRow, ...csvRows].join('\n');
-                    const csvLineCount = csvContent.split('\n').length;
-                    fs.writeFileSync(tempCsvPath, csvContent, 'utf8');
-                    console.log('POA Review Batch API - Created temp CSV:', tempCsvPath);
-                    console.log('POA Review Batch API - CSV line count (including header):', csvLineCount);
-                    console.log('POA Review Batch API - CSV data rows:', csvLineCount - 1);
-                    console.log('POA Review Batch API - Expected data rows:', allRows.length);
-                    console.log('POA Review Batch API - CSV first line:', csvContent.split('\n')[0]);
-                    
-                    if (csvLineCount - 1 !== allRows.length) {
-                        console.error('POA Review Batch API - ERROR: CSV row count mismatch!', {
-                            csvDataRows: csvLineCount - 1,
-                            expectedRows: allRows.length
-                        });
-                    }
-                } else {
-                    return badRequest(res, 'No data rows received');
+                const firstPath = batchData.batchFilePaths[0];
+                if (!firstPath || !fs.existsSync(firstPath)) {
+                    throw new Error('No data from batch 1. Send batch 1 first.');
                 }
+                fs.copyFileSync(firstPath, tempCsvPath);
+                for (let i = 1; i < batchData.batchFilePaths.length; i++) {
+                    const p = batchData.batchFilePaths[i];
+                    if (p && fs.existsSync(p)) {
+                        const content = fs.readFileSync(p, 'utf8');
+                        fs.appendFileSync(tempCsvPath, content, 'utf8');
+                    }
+                }
+                console.log('POA Review Batch API - Merged temp CSV:', tempCsvPath, 'rows:', totalRowsReceived);
 
                 // Convert CSV to Excel and process
                 const timestamp = Date.now();
@@ -475,10 +459,13 @@ except Exception as e:
                     throw new Error(`Output file was not created. Python output: ${stdout}\nErrors: ${stderr}`);
                 }
 
-                // Clean up temp files
+                // Clean up temp files (merged CSV, per-batch CSVs, Python script)
                 try {
                     if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
                     if (fs.existsSync(tempProcessScript)) fs.unlinkSync(tempProcessScript);
+                    for (const p of batchData.batchFilePaths) {
+                        if (p && fs.existsSync(p)) fs.unlinkSync(p);
+                    }
                 } catch (cleanupError) {
                     console.warn('POA Review Batch API - Cleanup error:', cleanupError);
                 }
@@ -495,7 +482,7 @@ except Exception as e:
                     downloadUrl,
                     fileName: outputFileName,
                     processingTime,
-                    totalRows: allRows.length
+                    totalRows: batchData.receivedRowCount
                 });
 
             } catch (error) {
@@ -510,6 +497,13 @@ except Exception as e:
                     stdout: error.stdout,
                     stderr: error.stderr
                 });
+                try {
+                    for (const p of batchData?.batchFilePaths || []) {
+                        if (p && fs.existsSync(p)) fs.unlinkSync(p);
+                    }
+                    const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
+                    if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
+                } catch (_) {}
                 batchStore.delete(batchId);
                 
                 // Return more detailed error information
@@ -549,11 +543,20 @@ except Exception as e:
     }
 }
 
-// Clean up old batch data periodically (every hour)
+// Clean up old batch data and their on-disk files periodically (every hour)
 setInterval(() => {
     const oneHourAgo = Date.now() - (60 * 60 * 1000);
+    const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+    const tempDir = path.join(rootDir, 'uploads', 'poa-review-temp');
     for (const [batchId, data] of batchStore.entries()) {
         if (data.startTime < oneHourAgo) {
+            try {
+                for (const p of data.batchFilePaths || []) {
+                    if (p && fs.existsSync(p)) fs.unlinkSync(p);
+                }
+                const mergedPath = path.join(tempDir, `${batchId}_data.csv`);
+                if (fs.existsSync(mergedPath)) fs.unlinkSync(mergedPath);
+            } catch (_) {}
             console.log('POA Review Batch API - Cleaning up old batch:', batchId);
             batchStore.delete(batchId);
         }

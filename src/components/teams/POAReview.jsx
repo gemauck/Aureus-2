@@ -589,7 +589,10 @@ const POAReview = () => {
                 );
             }
 
-            setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...`);
+            const largeFileNote = rows.length > 50000
+                ? ' Large file — processing may take several minutes; do not close this page.'
+                : '';
+            setProcessingProgress(`Parsed ${rows.length} rows. Starting batch processing...${largeFileNote}`);
             await handleChunkedUpload(rows, uploadedFile.name);
         } catch (err) {
             console.error('POA Review error:', err);
