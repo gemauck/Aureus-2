@@ -291,18 +291,26 @@ const POAReview = () => {
         return getUniqueSourceValuesFromRows(rows);
     }, [parseFileToRows, getUniqueSourceValuesFromRows]);
 
+    // Server limit (must match api/poa-review/process-batch.js MAX_TOTAL_ROWS)
+    const MAX_POA_ROWS = 250000;
+
     // Process file in chunks using batch API
     const handleChunkedUpload = useCallback(async (rows, fileName) => {
-        // Use larger batch size for very large files to reduce number of requests
-        // This helps prevent timeout issues with hundreds of batches
         const totalRows = rows.length;
+        if (totalRows > MAX_POA_ROWS) {
+            setError(`This file has too many rows (${totalRows.toLocaleString()}). Maximum ${MAX_POA_ROWS.toLocaleString()} rows are supported. Please split your file (e.g. by month) and run POA Review on each file separately.`);
+            setProcessing(false);
+            setProcessingProgress('');
+            setProcessingProgressPercent(0);
+            return;
+        }
+        // Use larger batch size for large files to reduce number of requests
         let BATCH_SIZE = 500; // Default batch size
         if (totalRows > 50000) {
-            BATCH_SIZE = 2000; // Larger batches for very large files
+            BATCH_SIZE = 2000; // Fewer requests for very large files
         } else if (totalRows > 10000) {
-            BATCH_SIZE = 1000; // Medium batches for large files
+            BATCH_SIZE = 1000;
         }
-        
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
         const batchId = `poa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         

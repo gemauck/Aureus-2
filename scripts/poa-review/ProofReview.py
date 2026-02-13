@@ -27,6 +27,53 @@ import numpy as np
 from FormatExcel import Formatter
 from os import listdir
 
+# Use streaming Excel write for large files to avoid OOM (openpyxl holds ~50x file size in RAM otherwise)
+LARGE_FILE_THRESHOLD = 50000
+
+# Styles for write_only path (avoid loading full sheet into memory)
+def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, yellow_col16):
+	from openpyxl import Workbook
+	from openpyxl.cell import WriteOnlyCell
+	from openpyxl.styles import PatternFill, Font, Alignment, Color
+	fill_header = PatternFill(patternType="solid", fgColor=Color(rgb="CCDAF5"))
+	fill_green = PatternFill(patternType="solid", fgColor=Color(rgb="D9EAD3"))
+	fill_yellow = PatternFill(patternType="solid", fgColor=Color(rgb="FFF2CC"))
+	font_9 = Font(size=9)
+	font_9_bold = Font(size=9, bold=True)
+	align_left = Alignment(horizontal="left")
+	num_cols = len(review_cols)
+	wb = Workbook(write_only=True)
+	ws = wb.create_sheet(title="Details as Assets")
+	# Header row
+	header_cells = []
+	for j, col in enumerate(review_cols):
+		c = WriteOnlyCell(ws, value=col)
+		c.fill = fill_header
+		c.font = font_9_bold
+		c.alignment = align_left
+		header_cells.append(c)
+	ws.append(header_cells)
+	# Data rows: one row at a time with per-row formatting
+	for i in range(len(review)):
+		row = review.iloc[i]
+		row_cells = []
+		for j, col in enumerate(review_cols):
+			val = row[col] if col in row.index else None
+			if pd.isna(val):
+				val = None
+			c = WriteOnlyCell(ws, value=val)
+			c.font = font_9
+			c.alignment = align_left
+			if bold_rows.iloc[i]:
+				c.font = font_9_bold
+			if green_rows.iloc[i]:
+				c.fill = fill_green
+			if j == 15 and yellow_col16.iloc[i]:  # column 16 (0-based 15)
+				c.fill = fill_yellow
+			row_cells.append(c)
+		ws.append(row_cells)
+	wb.save(output_path)
+
 # Columns to include in the final review report
 review_cols = [
     "Date & Time","Transaction ID","Asset Description","Asset Number","Asset Group","Asset Tank Size (L)","Asset Meter Type (Hr/Km)",
@@ -336,64 +383,56 @@ def format_review(review, filename, output_path=None):
 	# Ensure output directory exists
 	import os
 	os.makedirs(os.path.dirname(output_path), exist_ok=True)
-	
-	with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-		# Write DataFrame to Excel
-		review.to_excel(writer, sheet_name="Details as Assets", index=False)
 
-		wb = writer.book  
-		ws = writer.sheets["Details as Assets"]
-
-		format_review = Formatter(wb)
-
-		# Format header row: light blue background, left-aligned
-		format_review.fill_cells(row_start=1, num_rows=1, column_start=1, num_columns=len(review_cols) + 4)
-		format_review.left_align(row_start=1, num_rows=1, column_start=1, num_columns=len(review_cols) + 4)
-		format_review.create_borders(row_start=1, num_rows=1, column_start=1, num_columns=len(review_cols) + 4, border_style=None)
-		
-		# Set font size to 9 for entire worksheet
-		format_review.set_font(
-			row_start=format_review.ws.min_row,
-			num_rows=format_review.ws.max_row,
-			column_start=format_review.ws.min_column,
-			num_columns=format_review.ws.max_column,
-			size=9
-		)
-
-		# Precompute format flags from DataFrame (avoids 38k+ iter_rows and single-row calls)
-		n = len(review)
-		col_dt = review["Date & Time"]
-		col_txn = review["Transaction ID"]
-		col_smr = review["Total SMR Usage"]
-		# Coerce to numeric so header strings (e.g. "Total SMR Usage") in data rows become NaN, then 0
-		smr_numeric = pd.to_numeric(col_smr, errors="coerce").fillna(0)
+	n = len(review)
+	num_cols = len(review_cols)
+	# Precompute format flags once (used by both paths)
+	col_dt = review["Date & Time"]
+	col_txn = review["Transaction ID"]
+	col_smr = review["Total SMR Usage"]
+	smr_numeric = pd.to_numeric(col_smr, errors="coerce").fillna(0)
+	# Fast path when column is already datetime64
+	if pd.api.types.is_datetime64_any_dtype(col_dt):
+		is_ts = col_dt.notna()
+	else:
 		is_ts = pd.Series([isinstance(x, pd.Timestamp) for x in col_dt], index=review.index)
-		has_txn = col_txn.notna() & (col_txn.astype(str).str.strip() != "")
-		smr_empty = col_smr.isna() | (smr_numeric == 0)
-		bold_rows = ~is_ts & col_dt.notna()
-		green_rows = has_txn & is_ts
-		yellow_rows = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
+	has_txn = col_txn.notna() & (col_txn.astype(str).str.strip() != "")
+	smr_empty = col_smr.isna() | (smr_numeric == 0)
+	bold_rows = ~is_ts & col_dt.notna()
+	green_rows = has_txn & is_ts
+	yellow_col16 = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
 
-		def contiguous_ranges(series):
-			"""Convert boolean series to list of (start_row_1based, num_rows)."""
-			r = []
-			i = 0
-			while i < len(series):
-				if series.iloc[i]:
-					start = i
-					while i < len(series) and series.iloc[i]:
+	if n > LARGE_FILE_THRESHOLD:
+		# Streaming write: minimal memory so large files don't OOM the server
+		_write_only_excel(review, output_path, review_cols, bold_rows, green_rows, yellow_col16)
+	else:
+		# Standard path with Formatter (full sheet in memory)
+		with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+			review.to_excel(writer, sheet_name="Details as Assets", index=False)
+			wb = writer.book
+			ws = writer.sheets["Details as Assets"]
+			format_review = Formatter(wb)
+			format_review.fill_cells(row_start=1, num_rows=1, column_start=1, num_columns=num_cols + 4)
+			format_review.left_align(row_start=1, num_rows=1, column_start=1, num_columns=num_cols + 4)
+			format_review.create_borders(row_start=1, num_rows=1, column_start=1, num_columns=num_cols + 4, border_style=None)
+			format_review.set_font(row_start=1, num_rows=ws.max_row, column_start=1, num_columns=ws.max_column, size=9)
+			def contiguous_ranges(series):
+				r, i = [], 0
+				while i < len(series):
+					if series.iloc[i]:
+						start = i
+						while i < len(series) and series.iloc[i]:
+							i += 1
+						r.append((start + 2, i - start))
+					else:
 						i += 1
-					r.append((start + 2, i - start))  # +2: 1-based, +1 header
-				else:
-					i += 1
-			return r
-
-		for start, num_rows in contiguous_ranges(bold_rows):
-			format_review.make_bold(row_start=start, num_rows=num_rows, column_start=1, num_columns=len(review_cols) + 4, size=9)
-		for start, num_rows in contiguous_ranges(green_rows):
-			format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=1, num_columns=len(review_cols) + 4, color="D9EAD3")
-		for start, num_rows in contiguous_ranges(yellow_rows):
-			format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=16, num_columns=1, color="FFF2CC")
+				return r
+			for start, num_rows in contiguous_ranges(bold_rows):
+				format_review.make_bold(row_start=start, num_rows=num_rows, column_start=1, num_columns=num_cols + 4, size=9)
+			for start, num_rows in contiguous_ranges(green_rows):
+				format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=1, num_columns=num_cols + 4, color="D9EAD3")
+			for start, num_rows in contiguous_ranges(yellow_col16):
+				format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=16, num_columns=1, color="FFF2CC")
 
 # ============================================================================
 # MAIN EXECUTION SCRIPT

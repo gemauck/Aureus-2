@@ -20,8 +20,8 @@ import { parseJsonBody } from '../_lib/body.js';
 
 const execAsync = promisify(exec);
 
-// Limits to prevent server crash from huge documents
-const MAX_TOTAL_ROWS = 400000;   // Reject job if total rows exceed this
+// Limits: large files use streaming Excel write (write_only) to stay within server memory
+const MAX_TOTAL_ROWS = 250000;   // Allow up to ~250k rows when using write_only path in ProofReview
 const MAX_ROWS_PER_BATCH = 25000; // Reject single batch if it has more rows
 
 // Store batch metadata only (no row data); batches are streamed to disk
@@ -258,7 +258,7 @@ async function handler(req, res) {
                 return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
                     error: {
                         code: 'POA_TOO_MANY_ROWS',
-                        message: `This file has too many rows (${totalRowsReceived}). Maximum ${MAX_TOTAL_ROWS} rows are supported to avoid server overload. Please split your file or use a smaller dataset.`
+                        message: `This file has too many rows (${totalRowsReceived}). Maximum ${MAX_TOTAL_ROWS.toLocaleString()} rows are supported to avoid the server running out of memory. Please split your file (e.g. by month — one file per month) and run POA Review on each file separately.`
                     }
                 }));
             }
@@ -404,6 +404,9 @@ try:
         except Exception:
             pass
     
+    # Keep only columns needed for report to reduce memory for large files
+    data = data[[c for c in data.columns if c in review_cols]]
+    
     review = POAReview(data)
     review.mark_consecutive_transactions()
     review.label_rows()
@@ -443,8 +446,8 @@ except Exception as e:
                 try {
                     const result = await execAsync(pythonCommand, {
                         cwd: scriptsDir,
-                        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-                        timeout: 300000 // 5 minutes timeout
+                        maxBuffer: 20 * 1024 * 1024, // 20MB buffer for large file output
+                        timeout: 600000 // 10 minutes for large files (write_only path)
                     });
                     stdout = result.stdout || '';
                     stderr = result.stderr || '';
