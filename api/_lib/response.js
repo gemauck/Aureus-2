@@ -120,15 +120,17 @@ export function serverError(res, message = 'Server error', details) {
   
   // Don't override with DB message when the error is from another flow (e.g. POA batch processing)
   const isPoaOrOtherFlow = messageStr.includes('failed to process batches') || messageStr.includes('python script')
-  
-  if (!isPoaOrOtherFlow && (combinedText.includes("can't reach database server") ||
-      combinedText.includes("can't reach database") ||
-      combinedText.includes("econnrefused") ||
-      combinedText.includes("etimedout") ||
-      combinedText.includes("enotfound") ||
-      combinedText.includes("connection timeout") ||
-      combinedText.includes("connection refused") ||
-      (combinedText.includes("connection") && (combinedText.includes("unreachable") || combinedText.includes("failed")))) {
+  const looksLikeDbError =
+    combinedText.includes("can't reach database server") ||
+    combinedText.includes("can't reach database") ||
+    combinedText.includes("econnrefused") ||
+    combinedText.includes("etimedout") ||
+    combinedText.includes("enotfound") ||
+    combinedText.includes("connection timeout") ||
+    combinedText.includes("connection refused") ||
+    (combinedText.includes("connection") && (combinedText.includes("unreachable") || combinedText.includes("failed")))
+
+  if (!isPoaOrOtherFlow && looksLikeDbError) {
     errorCode = 'DATABASE_CONNECTION_ERROR'
     errorMessage = 'Database connection failed'
     errorDetails = 'The database server is unreachable. Please check your network connection and ensure the database server is running.'
