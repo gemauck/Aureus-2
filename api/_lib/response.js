@@ -118,7 +118,10 @@ export function serverError(res, message = 'Server error', details) {
   const detailsStr = typeof details === 'string' ? details.toLowerCase() : ''
   const combinedText = `${messageStr} ${detailsStr}`
   
-  if (combinedText.includes("can't reach database server") ||
+  // Don't override with DB message when the error is from another flow (e.g. POA batch processing)
+  const isPoaOrOtherFlow = messageStr.includes('failed to process batches') || messageStr.includes('python script')
+  
+  if (!isPoaOrOtherFlow && (combinedText.includes("can't reach database server") ||
       combinedText.includes("can't reach database") ||
       combinedText.includes("econnrefused") ||
       combinedText.includes("etimedout") ||
