@@ -362,12 +362,14 @@ def format_review(review, filename, output_path=None):
 		col_dt = review["Date & Time"]
 		col_txn = review["Transaction ID"]
 		col_smr = review["Total SMR Usage"]
+		# Coerce to numeric so header strings (e.g. "Total SMR Usage") in data rows become NaN, then 0
+		smr_numeric = pd.to_numeric(col_smr, errors="coerce").fillna(0)
 		is_ts = pd.Series([isinstance(x, pd.Timestamp) for x in col_dt], index=review.index)
 		has_txn = col_txn.notna() & (col_txn.astype(str).str.strip() != "")
-		smr_empty = col_smr.isna() | (col_smr.astype(float) == 0)
+		smr_empty = col_smr.isna() | (smr_numeric == 0)
 		bold_rows = ~is_ts & col_dt.notna()
 		green_rows = has_txn & is_ts
-		yellow_rows = is_ts & ((smr_empty & ~has_txn) | (col_smr.astype(float) == 0))
+		yellow_rows = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
 
 		def contiguous_ranges(series):
 			"""Convert boolean series to list of (start_row_1based, num_rows)."""
