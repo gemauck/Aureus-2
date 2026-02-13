@@ -318,9 +318,7 @@ def format_review(review, filename, output_path=None):
 		for c in missing:
 			review[c] = np.nan
 	review = review[review_cols]
-	else:
-		review = review[review_cols]
-	
+
 	# Generate output path if not provided
 	if output_path is None:
 		# Generate output filename (remove .csv extension if present, add .xlsx)
