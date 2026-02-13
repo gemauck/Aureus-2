@@ -25,6 +25,50 @@ const MAX_ROWS_PER_BATCH = 25000; // Reject single batch if it has more rows
 // Store batch metadata only (no row data); batches are streamed to disk
 const batchStore = new Map();
 
+/** Path to persisted batch metadata (shared across workers via disk) */
+function getMetaPath(batchId, tempDir) {
+    return path.join(tempDir, `${batchId}_meta.json`);
+}
+
+/** Load batch metadata from disk if present (for multi-worker: another worker may have stored it) */
+function loadBatchMeta(batchId, tempDir) {
+    const metaPath = getMetaPath(batchId, tempDir);
+    if (!fs.existsSync(metaPath)) return null;
+    try {
+        const raw = fs.readFileSync(metaPath, 'utf8');
+        const meta = JSON.parse(raw);
+        if (meta && typeof meta.totalBatches === 'number') return meta;
+    } catch (e) {
+        console.warn('POA Review Batch API - Failed to load batch meta:', batchId, e.message);
+    }
+    return null;
+}
+
+/** Persist batch metadata to disk so other workers can load it */
+function saveBatchMeta(batchId, tempDir, batchData) {
+    const metaPath = getMetaPath(batchId, tempDir);
+    const meta = {
+        csvDir: batchData.csvDir,
+        headers: batchData.headers,
+        batchFilePaths: batchData.batchFilePaths || [],
+        totalBatches: batchData.totalBatches,
+        sources: batchData.sources,
+        fileName: batchData.fileName,
+        receivedBatches: batchData.receivedBatches,
+        receivedRowCount: batchData.receivedRowCount,
+        startTime: batchData.startTime
+    };
+    fs.writeFileSync(metaPath, JSON.stringify(meta), 'utf8');
+}
+
+/** Remove persisted batch metadata (on success, failure, or cleanup) */
+function deleteBatchMeta(batchId, tempDir) {
+    const metaPath = getMetaPath(batchId, tempDir);
+    try {
+        if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+    } catch (_) {}
+}
+
 /** Escape a value for CSV (commas, quotes, newlines) */
 function escapeCsv(val) {
     const str = String(val ?? '');
@@ -136,26 +180,42 @@ async function handler(req, res) {
             }
         });
 
-        // Initialize or get batch store (metadata only; batches streamed to disk)
+        // Initialize or get batch store (metadata only; batches streamed to disk).
+        // Load from disk if another worker already created this batch (shared state across workers).
         if (!batchStore.has(batchId)) {
-            batchStore.set(batchId, {
-                csvDir: tempDir,
-                headers: null,
-                batchFilePaths: [], // index i = path for batch (i+1)
-                totalBatches: totalBatches || 1,
-                sources: sources || ['Inmine: Daily Diesel Issues'],
-                fileName: fileName || 'poa-review',
-                receivedBatches: 0,
-                receivedRowCount: 0,
-                startTime: Date.now()
-            });
+            const diskMeta = loadBatchMeta(batchId, tempDir);
+            if (diskMeta) {
+                batchStore.set(batchId, {
+                    csvDir: diskMeta.csvDir || tempDir,
+                    headers: diskMeta.headers,
+                    batchFilePaths: diskMeta.batchFilePaths || [],
+                    totalBatches: diskMeta.totalBatches,
+                    sources: diskMeta.sources || ['Inmine: Daily Diesel Issues'],
+                    fileName: diskMeta.fileName || 'poa-review',
+                    receivedBatches: diskMeta.receivedBatches || 0,
+                    receivedRowCount: diskMeta.receivedRowCount || 0,
+                    startTime: diskMeta.startTime || Date.now()
+                });
+            } else {
+                batchStore.set(batchId, {
+                    csvDir: tempDir,
+                    headers: null,
+                    batchFilePaths: [], // index i = path for batch (i+1)
+                    totalBatches: totalBatches || 1,
+                    sources: sources || ['Inmine: Daily Diesel Issues'],
+                    fileName: fileName || 'poa-review',
+                    receivedBatches: 0,
+                    receivedRowCount: 0,
+                    startTime: Date.now()
+                });
+            }
         }
 
         const batchData = batchStore.get(batchId);
 
         // Batch 1 must arrive first so we can derive headers; no row data is kept in memory
         if (batchData.headers === null && batchNumber !== 1) {
-            return badRequest(res, 'Send batch 1 first so the server can detect column headers.');
+            return badRequest(res, 'The server no longer has the data from the previous batches (the session may have expired or an error occurred). Please run the process again from the start: upload your file and click Process & Generate Report again.');
         }
 
         if (batchNumber === 1) {
@@ -168,6 +228,7 @@ async function handler(req, res) {
         batchData.batchFilePaths[batchNumber - 1] = batchCsvPath;
         batchData.receivedBatches++;
         batchData.receivedRowCount += rows.length;
+        saveBatchMeta(batchId, tempDir, batchData);
 
         // If this is the final batch or we've received all batches, process everything
         const allBatchesReceived = isFinal || batchData.receivedBatches >= batchData.totalBatches;
@@ -190,6 +251,7 @@ async function handler(req, res) {
                 for (const p of batchData.batchFilePaths) {
                     if (p && fs.existsSync(p)) try { fs.unlinkSync(p); } catch (_) {}
                 }
+                deleteBatchMeta(batchId, tempDir);
                 batchStore.delete(batchId);
                 return res.status(413).setHeader('Content-Type', 'application/json').end(JSON.stringify({
                     error: {
@@ -216,7 +278,7 @@ async function handler(req, res) {
                 const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
                 const firstPath = batchData.batchFilePaths[0];
                 if (!firstPath || !fs.existsSync(firstPath)) {
-                    throw new Error('No data from batch 1. Send batch 1 first.');
+                    throw new Error('No data from batch 1. The server lost the previous batches. Please run the process again from the start (upload your file and click Process & Generate Report again).');
                 }
                 fs.copyFileSync(firstPath, tempCsvPath);
                 for (let i = 1; i < batchData.batchFilePaths.length; i++) {
@@ -470,7 +532,8 @@ except Exception as e:
                     console.warn('POA Review Batch API - Cleanup error:', cleanupError);
                 }
 
-                // Clean up batch store
+                // Clean up batch store and disk meta
+                deleteBatchMeta(batchId, tempDir);
                 batchStore.delete(batchId);
 
                 // Return download URL
@@ -504,6 +567,7 @@ except Exception as e:
                     const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
                     if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
                 } catch (_) {}
+                deleteBatchMeta(batchId, tempDir);
                 batchStore.delete(batchId);
                 
                 // Return more detailed error information
@@ -556,6 +620,7 @@ setInterval(() => {
                 }
                 const mergedPath = path.join(tempDir, `${batchId}_data.csv`);
                 if (fs.existsSync(mergedPath)) fs.unlinkSync(mergedPath);
+                deleteBatchMeta(batchId, tempDir);
             } catch (_) {}
             console.log('POA Review Batch API - Cleaning up old batch:', batchId);
             batchStore.delete(batchId);
