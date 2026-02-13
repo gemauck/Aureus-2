@@ -66,18 +66,24 @@ class POAReview:
 		The constructor:
 		1. Creates boolean masks to identify transaction vs proof records
 		2. Converts date columns to datetime format for time-based analysis
+		3. Converts high-cardinality object columns to category to reduce memory
 		"""
 		self.data = per_asset_report
 		
 		# Create masks to identify different record types
 		# Transactions: Have a Transaction ID (but not the header "Transaction ID")
-		self.transaction_mask = (self.data["Transaction ID"].notna()) & (~self.data["Transaction ID"].isin(["Transaction ID"]))
+		self.transaction_mask = (self.data["Transaction ID"].notna()) & (self.data["Transaction ID"].astype(str).str.strip() != "Transaction ID")
 		
 		# Proof records: No Transaction ID, but have an Asset Number
 		self.proof_mask = (self.data["Transaction ID"].isna()) & (self.data["Asset Number"].notna())
 		
-		# Convert entire "Date & Time" column to datetime in one go (avoids pandas setitem failure on large masked assignment)
-		self.data["Date & Time"] = pd.to_datetime(self.data["Date & Time"], yearfirst=True, errors="coerce")	
+		# Convert "Date & Time" to datetime (single pass)
+		self.data["Date & Time"] = pd.to_datetime(self.data["Date & Time"], yearfirst=True, errors="coerce")
+		
+		# Use category for repeated strings to cut memory (big win at 30k+ rows)
+		for col in ("Asset Number", "Transaction ID", "Source"):
+			if col in self.data.columns and self.data[col].dtype == object:
+				self.data[col] = self.data[col].astype("category")
 
 	def mark_no_poa_assets(self):
 		"""
@@ -122,13 +128,13 @@ class POAReview:
 		# Calculate time difference between consecutive transactions
 		time_between_dispenses = self.data.loc[self.transaction_mask, "Date & Time"].diff()
 
-		# Mark as consecutive (0) if within 1 hour, otherwise new group (1)
+		# Mark as consecutive (0) if within 1 hour, otherwise new group (1); use int8 to save memory
 		self.data.loc[self.transaction_mask, "is consec"] = np.where(
-			(time_between_dispenses > pd.Timedelta(hours=0)) & 
-			(time_between_dispenses < pd.Timedelta(hours=1)), 
-			0,  # Consecutive transaction
-			1   # New transaction group
-		)
+			(time_between_dispenses > pd.Timedelta(hours=0)) &
+			(time_between_dispenses < pd.Timedelta(hours=1)),
+			0,
+			1,
+		).astype(np.int8)
 
 		return self.data
 
@@ -167,13 +173,15 @@ class POAReview:
 		)
 
 		# Assign proof records the same label as the next transaction for that asset
-		# This links proof records to the transactions they support
-		# bfill() (backward fill) propagates transaction labels to preceding proof records
 		self.data.loc[self.transaction_mask | self.proof_mask, "label"] = (
 			self.data.loc[self.transaction_mask | self.proof_mask, :]
 			.groupby("Asset Number")["label"]
 			.bfill()
 		)
+		# Category reduces memory for many repeated labels
+		self.data["label"] = self.data["label"].astype("category")
+		# Drop temporary column to free memory
+		self.data.drop(columns=["is consec"], inplace=True, errors="ignore")
 
 		return self.data
 
@@ -199,14 +207,9 @@ class POAReview:
 		# Count proof records per label
 		count = self.data.loc[self.proof_mask, "label"].value_counts().to_dict()
 		
-		# Map counts to transactions with matching labels
-		self.data.loc[self.transaction_mask, "Count of proof before transaction"] = (
-			self.data.loc[self.transaction_mask, "label"].map(count)
-		)
-		# Fill NaN with 0 (transactions with no proof records)
-		self.data.loc[self.transaction_mask, "Count of proof before transaction"] = (
-			self.data.loc[self.transaction_mask, "Count of proof before transaction"].fillna(0)
-		)
+		# Map counts to transactions; use int32 to save memory
+		mapped = self.data.loc[self.transaction_mask, "label"].map(count)
+		self.data.loc[self.transaction_mask, "Count of proof before transaction"] = pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.int32)
 
 		return self.data
 
@@ -245,12 +248,14 @@ class POAReview:
 			.ffill()
 		)
 
-		# Step 3: Calculate time difference and convert to hours
-		# (Date difference in pandas gives days, so multiply by 24 for hours)
-		self.data.loc[self.transaction_mask | self.proof_mask, "Time since last activity"] = (
-			(self.data.loc[self.transaction_mask | self.proof_mask, "Date & Time"] - 
-			 self.data.loc[self.transaction_mask | self.proof_mask, "Last Empty Time"]) * 24
+		# Step 3: Time difference in hours; use float32 to save memory
+		delta = (
+			self.data.loc[self.transaction_mask | self.proof_mask, "Date & Time"] -
+			self.data.loc[self.transaction_mask | self.proof_mask, "Last Empty Time"]
 		)
+		self.data.loc[self.transaction_mask | self.proof_mask, "Time since last activity"] = (delta.dt.total_seconds() / 3600.0).astype(np.float32)
+		# Drop temp column to free memory
+		self.data.drop(columns=["Last Empty Time"], inplace=True, errors="ignore")
 
 		return self.data
 
@@ -274,28 +279,22 @@ class POAReview:
 			- Maps the total to transactions with matching labels
 			- Transactions with no matching SMR data get 0
 		"""
-		# Ensure "total smr" is a float column (CSV may have created it as str, causing assign to fail)
-		self.data["total smr"] = np.nan
-
-		# Sum SMR usage by label for the specified sources (ensure numeric so hours dict has floats)
-		smr_series = pd.to_numeric(self.data["Total SMR Usage"], errors="coerce").fillna(0)
+		# Sum SMR by label for specified sources without creating a full-column copy (low memory)
+		source_mask = self.data["Source"].isin(sources)
+		smr_numeric = pd.to_numeric(self.data.loc[source_mask, "Total SMR Usage"], errors="coerce").fillna(0).astype(np.float32)
 		hours = (
-			self.data.loc[self.data["Source"].isin(sources)]
-			.assign(_smr=smr_series)
-			.groupby("label")["_smr"]
+			self.data.loc[source_mask]
+			.assign(_s=smr_numeric)
+			.groupby("label", observed=True)["_s"]
 			.sum()
 			.to_dict()
 		)
+		del smr_numeric, source_mask
 
-		# Map totals to transactions; ensure float so assignment to float column never gets StringArray
+		# Map to transactions; float32 to save memory
 		mapped = self.data.loc[self.transaction_mask, "label"].map(hours)
-		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce")
-		# Fill NaN with 0 (transactions with no SMR data)
-		self.data.loc[self.transaction_mask, "total smr"] = (
-			self.data.loc[self.transaction_mask, "total smr"].fillna(0)
-		)
-		
-		print(hours)  # Debug output: shows the calculated totals
+		self.data["total smr"] = np.nan
+		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.float32)
 		return self.data
 
 def format_review(review, filename, output_path=None):
@@ -316,12 +315,12 @@ def format_review(review, filename, output_path=None):
 	Output:
 		Creates Excel file at the specified output_path or default location
 	"""
-	# Select only the columns we want in the final report; add missing columns as empty so output shape is consistent
+	# Select only the columns we need (drops intermediates to free memory)
 	missing = [c for c in review_cols if c not in review.columns]
 	if missing:
 		for c in missing:
 			review[c] = np.nan
-	review = review[review_cols]
+	review = review[review_cols].copy()
 
 	# Generate output path if not provided
 	if output_path is None:
@@ -351,36 +350,45 @@ def format_review(review, filename, output_path=None):
 		
 		# Set font size to 9 for entire worksheet
 		format_review.set_font(
-			row_start=format_review.ws.min_row, 
-			num_rows=format_review.ws.max_row, 
-			column_start=format_review.ws.min_column, 
-			num_columns=format_review.ws.max_column, 
+			row_start=format_review.ws.min_row,
+			num_rows=format_review.ws.max_row,
+			column_start=format_review.ws.min_column,
+			num_columns=format_review.ws.max_column,
 			size=9
 		)
 
-		# Apply conditional formatting row by row
-		for i, row in enumerate(format_review.ws.iter_rows(min_col=1, max_col=len(review_cols) + 4), start=1):
-			
-			# Rule 1: Bold section headers (rows where column 0 has text but not a timestamp)
-			if row[0].value and not isinstance(row[0].value, pd.Timestamp):
-				format_review.make_bold(row_start=i, num_rows=1, column_start=1, num_columns=len(review_cols) + 4, size=9)
+		# Precompute format flags from DataFrame (avoids 38k+ iter_rows and single-row calls)
+		n = len(review)
+		col_dt = review["Date & Time"]
+		col_txn = review["Transaction ID"]
+		col_smr = review["Total SMR Usage"]
+		is_ts = pd.Series([isinstance(x, pd.Timestamp) for x in col_dt], index=review.index)
+		has_txn = col_txn.notna() & (col_txn.astype(str).str.strip() != "")
+		smr_empty = col_smr.isna() | (col_smr.astype(float) == 0)
+		bold_rows = ~is_ts & col_dt.notna()
+		green_rows = has_txn & is_ts
+		yellow_rows = is_ts & ((smr_empty & ~has_txn) | (col_smr.astype(float) == 0))
 
-			# Rule 2: Green background for transactions with proof
-			# (has Transaction ID in column 1, and timestamp in column 0, but not header row)
-			if row[1].value and i != 1 and isinstance(row[0].value, pd.Timestamp):
-				format_review.fill_cells(row_start=i, num_rows=1, column_start=1, num_columns=len(review_cols) + 4, color="D9EAD3")
+		def contiguous_ranges(series):
+			"""Convert boolean series to list of (start_row_1based, num_rows)."""
+			r = []
+			i = 0
+			while i < len(series):
+				if series.iloc[i]:
+					start = i
+					while i < len(series) and series.iloc[i]:
+						i += 1
+					r.append((start + 2, i - start))  # +2: 1-based, +1 header
+				else:
+					i += 1
+			return r
 
-			# Rule 3: Yellow background for missing SMR data
-			# Column 15 = "Total SMR Usage", Column 16 = next column
-			# Condition: (no SMR value AND no Transaction ID AND has timestamp) OR (SMR = 0)
-			# But exclude the header row
-			has_timestamp = isinstance(row[0].value, pd.Timestamp)
-			no_transaction_id = not row[1].value
-			no_smr_value = not row[15].value or row[15].value == 0
-			is_not_header = row[15].value != "Total SMR Usage"
-			
-			if has_timestamp and (no_smr_value and no_transaction_id or row[15].value == 0) and is_not_header:
-				format_review.fill_cells(row_start=i, num_rows=1, column_start=16, num_columns=1, color="FFF2CC")
+		for start, num_rows in contiguous_ranges(bold_rows):
+			format_review.make_bold(row_start=start, num_rows=num_rows, column_start=1, num_columns=len(review_cols) + 4, size=9)
+		for start, num_rows in contiguous_ranges(green_rows):
+			format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=1, num_columns=len(review_cols) + 4, color="D9EAD3")
+		for start, num_rows in contiguous_ranges(yellow_rows):
+			format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=16, num_columns=1, color="FFF2CC")
 
 # ============================================================================
 # MAIN EXECUTION SCRIPT

@@ -328,9 +328,9 @@ def find_column(df, target_name):
     return None
 
 try:
-    # Read the CSV file - don't skip rows since we already have headers
+    # Read the CSV file with low-memory parsing (avoids loading full file for type inference)
     print("Reading CSV file...")
-    data = pd.read_csv(input_file, skiprows=0)
+    data = pd.read_csv(input_file, skiprows=0, low_memory=True)
     
     print(f"Found columns: {list(data.columns)}")
     print(f"Total rows: {len(data)}")
@@ -380,6 +380,21 @@ try:
     if column_mapping:
         print(f"Renaming columns: {column_mapping}")
         data = data.rename(columns=column_mapping)
+    
+    # Reduce memory: convert repeated string columns to category, downcast numerics
+    for col in data.columns:
+        if data[col].dtype == object or data[col].dtype.name == "string":
+            try:
+                n = data[col].nunique()
+                if n < len(data) * 0.5:
+                    data[col] = data[col].astype("category")
+            except Exception:
+                pass
+    for col in data.select_dtypes(include=["floating"]).columns:
+        try:
+            data[col] = data[col].astype("float32")
+        except Exception:
+            pass
     
     print(f"Initializing review with {len(data)} rows...")
     review = POAReview(data)
