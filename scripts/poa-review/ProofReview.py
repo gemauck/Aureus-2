@@ -277,18 +277,19 @@ class POAReview:
 		# Ensure "total smr" is a float column (CSV may have created it as str, causing assign to fail)
 		self.data["total smr"] = np.nan
 
-		# Sum SMR usage by label for the specified sources
+		# Sum SMR usage by label for the specified sources (ensure numeric so hours dict has floats)
+		smr_series = pd.to_numeric(self.data["Total SMR Usage"], errors="coerce").fillna(0)
 		hours = (
 			self.data.loc[self.data["Source"].isin(sources)]
-			.groupby("label")['Total SMR Usage']
+			.assign(_smr=smr_series)
+			.groupby("label")["_smr"]
 			.sum()
 			.to_dict()
 		)
-		
-		# Map totals to transactions
-		self.data.loc[self.transaction_mask, "total smr"] = (
-			self.data.loc[self.transaction_mask, "label"].map(hours)
-		)
+
+		# Map totals to transactions; ensure float so assignment to float column never gets StringArray
+		mapped = self.data.loc[self.transaction_mask, "label"].map(hours)
+		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce")
 		# Fill NaN with 0 (transactions with no SMR data)
 		self.data.loc[self.transaction_mask, "total smr"] = (
 			self.data.loc[self.transaction_mask, "total smr"].fillna(0)
