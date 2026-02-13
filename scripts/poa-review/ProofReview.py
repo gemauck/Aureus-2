@@ -53,22 +53,24 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 		c.alignment = align_left
 		header_cells.append(c)
 	ws.append(header_cells)
-	# Data rows: one row at a time with per-row formatting
+	# Data rows: use numpy for fast iteration (avoids .iloc[] and row[col] lookups)
+	data_arr = review[review_cols].values
+	bold_arr = bold_rows.values
+	green_arr = green_rows.values
+	yellow_arr = yellow_col16.values
 	for i in range(len(review)):
-		row = review.iloc[i]
+		row_vals = data_arr[i]
 		row_cells = []
-		for j, col in enumerate(review_cols):
-			val = row[col] if col in row.index else None
+		for j in range(num_cols):
+			val = row_vals[j]
 			if pd.isna(val):
 				val = None
 			c = WriteOnlyCell(ws, value=val)
-			c.font = font_9
+			c.font = font_9_bold if bold_arr[i] else font_9
 			c.alignment = align_left
-			if bold_rows.iloc[i]:
-				c.font = font_9_bold
-			if green_rows.iloc[i]:
+			if green_arr[i]:
 				c.fill = fill_green
-			if j == 15 and yellow_col16.iloc[i]:  # column 16 (0-based 15)
+			if j == 15 and yellow_arr[i]:  # column 16 (0-based 15)
 				c.fill = fill_yellow
 			row_cells.append(c)
 		ws.append(row_cells)
@@ -146,13 +148,12 @@ class POAReview:
 			Sets "No POA Asset" = "No Proof of Use Asset" for assets that have
 			transactions but never appear in proof records.
 		"""
-		# Get list of all asset numbers that have proof records
-		poa_assets = self.data.loc[self.proof_mask, "Asset Number"].unique()
-		
-		# Mark assets that have transactions but no proof records
-		# Exclude header rows and NaN values
-		self.data.loc[(~self.data["Asset Number"].isin(poa_assets)) & 
-		              (~self.data["Asset Number"].isin(["Asset Number", np.nan])), 
+		# Set of asset numbers that have proof records (set for fast .isin())
+		poa_assets = set(self.data.loc[self.proof_mask, "Asset Number"].dropna().unique())
+		# Mark assets that have transactions but no proof records; exclude header and NaN
+		self.data.loc[(~self.data["Asset Number"].isin(poa_assets)) &
+		              (self.data["Asset Number"].notna()) &
+		              (self.data["Asset Number"].astype(str).str.strip() != "Asset Number"),
 		              "No POA Asset"] = "No Proof of Use Asset"
 
 		return self.data

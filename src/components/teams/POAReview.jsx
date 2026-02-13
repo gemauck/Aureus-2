@@ -304,10 +304,10 @@ const POAReview = () => {
             setProcessingProgressPercent(0);
             return;
         }
-        // Use larger batch size for large files to reduce number of requests
+        // Use larger batch size for large files to reduce round-trips (server allows up to 25k/ batch)
         let BATCH_SIZE = 500; // Default batch size
         if (totalRows > 50000) {
-            BATCH_SIZE = 2000; // Fewer requests for very large files
+            BATCH_SIZE = 3500; // Fewer requests for very large files, still safe for server
         } else if (totalRows > 10000) {
             BATCH_SIZE = 1000;
         }
