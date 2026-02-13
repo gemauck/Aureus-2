@@ -8,6 +8,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createReadStream, createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { withHttp } from '../_lib/withHttp.js';
@@ -274,7 +276,7 @@ async function handler(req, res) {
             }
 
             try {
-                // Merge batch CSV files in order into one file (no full dataset in memory)
+                // Merge batch CSV files in order into one file (streaming: low memory, faster for large batches)
                 const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
                 const firstPath = batchData.batchFilePaths[0];
                 if (!firstPath || !fs.existsSync(firstPath)) {
@@ -284,8 +286,11 @@ async function handler(req, res) {
                 for (let i = 1; i < batchData.batchFilePaths.length; i++) {
                     const p = batchData.batchFilePaths[i];
                     if (p && fs.existsSync(p)) {
-                        const content = fs.readFileSync(p, 'utf8');
-                        fs.appendFileSync(tempCsvPath, content, 'utf8');
+                        const appendStream = createWriteStream(tempCsvPath, { flags: 'a' });
+                        await pipeline(
+                            createReadStream(p, { encoding: 'utf8' }),
+                            appendStream
+                        );
                     }
                 }
                 console.log('POA Review Batch API - Merged temp CSV:', tempCsvPath, 'rows:', totalRowsReceived);
@@ -328,16 +333,16 @@ def find_column(df, target_name):
     return None
 
 try:
-    # Read the CSV file with low-memory parsing (avoids loading full file for type inference)
-    print("Reading CSV file...")
-    data = pd.read_csv(input_file, skiprows=0, low_memory=True)
-    
-    print(f"Found columns: {list(data.columns)}")
-    print(f"Total rows: {len(data)}")
-    
-    # Debug: Print first few rows to verify data structure
-    if len(data) > 0:
-        print(f"First row sample: {data.iloc[0].to_dict()}")
+    # Read CSV with explicit dtypes for known numeric columns (faster, less memory)
+    import numpy as np
+    # Total SMR Usage omitted: may contain header text in some rows, coerced in ProofReview
+    numeric_cols = ["Litres", "Opening SMR", "Closing SMR", "Total Fuel Used (L)",
+        "Eligible Volume (L) (Claimable % of Total)", "Eligible Price", "Eligible Total (R)",
+        "Total Usage Km/Hr", "Loads / Tonnes", "Pump Before", "Pump After", "Opening Odo", "Closing Odo",
+        "≈ Tank Litres Before", "≈ Tank Litres After"]
+    dtype_dict = {c: np.float32 for c in numeric_cols}
+    data = pd.read_csv(input_file, skiprows=0, low_memory=True, engine="c", dtype=dtype_dict)
+    print(f"Read {len(data)} rows, {len(data.columns)} columns")
     
     # Required columns and their normalized names
     required_columns = {
@@ -378,7 +383,6 @@ try:
     
     # Rename columns to match expected names
     if column_mapping:
-        print(f"Renaming columns: {column_mapping}")
         data = data.rename(columns=column_mapping)
     
     # Reduce memory: convert repeated string columns to category, downcast numerics
@@ -396,71 +400,25 @@ try:
         except Exception:
             pass
     
-    print(f"Initializing review with {len(data)} rows...")
     review = POAReview(data)
-    print(f"After initialization: {len(review.data)} rows")
-    
-    print("Marking consecutive transactions...")
     review.mark_consecutive_transactions()
-    print(f"After mark_consecutive_transactions: {len(review.data)} rows")
-    
-    print("Creating labels for transactions...")
     review.label_rows()
-    print(f"After label_rows: {len(review.data)} rows")
-    
-    print("Marking no POA assets...")
     review.mark_no_poa_assets()
-    print(f"After mark_no_poa_assets: {len(review.data)} rows")
-    
-    print("Counting proof before transactions...")
     review.count_proof_before_transaction()
-    print(f"After count_proof_before_transaction: {len(review.data)} rows")
-    
-    print("Calculating time since last activity...")
     review.time_since_last_activity()
-    print(f"After time_since_last_activity: {len(review.data)} rows")
-    
-    print("Calculating total SMR...")
-    # CRITICAL: total_smr requires 'label' column which is created by label_rows()
-    # Ensure label column exists before calling total_smr
     if "label" not in review.data.columns:
-        print("Warning: label column missing, recreating labels...")
         review.label_rows()
     review.total_smr(sources)
-    print(f"After total_smr: {len(review.data)} rows")
-    
-    print(f"Before format_review: {len(review.data)} rows, {len(review.data.columns)} columns")
-    print(f"Transaction rows: {review.transaction_mask.sum()}")
-    print(f"Proof rows: {review.proof_mask.sum()}")
-    print(f"Total rows (transaction + proof): {review.transaction_mask.sum() + review.proof_mask.sum()}")
-    
-    # Verify we have all rows
-    if len(review.data) != len(data):
-        print(f"WARNING: Row count changed during processing! Started with {len(data)}, now have {len(review.data)}")
-    
-    print("Formatting review...")
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     
     # Format and save - pass output_path directly
     format_review(review.data, os.path.basename(input_file), output_file)
     
-    # Verify output file was created and check row count
-    import openpyxl
     if os.path.exists(output_file):
-        wb = openpyxl.load_workbook(output_file)
-        ws = wb.active
-        output_row_count = ws.max_row - 1  # Subtract header row
-        print(f"Output Excel file created: {output_file}")
-        print(f"Output Excel row count (excluding header): {output_row_count}")
-        print(f"Input row count: {len(data)}")
-        if output_row_count != len(data):
-            print(f"WARNING: Row count mismatch! Input: {len(data)}, Output: {output_row_count}")
-        wb.close()
+        print(f"Success: {output_file}")
     else:
-        print(f"ERROR: Output file not found at {output_file}")
-    
-    print(f"Success! Output saved to: {output_file}")
+        print(f"ERROR: Output file not found at {output_file}", file=sys.stderr)
     sys.exit(0)
 except Exception as e:
     print(f"Error: {str(e)}", file=sys.stderr)

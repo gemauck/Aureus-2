@@ -315,12 +315,15 @@ def format_review(review, filename, output_path=None):
 	Output:
 		Creates Excel file at the specified output_path or default location
 	"""
-	# Select only the columns we need (drops intermediates to free memory)
+	# Drop unused columns in place to free memory, then keep only review_cols order
+	drop_cols = [c for c in review.columns if c not in review_cols]
+	if drop_cols:
+		review.drop(columns=drop_cols, inplace=True)
 	missing = [c for c in review_cols if c not in review.columns]
 	if missing:
 		for c in missing:
 			review[c] = np.nan
-	review = review[review_cols].copy()
+	review = review.reindex(columns=review_cols)
 
 	# Generate output path if not provided
 	if output_path is None:
