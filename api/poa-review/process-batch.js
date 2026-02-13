@@ -510,19 +510,19 @@ except Exception as e:
                 let errorMessage = error.message || 'Unknown error occurred';
                 let errorDetails = errorMessage;
 
-                // Friendly hint when Python is missing pandas (venv not set up on server)
-                if (errorMessage.includes("No module named 'pandas'") || errorMessage.includes('ModuleNotFoundError')) {
-                    errorDetails += '\n\nServer setup required: on the server run from project root: ./scripts/poa-review/setup-venv.sh';
+                // Exit code 137 = process killed (SIGKILL), usually OOM - give user-friendly guidance
+                if (errorMessage.includes('exit code 137') || errorMessage.includes('Killed')) {
+                    errorMessage = 'This file is too large for the server to process (it ran out of memory). Please use a smaller file, or split your data into multiple files (e.g. by month), then run POA Review on each.';
+                    errorDetails = errorMessage;
+                } else {
+                    // Friendly hint when Python is missing pandas (venv not set up on server)
+                    if (errorMessage.includes("No module named 'pandas'") || errorMessage.includes('ModuleNotFoundError')) {
+                        errorDetails += '\n\nServer setup required: on the server run from project root: ./scripts/poa-review/setup-venv.sh';
+                    }
+                    if (error.stdout) errorDetails += `\nPython output: ${error.stdout}`;
+                    if (error.stderr) errorDetails += `\nPython errors: ${error.stderr}`;
                 }
-                
-                // Include Python output if available
-                if (error.stdout) {
-                    errorDetails += `\nPython output: ${error.stdout}`;
-                }
-                if (error.stderr) {
-                    errorDetails += `\nPython errors: ${error.stderr}`;
-                }
-                
+
                 return serverError(res, `Failed to process batches: ${errorMessage}`, errorDetails);
             }
         } else {

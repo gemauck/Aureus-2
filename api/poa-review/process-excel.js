@@ -423,9 +423,14 @@ sys.exit(0)
 
     } catch (error) {
         console.error('POA Review Excel API - Error:', error);
-        const msg = error.message || String(error);
+        let msg = error.message || String(error);
         const isFileTooLarge = msg.includes('File too large') || error.code === 'POA_FILE_TOO_LARGE';
-        const isTooManyRows = msg.includes('too many rows') || msg.includes('Maximum') && msg.includes('rows are supported');
+        const isTooManyRows = msg.includes('too many rows') || (msg.includes('Maximum') && msg.includes('rows are supported'));
+        // Exit code 137 = process killed (SIGKILL), usually by OOM killer when file is too large for server memory
+        const isKilledOOM = msg.includes('exit code 137') || msg.includes('Killed');
+        if (isKilledOOM) {
+            msg = 'This file is too large for the server to process (it ran out of memory). Please use a smaller file, or split your data into multiple files (e.g. by month), then run POA Review on each.';
+        }
         if (!res.headersSent && !res.writableEnded) {
             if (isFileTooLarge) {
                 res.statusCode = 413;
@@ -440,6 +445,14 @@ sys.exit(0)
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({
                     error: { code: 'POA_TOO_MANY_ROWS', message: msg }
+                }));
+                return;
+            }
+            if (isKilledOOM) {
+                res.statusCode = 503;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                    error: { code: 'POA_SERVER_MEMORY', message: msg }
                 }));
                 return;
             }
