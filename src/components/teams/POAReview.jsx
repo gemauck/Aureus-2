@@ -12,6 +12,9 @@ const { useState, useCallback } = React;
 const MAX_FILE_SIZE_MB = 50;
 const MAX_ROWS = 400000;
 
+// Max rows to scan when detecting sources from uploaded file (keeps UI responsive)
+const SOURCE_DETECT_MAX_ROWS = 5000;
+
 const POAReview = () => {
     const { isDark } = window.useTheme || (() => ({ isDark: false }));
     
@@ -20,37 +23,46 @@ const POAReview = () => {
     const [processingProgress, setProcessingProgress] = useState('');
     const [error, setError] = useState(null);
     const [downloadUrl, setDownloadUrl] = useState(null);
-    const [sources, setSources] = useState(['Inmine: Daily Diesel Issues']);
+    const [sources, setSources] = useState([]);
     const [newSource, setNewSource] = useState('');
     const [processingProgressPercent, setProcessingProgressPercent] = useState(0);
+    const [documentSources, setDocumentSources] = useState([]);
+    const [sourcesDetecting, setSourcesDetecting] = useState(false);
 
     const handleFileSelect = useCallback((event) => {
         const file = event.target.files?.[0];
         if (file) {
-            // Validate file type
             const validExtensions = ['.xlsx', '.xls', '.csv'];
             const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-            
             if (!validExtensions.includes(fileExtension)) {
                 setError('Please upload an Excel file (.xlsx, .xls) or CSV file');
                 return;
             }
-            
-            // Validate file size (max 50MB)
             const maxSize = MAX_FILE_SIZE_MB * 1024 * 1024;
             if (file.size > maxSize) {
                 setError(`File size must be less than ${MAX_FILE_SIZE_MB}MB to avoid server overload.`);
                 return;
             }
-            
             setUploadedFile(file);
             setError(null);
             setDownloadUrl(null);
+            setDocumentSources([]);
+            setSources([]);
+            setSourcesDetecting(true);
+            // Detect sources from document (sample) then update documentSources
+            detectSourcesFromFile(file).then((unique) => {
+                setDocumentSources(unique);
+                setSourcesDetecting(false);
+            }).catch((err) => {
+                console.warn('POA Review - Source detection failed:', err);
+                setDocumentSources([]);
+                setSourcesDetecting(false);
+            });
         }
     }, []);
 
-    // Parse Excel/CSV file client-side and convert to JSON rows
-    const parseFileToRows = useCallback(async (file) => {
+    // Parse Excel/CSV file client-side and convert to JSON rows (optional maxRows to limit for source detection)
+    const parseFileToRows = useCallback(async (file, maxRows = null) => {
         const fileName = file.name.toLowerCase();
         const isCSV = fileName.endsWith('.csv');
         const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
@@ -105,10 +117,11 @@ const POAReview = () => {
                         row[header] = values[idx] || '';
                     });
                     rows.push(row);
+                    if (maxRows != null && rows.length >= maxRows) break;
                 }
             }
 
-            return rows;
+            return maxRows != null ? rows.slice(0, maxRows) : rows;
         } else if (isExcel) {
             // Parse Excel using XLSX.js
             let XLSXLib = window.XLSX;
@@ -186,8 +199,9 @@ const POAReview = () => {
                 headers = (rawData[0] || []).map(h => String(h || '').trim());
             }
             
-            // Data rows start after the header row
-            const dataRows = rawData.slice(headerRowIndex + 1);
+            // Data rows start after the header row (optionally limit for source detection)
+            const dataRowsRaw = rawData.slice(headerRowIndex + 1);
+            const dataRows = maxRows != null ? dataRowsRaw.slice(0, maxRows) : dataRowsRaw;
             console.log('POA Review - Data rows after slicing (excluding header):', dataRows.length);
             
             // Filter out empty column headers and handle duplicates (like pandas does)
@@ -259,6 +273,23 @@ const POAReview = () => {
             throw new Error('Unsupported file type. Please use CSV or Excel files.');
         }
     }, []);
+
+    const getUniqueSourceValuesFromRows = useCallback((rows) => {
+        if (!rows || rows.length === 0) return [];
+        const sourceKey = Object.keys(rows[0]).find(k => /^source$/i.test(String(k).trim()));
+        if (!sourceKey) return [];
+        const set = new Set();
+        rows.forEach(row => {
+            const v = row[sourceKey];
+            if (v != null && String(v).trim() !== '') set.add(String(v).trim());
+        });
+        return Array.from(set).sort();
+    }, []);
+
+    const detectSourcesFromFile = useCallback(async (file) => {
+        const rows = await parseFileToRows(file, SOURCE_DETECT_MAX_ROWS);
+        return getUniqueSourceValuesFromRows(rows);
+    }, [parseFileToRows, getUniqueSourceValuesFromRows]);
 
     // Process file in chunks using batch API
     const handleChunkedUpload = useCallback(async (rows, fileName) => {
@@ -364,7 +395,7 @@ const POAReview = () => {
                                 batchNumber,
                                 totalBatches,
                                 rows: batch,
-                                sources: sources || ['Inmine: Daily Diesel Issues'],
+                                sources: sources && sources.length > 0 ? sources : [],
                                 fileName,
                                 isFinal
                             })
@@ -388,7 +419,7 @@ const POAReview = () => {
                                         batchNumber,
                                         totalBatches,
                                         rows: batch,
-                                        sources: sources || ['Inmine: Daily Diesel Issues'],
+                                        sources: sources && sources.length > 0 ? sources : [],
                                         fileName,
                                         isFinal
                                     })
@@ -484,10 +515,27 @@ const POAReview = () => {
         }
     }, [sources]);
 
+    const toggleDocumentSource = useCallback((sourceName) => {
+        setSources(prev => prev.includes(sourceName) ? prev.filter(s => s !== sourceName) : [...prev, sourceName]);
+    }, []);
+    const selectAllDocumentSources = useCallback(() => {
+        setSources(prev => {
+            const combined = new Set([...prev, ...documentSources]);
+            return Array.from(combined);
+        });
+    }, [documentSources]);
+    const clearDocumentSourceSelection = useCallback(() => {
+        setSources(prev => prev.filter(s => !documentSources.includes(s)));
+    }, [documentSources]);
+
     // Main upload handler
     const handleUpload = useCallback(async () => {
         if (!uploadedFile) {
             setError('Please select a file first');
+            return;
+        }
+        if (!sources || sources.length === 0) {
+            setError('Select at least one SMR source to include (from the list above or add one manually).');
             return;
         }
 
@@ -681,6 +729,8 @@ const POAReview = () => {
                                 setUploadedFile(null);
                                 setDownloadUrl(null);
                                 setError(null);
+                                setDocumentSources([]);
+                                setSources([]);
                             }}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                                 isDark 
@@ -701,16 +751,62 @@ const POAReview = () => {
                     SMR Sources to Include
                 </label>
                 <p className={`text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                    Specify which sources to include when calculating total SMR usage
+                    Upload a file first to see sources found in the document, then select which to include when calculating total SMR usage.
                 </p>
-                
+
+                {sourcesDetecting && (
+                    <p className={`text-sm mb-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                        <i className="fas fa-spinner fa-spin mr-2"></i>Detecting sources in document...
+                    </p>
+                )}
+
+                {!sourcesDetecting && documentSources.length > 0 && (
+                    <div className="mb-4">
+                        <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
+                            Sources found in your document
+                        </p>
+                        <div className="flex gap-2 mb-2">
+                            <button
+                                type="button"
+                                onClick={selectAllDocumentSources}
+                                className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-600 text-slate-200 hover:bg-slate-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                            >
+                                Select all
+                            </button>
+                            <button
+                                type="button"
+                                onClick={clearDocumentSourceSelection}
+                                className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-600 text-slate-200 hover:bg-slate-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                            >
+                                Clear selection
+                            </button>
+                        </div>
+                        <div className={`max-h-32 overflow-y-auto rounded border p-2 space-y-1 ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                            {documentSources.map((name) => (
+                                <label key={name} className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={sources.includes(name)}
+                                        onChange={() => toggleDocumentSource(name)}
+                                        className="rounded border-gray-400"
+                                    />
+                                    <span className="text-sm">{name}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <p className={`text-xs mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                    Or add a source name manually (if not in the list above):
+                </p>
                 <div className="flex flex-col sm:flex-row gap-2 mb-3">
                     <input
                         type="text"
                         value={newSource}
                         onChange={(e) => setNewSource(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && handleAddSource()}
-                        placeholder="Enter source name (e.g., 'Inmine: Daily Diesel Issues')"
+                        placeholder="Enter source name from your document"
                         className={`flex-1 px-3 py-2 text-sm border rounded-lg ${
                             isDark 
                                 ? 'bg-slate-700 border-slate-600 text-slate-100' 
@@ -737,6 +833,7 @@ const POAReview = () => {
 
                 {sources.length > 0 && (
                     <div className="space-y-2">
+                        <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>Selected sources (will be used for report):</p>
                         {sources.map((source, index) => (
                             <div
                                 key={index}
@@ -804,9 +901,10 @@ const POAReview = () => {
             <div className="flex flex-col sm:flex-row gap-3">
                 <button
                     onClick={handleUpload}
-                    disabled={!uploadedFile || isProcessing}
+                    disabled={!uploadedFile || isProcessing || !sources || sources.length === 0}
+                    title={uploadedFile && sources.length === 0 ? 'Select at least one SMR source above' : undefined}
                     className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition ${
-                        uploadedFile && !isProcessing
+                        uploadedFile && !isProcessing && sources && sources.length > 0
                             ? isDark
                                 ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
