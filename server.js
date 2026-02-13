@@ -224,22 +224,19 @@ async function loadHandler(handlerPath) {
           stack: error.stack
         })
         
-        // Return a fallback handler that returns 500 error
+        // Return a fallback handler that returns 500 error (include load error message for debugging)
+        const loadErrorMessage = error.message || ''
         return (req, res) => {
           console.error(`❌ Handler execution failed for ${req.method} ${req.url} (handler: ${handlerPath})`)
           if (!res.headersSent) {
-            res.status(500).json({ 
-              error: 'Handler failed to load', 
+            res.status(500).json({
+              error: 'Handler failed to load',
+              message: loadErrorMessage,
               path: req.url,
-              handlerPath: handlerPath,
               timestamp: new Date().toISOString(),
-              // Include error details in development
               ...(process.env.NODE_ENV === 'development' ? {
-                errorDetails: {
-                  message: error.message,
-                  name: error.name,
-                  code: error.code
-                }
+                handlerPath: handlerPath,
+                errorDetails: { name: error.name, code: error.code }
               } : {})
             })
           }
