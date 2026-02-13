@@ -15,6 +15,7 @@ const ClientNewsFeed = () => {
     const [activities, setActivities] = useState([]);
     const [newsArticles, setNewsArticles] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshingNews, setIsRefreshingNews] = useState(false); // true while fetching new articles from RSS
     const [selectedClient, setSelectedClient] = useState('all');
     const [clients, setClients] = useState([]);
     const [filterDate, setFilterDate] = useState('all'); // all, today, week, month
@@ -297,6 +298,46 @@ const ClientNewsFeed = () => {
         return publishedDate >= dayAgo;
     };
 
+    // Trigger backend to fetch new articles from Google News for all clients/leads, then reload feed
+    const triggerNewsSearchAndRefresh = async () => {
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            alert('Please sign in to refresh news.');
+            return;
+        }
+        setIsRefreshingNews(true);
+        try {
+            const searchRes = await fetch('/api/client-news/search', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            const searchData = searchRes.ok ? await searchRes.json().catch(() => ({})) : null;
+            const payload = searchData?.data ?? searchData;
+            const clientsProcessed = payload?.clientsProcessed ?? 0;
+            const articlesFound = payload?.articlesFound ?? 0;
+            if (!searchRes.ok) {
+                console.warn('News search request failed:', searchRes.status);
+            }
+            await Promise.all([loadActivities(), loadNewsArticles()]);
+            if (searchRes.ok && (articlesFound > 0 || clientsProcessed > 0)) {
+                const msg = articlesFound > 0
+                    ? `Found new articles for ${articlesFound} client(s). Feed updated.`
+                    : `Checked ${clientsProcessed} client(s) and leads. Feed updated.`;
+                if (window.toast) window.toast(msg); else alert(msg);
+            }
+        } catch (err) {
+            console.error('Failed to refresh news:', err);
+            await Promise.all([loadActivities(), loadNewsArticles()]);
+            if (window.toast) window.toast('Could not fetch new articles; showing latest saved news.'); else alert('Could not fetch new articles; showing latest saved news.');
+        } finally {
+            setIsRefreshingNews(false);
+        }
+    };
+
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -308,14 +349,12 @@ const ClientNewsFeed = () => {
                     </p>
                 </div>
                 <button
-                    onClick={() => {
-                        loadActivities();
-                        loadNewsArticles();
-                    }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center gap-2 text-sm font-medium"
+                    onClick={triggerNewsSearchAndRefresh}
+                    disabled={isRefreshingNews}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center gap-2 text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                    <i className="fas fa-sync-alt"></i>
-                    Refresh
+                    <i className={`fas ${isRefreshingNews ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+                    {isRefreshingNews ? 'Fetching new news…' : 'Refresh'}
                 </button>
             </div>
 
