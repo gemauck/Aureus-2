@@ -312,8 +312,14 @@ def format_review(review, filename, output_path=None):
 	Output:
 		Creates Excel file at the specified output_path or default location
 	"""
-	# Select only the columns we want in the final report
+	# Select only the columns we want in the final report; add missing columns as empty so output shape is consistent
+	missing = [c for c in review_cols if c not in review.columns]
+	if missing:
+		for c in missing:
+			review[c] = np.nan
 	review = review[review_cols]
+	else:
+		review = review[review_cols]
 	
 	# Generate output path if not provided
 	if output_path is None:
