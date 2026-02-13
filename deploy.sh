@@ -43,6 +43,8 @@ fi
 echo
 echo "-> Pulling latest code from origin/${GIT_BRANCH}..."
 git fetch origin "${GIT_BRANCH}"
+# Discard local changes to index.html (build updates it; avoids pull conflict on next deploy)
+git checkout -- index.html 2>/dev/null || true
 git pull origin "${GIT_BRANCH}"
 
 echo
