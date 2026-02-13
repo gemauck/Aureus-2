@@ -58,4 +58,3 @@ export async function ensureBOMMigration() {
     // Don't break the app if migration check fails
   }
 }
-

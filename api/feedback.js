@@ -209,7 +209,8 @@ async function handler(req, res) {
     }
 
     const { params: queryParams, path: urlPath } = parseQueryParams(req.url)
-    const pathSegments = urlPath.split('/').filter(Boolean)
+    const cleanPath = urlPath.split('#')[0].replace(/^\/api\//, '/')
+    const pathSegments = cleanPath.split('/').filter(Boolean)
 
     // GET /api/feedback -> list feedback with optional filtering
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'feedback') {

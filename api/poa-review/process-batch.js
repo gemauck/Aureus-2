@@ -513,8 +513,13 @@ except Exception as e:
                 batchStore.delete(batchId);
                 
                 // Return more detailed error information
-                const errorMessage = error.message || 'Unknown error occurred';
+                let errorMessage = error.message || 'Unknown error occurred';
                 let errorDetails = errorMessage;
+
+                // Friendly hint when Python is missing pandas (venv not set up on server)
+                if (errorMessage.includes("No module named 'pandas'") || errorMessage.includes('ModuleNotFoundError')) {
+                    errorDetails += '\n\nServer setup required: on the server run from project root: ./scripts/poa-review/setup-venv.sh';
+                }
                 
                 // Include Python output if available
                 if (error.stdout) {
