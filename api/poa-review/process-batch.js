@@ -333,15 +333,9 @@ def find_column(df, target_name):
     return None
 
 try:
-    # Read CSV with explicit dtypes for known numeric columns (faster, less memory)
-    import numpy as np
-    # Total SMR Usage omitted: may contain header text in some rows, coerced in ProofReview
-    numeric_cols = ["Litres", "Opening SMR", "Closing SMR", "Total Fuel Used (L)",
-        "Eligible Volume (L) (Claimable % of Total)", "Eligible Price", "Eligible Total (R)",
-        "Total Usage Km/Hr", "Loads / Tonnes", "Pump Before", "Pump After", "Opening Odo", "Closing Odo",
-        "≈ Tank Litres Before", "≈ Tank Litres After"]
-    dtype_dict = {c: np.float32 for c in numeric_cols}
-    data = pd.read_csv(input_file, skiprows=0, low_memory=True, engine="c", dtype=dtype_dict)
+    # Read CSV without strict dtypes: merged file can contain duplicate header rows (batch appends),
+    # so forcing float32 on read fails when a cell contains header text e.g. "Litres". Downcast after read.
+    data = pd.read_csv(input_file, skiprows=0, low_memory=True)
     print(f"Read {len(data)} rows, {len(data.columns)} columns")
     
     # Required columns and their normalized names
@@ -385,7 +379,17 @@ try:
     if column_mapping:
         data = data.rename(columns=column_mapping)
     
-    # Reduce memory: convert repeated string columns to category, downcast numerics
+    # Reduce memory: coerce known numeric columns (handles duplicate header rows in merged CSV)
+    numeric_cols = ["Litres", "Opening SMR", "Closing SMR", "Total Fuel Used (L)",
+        "Eligible Volume (L) (Claimable % of Total)", "Eligible Price", "Eligible Total (R)",
+        "Total Usage Km/Hr", "Loads / Tonnes", "Pump Before", "Pump After", "Opening Odo", "Closing Odo",
+        "≈ Tank Litres Before", "≈ Tank Litres After"]
+    for col in numeric_cols:
+        if col in data.columns:
+            try:
+                data[col] = pd.to_numeric(data[col], errors="coerce").astype("float32")
+            except Exception:
+                pass
     for col in data.columns:
         if data[col].dtype == object or data[col].dtype.name == "string":
             try:
