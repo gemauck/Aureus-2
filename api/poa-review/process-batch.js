@@ -560,16 +560,22 @@ except Exception as e:
                     stdout: error.stdout,
                     stderr: error.stderr
                 });
+                // Only remove merged CSV and Python script so retry can re-run merge + Python.
+                // Keep batch store, meta file, and per-batch CSV files so client retry of batch 39 works.
                 try {
-                    for (const p of batchData?.batchFilePaths || []) {
-                        if (p && fs.existsSync(p)) fs.unlinkSync(p);
-                    }
                     const tempCsvPath = path.join(tempDir, `${batchId}_data.csv`);
                     if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
+                    const scriptPrefix = `process_batch_${batchId}_`;
+                    if (fs.existsSync(scriptsDir)) {
+                        for (const name of fs.readdirSync(scriptsDir)) {
+                            if (name.startsWith(scriptPrefix) && name.endsWith('.py')) {
+                                try { fs.unlinkSync(path.join(scriptsDir, name)); } catch (_) {}
+                            }
+                        }
+                    }
                 } catch (_) {}
-                deleteBatchMeta(batchId, tempDir);
-                batchStore.delete(batchId);
-                
+                // Do not delete batchStore, meta, or batchFilePaths - allow retry
+
                 // Return more detailed error information
                 let errorMessage = error.message || 'Unknown error occurred';
                 let errorDetails = errorMessage;
