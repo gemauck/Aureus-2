@@ -4772,8 +4772,10 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                 );
             })()}
             {assignmentOpen && assignmentAnchorRect && (() => {
-                const sec = sections.find(s => String(s.id) === assignmentOpen.sectionId);
-                const targetDoc = sec?.documents?.find(d => String(d.id) === assignmentOpen.docId);
+                const sectionIdStr = String(assignmentOpen.sectionId);
+                const docIdStr = String(assignmentOpen.docId);
+                const sec = sections.find(s => String(s.id) === sectionIdStr);
+                const targetDoc = sec?.documents?.find(d => String(d.id) === docIdStr);
                 if (!sec || !targetDoc) return null;
                 const current = normalizeAssignedTo(targetDoc);
                 return (
