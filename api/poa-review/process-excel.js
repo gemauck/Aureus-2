@@ -39,6 +39,13 @@ async function handler(req, res) {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         });
 
+        // Resolve Python: use venv if present, otherwise system python3
+        const venvPythonPath = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
+        const venvPython = fs.existsSync(venvPythonPath) ? venvPythonPath : 'python3';
+        if (venvPython === 'python3') {
+            console.log('POA Review Excel API - venv-poareview not found, using system python3');
+        }
+
         // Parse multipart and stream file directly to disk (no full-file buffer in memory)
         const Busboy = (await import('busboy')).default;
         const bb = Busboy({ headers: req.headers });
