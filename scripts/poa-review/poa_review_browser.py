@@ -62,17 +62,20 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
     yellow_arr = yellow_col16.values
     for i in range(len(review)):
         row_vals = data_arr[i]
+        bold_i = bold_arr[i]
+        green_i = green_arr[i]
+        yellow_i = yellow_arr[i]
         row_cells = []
         for j in range(num_cols):
             val = row_vals[j]
             if pd.isna(val):
                 val = None
             c = WriteOnlyCell(ws, value=val)
-            c.font = font_9_bold if bold_arr[i] else font_9
+            c.font = font_9_bold if bold_i else font_9
             c.alignment = align_left
-            if green_arr[i]:
+            if green_i:
                 c.fill = fill_green
-            if j == 15 and yellow_arr[i]:
+            if j == 15 and yellow_i:
                 c.fill = fill_yellow
             row_cells.append(c)
         ws.append(row_cells)
@@ -190,7 +193,7 @@ def run():
         options = json.load(f)
     sources = options.get("sources", ["Inmine: Daily Diesel Issues"])
 
-    data = pd.read_csv(INPUT_CSV, low_memory=True)
+    data = pd.read_csv(INPUT_CSV, low_memory=True, dtype=str, na_values=[""])
     required = {
         "Transaction ID": ["transaction id", "transactionid", "txn id", "txnid"],
         "Asset Number": ["asset number", "assetnumber", "asset no", "assetno"],
@@ -234,11 +237,7 @@ def run():
     col_txn = review.data["Transaction ID"]
     col_smr = review.data["Total SMR Usage"]
     smr_numeric = pd.to_numeric(col_smr, errors="coerce").fillna(0)
-    is_ts = (
-        col_dt.notna()
-        if pd.api.types.is_datetime64_any_dtype(col_dt)
-        else pd.Series([isinstance(x, pd.Timestamp) for x in col_dt], index=review.data.index)
-    )
+    is_ts = col_dt.notna()
     has_txn = col_txn.notna() & (col_txn.astype(str).str.strip() != "")
     smr_empty = col_smr.isna() | (smr_numeric == 0)
     bold_rows = ~is_ts & col_dt.notna()
