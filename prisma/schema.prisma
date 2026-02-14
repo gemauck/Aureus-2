@@ -1817,30 +1817,6 @@ model StarredOpportunity {
   @@index([opportunityId])
 }
 
-// Customer engagement mandates (Business Development) with proposal workflow
-model EngagementMandate {
-  id                String   @id @default(cuid())
-  clientName        String   // Client / company name
-  siteName          String   @default("") // Site name
-  dateOfVisit       String?  @default("") // Date or "TBC"
-  typeOfOperation   String   @default("") // e.g. Underground Platinum Group Metals
-  siteLocation      String   @default("") // Address or coordinates
-  servicesRequired  String   @default("[]") // JSON array: Fuel Management, Asset Tracking, etc.
-  status            String   @default("draft") // draft | in_progress | won | lost
-  clientId         String?  // Optional link to CRM client
-  opportunityId     String?  // Optional link to CRM opportunity
-  workflowStages    String   @default("[]") // JSON array of { name, department, assignee, assigneeId, assigneeEmail, status, comments, rejectedBy, rejectedAt, rejectedReason }
-  createdById      String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@index([status])
-  @@index([createdById])
-  @@index([clientId])
-  @@index([opportunityId])
-  @@index([createdAt])
-}
-
 model SystemSettings {
   id                    String   @id @default("system")
   companyName           String   @default("Abcotronics")
