@@ -321,11 +321,12 @@ const POAReview = () => {
         // Use larger batch size for large files to reduce round-trips (server allows up to 25k/ batch)
         let BATCH_SIZE = 500; // Default batch size
         if (totalRows > 50000) {
-            BATCH_SIZE = 3500; // Fewer requests for very large files, still safe for server
+            BATCH_SIZE = 6000; // Fewer requests for very large files
         } else if (totalRows > 10000) {
             BATCH_SIZE = 1000;
         }
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
+        const PARALLEL_CONCURRENCY = 3; // Send up to 3 batches at a time to speed up upload
         const batchId = `poa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         console.log('POA Review - Batch configuration:', {
@@ -341,197 +342,107 @@ const POAReview = () => {
             fileName
         });
 
-        setProcessingProgress(`Processing ${totalRows} rows in ${totalBatches} batches...`);
+        setProcessingProgress(`Processing ${totalRows} rows in ${totalBatches} batches (parallel)...`);
         setProcessingProgressPercent(0);
 
-        try {
-            // Send batches sequentially (await each one before sending the next)
-            console.log('POA Review - Starting batch loop, totalBatches:', totalBatches);
-            for (let i = 0; i < totalBatches; i++) {
-                const start = i * BATCH_SIZE;
-                const end = Math.min(start + BATCH_SIZE, totalRows);
-                const batch = rows.slice(start, end);
-                const batchNumber = i + 1;
-                const isFinal = batchNumber === totalBatches;
-
-                console.log(`POA Review - Preparing batch ${batchNumber}/${totalBatches}`, {
-                    batchSize: batch.length,
-                    isFinal,
-                    batchId
-                });
-
-                setProcessingProgress(`Sending batch ${batchNumber} of ${totalBatches} (${end} of ${totalRows} rows)...`);
-                setProcessingProgressPercent(Math.round((batchNumber / totalBatches) * 50)); // 50% for sending
-
-                console.log(`POA Review - Sending batch ${batchNumber}/${totalBatches} to server...`);
-                
-                // Retry logic for 401 (auth), 502/503/504 errors (server/gateway errors)
-                let batchResponse;
-                let retries = 0;
-                const maxRetries = 3;
-                const retryDelay = 2000; // 2 seconds between retries
-                
-                // Helper function to get fresh token
-                const getAuthToken = () => window.storage?.getToken?.() || '';
-                
-                // Helper function to refresh token
-                const refreshToken = async () => {
-                    try {
-                        const refreshUrl = '/api/auth/refresh';
-                        const refreshRes = await fetch(refreshUrl, { 
-                            method: 'POST', 
-                            credentials: 'include', 
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-                        
-                        if (refreshRes.ok) {
-                            const text = await refreshRes.text();
-                            const refreshData = text ? JSON.parse(text) : {};
-                            const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
-                            if (newToken && window.storage?.setToken) {
-                                window.storage.setToken(newToken);
-                                console.log('POA Review - Token refreshed successfully');
-                                return newToken;
-                            }
-                        }
-                        console.warn('POA Review - Token refresh failed');
-                        return null;
-                    } catch (error) {
-                        console.error('POA Review - Token refresh error:', error);
-                        return null;
-                    }
-                };
-                
-                while (retries <= maxRetries) {
-                    try {
-                        let token = getAuthToken();
-                        
-                        batchResponse = await fetch('/api/poa-review/process-batch', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({
-                                batchId,
-                                batchNumber,
-                                totalBatches,
-                                rows: batch,
-                                sources: sources && sources.length > 0 ? sources : [],
-                                fileName,
-                                isFinal
-                            })
-                        });
-                        
-                        // Handle 401 Unauthorized - try to refresh token once
-                        if (batchResponse.status === 401 && retries === 0) {
-                            console.warn(`POA Review - Batch ${batchNumber} got 401, attempting token refresh...`);
-                            const newToken = await refreshToken();
-                            if (newToken) {
-                                // Retry immediately with new token (don't count as retry)
-                                token = newToken;
-                                batchResponse = await fetch('/api/poa-review/process-batch', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${token}`
-                                    },
-                                    body: JSON.stringify({
-                                        batchId,
-                                        batchNumber,
-                                        totalBatches,
-                                        rows: batch,
-                                        sources: sources && sources.length > 0 ? sources : [],
-                                        fileName,
-                                        isFinal
-                                    })
-                                });
-                            }
-                        }
-                        
-                        // If successful or client error (4xx except 401), don't retry
-                        if (batchResponse.ok || (batchResponse.status >= 400 && batchResponse.status < 500 && batchResponse.status !== 401)) {
-                            break;
-                        }
-                        
-                        // Retry on server/gateway errors (5xx) or 401 after refresh failed
-                        if ((batchResponse.status >= 500 || batchResponse.status === 401) && retries < maxRetries) {
-                            retries++;
-                            console.warn(`POA Review - Batch ${batchNumber} got ${batchResponse.status}, retrying (${retries}/${maxRetries})...`);
-                            await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
-                            continue;
-                        }
-                        
-                        break;
-                    } catch (fetchError) {
-                        if (retries < maxRetries) {
-                            retries++;
-                            console.warn(`POA Review - Batch ${batchNumber} fetch error, retrying (${retries}/${maxRetries}):`, fetchError.message);
-                            await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
-                            continue;
-                        }
-                        throw fetchError;
-                    }
+        const getAuthToken = () => window.storage?.getToken?.() || '';
+        const refreshToken = async () => {
+            try {
+                const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                if (refreshRes.ok) {
+                    const refreshData = await refreshRes.json().catch(() => ({}));
+                    const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                    if (newToken && window.storage?.setToken) { window.storage.setToken(newToken); return newToken; }
                 }
-                
-                console.log(`POA Review - Batch ${batchNumber}/${totalBatches} response received, status:`, batchResponse.status);
+                return null;
+            } catch (_) { return null; }
+        };
 
-                if (!batchResponse.ok) {
-                    // Get detailed error information
-                    let errorMessage = `Failed to process batch ${batchNumber}`;
-                    try {
-                        const errorData = await batchResponse.json();
-                        console.error('POA Review Batch API Error:', errorData);
-                        errorMessage = errorData.error?.message || 
-                                      errorData.message || 
-                                      errorData.error || 
-                                      errorMessage;
-                        // Include more details if available
-                        if (errorData.error?.details) {
-                            errorMessage += `: ${errorData.error.details}`;
+        const sendOneBatch = async (batchNumber, batch, isFinal) => {
+            const maxRetries = 3;
+            const retryDelay = 2000;
+            let lastError;
+            for (let retries = 0; retries <= maxRetries; retries++) {
+                try {
+                    let token = getAuthToken();
+                    let res = await fetch('/api/poa-review/process-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ batchId, batchNumber, totalBatches, rows: batch, sources: sources?.length ? sources : [], fileName, isFinal })
+                    });
+                    if (res.status === 401 && retries === 0) {
+                        const newToken = await refreshToken();
+                        if (newToken) {
+                            res = await fetch('/api/poa-review/process-batch', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newToken}` },
+                                body: JSON.stringify({ batchId, batchNumber, totalBatches, rows: batch, sources: sources?.length ? sources : [], fileName, isFinal })
+                            });
                         }
-                    } catch (parseError) {
-                        const errorText = await batchResponse.text().catch(() => batchResponse.statusText);
-                        console.error('POA Review Batch API Error (text):', errorText);
-                        errorMessage = `${errorMessage}: ${errorText || batchResponse.statusText}`;
                     }
-                    throw new Error(errorMessage);
-                }
-
-                const batchResult = await batchResponse.json();
-                console.log(`POA Review - Batch ${batchNumber} result:`, batchResult);
-
-                if (isFinal) {
-                    console.log('POA Review - Final batch received, checking for download URL...');
-                    if (batchResult.data?.downloadUrl || batchResult.downloadUrl) {
-                        // Final batch - processing complete
-                        const downloadUrl = batchResult.data?.downloadUrl || batchResult.downloadUrl;
-                        console.log('POA Review - Download URL received:', downloadUrl);
-                        
-                        setProcessingProgress('Generating final report...');
-                        setProcessingProgressPercent(90);
-
-                        // Wait a moment for server to finish processing
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-
-                        // Check for final result
-                        setDownloadUrl(downloadUrl);
-                        setProcessingProgress('Complete!');
-                        setProcessingProgressPercent(100);
-                        setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
-                        console.log('POA Review - Processing complete, download URL set');
-                        return;
-                    } else {
-                        console.warn('POA Review - Final batch received but no download URL:', batchResult);
-                        throw new Error('Final batch processed but no download URL received. Server may still be processing.');
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        const msg = errData?.error?.message || errData?.message || res.statusText;
+                        throw new Error(msg || `Batch ${batchNumber} failed`);
                     }
-                } else {
-                    // Update progress for non-final batches
-                    const progress = batchResult.data?.progress || batchResult.progress || Math.round((batchNumber / totalBatches) * 50);
-                    setProcessingProgressPercent(progress);
-                    console.log(`POA Review - Batch ${batchNumber} acknowledged, progress: ${progress}%`);
+                    const result = await res.json();
+                    return { batchNumber, isFinal, result };
+                } catch (err) {
+                    lastError = err;
+                    if (retries < maxRetries) await new Promise(r => setTimeout(r, retryDelay * (retries + 1)));
                 }
             }
+            throw lastError;
+        };
+
+        const runWithConcurrency = async (tasks, concurrency) => {
+            const results = [];
+            let next = 0;
+            let completed = 0;
+            const runNext = async () => {
+                if (next >= tasks.length) return;
+                const idx = next++;
+                try {
+                    results[idx] = await tasks[idx]();
+                    completed++;
+                    setProcessingProgress(`Sending batch ${completed} of ${totalBatches}...`);
+                    setProcessingProgressPercent(Math.round((completed / totalBatches) * 50));
+                } finally {
+                    await runNext();
+                }
+            };
+            const workerCount = Math.min(concurrency, tasks.length);
+            await Promise.all(Array.from({ length: workerCount }, () => runNext()));
+            return results;
+        };
+
+        try {
+            console.log('POA Review - Starting parallel batch upload, concurrency:', PARALLEL_CONCURRENCY);
+            const batchConfigs = [];
+            for (let i = 0; i < totalBatches; i++) {
+                const start = i * BATCH_SIZE;
+                batchConfigs.push({
+                    batchNumber: i + 1,
+                    batch: rows.slice(start, Math.min(start + BATCH_SIZE, totalRows)),
+                    isFinal: i + 1 === totalBatches
+                });
+            }
+            const tasks = batchConfigs.map(({ batchNumber, batch, isFinal }) => () => sendOneBatch(batchNumber, batch, isFinal));
+            const results = await runWithConcurrency(tasks, PARALLEL_CONCURRENCY);
+
+            const finalResult = results.find(r => r && r.isFinal)?.result;
+            if (!finalResult?.data?.downloadUrl && !finalResult?.downloadUrl) {
+                throw new Error('Final batch did not return download URL. Server may still be processing.');
+            }
+            const downloadUrl = finalResult.data?.downloadUrl || finalResult.downloadUrl;
+            setProcessingProgress('Generating final report...');
+            setProcessingProgressPercent(90);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            setDownloadUrl(downloadUrl);
+            setProcessingProgress('Complete!');
+            setProcessingProgressPercent(100);
+            setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
+            console.log('POA Review - Processing complete, download URL set');
         } catch (error) {
             console.error('POA Review - Chunked processing error:', error);
             throw error;

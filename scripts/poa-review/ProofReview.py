@@ -32,6 +32,48 @@ LARGE_FILE_THRESHOLD = 50000
 
 # Styles for write_only path (avoid loading full sheet into memory)
 def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, yellow_col16):
+	try:
+		import xlsxwriter
+		_write_only_xlsxwriter(review, output_path, review_cols, bold_rows, green_rows, yellow_col16)
+		return
+	except ImportError:
+		pass
+	_write_only_openpyxl(review, output_path, review_cols, bold_rows, green_rows, yellow_col16)
+
+
+def _write_only_xlsxwriter(review, output_path, review_cols, bold_rows, green_rows, yellow_col16):
+	import xlsxwriter
+	num_cols = len(review_cols)
+	wb = xlsxwriter.Workbook(output_path, options={"constant_memory": True})
+	ws = wb.add_worksheet("Details as Assets")
+	header_fmt = wb.add_format({"bold": True, "font_size": 9, "align": "left", "bg_color": "#CCDAF5"})
+	norm_fmt = wb.add_format({"font_size": 9, "align": "left"})
+	bold_fmt = wb.add_format({"bold": True, "font_size": 9, "align": "left"})
+	green_fmt = wb.add_format({"font_size": 9, "align": "left", "bg_color": "#D9EAD3"})
+	yellow_fmt = wb.add_format({"font_size": 9, "align": "left", "bg_color": "#FFF2CC"})
+	for j, col in enumerate(review_cols):
+		ws.write(0, j, col, header_fmt)
+	data_arr = review[review_cols].values
+	bold_arr = bold_rows.values
+	green_arr = green_rows.values
+	yellow_arr = yellow_col16.values
+	for i in range(len(review)):
+		row_vals = data_arr[i]
+		for j in range(num_cols):
+			val = row_vals[j]
+			if pd.isna(val):
+				val = None
+			if green_arr[i]:
+				fmt = yellow_fmt if (j == 15 and yellow_arr[i]) else green_fmt
+			elif j == 15 and yellow_arr[i]:
+				fmt = yellow_fmt
+			else:
+				fmt = bold_fmt if bold_arr[i] else norm_fmt
+			ws.write(i + 1, j, val, fmt)
+	wb.close()
+
+
+def _write_only_openpyxl(review, output_path, review_cols, bold_rows, green_rows, yellow_col16):
 	from openpyxl import Workbook
 	from openpyxl.cell import WriteOnlyCell
 	from openpyxl.styles import PatternFill, Font, Alignment, Color
@@ -44,7 +86,6 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 	num_cols = len(review_cols)
 	wb = Workbook(write_only=True)
 	ws = wb.create_sheet(title="Details as Assets")
-	# Header row
 	header_cells = []
 	for j, col in enumerate(review_cols):
 		c = WriteOnlyCell(ws, value=col)
@@ -53,7 +94,6 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 		c.alignment = align_left
 		header_cells.append(c)
 	ws.append(header_cells)
-	# Data rows: use numpy for fast iteration (avoids .iloc[] and row[col] lookups)
 	data_arr = review[review_cols].values
 	bold_arr = bold_rows.values
 	green_arr = green_rows.values
@@ -70,7 +110,7 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 			c.alignment = align_left
 			if green_arr[i]:
 				c.fill = fill_green
-			if j == 15 and yellow_arr[i]:  # column 16 (0-based 15)
+			if j == 15 and yellow_arr[i]:
 				c.fill = fill_yellow
 			row_cells.append(c)
 		ws.append(row_cells)
