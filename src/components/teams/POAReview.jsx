@@ -610,18 +610,19 @@ const POAReview = () => {
                 await new Promise(r => setTimeout(r, 0));
                 const scriptUrl = (window.location.origin || '') + '/api/poa-review/browser-script';
                 const workerCode = `
+importScripts('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+const loadPyodide = self.loadPyodide;
 self.onmessage = async (e) => {
   const { csv, optionsJson, scriptUrl } = e.data;
   try {
     self.postMessage({ type: 'progress', message: 'Loading Python runtime…' });
-    const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
     const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
     self.postMessage({ type: 'progress', message: 'Installing packages (pandas, openpyxl)…' });
     await pyodide.loadPackage('micropip');
     const micropip = pyodide.pyimport('micropip');
     await micropip.install('pandas');
     await micropip.install('openpyxl');
-    self.postMessage({ type: 'progress', message: 'Processing ' + (csv.split('\\n').length - 1).toLocaleString() + ' rows… (this may take several minutes)' });
+    self.postMessage({ type: 'progress', message: 'Processing ' + (csv.split('\n').length - 1).toLocaleString() + ' rows… (this may take several minutes)' });
     pyodide.FS.writeFile('/tmp/input.csv', csv);
     pyodide.FS.writeFile('/tmp/options.json', optionsJson);
     const res = await fetch(scriptUrl);
@@ -636,7 +637,7 @@ self.onmessage = async (e) => {
 `;
                 const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
                 const workerUrl = URL.createObjectURL(workerBlob);
-                const worker = new Worker(workerUrl, { type: 'module' });
+                const worker = new Worker(workerUrl);
                 URL.revokeObjectURL(workerUrl);
                 await new Promise((resolve, reject) => {
                     worker.onmessage = (ev) => {
