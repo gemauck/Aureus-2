@@ -11,6 +11,6 @@ echo "Creating venv at: $VENV"
 
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip
-"$VENV/bin/pip" install pandas openpyxl xlsxwriter
+"$VENV/bin/pip" install pandas openpyxl
 
 echo "Done. POA Review will use $VENV/bin/python3 for server-side Excel processing."
