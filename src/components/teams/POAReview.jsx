@@ -26,6 +26,8 @@ const MAX_ROWS = 400000;
 
 // Max rows to scan when detecting sources from uploaded file (keeps UI responsive)
 const SOURCE_DETECT_MAX_ROWS = 5000;
+// Max rows when running in browser (Pyodide); larger files use server
+const MAX_ROWS_BROWSER = 35000;
 
 const POAReview = () => {
     const { isDark } = window.useTheme || (() => ({ isDark: false }));
@@ -42,6 +44,7 @@ const POAReview = () => {
     const [sourcesDetecting, setSourcesDetecting] = useState(false);
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
+    const [runLocally, setRunLocally] = useState(false);
 
     const handleFileSelect = useCallback((event) => {
         const file = event.target.files?.[0];
@@ -569,6 +572,68 @@ const POAReview = () => {
         processingStartRef.current = Date.now();
 
         try {
+            // Run in browser (Pyodide) — no file sent to server
+            if (runLocally) {
+                setProcessingProgress('Reading file...');
+                const rows = await parseFileToRows(uploadedFile);
+                if (rows.length === 0) throw new Error('No data rows found in file');
+                if (rows.length > MAX_ROWS_BROWSER) {
+                    throw new Error(
+                        `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer. This file has ${rows.length.toLocaleString()} rows — uncheck "Run in my browser" to process on the server.`
+                    );
+                }
+                setProcessingProgress('Loading Python runtime...');
+                const loadPyodide = await new Promise((resolve, reject) => {
+                    if (window.loadPyodide) return resolve(window.loadPyodide);
+                    const s = document.createElement('script');
+                    s.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+                    s.onload = () => resolve(window.loadPyodide);
+                    s.onerror = () => reject(new Error('Failed to load Pyodide'));
+                    document.head.appendChild(s);
+                });
+                const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
+                setProcessingProgress('Installing packages (pandas, openpyxl)...');
+                await pyodide.loadPackage('micropip');
+                const micropip = pyodide.pyimport('micropip');
+                await micropip.install('pandas');
+                await micropip.install('openpyxl');
+                setProcessingProgress('Building data...');
+                const headers = Object.keys(rows[0]);
+                const escapeCsv = (v) => {
+                    const s = v == null ? '' : String(v);
+                    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+                    return s;
+                };
+                const csvLines = [headers.map(escapeCsv).join(',')];
+                for (const row of rows) {
+                    csvLines.push(headers.map((h) => escapeCsv(row[h])).join(','));
+                }
+                const csvString = csvLines.join('\n');
+                const optionsJson = JSON.stringify({ sources: sources || ['Inmine: Daily Diesel Issues'] });
+                setProcessingProgress('Processing...');
+                pyodide.FS.writeFile('/tmp/input.csv', csvString);
+                pyodide.FS.writeFile('/tmp/options.json', optionsJson);
+                const scriptRes = await fetch('/api/poa-review/browser-script');
+                if (!scriptRes.ok) throw new Error('Failed to load browser script');
+                const script = await scriptRes.text();
+                pyodide.runPython(script);
+                const outBytes = pyodide.FS.readFile('/tmp/output.xlsx', { encoding: 'binary' });
+                pyodide.FS.unlink('/tmp/input.csv');
+                pyodide.FS.unlink('/tmp/options.json');
+                pyodide.FS.unlink('/tmp/output.xlsx');
+                const blob = new Blob([outBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (uploadedFile.name.replace(/\.[^.]+$/, '') || 'poa-review') + '-report.xlsx';
+                a.click();
+                URL.revokeObjectURL(url);
+                setProcessingProgress('Complete! Report downloaded.');
+                setProcessingProgressPercent(100);
+                setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
+                return;
+            }
+
             const fileName = uploadedFile.name.toLowerCase();
             const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
             const isLargeFile = uploadedFile.size > 10 * 1024 * 1024; // 10MB threshold
@@ -676,7 +741,7 @@ const POAReview = () => {
         } finally {
             setIsProcessing(false);
         }
-    }, [uploadedFile, sources, parseFileToRows, handleChunkedUpload]);
+    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -885,6 +950,23 @@ const POAReview = () => {
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* Run locally option */}
+            <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
+                    <input
+                        type="checkbox"
+                        checked={runLocally}
+                        onChange={(e) => setRunLocally(e.target.checked)}
+                        disabled={isProcessing}
+                        className="rounded border-gray-400"
+                    />
+                    <span className="text-sm">Run in my browser</span>
+                </label>
+                <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                    Process data on your device (no upload). Best for files under {MAX_ROWS_BROWSER.toLocaleString()} rows. First run may take a minute to load Python.
+                </p>
             </div>
 
             {/* Error Display */}

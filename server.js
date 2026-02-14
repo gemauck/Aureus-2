@@ -2037,6 +2037,20 @@ app.post('/api/poa-review/process-batch', async (req, res) => {
     throw e
   }
 })
+// Serve standalone Python script for browser (Pyodide) run
+app.get('/api/poa-review/browser-script', (req, res) => {
+  try {
+    const scriptPath = path.join(__dirname, 'scripts', 'poa-review', 'poa_review_browser.py')
+    const script = fs.readFileSync(scriptPath, 'utf8')
+    res.type('text/plain').send(script)
+  } catch (e) {
+    console.error('❌ POA Review browser-script error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to read browser script', path: req.url })
+    }
+    throw e
+  }
+})
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
