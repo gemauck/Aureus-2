@@ -301,6 +301,8 @@ app.use(helmet({
       fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com"],
       // Allow embedded maps from OpenStreetMap
       frameSrc: ["'self'", "https://www.openstreetmap.org"],
+      // POA Review "Run in browser" runs Pyodide in a blob: worker so the tab stays responsive
+      workerSrc: ["'self'", "blob:", "https://cdn.jsdelivr.net"],
     },
   },
   crossOriginEmbedderPolicy: false, // Allow embedding

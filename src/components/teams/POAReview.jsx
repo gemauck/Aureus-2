@@ -6,7 +6,7 @@
  * Server enforces file size (50MB) and row limits to avoid overload.
  */
 
-const { useState, useCallback, useRef, useEffect } = React;
+const { useState, useCallback, useRef } = React;
 
 function formatElapsed(ms) {
     if (ms < 0 || !Number.isFinite(ms)) return '';
@@ -45,39 +45,6 @@ const POAReview = () => {
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
     const [runLocally, setRunLocally] = useState(false);
-    const [pyodidePreloadStatus, setPyodidePreloadStatus] = useState(''); // '' | 'loading' | 'ready' | 'error'
-    const pyodideRef = useRef({ pyodide: null, loadPromise: null });
-
-    // Preload Pyodide + packages when "Run in my browser" is checked so Process is faster
-    useEffect(() => {
-        if (!runLocally || pyodideRef.current.pyodide || pyodideRef.current.loadPromise) return;
-        setPyodidePreloadStatus('loading');
-        const load = async () => {
-            try {
-                const loadPyodide = await new Promise((resolve, reject) => {
-                    if (window.loadPyodide) return resolve(window.loadPyodide);
-                    const s = document.createElement('script');
-                    s.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
-                    s.onload = () => resolve(window.loadPyodide);
-                    s.onerror = () => reject(new Error('Failed to load Pyodide'));
-                    document.head.appendChild(s);
-                });
-                const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
-                await pyodide.loadPackage('micropip');
-                const micropip = pyodide.pyimport('micropip');
-                await micropip.install('pandas');
-                await micropip.install('openpyxl');
-                pyodideRef.current.pyodide = pyodide;
-                pyodideRef.current.loadPromise = null;
-                setPyodidePreloadStatus('ready');
-            } catch (e) {
-                console.warn('POA Review - Pyodide preload failed:', e);
-                pyodideRef.current.loadPromise = null;
-                setPyodidePreloadStatus('error');
-            }
-        };
-        pyodideRef.current.loadPromise = load();
-    }, [runLocally]);
 
     const handleFileSelect = useCallback((event) => {
         const file = event.target.files?.[0];
@@ -615,31 +582,6 @@ const POAReview = () => {
                         `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer. This file has ${rows.length.toLocaleString()} rows — uncheck "Run in my browser" to process on the server.`
                     );
                 }
-                let pyodide = pyodideRef.current.pyodide;
-                if (!pyodide) {
-                    if (pyodideRef.current.loadPromise) {
-                        setProcessingProgress('Waiting for Python runtime...');
-                        try { await pyodideRef.current.loadPromise; } catch (_) {}
-                        pyodide = pyodideRef.current.pyodide;
-                    }
-                    if (!pyodide) {
-                        setProcessingProgress('Loading Python runtime...');
-                        const loadPyodide = await new Promise((resolve, reject) => {
-                            if (window.loadPyodide) return resolve(window.loadPyodide);
-                            const s = document.createElement('script');
-                            s.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
-                            s.onload = () => resolve(window.loadPyodide);
-                            s.onerror = () => reject(new Error('Failed to load Pyodide'));
-                            document.head.appendChild(s);
-                        });
-                        pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
-                        setProcessingProgress('Installing packages (pandas, openpyxl)...');
-                        await pyodide.loadPackage('micropip');
-                        const micropip = pyodide.pyimport('micropip');
-                        await micropip.install('pandas');
-                        await micropip.install('openpyxl');
-                    }
-                }
                 setProcessingProgress('Building data...');
                 setProcessingProgressPercent(5);
                 const headers = Object.keys(rows[0]);
@@ -663,33 +605,74 @@ const POAReview = () => {
                 }
                 const csvString = csvLines.join('\n');
                 const optionsJson = JSON.stringify({ sources: sources || ['Inmine: Daily Diesel Issues'] });
-                setProcessingProgress(`Processing ${rows.length.toLocaleString()} rows in Python… (this may take several minutes)`);
-                setProcessingProgressPercent(20);
+                setProcessingProgress(`Starting Python (tab will stay responsive)…`);
+                setProcessingProgressPercent(15);
                 await new Promise(r => setTimeout(r, 0));
-                pyodide.FS.writeFile('/tmp/input.csv', csvString);
-                pyodide.FS.writeFile('/tmp/options.json', optionsJson);
-                setProcessingProgress(`Running report… ${rows.length.toLocaleString()} rows`);
-                setProcessingProgressPercent(25);
-                await new Promise(r => setTimeout(r, 0));
-                const scriptRes = await fetch('/api/poa-review/browser-script');
-                if (!scriptRes.ok) throw new Error('Failed to load browser script');
-                const script = await scriptRes.text();
-                pyodide.runPython(script);
-                const outBytes = pyodide.FS.readFile('/tmp/output.xlsx', { encoding: 'binary' });
-                pyodide.FS.unlink('/tmp/input.csv');
-                pyodide.FS.unlink('/tmp/options.json');
-                pyodide.FS.unlink('/tmp/output.xlsx');
-                const blob = new Blob([outBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = (uploadedFile.name.replace(/\.[^.]+$/, '') || 'poa-review') + '-report.xlsx';
-                a.click();
-                URL.revokeObjectURL(url);
-                const elapsed = formatElapsed(Date.now() - (processingStartRef.current || Date.now()));
-                setProcessingProgress('Complete! Report downloaded.');
-                setProcessingProgressPercent(100);
-                setCompletedInText(elapsed);
+                const scriptUrl = (window.location.origin || '') + '/api/poa-review/browser-script';
+                const workerCode = `
+self.onmessage = async (e) => {
+  const { csv, optionsJson, scriptUrl } = e.data;
+  try {
+    self.postMessage({ type: 'progress', message: 'Loading Python runtime…' });
+    const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+    const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
+    self.postMessage({ type: 'progress', message: 'Installing packages (pandas, openpyxl)…' });
+    await pyodide.loadPackage('micropip');
+    const micropip = pyodide.pyimport('micropip');
+    await micropip.install('pandas');
+    await micropip.install('openpyxl');
+    self.postMessage({ type: 'progress', message: 'Processing ' + (csv.split('\\n').length - 1).toLocaleString() + ' rows… (this may take several minutes)' });
+    pyodide.FS.writeFile('/tmp/input.csv', csv);
+    pyodide.FS.writeFile('/tmp/options.json', optionsJson);
+    const res = await fetch(scriptUrl);
+    const script = await res.text();
+    pyodide.runPython(script);
+    const outBytes = pyodide.FS.readFile('/tmp/output.xlsx', { encoding: 'binary' });
+    self.postMessage({ type: 'done', outBytes });
+  } catch (err) {
+    self.postMessage({ type: 'error', error: err && (err.message || String(err)) });
+  }
+};
+`;
+                const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(workerBlob);
+                const worker = new Worker(workerUrl, { type: 'module' });
+                URL.revokeObjectURL(workerUrl);
+                await new Promise((resolve, reject) => {
+                    worker.onmessage = (ev) => {
+                        const d = ev.data;
+                        if (d.type === 'progress') {
+                            setProcessingProgress(d.message);
+                            if (d.message.includes('Loading')) setProcessingProgressPercent(20);
+                            else if (d.message.includes('Installing')) setProcessingProgressPercent(30);
+                            else setProcessingProgressPercent(40);
+                        } else if (d.type === 'done') {
+                            try {
+                                const blob = new Blob([d.outBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = (uploadedFile.name.replace(/\.[^.]+$/, '') || 'poa-review') + '-report.xlsx';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            } catch (_) {}
+                            const elapsed = formatElapsed(Date.now() - (processingStartRef.current || Date.now()));
+                            setProcessingProgress('Complete! Report downloaded.');
+                            setProcessingProgressPercent(100);
+                            setCompletedInText(elapsed);
+                            worker.terminate();
+                            resolve();
+                        } else if (d.type === 'error') {
+                            worker.terminate();
+                            reject(new Error(d.error));
+                        }
+                    };
+                    worker.onerror = (err) => {
+                        worker.terminate();
+                        reject(err.message ? new Error(err.message) : new Error('Worker failed'));
+                    };
+                    worker.postMessage({ csv: csvString, optionsJson, scriptUrl });
+                });
                 return;
             }
 
@@ -1024,9 +1007,7 @@ const POAReview = () => {
                     <span className="text-sm">Run in my browser</span>
                 </label>
                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    Process data on your device (no upload). Best for files under {MAX_ROWS_BROWSER.toLocaleString()} rows.
-                    {pyodidePreloadStatus === 'loading' && ' Preloading Python…'}
-                    {pyodidePreloadStatus === 'ready' && ' Python ready — Process will start immediately.'}
+                    Process data on your device (no upload). Tab stays responsive; best for files under {MAX_ROWS_BROWSER.toLocaleString()} rows.
                 </p>
             </div>
 
