@@ -622,7 +622,7 @@ self.onmessage = async (e) => {
     const micropip = pyodide.pyimport('micropip');
     await micropip.install('pandas');
     await micropip.install('openpyxl');
-    self.postMessage({ type: 'progress', message: 'Processing ' + (csv.split('\n').length - 1).toLocaleString() + ' rows… (this may take several minutes)' });
+    self.postMessage({ type: 'progress', message: 'Processing ' + (csv.split('\\n').length - 1).toLocaleString() + ' rows… (this may take several minutes)' });
     pyodide.FS.writeFile('/tmp/input.csv', csv);
     pyodide.FS.writeFile('/tmp/options.json', optionsJson);
     const res = await fetch(scriptUrl);
