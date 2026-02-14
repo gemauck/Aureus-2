@@ -294,10 +294,10 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://cdn.sheetjs.com", "blob:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://cdn.sheetjs.com", "https://cdn.jsdelivr.net", "blob:"],
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://unpkg.com", "https://nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "https://unpkg.com", "https://cdn.jsdelivr.net", "https://nominatim.openstreetmap.org"],
       fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com"],
       // Allow embedded maps from OpenStreetMap
       frameSrc: ["'self'", "https://www.openstreetmap.org"],
