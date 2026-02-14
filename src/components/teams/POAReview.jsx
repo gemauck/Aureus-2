@@ -6,7 +6,19 @@
  * Server enforces file size (50MB) and row limits to avoid overload.
  */
 
-const { useState, useCallback } = React;
+const { useState, useCallback, useRef } = React;
+
+function formatElapsed(ms) {
+    if (ms < 0 || !Number.isFinite(ms)) return '';
+    const sec = Math.floor(ms / 1000);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m < 60) return s ? `${m}m ${s}s` : `${m}m`;
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return min ? `${h}h ${min}m ${s}s` : `${h}h ${s}s`;
+}
 
 // Must match server limits (api/poa-review/process-excel.js and process-batch.js)
 const MAX_FILE_SIZE_MB = 50;
@@ -28,6 +40,8 @@ const POAReview = () => {
     const [processingProgressPercent, setProcessingProgressPercent] = useState(0);
     const [documentSources, setDocumentSources] = useState([]);
     const [sourcesDetecting, setSourcesDetecting] = useState(false);
+    const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
+    const processingStartRef = useRef(null);
 
     const handleFileSelect = useCallback((event) => {
         const file = event.target.files?.[0];
@@ -504,6 +518,7 @@ const POAReview = () => {
                         setDownloadUrl(downloadUrl);
                         setProcessingProgress('Complete!');
                         setProcessingProgressPercent(100);
+                        setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
                         console.log('POA Review - Processing complete, download URL set');
                         return;
                     } else {
@@ -550,6 +565,8 @@ const POAReview = () => {
         setIsProcessing(true);
         setError(null);
         setProcessingProgressPercent(0);
+        setCompletedInText(null);
+        processingStartRef.current = Date.now();
 
         try {
             const fileName = uploadedFile.name.toLowerCase();
@@ -623,6 +640,7 @@ const POAReview = () => {
                     setDownloadUrl(downloadUrl);
                     setProcessingProgress('Complete!');
                     setProcessingProgressPercent(100);
+                    setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
                 } else {
                     throw new Error('No download URL received from server');
                 }
@@ -737,6 +755,7 @@ const POAReview = () => {
                                 setUploadedFile(null);
                                 setDownloadUrl(null);
                                 setError(null);
+                                setCompletedInText(null);
                                 setDocumentSources([]);
                                 setSources([]);
                             }}
@@ -882,13 +901,16 @@ const POAReview = () => {
             {isProcessing && (
                 <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="flex items-center gap-3 mb-3">
-                        <i className="fas fa-spinner fa-spin text-indigo-600"></i>
+                        <i className={`fas ${processingProgressPercent >= 100 ? 'fa-check-circle text-green-600' : 'fa-spinner fa-spin text-indigo-600'}`}></i>
                         <div className="flex-1">
                             <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
-                                Processing...
+                                {processingProgressPercent >= 100 ? 'Complete!' : 'Processing...'}
                             </p>
                             <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                                 {processingProgress}
+                                {completedInText && processingProgressPercent >= 100 && (
+                                    <span className="ml-1">— {completedInText}</span>
+                                )}
                             </p>
                         </div>
                         <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
@@ -935,17 +957,24 @@ const POAReview = () => {
                 </button>
 
                 {downloadUrl && (
-                    <button
-                        onClick={handleDownload}
-                        className={`px-4 py-3 rounded-lg text-sm font-medium transition ${
-                            isDark
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-green-600 text-white hover:bg-green-700'
-                        }`}
-                    >
-                        <i className="fas fa-download mr-2"></i>
-                        Download Report
-                    </button>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <button
+                            onClick={handleDownload}
+                            className={`px-4 py-3 rounded-lg text-sm font-medium transition ${
+                                isDark
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-green-600 text-white hover:bg-green-700'
+                            }`}
+                        >
+                            <i className="fas fa-download mr-2"></i>
+                            Download Report
+                        </button>
+                        {completedInText && (
+                            <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                Completed in {completedInText}
+                            </span>
+                        )}
+                    </div>
                 )}
             </div>
 
