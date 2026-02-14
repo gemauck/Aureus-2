@@ -27,7 +27,7 @@ const MAX_ROWS = 400000;
 // Max rows to scan when detecting sources from uploaded file (keeps UI responsive)
 const SOURCE_DETECT_MAX_ROWS = 5000;
 // Max rows when running in browser (Pyodide); larger files use server
-const MAX_ROWS_BROWSER = 35000;
+const MAX_ROWS_BROWSER = 500000;
 
 const POAReview = () => {
     const { isDark } = window.useTheme || (() => ({ isDark: false }));
