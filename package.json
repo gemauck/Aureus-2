@@ -17,7 +17,7 @@
     "railway-build": "npm run build:jsx && npm run build:css && npx prisma generate && echo 'Railway build completed'",
     "railway-start": "./deploy-railway-fixes.sh",
     "postinstall": "npx prisma generate",
-    "deploy": "ssh root@165.22.127.196 'cd /var/www/abcotronics-erp && ./deploy.sh'",
+    "deploy": "ssh root@165.22.127.196 'cd /var/www/abcotronics-erp && git checkout -- index.html 2>/dev/null; ./deploy.sh'",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
