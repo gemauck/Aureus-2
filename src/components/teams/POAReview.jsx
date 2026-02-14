@@ -641,6 +641,7 @@ const POAReview = () => {
                     }
                 }
                 setProcessingProgress('Building data...');
+                setProcessingProgressPercent(5);
                 const headers = Object.keys(rows[0]);
                 const numCols = headers.length;
                 const escape = (v) => {
@@ -662,9 +663,14 @@ const POAReview = () => {
                 }
                 const csvString = csvLines.join('\n');
                 const optionsJson = JSON.stringify({ sources: sources || ['Inmine: Daily Diesel Issues'] });
-                setProcessingProgress('Processing...');
+                setProcessingProgress(`Processing ${rows.length.toLocaleString()} rows in Python… (this may take several minutes)`);
+                setProcessingProgressPercent(20);
+                await new Promise(r => setTimeout(r, 0));
                 pyodide.FS.writeFile('/tmp/input.csv', csvString);
                 pyodide.FS.writeFile('/tmp/options.json', optionsJson);
+                setProcessingProgress(`Running report… ${rows.length.toLocaleString()} rows`);
+                setProcessingProgressPercent(25);
+                await new Promise(r => setTimeout(r, 0));
                 const scriptRes = await fetch('/api/poa-review/browser-script');
                 if (!scriptRes.ok) throw new Error('Failed to load browser script');
                 const script = await scriptRes.text();
@@ -680,9 +686,10 @@ const POAReview = () => {
                 a.download = (uploadedFile.name.replace(/\.[^.]+$/, '') || 'poa-review') + '-report.xlsx';
                 a.click();
                 URL.revokeObjectURL(url);
+                const elapsed = formatElapsed(Date.now() - (processingStartRef.current || Date.now()));
                 setProcessingProgress('Complete! Report downloaded.');
                 setProcessingProgressPercent(100);
-                setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
+                setCompletedInText(elapsed);
                 return;
             }
 
