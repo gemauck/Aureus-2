@@ -363,15 +363,13 @@ def format_review(review, filename, output_path=None):
 	Output:
 		Creates Excel file at the specified output_path or default location
 	"""
-	# Drop unused columns in place to free memory, then keep only review_cols order
-	drop_cols = [c for c in review.columns if c not in review_cols]
-	if drop_cols:
-		review.drop(columns=drop_cols, inplace=True)
+	# Keep all columns: ensure review_cols exist, then order as review_cols first + rest
 	missing = [c for c in review_cols if c not in review.columns]
 	if missing:
 		for c in missing:
 			review[c] = np.nan
-	review = review.reindex(columns=review_cols)
+	output_cols = list(review_cols) + [c for c in review.columns if c not in review_cols]
+	review = review.reindex(columns=output_cols)
 
 	# Generate output path if not provided
 	if output_path is None:
@@ -386,7 +384,7 @@ def format_review(review, filename, output_path=None):
 	os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
 	n = len(review)
-	num_cols = len(review_cols)
+	num_cols = len(output_cols)
 	# Precompute format flags once (used by both paths)
 	col_dt = review["Date & Time"]
 	col_txn = review["Transaction ID"]
@@ -405,7 +403,7 @@ def format_review(review, filename, output_path=None):
 
 	if n > LARGE_FILE_THRESHOLD:
 		# Streaming write: minimal memory so large files don't OOM the server
-		_write_only_excel(review, output_path, review_cols, bold_rows, green_rows, yellow_col16)
+		_write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16)
 	else:
 		# Standard path with Formatter (full sheet in memory)
 		with pd.ExcelWriter(output_path, engine="openpyxl") as writer:

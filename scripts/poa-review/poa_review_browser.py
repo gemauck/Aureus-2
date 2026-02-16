@@ -216,7 +216,10 @@ def run():
 
     if "Source" not in data.columns and sources:
         data["Source"] = sources[0]
-    data = data[[c for c in data.columns if c in REVIEW_COLS]]
+    # Keep all input columns; ensure REVIEW_COLS exist for logic/formatting
+    for c in REVIEW_COLS:
+        if c not in data.columns:
+            data[c] = np.nan
     review = POAReview(data)
     review.mark_consecutive_transactions()
     review.label_rows()
@@ -225,13 +228,12 @@ def run():
     review.time_since_last_activity()
     review.total_smr(sources)
 
-    drop_cols = [c for c in review.data.columns if c not in REVIEW_COLS]
-    if drop_cols:
-        review.data.drop(columns=drop_cols, inplace=True)
+    # Output order: REVIEW_COLS first, then any other columns (keep all columns)
     for c in REVIEW_COLS:
         if c not in review.data.columns:
             review.data[c] = np.nan
-    review.data = review.data.reindex(columns=REVIEW_COLS)
+    output_cols = list(REVIEW_COLS) + [c for c in review.data.columns if c not in REVIEW_COLS]
+    review.data = review.data.reindex(columns=output_cols)
 
     col_dt = review.data["Date & Time"]
     col_txn = review.data["Transaction ID"]
@@ -245,7 +247,7 @@ def run():
     yellow_col16 = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
 
     _write_only_excel(
-        review.data, OUTPUT_XLSX, REVIEW_COLS, bold_rows, green_rows, yellow_col16
+        review.data, OUTPUT_XLSX, output_cols, bold_rows, green_rows, yellow_col16
     )
 
 
