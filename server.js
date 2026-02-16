@@ -2054,6 +2054,27 @@ app.get('/api/poa-review/browser-script', (req, res) => {
   }
 })
 
+// Proxy Pyodide assets from CDN so the worker can load from same-origin (avoids firewall/CDN blocks)
+const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full'
+app.get(/^\/api\/poa-review\/pyodide\/(.*)$/, async (req, res) => {
+  const subpath = (req.params[0] || '').replace(/^\/+/, '') || 'pyodide.js'
+  const target = `${PYODIDE_CDN}/${subpath}`
+  try {
+    const resp = await fetch(target, { headers: { 'Accept': req.get('Accept') || '*/*' } })
+    if (!resp.ok) {
+      return res.status(resp.status).send(resp.statusText)
+    }
+    const contentType = resp.headers.get('Content-Type') || (subpath.endsWith('.js') ? 'application/javascript' : 'application/octet-stream')
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.type(contentType)
+    const buf = await resp.arrayBuffer()
+    res.send(Buffer.from(buf))
+  } catch (e) {
+    console.error('❌ POA Review pyodide proxy error:', e.message)
+    if (!res.headersSent) res.status(502).json({ error: 'Pyodide proxy failed', target })
+  }
+})
+
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
   let timeout = null

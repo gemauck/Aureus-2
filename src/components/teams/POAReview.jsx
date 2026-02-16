@@ -608,15 +608,17 @@ const POAReview = () => {
                 setProcessingProgress(`Starting Python (tab will stay responsive)…`);
                 setProcessingProgressPercent(15);
                 await new Promise(r => setTimeout(r, 0));
-                const scriptUrl = (window.location.origin || '') + '/api/poa-review/browser-script';
+                const origin = (window.location.origin || '').replace(/\/$/, '');
+                const scriptUrl = origin + '/api/poa-review/browser-script';
+                const pyodideBase = origin + '/api/poa-review/pyodide';
                 const workerCode = `
-importScripts('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+importScripts('${pyodideBase}/pyodide.js');
 const loadPyodide = self.loadPyodide;
 self.onmessage = async (e) => {
   const { csv, optionsJson, scriptUrl } = e.data;
   try {
     self.postMessage({ type: 'progress', message: 'Loading Python runtime…' });
-    const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/' });
+    const pyodide = await loadPyodide({ indexURL: '${pyodideBase}/' });
     self.postMessage({ type: 'progress', message: 'Installing packages (pandas, openpyxl)…' });
     await pyodide.loadPackage('micropip');
     const micropip = pyodide.pyimport('micropip');
