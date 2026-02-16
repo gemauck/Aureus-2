@@ -339,6 +339,7 @@ if missing_columns:
 if column_mapping:
     data = data.rename(columns=column_mapping)
 
+original_columns = list(data.columns)
 review = POAReview(data)
 review.mark_consecutive_transactions()
 review.label_rows()
@@ -351,7 +352,7 @@ if "label" not in review.data.columns:
 review.total_smr(sources)
 
 os.makedirs(os.path.dirname(output_file), exist_ok=True)
-format_review(review.data, os.path.basename(input_file), output_file)
+format_review(review.data, os.path.basename(input_file), output_file, original_columns)
 
 print(f"Success! Output saved to: {output_file}")
 sys.exit(0)

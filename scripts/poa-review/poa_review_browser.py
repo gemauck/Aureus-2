@@ -35,7 +35,7 @@ def find_column(df, target_name):
     return None
 
 
-def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, yellow_col16):
+def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index=15):
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.styles import PatternFill, Font, Alignment, Color
@@ -45,18 +45,18 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
     font_9 = Font(size=9)
     font_9_bold = Font(size=9, bold=True)
     align_left = Alignment(horizontal="left")
-    num_cols = len(review_cols)
+    num_cols = len(output_cols)
     wb = Workbook(write_only=True)
     ws = wb.create_sheet(title="Details as Assets")
     header_cells = []
-    for col in review_cols:
+    for col in output_cols:
         c = WriteOnlyCell(ws, value=col)
         c.fill = fill_header
         c.font = font_9_bold
         c.alignment = align_left
         header_cells.append(c)
     ws.append(header_cells)
-    data_arr = review[review_cols].values
+    data_arr = review[output_cols].values
     bold_arr = bold_rows.values
     green_arr = green_rows.values
     yellow_arr = yellow_col16.values
@@ -75,7 +75,7 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
             c.alignment = align_left
             if green_i:
                 c.fill = fill_green
-            if j == 15 and yellow_i:
+            if j == yellow_col_index and yellow_i:
                 c.fill = fill_yellow
             row_cells.append(c)
         ws.append(row_cells)
@@ -216,7 +216,8 @@ def run():
 
     if "Source" not in data.columns and sources:
         data["Source"] = sources[0]
-    # Keep all input columns; ensure REVIEW_COLS exist for logic/formatting
+    original_columns = list(data.columns)
+    # Ensure REVIEW_COLS exist so processing logic does not break (add as NaN only if missing)
     for c in REVIEW_COLS:
         if c not in data.columns:
             data[c] = np.nan
@@ -228,11 +229,11 @@ def run():
     review.time_since_last_activity()
     review.total_smr(sources)
 
-    # Output order: REVIEW_COLS first, then any other columns (keep all columns)
-    for c in REVIEW_COLS:
-        if c not in review.data.columns:
-            review.data[c] = np.nan
-    output_cols = list(REVIEW_COLS) + [c for c in review.data.columns if c not in REVIEW_COLS]
+    # Output: exact original columns (same order) + only the 4 computed review columns (no "label", no extra REVIEW_COLS)
+    COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr"]
+    output_cols = [c for c in original_columns if c in review.data.columns] + [
+        c for c in COMPUTED_COLS if c in review.data.columns
+    ]
     review.data = review.data.reindex(columns=output_cols)
 
     col_dt = review.data["Date & Time"]
@@ -245,9 +246,10 @@ def run():
     bold_rows = ~is_ts & col_dt.notna()
     green_rows = has_txn & is_ts
     yellow_col16 = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
+    yellow_col_index = output_cols.index("Total SMR Usage") if "Total SMR Usage" in output_cols else -1
 
     _write_only_excel(
-        review.data, OUTPUT_XLSX, output_cols, bold_rows, green_rows, yellow_col16
+        review.data, OUTPUT_XLSX, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index
     )
 
 

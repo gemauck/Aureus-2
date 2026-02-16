@@ -404,8 +404,8 @@ try:
         except Exception:
             pass
     
-    # Keep only columns needed for report to reduce memory for large files
-    data = data[[c for c in data.columns if c in review_cols]]
+    # Keep all columns; capture order for output (original columns + 4 computed only)
+    original_columns = list(data.columns)
     
     review = POAReview(data)
     review.mark_consecutive_transactions()
@@ -419,8 +419,8 @@ try:
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     
-    # Format and save - pass output_path directly
-    format_review(review.data, os.path.basename(input_file), output_file)
+    # Format and save - pass output_path and original_columns so output keeps same columns + 4 computed
+    format_review(review.data, os.path.basename(input_file), output_file, original_columns)
     
     if os.path.exists(output_file):
         print(f"Success: {output_file}")

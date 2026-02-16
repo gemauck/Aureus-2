@@ -31,7 +31,7 @@ from os import listdir
 LARGE_FILE_THRESHOLD = 50000
 
 # Styles for write_only path (avoid loading full sheet into memory)
-def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, yellow_col16):
+def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index=15):
 	from openpyxl import Workbook
 	from openpyxl.cell import WriteOnlyCell
 	from openpyxl.styles import PatternFill, Font, Alignment, Color
@@ -41,12 +41,12 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 	font_9 = Font(size=9)
 	font_9_bold = Font(size=9, bold=True)
 	align_left = Alignment(horizontal="left")
-	num_cols = len(review_cols)
+	num_cols = len(output_cols)
 	wb = Workbook(write_only=True)
 	ws = wb.create_sheet(title="Details as Assets")
 	# Header row
 	header_cells = []
-	for j, col in enumerate(review_cols):
+	for j, col in enumerate(output_cols):
 		c = WriteOnlyCell(ws, value=col)
 		c.fill = fill_header
 		c.font = font_9_bold
@@ -54,7 +54,7 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 		header_cells.append(c)
 	ws.append(header_cells)
 	# Data rows: use numpy for fast iteration (avoids .iloc[] and row[col] lookups)
-	data_arr = review[review_cols].values
+	data_arr = review[output_cols].values
 	bold_arr = bold_rows.values
 	green_arr = green_rows.values
 	yellow_arr = yellow_col16.values
@@ -70,7 +70,7 @@ def _write_only_excel(review, output_path, review_cols, bold_rows, green_rows, y
 			c.alignment = align_left
 			if green_arr[i]:
 				c.fill = fill_green
-			if j == 15 and yellow_arr[i]:  # column 16 (0-based 15)
+			if j == yellow_col_index and yellow_arr[i]:
 				c.fill = fill_yellow
 			row_cells.append(c)
 		ws.append(row_cells)
@@ -345,7 +345,7 @@ class POAReview:
 		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.float32)
 		return self.data
 
-def format_review(review, filename, output_path=None):
+def format_review(review, filename, output_path=None, original_columns=None):
 	"""
 	Format and export the review data to an Excel file with conditional formatting.
 	
@@ -359,16 +359,22 @@ def format_review(review, filename, output_path=None):
 		review (pd.DataFrame): The processed review data
 		filename (str): Input filename (used to generate output filename if output_path not provided)
 		output_path (str, optional): Full path to output file. If not provided, uses default location.
-		
-	Output:
-		Creates Excel file at the specified output_path or default location
+		original_columns (list, optional): If provided, output keeps these columns in order, then appends
+			the 4 computed columns (No POA Asset, etc.). No extra columns and no internal "label" column.
 	"""
-	# Keep all columns: ensure review_cols exist, then order as review_cols first + rest
-	missing = [c for c in review_cols if c not in review.columns]
-	if missing:
-		for c in missing:
-			review[c] = np.nan
-	output_cols = list(review_cols) + [c for c in review.columns if c not in review_cols]
+	COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr"]
+	if original_columns is not None:
+		# Output = original columns (same order) + 4 computed only
+		output_cols = [c for c in original_columns if c in review.columns] + [
+			c for c in COMPUTED_COLS if c in review.columns
+		]
+	else:
+		# Legacy: ensure review_cols exist, then review_cols + rest (excluding internal "label")
+		missing = [c for c in review_cols if c not in review.columns]
+		if missing:
+			for c in missing:
+				review[c] = np.nan
+		output_cols = list(review_cols) + [c for c in review.columns if c not in review_cols and c != "label"]
 	review = review.reindex(columns=output_cols)
 
 	# Generate output path if not provided
@@ -400,10 +406,12 @@ def format_review(review, filename, output_path=None):
 	bold_rows = ~is_ts & col_dt.notna()
 	green_rows = has_txn & is_ts
 	yellow_col16 = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
+	yellow_col_index = output_cols.index("Total SMR Usage") if "Total SMR Usage" in output_cols else -1
+	yellow_col_1based = (yellow_col_index + 1) if yellow_col_index >= 0 else 16
 
 	if n > LARGE_FILE_THRESHOLD:
 		# Streaming write: minimal memory so large files don't OOM the server
-		_write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16)
+		_write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index)
 	else:
 		# Standard path with Formatter (full sheet in memory)
 		with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
@@ -430,8 +438,9 @@ def format_review(review, filename, output_path=None):
 				format_review.make_bold(row_start=start, num_rows=num_rows, column_start=1, num_columns=num_cols + 4, size=9)
 			for start, num_rows in contiguous_ranges(green_rows):
 				format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=1, num_columns=num_cols + 4, color="D9EAD3")
-			for start, num_rows in contiguous_ranges(yellow_col16):
-				format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=16, num_columns=1, color="FFF2CC")
+			if yellow_col_1based <= num_cols:
+				for start, num_rows in contiguous_ranges(yellow_col16):
+					format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=yellow_col_1based, num_columns=1, color="FFF2CC")
 
 # ============================================================================
 # MAIN EXECUTION SCRIPT

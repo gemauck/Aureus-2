@@ -186,6 +186,7 @@ try:
         print(f"Renaming columns: {column_mapping}")
         data = data.rename(columns=column_mapping)
     
+    original_columns = list(data.columns)
     print("Initializing review...")
     review = POAReview(data)
     
@@ -202,8 +203,8 @@ try:
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     
-    # Format and save - pass output_path directly
-    format_review(review.data, os.path.basename(input_file), output_file)
+    # Format and save - pass output_path and original_columns so output keeps same columns + 4 computed
+    format_review(review.data, os.path.basename(input_file), output_file, original_columns)
     
     print(f"Success! Output saved to: {output_file}")
     sys.exit(0)
