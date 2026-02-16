@@ -198,6 +198,7 @@ try:
     
     print("Calculating total SMR...")
     review.total_smr(sources)
+    review.mark_dispense_with_no_proof()
     
     print("Formatting review...")
     # Create output directory if it doesn't exist
