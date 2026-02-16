@@ -613,12 +613,11 @@ const POAReview = () => {
                 const pyodideBase = origin + '/api/poa-review/pyodide';
                 const workerCode = `
 importScripts('${pyodideBase}/pyodide.js');
-const loadPyodide = self.loadPyodide;
 self.onmessage = async (e) => {
   const { csv, optionsJson, scriptUrl } = e.data;
   try {
     self.postMessage({ type: 'progress', message: 'Loading Python runtime…' });
-    const pyodide = await loadPyodide({ indexURL: '${pyodideBase}/' });
+    const pyodide = await self.loadPyodide({ indexURL: '${pyodideBase}/' });
     self.postMessage({ type: 'progress', message: 'Installing packages (pandas, openpyxl)…' });
     await pyodide.loadPackage('micropip');
     const micropip = pyodide.pyimport('micropip');
