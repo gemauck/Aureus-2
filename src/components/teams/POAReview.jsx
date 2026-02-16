@@ -24,8 +24,8 @@ function formatElapsed(ms) {
 const MAX_FILE_SIZE_MB = 50;
 const MAX_ROWS = 400000;
 
-// Max rows to scan when detecting sources from uploaded file (keeps UI responsive)
-const SOURCE_DETECT_MAX_ROWS = 5000;
+// Max rows to scan when detecting sources from uploaded file (scan full allowed file so we find all unique sources)
+const SOURCE_DETECT_MAX_ROWS = 250000;
 // Max rows when running in browser (Pyodide); larger files use server
 const MAX_ROWS_BROWSER = 500000;
 
@@ -300,7 +300,8 @@ const POAReview = () => {
             const v = row[sourceKey];
             if (v != null && String(v).trim() !== '') set.add(String(v).trim());
         });
-        return Array.from(set).sort();
+        // Exclude the literal "Source" (column header that can appear in data rows)
+        return Array.from(set).sort().filter(s => !/^source$/i.test(s));
     }, []);
 
     const detectSourcesFromFile = useCallback(async (file) => {
