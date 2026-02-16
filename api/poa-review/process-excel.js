@@ -350,7 +350,6 @@ review.time_since_last_activity()
 if "label" not in review.data.columns:
     review.label_rows()
 review.total_smr(sources)
-review.mark_dispense_with_no_proof()
 
 os.makedirs(os.path.dirname(output_file), exist_ok=True)
 format_review(review.data, os.path.basename(input_file), output_file, original_columns)

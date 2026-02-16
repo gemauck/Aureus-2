@@ -81,7 +81,7 @@ review_cols = [
     "Date & Time","Transaction ID","Asset Description","Asset Number","Asset Group","Asset Tank Size (L)","Asset Meter Type (Hr/Km)",
     "Storage Tank","Fuel Pump","Litres","Total Fuel Used (L)","Operation Description / Comment","Refund Eligibility","Opening SMR",
     "Closing SMR","Total SMR Usage","Material","Location.1","Loads / Tonnes","Activity","Comments","Source","Custom Attribute",
-    "No POA Asset","Count of proof before transaction","Time since last activity","total smr","Dispense with no proof"
+    "No POA Asset","Count of proof before transaction","Time since last activity","total smr"
 ]
 
 class POAReview:
@@ -345,18 +345,6 @@ class POAReview:
 		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.float32)
 		return self.data
 
-	def mark_dispense_with_no_proof(self):
-		"""Set 'Dispense with no proof' = Yes for transaction rows that have zero proof records (gap for follow-up)."""
-		if "Count of proof before transaction" not in self.data.columns:
-			self.count_proof_before_transaction()
-		self.data["Dispense with no proof"] = ""
-		count_col = self.data["Count of proof before transaction"]
-		self.data.loc[
-			self.transaction_mask & (pd.to_numeric(count_col, errors="coerce").fillna(-1) == 0),
-			"Dispense with no proof",
-		] = "Yes"
-		return self.data
-
 def format_review(review, filename, output_path=None, original_columns=None):
 	"""
 	Format and export the review data to an Excel file with conditional formatting.
@@ -372,9 +360,9 @@ def format_review(review, filename, output_path=None, original_columns=None):
 		filename (str): Input filename (used to generate output filename if output_path not provided)
 		output_path (str, optional): Full path to output file. If not provided, uses default location.
 		original_columns (list, optional): If provided, output keeps these columns in order, then appends
-			the computed columns (No POA Asset, Count of proof..., Time since last activity, total smr, Dispense with no proof). No extra columns and no internal "label" column.
+			the 4 computed columns (No POA Asset, etc.). No extra columns and no internal "label" column.
 	"""
-	COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr", "Dispense with no proof"]
+	COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr"]
 	if original_columns is not None:
 		# Output = original columns (same order) + 4 computed only
 		output_cols = [c for c in original_columns if c in review.columns] + [

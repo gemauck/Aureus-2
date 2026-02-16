@@ -17,7 +17,7 @@ REVIEW_COLS = [
     "Total Fuel Used (L)", "Operation Description / Comment", "Refund Eligibility", "Opening SMR",
     "Closing SMR", "Total SMR Usage", "Material", "Location.1", "Loads / Tonnes", "Activity",
     "Comments", "Source", "Custom Attribute", "No POA Asset", "Count of proof before transaction",
-    "Time since last activity", "total smr", "Dispense with no proof"
+    "Time since last activity", "total smr"
 ]
 
 
@@ -168,18 +168,6 @@ class POAReview:
         self.data.drop(columns=["Last Empty Time"], inplace=True, errors="ignore")
         return self.data
 
-    def mark_dispense_with_no_proof(self):
-        """Set 'Dispense with no proof' = Yes for transaction rows that have zero proof records (gap for follow-up)."""
-        if "Count of proof before transaction" not in self.data.columns:
-            self.count_proof_before_transaction()
-        self.data["Dispense with no proof"] = ""
-        count_col = self.data["Count of proof before transaction"]
-        self.data.loc[
-            self.transaction_mask & (pd.to_numeric(count_col, errors="coerce").fillna(-1) == 0),
-            "Dispense with no proof",
-        ] = "Yes"
-        return self.data
-
     def total_smr(self, sources):
         source_mask = self.data["Source"].isin(sources)
         smr_numeric = pd.to_numeric(
@@ -240,10 +228,9 @@ def run():
     review.count_proof_before_transaction()
     review.time_since_last_activity()
     review.total_smr(sources)
-    review.mark_dispense_with_no_proof()
 
-    # Output: exact original columns (same order) + computed review columns only (no "label", no extra REVIEW_COLS)
-    COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr", "Dispense with no proof"]
+    # Output: exact original columns (same order) + only the 4 computed review columns (no "label", no extra REVIEW_COLS)
+    COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr"]
     output_cols = [c for c in original_columns if c in review.data.columns] + [
         c for c in COMPUTED_COLS if c in review.data.columns
     ]

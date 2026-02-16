@@ -416,7 +416,6 @@ try:
     if "label" not in review.data.columns:
         review.label_rows()
     review.total_smr(sources)
-    review.mark_dispense_with_no_proof()
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     
