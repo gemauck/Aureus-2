@@ -1347,6 +1347,16 @@ model InventoryItem {
   @@index([locationId])
 }
 
+model BOMGroup {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  boms      BOM[]
+
+  @@index([name])
+}
+
 model BOM {
   id                String         @id @default(cuid())
   productSku        String
@@ -1367,12 +1377,15 @@ model BOM {
   instructions      String         @default("")
   thumbnail         String         @default("")
   inventoryItemId   String?
+  groupId           String?
   inventoryItem     InventoryItem? @relation("BOMFinishedProduct", fields: [inventoryItemId], references: [id])
+  group             BOMGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([productSku])
   @@index([status])
   @@index([ownerId])
   @@index([inventoryItemId])
+  @@index([groupId])
 }
 
 model ProductionOrder {

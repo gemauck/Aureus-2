@@ -5,7 +5,7 @@ console.log('🔵 Manufacturing.jsx: Script started loading...');
 // If React isn't ready yet, we fall back to an empty object so the script
 // doesn't crash before we can register a fallback component.
 const ReactGlobal = window.React || {};
-const { useState, useEffect, useCallback, useMemo, useRef, createElement } = ReactGlobal;
+const { useState, useEffect, useCallback, useMemo, useRef, createElement, Fragment } = ReactGlobal;
 // Safely access useAuth - don't destructure if undefined
 const useAuth = window.useAuth || (() => {
   console.error('❌ Manufacturing: useAuth is not available');
@@ -349,6 +349,11 @@ try {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [pendingCreateData, setPendingCreateData] = useState(null);
   const fileInputRef = useRef(null);
+  const [expandedBomId, setExpandedBomId] = useState(null);
+  const [bomGroups, setBomGroups] = useState([]);
+  const [bomGroupFilter, setBomGroupFilter] = useState('');
+  const [showBomGroupsModal, setShowBomGroupsModal] = useState(false);
+  const [newBomGroupName, setNewBomGroupName] = useState('');
 
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
@@ -490,6 +495,19 @@ try {
                 console.error('Error loading BOMs:', error);
                 return { type: 'boms', error };
               })
+          );
+        }
+
+        // BOM Groups
+        if (typeof window.DatabaseAPI.getBOMGroups === 'function') {
+          apiCalls.push(
+            window.DatabaseAPI.getBOMGroups()
+              .then(res => {
+                const list = res?.data?.groups || res?.data || [];
+                setBomGroups(Array.isArray(list) ? list : []);
+                return { type: 'bomGroups', data: list };
+              })
+              .catch(() => ({ type: 'bomGroups', error: true }))
           );
         }
 
@@ -3187,117 +3205,246 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const BOMView = () => {
+    const filteredBoms = bomGroupFilter
+      ? boms.filter(bom => (bom.groupId || '') === bomGroupFilter)
+      : boms;
+    const getGroupName = (groupId) => {
+      if (!groupId) return '—';
+      const g = bomGroups.find(gr => gr.id === groupId);
+      return g ? g.name : '—';
+    };
+
     return (
       <div className="space-y-3">
         {/* Controls */}
         <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-gray-900">Bill of Materials (BOM)</h3>
-            <button
-              onClick={openAddBomModal}
-              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <i className="fas fa-plus text-xs"></i>
-              Create BOM
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={bomGroupFilter}
+                onChange={(e) => setBomGroupFilter(e.target.value)}
+                className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All groups</option>
+                {bomGroups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => { setShowBomGroupsModal(true); setNewBomGroupName(''); }}
+                className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                title="Manage BOM groups"
+              >
+                <i className="fas fa-layer-group mr-1"></i> Groups
+              </button>
+              <button
+                onClick={openAddBomModal}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <i className="fas fa-plus text-xs"></i>
+                Create BOM
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* BOM Cards */}
-        <div className="grid grid-cols-1 gap-3">
-          {boms.map(bom => (
-            <div key={bom.id} className="bg-white rounded-lg border border-gray-200">
-              <div className="p-3 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-sm font-semibold text-gray-900">{bom.productName}</h3>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(bom.status)}`}>
-                        {bom.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4 mt-1">
-                      <p className="text-xs text-gray-500">BOM: {bom.id}</p>
-                      <p className="text-xs text-gray-500">SKU: {bom.productSku}</p>
-                      <p className="text-xs text-gray-500">Version: {bom.version}</p>
-                      <p className="text-xs text-gray-500">Effective: {bom.effectiveDate}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => { setSelectedItem(bom); setModalType('view_bom'); setShowModal(true); }}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2 py-1"
-                      title="View Details"
-                    >
-                      <i className="fas fa-eye"></i>
-                    </button>
-                    <button
-                      onClick={() => openEditBomModal(bom)}
-                      className="text-green-600 hover:text-green-800 text-sm font-medium px-2 py-1"
-                      title="Edit BOM"
-                    >
-                      <i className="fas fa-edit"></i>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBom(bom.id)}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium px-2 py-1"
-                      title="Delete BOM"
-                    >
-                      <i className="fas fa-trash"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="p-3">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Component</th>
-                        <th className="px-2 py-1 text-right text-xs font-medium text-gray-500">Qty</th>
-                        <th className="px-2 py-1 text-right text-xs font-medium text-gray-500">Unit Cost</th>
-                        <th className="px-2 py-1 text-right text-xs font-medium text-gray-500">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {bom.components.map((comp, idx) => (
-                        <tr key={idx}>
-                          <td className="px-2 py-1">
-                            <div className="text-sm text-gray-900">{comp.name}</div>
-                            <div className="text-xs text-gray-500">{comp.sku}</div>
+        {/* BOM List (table with expand on click) */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="w-8 px-2 py-2"></th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Group</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Effective</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total cost</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredBoms.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500">
+                      {boms.length === 0 ? 'No BOMs yet. Create one to get started.' : 'No BOMs in this group.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredBoms.map(bom => {
+                    const isExpanded = expandedBomId === bom.id;
+                    const components = Array.isArray(bom.components) ? bom.components : [];
+                    return (
+                      <Fragment key={bom.id}>
+                        <tr
+                          className={`${isExpanded ? 'bg-blue-50/50' : ''} hover:bg-gray-50 cursor-pointer`}
+                          onClick={() => setExpandedBomId(isExpanded ? null : bom.id)}
+                        >
+                          <td className="px-2 py-2 text-gray-400">
+                            <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs`}></i>
                           </td>
-                          <td className="px-2 py-1 text-sm text-right text-gray-900">{comp.quantity} {comp.unit}</td>
-                          <td className="px-2 py-1 text-sm text-right text-gray-900">{formatCurrency(comp.unitCost)}</td>
-                          <td className="px-2 py-1 text-sm font-semibold text-right text-gray-900">{formatCurrency(comp.totalCost)}</td>
+                          <td className="px-3 py-2">
+                            <span className="text-sm font-medium text-gray-900">{bom.productName}</span>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-600 font-mono">{bom.productSku}</td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{bom.version}</td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(bom.status)}`}>
+                              {bom.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{getGroupName(bom.groupId)}</td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{bom.effectiveDate || '—'}</td>
+                          <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatCurrency(bom.totalCost)}</td>
+                          <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => { setSelectedItem(bom); setModalType('view_bom'); setShowModal(true); }}
+                              className="text-blue-600 hover:text-blue-800 p-1"
+                              title="View"
+                            >
+                              <i className="fas fa-eye"></i>
+                            </button>
+                            <button
+                              onClick={() => openEditBomModal(bom)}
+                              className="text-green-600 hover:text-green-800 p-1"
+                              title="Edit"
+                            >
+                              <i className="fas fa-edit"></i>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBom(bom.id)}
+                              className="text-red-600 hover:text-red-800 p-1"
+                              title="Delete"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                        {isExpanded && (
+                          <tr className="bg-gray-50">
+                            <td colSpan={9} className="px-3 py-3">
+                              <div className="pl-6 space-y-3">
+                                <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">Components</div>
+                                <div className="overflow-x-auto rounded border border-gray-200 bg-white">
+                                  <table className="w-full text-sm">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-600">Component</th>
+                                        <th className="px-3 py-2 text-right font-medium text-gray-600">Qty</th>
+                                        <th className="px-3 py-2 text-right font-medium text-gray-600">Unit Cost</th>
+                                        <th className="px-3 py-2 text-right font-medium text-gray-600">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                      {components.length === 0 ? (
+                                        <tr><td colSpan={4} className="px-3 py-2 text-gray-500">No components</td></tr>
+                                      ) : (
+                                        components.map((comp, idx) => (
+                                          <tr key={idx}>
+                                            <td className="px-3 py-2">
+                                              <span className="text-gray-900">{comp.name}</span>
+                                              <span className="text-gray-500 ml-1 text-xs">({comp.sku})</span>
+                                            </td>
+                                            <td className="px-3 py-2 text-right text-gray-900">{comp.quantity} {comp.unit || 'pcs'}</td>
+                                            <td className="px-3 py-2 text-right text-gray-900">{formatCurrency(comp.unitCost)}</td>
+                                            <td className="px-3 py-2 text-right font-medium text-gray-900">{formatCurrency(comp.totalCost)}</td>
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div className="grid grid-cols-4 gap-4 text-sm">
+                                  <div><span className="text-gray-500">Material</span> <span className="font-medium">{formatCurrency(bom.totalMaterialCost)}</span></div>
+                                  <div><span className="text-gray-500">Labor</span> <span className="font-medium">{formatCurrency(bom.laborCost)}</span></div>
+                                  <div><span className="text-gray-500">Overhead</span> <span className="font-medium">{formatCurrency(bom.overheadCost)}</span></div>
+                                  <div><span className="text-gray-500">Total per unit</span> <span className="font-semibold text-blue-600">{formatCurrency(bom.totalCost)}</span></div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* BOM Groups modal */}
+        {showBomGroupsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-md w-full shadow-xl">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">BOM Groups</h2>
+                <button onClick={() => { setShowBomGroupsModal(false); setNewBomGroupName(''); }} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newBomGroupName}
+                    onChange={(e) => setNewBomGroupName(e.target.value)}
+                    placeholder="New group name"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!newBomGroupName.trim()) return;
+                      try {
+                        const res = await window.DatabaseAPI?.createBOMGroup?.({ name: newBomGroupName.trim() });
+                        if (res?.data?.group) {
+                          setBomGroups(prev => [...prev, res.data.group]);
+                          setNewBomGroupName('');
+                        }
+                      } catch (e) {
+                        console.error(e);
+                        alert('Failed to create group.');
+                      }
+                    }}
+                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <div className="grid grid-cols-4 gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500">Material Cost</p>
-                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(bom.totalMaterialCost)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Labor Cost</p>
-                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(bom.laborCost)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Overhead Cost</p>
-                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(bom.overheadCost)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Total Cost per Unit</p>
-                      <p className="text-sm font-semibold text-blue-600">{formatCurrency(bom.totalCost)}</p>
-                    </div>
-                  </div>
-                </div>
+                <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
+                  {bomGroups.map(g => (
+                    <li key={g.id} className="py-2 flex items-center justify-between">
+                      <span className="text-sm text-gray-900">{g.name}</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`Delete group "${g.name}"? BOMs in this group will be unassigned.`)) return;
+                          try {
+                            await window.DatabaseAPI?.deleteBOMGroup?.(g.id);
+                            setBomGroups(prev => prev.filter(x => x.id !== g.id));
+                            setBoms(prev => prev.map(b => b.groupId === g.id ? { ...b, groupId: null } : b));
+                            if (bomGroupFilter === g.id) setBomGroupFilter('');
+                          } catch (e) {
+                            console.error(e);
+                            alert('Failed to delete group.');
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -3649,7 +3796,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       estimatedTime: 0,
       notes: '',
       thumbnail: '',
-      instructions: ''
+      instructions: '',
+      groupId: ''
     });
     setBomComponents([]);
     setModalType('add_bom');
@@ -3679,7 +3827,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       ...bom,
       inventoryItemId: bom.inventoryItemId || '', // Include inventoryItemId
       thumbnail: bom.thumbnail || '',
-      instructions: bom.instructions || ''
+      instructions: bom.instructions || '',
+      groupId: bom.groupId || ''
     });
     setBomComponents(componentsWithLocation);
     setSelectedItem(bom);
@@ -4061,7 +4210,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         overheadCost,
         totalCost,
         estimatedTime: parseInt(formData.estimatedTime) || 0,
-        effectiveDate: formData.effectiveDate || new Date().toISOString().split('T')[0]
+        effectiveDate: formData.effectiveDate || new Date().toISOString().split('T')[0],
+        groupId: formData.groupId || null
       };
 
       if (selectedItem?.id) {
@@ -5985,6 +6135,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   >
                     <option value="active">Active</option>
                     <option value="draft">Draft</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Group</label>
+                  <select
+                    value={formData.groupId || ''}
+                    onChange={(e) => setFormData({ ...formData, groupId: e.target.value || '' })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">No group</option>
+                    {bomGroups.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>

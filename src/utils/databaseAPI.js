@@ -1764,6 +1764,27 @@ const DatabaseAPI = {
         return response;
     },
 
+    async getBOMGroups() {
+        const raw = await this.makeRequest('/manufacturing/bom-groups');
+        const list = raw?.data?.groups ?? raw?.groups ?? [];
+        return { data: { groups: Array.isArray(list) ? list : [] } };
+    },
+
+    async createBOMGroup(data) {
+        const response = await this.makeRequest('/manufacturing/bom-groups', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        return response;
+    },
+
+    async deleteBOMGroup(id) {
+        const response = await this.makeRequest(`/manufacturing/bom-groups/${id}`, {
+            method: 'DELETE'
+        });
+        return response;
+    },
+
     // MANUFACTURING OPERATIONS - PRODUCTION ORDERS
     async getProductionOrders() {
         const raw = await this.makeRequest('/manufacturing/production-orders');

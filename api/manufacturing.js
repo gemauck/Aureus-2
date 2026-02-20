@@ -481,7 +481,8 @@ async function handler(req, res) {
             tx.inventoryItem.count(),
             tx.stockLocation.count(),
             tx.purchaseOrder.count(),
-            tx.supplier.count()
+            tx.supplier.count(),
+            tx.bOMGroup.count()
           ])
 
           const deleted = {
@@ -492,7 +493,8 @@ async function handler(req, res) {
             inventoryItems: (await tx.inventoryItem.deleteMany()).count,
             stockLocations: (await tx.stockLocation.deleteMany()).count,
             purchaseOrders: (await tx.purchaseOrder.deleteMany()).count,
-            suppliers: (await tx.supplier.deleteMany()).count
+            suppliers: (await tx.supplier.deleteMany()).count,
+            bomGroups: (await tx.bOMGroup.deleteMany()).count
           }
 
           return {
@@ -504,7 +506,8 @@ async function handler(req, res) {
               inventoryItems: counts[4],
               stockLocations: counts[5],
               purchaseOrders: counts[6],
-              suppliers: counts[7]
+              suppliers: counts[7],
+              bomGroups: counts[8]
             },
             deleted
           }
@@ -1553,6 +1556,41 @@ async function handler(req, res) {
     }
   }
 
+  // BOM GROUPS
+  if (resourceType === 'bom-groups') {
+    if (req.method === 'GET' && !id) {
+      try {
+        const groups = await prisma.bOMGroup.findMany({ orderBy: { name: 'asc' } })
+        return ok(res, { groups })
+      } catch (error) {
+        console.error('❌ Failed to list BOM groups:', error)
+        return serverError(res, 'Failed to list BOM groups', error.message)
+      }
+    }
+    if (req.method === 'POST' && !id) {
+      const body = req.body || {}
+      const name = (body.name || '').trim()
+      if (!name) return badRequest(res, 'name is required')
+      try {
+        const group = await prisma.bOMGroup.create({ data: { name } })
+        return created(res, { group })
+      } catch (error) {
+        console.error('❌ Failed to create BOM group:', error)
+        return serverError(res, 'Failed to create BOM group', error.message)
+      }
+    }
+    if (req.method === 'DELETE' && id) {
+      try {
+        await prisma.bOM.updateMany({ where: { groupId: id }, data: { groupId: null } })
+        await prisma.bOMGroup.delete({ where: { id } })
+        return ok(res, { deleted: true })
+      } catch (error) {
+        if (error.code === 'P2025') return notFound(res, 'BOM group not found')
+        return serverError(res, 'Failed to delete BOM group', error.message)
+      }
+    }
+  }
+
   // BILL OF MATERIALS (BOMs)
   if (resourceType === 'boms') {
     // LIST (GET /api/manufacturing/boms)
@@ -1563,12 +1601,14 @@ async function handler(req, res) {
         // Verify BOM table exists first
         try {
           const boms = await prisma.bOM.findMany({
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            include: { group: { select: { id: true, name: true } } }
           })
           
           const formatted = boms.map(bom => ({
             ...bom,
             id: bom.id,
+            groupId: bom.groupId,
             components: parseJson(bom.components),
             effectiveDate: formatDate(bom.effectiveDate),
             createdAt: formatDate(bom.createdAt),
@@ -1673,7 +1713,8 @@ async function handler(req, res) {
             notes: body.notes || '',
             thumbnail: body.thumbnail || '',
             instructions: body.instructions || '',
-            ownerId: null
+            ownerId: null,
+            groupId: body.groupId || null
           }
         })
         
@@ -1750,6 +1791,7 @@ async function handler(req, res) {
         if (body.notes !== undefined) updateData.notes = body.notes
         if (body.thumbnail !== undefined) updateData.thumbnail = body.thumbnail || ''
         if (body.instructions !== undefined) updateData.instructions = body.instructions || ''
+        if (body.groupId !== undefined) updateData.groupId = body.groupId || null
         
         // Recalculate costs if components or cost fields changed
         if (body.components !== undefined || body.laborCost !== undefined || body.overheadCost !== undefined) {
