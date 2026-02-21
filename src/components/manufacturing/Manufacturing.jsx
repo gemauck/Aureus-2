@@ -3377,74 +3377,90 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
         </div>
 
-        {/* BOM Groups modal */}
-        {showBomGroupsModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-md w-full shadow-xl">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">BOM Groups</h2>
-                <button onClick={() => { setShowBomGroupsModal(false); setNewBomGroupName(''); }} className="text-gray-400 hover:text-gray-600">
-                  <i className="fas fa-times"></i>
-                </button>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newBomGroupName}
-                    onChange={(e) => setNewBomGroupName(e.target.value)}
-                    placeholder="New group name"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!newBomGroupName.trim()) return;
-                      try {
-                        const res = await window.DatabaseAPI?.createBOMGroup?.({ name: newBomGroupName.trim() });
-                        if (res?.data?.group) {
-                          setBomGroups(prev => [...prev, res.data.group]);
-                          setNewBomGroupName('');
-                        }
-                      } catch (e) {
-                        console.error(e);
-                        alert('Failed to create group.');
-                      }
-                    }}
-                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Add
+        {/* BOM Groups modal - rendered via portal to avoid focus loss from parent re-renders */}
+        {showBomGroupsModal && (() => {
+          const modalContent = (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => e.target === e.currentTarget && (setShowBomGroupsModal(false), setNewBomGroupName(''))}>
+              <div className="bg-white rounded-lg max-w-md w-full shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">BOM Groups</h2>
+                  <button onClick={() => { setShowBomGroupsModal(false); setNewBomGroupName(''); }} className="text-gray-400 hover:text-gray-600">
+                    <i className="fas fa-times"></i>
                   </button>
                 </div>
-                <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
-                  {bomGroups.map(g => (
-                    <li key={g.id} className="py-2 flex items-center justify-between">
-                      <span className="text-sm text-gray-900">{g.name}</span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!confirm(`Delete group "${g.name}"? BOMs in this group will be unassigned.`)) return;
-                          try {
-                            await window.DatabaseAPI?.deleteBOMGroup?.(g.id);
-                            setBomGroups(prev => prev.filter(x => x.id !== g.id));
-                            setBoms(prev => prev.map(b => b.groupId === g.id ? { ...b, groupId: null } : b));
-                            if (bomGroupFilter === g.id) setBomGroupFilter('');
-                          } catch (e) {
-                            console.error(e);
-                            alert('Failed to delete group.');
+                <div className="p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newBomGroupName}
+                      onChange={(e) => setNewBomGroupName(e.target.value)}
+                      placeholder="New group name"
+                      autoComplete="off"
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const name = newBomGroupName.trim();
+                        if (!name) return;
+                        const api = window.DatabaseAPI;
+                        if (!api?.createBOMGroup) {
+                          alert('BOM groups API is not available.');
+                          return;
+                        }
+                        try {
+                          const res = await api.createBOMGroup({ name });
+                          const group = res?.data?.group ?? res?.group;
+                          if (group && group.id) {
+                            setBomGroups(prev => [...prev, group]);
+                            setNewBomGroupName('');
+                          } else {
+                            alert('Create succeeded but invalid response. Please refresh and try again.');
                           }
-                        }}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        } catch (e) {
+                          console.error('Create BOM group failed:', e);
+                          const msg = e?.message || e?.error?.message || 'Unknown error';
+                          alert('Failed to create group: ' + msg);
+                        }
+                      }}
+                      className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
+                    {bomGroups.map(g => (
+                      <li key={g.id} className="py-2 flex items-center justify-between">
+                        <span className="text-sm text-gray-900">{g.name}</span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Delete group "${g.name}"? BOMs in this group will be unassigned.`)) return;
+                            try {
+                              await window.DatabaseAPI?.deleteBOMGroup?.(g.id);
+                              setBomGroups(prev => prev.filter(x => x.id !== g.id));
+                              setBoms(prev => prev.map(b => b.groupId === g.id ? { ...b, groupId: null } : b));
+                              if (bomGroupFilter === g.id) setBomGroupFilter('');
+                            } catch (e) {
+                              console.error(e);
+                              alert('Failed to delete group.');
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+          return (window.ReactDOM && typeof window.ReactDOM.createPortal === 'function')
+            ? window.ReactDOM.createPortal(modalContent, document.body)
+            : modalContent;
+        })()}
       </div>
     );
   };
