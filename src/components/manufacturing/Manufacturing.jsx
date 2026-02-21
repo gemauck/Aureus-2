@@ -353,7 +353,7 @@ try {
   const [bomGroups, setBomGroups] = useState([]);
   const [bomGroupFilter, setBomGroupFilter] = useState('');
   const [showBomGroupsModal, setShowBomGroupsModal] = useState(false);
-  const [newBomGroupName, setNewBomGroupName] = useState('');
+  const bomGroupInputRef = useRef(null);
 
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
@@ -3233,7 +3233,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </select>
               <button
                 type="button"
-                onClick={() => { setShowBomGroupsModal(true); setNewBomGroupName(''); }}
+                onClick={() => setShowBomGroupsModal(true)}
                 className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                 title="Manage BOM groups"
               >
@@ -3377,23 +3377,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
         </div>
 
-        {/* BOM Groups modal - rendered via portal to avoid focus loss from parent re-renders */}
+        {/* BOM Groups modal - uncontrolled input to avoid focus loss on each keystroke */}
         {showBomGroupsModal && (() => {
           const modalContent = (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => e.target === e.currentTarget && (setShowBomGroupsModal(false), setNewBomGroupName(''))}>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => e.target === e.currentTarget && setShowBomGroupsModal(false)}>
               <div className="bg-white rounded-lg max-w-md w-full shadow-xl" onClick={e => e.stopPropagation()}>
                 <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-gray-900">BOM Groups</h2>
-                  <button onClick={() => { setShowBomGroupsModal(false); setNewBomGroupName(''); }} className="text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setShowBomGroupsModal(false)} className="text-gray-400 hover:text-gray-600">
                     <i className="fas fa-times"></i>
                   </button>
                 </div>
                 <div className="p-4 space-y-3">
                   <div className="flex gap-2">
                     <input
+                      ref={bomGroupInputRef}
                       type="text"
-                      value={newBomGroupName}
-                      onChange={(e) => setNewBomGroupName(e.target.value)}
+                      defaultValue=""
                       placeholder="New group name"
                       autoComplete="off"
                       className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -3401,7 +3401,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <button
                       type="button"
                       onClick={async () => {
-                        const name = newBomGroupName.trim();
+                        const name = (bomGroupInputRef.current?.value || '').trim();
                         if (!name) return;
                         const api = window.DatabaseAPI;
                         if (!api?.createBOMGroup) {
@@ -3413,7 +3413,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           const group = res?.data?.group ?? res?.group;
                           if (group && group.id) {
                             setBomGroups(prev => [...prev, group]);
-                            setNewBomGroupName('');
+                            if (bomGroupInputRef.current) bomGroupInputRef.current.value = '';
                           } else {
                             alert('Create succeeded but invalid response. Please refresh and try again.');
                           }
