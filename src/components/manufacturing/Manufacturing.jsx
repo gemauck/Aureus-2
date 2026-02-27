@@ -836,7 +836,7 @@ try {
     }
   };
 
-  const handleExportInventory = useCallback(() => {
+  const handleExportInventory = useCallback(async () => {
     if (!Array.isArray(inventory) || inventory.length === 0) {
       window.alert('No inventory data available to export.');
       return;
@@ -923,46 +923,87 @@ try {
         return value;
       };
 
-      const sanitizeForCell = (value) =>
-        String(formatValueForCell(value))
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/\r?\n/g, '&#10;');
-
-      let excelContent = '<html xmlns:x="urn:schemas-microsoft-com:office:excel">';
-      excelContent += '<head><meta charset="UTF-8"><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>';
-      excelContent += '<x:Name>Inventory Export</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
-      excelContent += '</x:ExcelWorksheets></x:ExcelWorkbook></xml></head><body>';
-      excelContent += '<table border="1"><thead><tr>';
-
-      orderedKeys.forEach((key) => {
-        excelContent += `<th>${sanitizeForCell(key)}</th>`;
-      });
-
-      excelContent += '</tr></thead><tbody>';
-
-      inventory.forEach((item) => {
-        excelContent += '<tr>';
-        orderedKeys.forEach((key) => {
-          const cellValue = key in item ? item[key] : '';
-          excelContent += `<td>${sanitizeForCell(cellValue)}</td>`;
-        });
-        excelContent += '</tr>';
-      });
-
-      excelContent += '</tbody></table></body></html>';
-
-      const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
       const today = new Date().toISOString().split('T')[0];
-      link.download = `manufacturing_inventory_${today}.xls`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const baseName = `manufacturing_inventory_${today}`;
+
+      // Prefer real .xlsx via XLSX so Excel opens without "format and extension don't match"
+      let XLSXLib = window.XLSX;
+      if (!XLSXLib || !XLSXLib.utils) {
+        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          XLSXLib = window.XLSX;
+        }
+      }
+
+      if (XLSXLib && XLSXLib.utils) {
+        const headerRow = orderedKeys.slice();
+        const dataRows = inventory.map((item) =>
+          orderedKeys.map((key) => formatValueForCell(key in item ? item[key] : ''))
+        );
+        // Sum Total Value column for footer row
+        const totalValueIdx = orderedKeys.indexOf('totalValue');
+        let totalValueSum = 0;
+        if (totalValueIdx !== -1) {
+          inventory.forEach((item) => {
+            const v = item && (item.totalValue ?? item['totalValue']);
+            const n = typeof v === 'number' ? v : Number(v);
+            if (!Number.isNaN(n)) totalValueSum += n;
+          });
+        }
+        const totalRow = orderedKeys.map((key, idx) => {
+          if (key === 'totalValue') return totalValueSum;
+          if (idx === 0) return 'Total';
+          return '';
+        });
+        const aoa = [headerRow, ...dataRows, totalRow];
+        const ws = XLSXLib.utils.aoa_to_sheet(aoa);
+        const wb = XLSXLib.utils.book_new();
+        XLSXLib.utils.book_append_sheet(wb, ws, 'Inventory Export');
+        const out = XLSXLib.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${baseName}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        // Fallback: CSV so the file opens in Excel without format warnings
+        const totalValueIdx = orderedKeys.indexOf('totalValue');
+        let totalValueSum = 0;
+        if (totalValueIdx !== -1) {
+          inventory.forEach((item) => {
+            const v = item && (item.totalValue ?? item['totalValue']);
+            const n = typeof v === 'number' ? v : Number(v);
+            if (!Number.isNaN(n)) totalValueSum += n;
+          });
+        }
+        const sanitizeCsv = (value) => {
+          const s = String(formatValueForCell(value));
+          if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+          return s;
+        };
+        const headerLine = orderedKeys.map(sanitizeCsv).join(',');
+        const dataLines = inventory.map((item) =>
+          orderedKeys.map((key) => sanitizeCsv(key in item ? item[key] : '')).join(',')
+        );
+        const totalRowCells = orderedKeys.map((key, idx) =>
+          key === 'totalValue' ? sanitizeCsv(totalValueSum) : idx === 0 ? 'Total' : ''
+        );
+        const totalLine = totalRowCells.join(',');
+        const csvContent = [headerLine, ...dataLines, totalLine].join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${baseName}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error('Failed to export manufacturing inventory:', error);
       window.alert('Failed to export inventory. Please try again or check the console for details.');
