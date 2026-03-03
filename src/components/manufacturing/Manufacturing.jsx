@@ -170,6 +170,7 @@ try {
   const [inventoryLoadedFromAPI, setInventoryLoadedFromAPI] = useState(false);
   const [boms, setBoms] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
+  const [expandedProductionOrderId, setExpandedProductionOrderId] = useState(null);
   const [salesOrders, setSalesOrders] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   // Initialize movements from localStorage if available
@@ -3506,6 +3507,30 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     );
   };
 
+  // Get BOM for a production order and components with required qty vs on-hand (for expand/print)
+  const getProductionOrderComponentsWithStock = (order) => {
+    const bom = order?.bomId ? boms.find(b => b.id === order.bomId) : boms.find(b => b.productSku === order?.productSku);
+    if (!bom || !Array.isArray(bom.components) || bom.components.length === 0) {
+      return [];
+    }
+    const orderQty = parseInt(order.quantity, 10) || 0;
+    return bom.components.map(comp => {
+      const requiredQty = (parseFloat(comp.quantity) || 0) * orderQty;
+      const invItem = inventory.find(i => (i.sku || '').toString().trim() === (comp.sku || '').toString().trim());
+      const onHand = (invItem?.quantity ?? 0) - (invItem?.allocatedQuantity ?? 0);
+      const inStock = onHand >= requiredQty;
+      return {
+        sku: comp.sku,
+        name: comp.name || comp.sku,
+        unit: comp.unit || '',
+        quantityPerUnit: parseFloat(comp.quantity) || 0,
+        requiredQty,
+        onHand: Math.max(0, onHand),
+        inStock
+      };
+    });
+  };
+
   const ProductionView = () => {
     return (
       <div className="space-y-3">
@@ -3565,6 +3590,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           ) : (
             productionOrders.map(order => {
               const progress = (order.quantityProduced / order.quantity) * 100;
+              const isExpanded = expandedProductionOrderId === order.id;
+              const componentsWithStock = getProductionOrderComponentsWithStock(order);
               return (
                 <div key={order.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
                   <div className="flex items-start justify-between mb-3">
@@ -3620,6 +3647,39 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       </div>
                     )}
                   </div>
+
+                  {/* Components dropdown */}
+                  <div className="mb-3 pt-3 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedProductionOrderId(id => id === order.id ? null : order.id)}
+                      className="flex items-center justify-between w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900"
+                    >
+                      <span>Components required</span>
+                      <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs text-gray-500`}></i>
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+                        {componentsWithStock.length === 0 ? (
+                          <p className="p-3 text-xs text-gray-500">No BOM linked or no components defined.</p>
+                        ) : (
+                          <div className="divide-y divide-gray-200 max-h-48 overflow-y-auto">
+                            {componentsWithStock.map((c, idx) => (
+                              <div key={idx} className="flex items-center justify-between px-3 py-2 text-xs">
+                                <div>
+                                  <span className="font-mono text-gray-900">{c.sku}</span>
+                                  <span className="ml-2 text-gray-700">{c.name}</span>
+                                </div>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded font-medium ${c.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {c.requiredQty} req / {c.onHand} on hand — {c.inStock ? 'In stock' : 'Out of stock'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
@@ -3627,7 +3687,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       onClick={() => { setSelectedItem(order); setModalType('view_production'); setShowModal(true); }}
                       className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
                     >
-                      <i className="fas fa-eye mr-1"></i> View
+                      <i className="fas fa-print mr-1"></i> View / Print
                     </button>
                     <button
                       onClick={() => {
@@ -3663,6 +3723,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-2 py-2 w-9 text-left text-xs font-medium text-gray-500"></th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Order ID</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Product</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
@@ -3676,7 +3737,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <tbody className="divide-y divide-gray-200">
                 {productionOrders.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="px-3 py-12 text-center">
+                    <td colSpan="10" className="px-3 py-12 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <i className="fas fa-industry text-4xl mb-4 text-gray-300"></i>
                         <p className="text-sm font-medium text-gray-700 mb-2">No production orders found</p>
@@ -3706,8 +3767,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 ) : (
                   productionOrders.map(order => {
                   const progress = (order.quantityProduced / order.quantity) * 100;
+                  const isExpanded = expandedProductionOrderId === order.id;
+                  const componentsWithStock = getProductionOrderComponentsWithStock(order);
                   return (
-                    <tr key={order.id} className="hover:bg-gray-50">
+                    <Fragment key={order.id}>
+                    <tr
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={(e) => {
+                        if (!e.target.closest('button')) setExpandedProductionOrderId(id => id === order.id ? null : order.id);
+                      }}
+                    >
+                      <td className="px-2 py-2 text-gray-500">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setExpandedProductionOrderId(id => id === order.id ? null : order.id); }}
+                          className="p-1 rounded hover:bg-gray-200"
+                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                        >
+                          <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs`}></i>
+                        </button>
+                      </td>
                       <td className="px-3 py-2 text-sm font-medium text-gray-900">{order.id}</td>
                       <td className="px-3 py-2">
                         <div className="text-sm font-medium text-gray-900">{order.productName}</div>
@@ -3739,8 +3818,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         {order.completedDate && <div className="text-xs text-green-600">Done: {order.completedDate}</div>}
                       </td>
                       <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(order.totalCost)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setSelectedItem(order); setModalType('view_production'); setShowModal(true); }}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            title="View / Print"
+                          >
+                            <i className="fas fa-print"></i>
+                          </button>
                           <button
                             onClick={() => { 
                               setSelectedItem(order);
@@ -3767,6 +3853,44 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         </div>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr className="bg-gray-50">
+                        <td colSpan="10" className="px-4 py-3">
+                          <div className="text-xs font-semibold text-gray-700 mb-2">Components required</div>
+                          {componentsWithStock.length === 0 ? (
+                            <p className="text-sm text-gray-500">No BOM linked or no components defined.</p>
+                          ) : (
+                            <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden bg-white">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-700">Component</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700">Required</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700">On hand</th>
+                                  <th className="px-3 py-2 text-center font-medium text-gray-700">Stock</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {componentsWithStock.map((c, idx) => (
+                                  <tr key={idx} className="border-t border-gray-200">
+                                    <td className="px-3 py-2 font-mono text-gray-900">{c.sku}</td>
+                                    <td className="px-3 py-2 text-gray-900">{c.name}</td>
+                                    <td className="px-3 py-2 text-right text-gray-900">{c.requiredQty} {c.unit}</td>
+                                    <td className="px-3 py-2 text-right text-gray-900">{c.onHand} {c.unit}</td>
+                                    <td className="px-3 py-2 text-center">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                        {c.inStock ? 'In stock' : 'Out of stock'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
                 )}
@@ -6845,6 +6969,132 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               >
                 {modalType === 'add_production' ? 'Create Production Order' : 'Update Order'}
               </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (modalType === 'view_production' && selectedItem) {
+      const order = selectedItem;
+      const componentsWithStock = getProductionOrderComponentsWithStock(order);
+      const progress = order.quantity ? ((order.quantityProduced || 0) / order.quantity) * 100 : 0;
+
+      const handlePrintProductionOrder = () => {
+        const content = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Production Order ${(order.workOrderNumber || order.id || '').replace(/</g, '')}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; color: #111; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .meta { color: #666; font-size: 0.875rem; margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    th { background: #f5f5f5; font-weight: 600; }
+    .status-in { color: #166534; }
+    .status-out { color: #b91c1c; }
+    .section { margin-top: 1.5rem; }
+    .section-title { font-weight: 600; margin-bottom: 0.5rem; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Production Order: ${(order.productName || order.id || '').replace(/</g, '')}</h1>
+  <div class="meta">
+    Order ID: ${(order.id || '').replace(/</g, '')} &bull; WO: ${(order.workOrderNumber || '—').replace(/</g, '')} &bull; SKU: ${(order.productSku || '—').replace(/</g, '')}<br>
+    Status: ${(order.status || '').replace(/</g, '')} &bull; Priority: ${(order.priority || '').replace(/</g, '')}<br>
+    Quantity: ${(order.quantityProduced ?? 0)} / ${(order.quantity ?? 0)} (${progress.toFixed(0)}% complete)<br>
+    Start: ${(order.startDate || '—').replace(/</g, '')} &bull; Target: ${(order.targetDate || '—').replace(/</g, '')} &bull; Total Cost: ${(formatCurrency(order.totalCost) || '—').replace(/</g, '')}
+  </div>
+  <div class="section">
+    <div class="section-title">Components required</div>
+    <table>
+      <thead><tr><th>SKU</th><th>Component</th><th>Required</th><th>On hand</th><th>Stock</th></tr></thead>
+      <tbody>
+        ${componentsWithStock.map(c => `
+        <tr>
+          <td>${(c.sku || '').replace(/</g, '&lt;')}</td>
+          <td>${(c.name || '').replace(/</g, '&lt;')}</td>
+          <td>${c.requiredQty} ${(c.unit || '').replace(/</g, '')}</td>
+          <td>${c.onHand} ${(c.unit || '').replace(/</g, '')}</td>
+          <td class="${c.inStock ? 'status-in' : 'status-out'}">${c.inStock ? 'In stock' : 'Out of stock'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+  <p class="meta" style="margin-top: 1.5rem;">Printed on ${new Date().toLocaleString()}.</p>
+</body>
+</html>`;
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(content);
+          win.document.close();
+          win.focus();
+          setTimeout(() => { win.print(); win.close(); }, 300);
+        } else {
+          alert('Please allow pop-ups to print.');
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold text-gray-900">Production Order Details</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintProductionOrder}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <i className="fas fa-print"></i> Print
+                </button>
+                <button
+                  onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><span className="text-gray-500">Order ID</span><br/><span className="font-medium">{order.id}</span></div>
+                <div><span className="text-gray-500">Work Order</span><br/><span className="font-medium">{order.workOrderNumber || '—'}</span></div>
+                <div className="col-span-2"><span className="text-gray-500">Product</span><br/><span className="font-medium">{order.productName}</span> <span className="text-gray-500">({order.productSku})</span></div>
+                <div><span className="text-gray-500">Status</span><br/><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(order.status)}`}>{(order.status || '').replace('_', ' ')}</span></div>
+                <div><span className="text-gray-500">Priority</span><br/><span className="font-medium capitalize">{order.priority}</span></div>
+                <div><span className="text-gray-500">Progress</span><br/><span className="font-medium">{order.quantityProduced ?? 0} / {order.quantity ?? 0} ({progress.toFixed(0)}%)</span></div>
+                <div><span className="text-gray-500">Total Cost</span><br/><span className="font-semibold">{formatCurrency(order.totalCost)}</span></div>
+                <div><span className="text-gray-500">Start</span><br/><span className="font-medium">{order.startDate || '—'}</span></div>
+                <div><span className="text-gray-500">Target</span><br/><span className="font-medium">{order.targetDate || '—'}</span></div>
+                {order.completedDate && <div><span className="text-gray-500">Completed</span><br/><span className="font-medium text-green-600">{order.completedDate}</span></div>}
+              </div>
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Components required</h3>
+                {componentsWithStock.length === 0 ? (
+                  <p className="text-sm text-gray-500">No BOM linked or no components defined.</p>
+                ) : (
+                  <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                    <thead><tr className="bg-gray-100"><th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th><th className="px-3 py-2 text-left font-medium text-gray-700">Component</th><th className="px-3 py-2 text-right font-medium text-gray-700">Required</th><th className="px-3 py-2 text-right font-medium text-gray-700">On hand</th><th className="px-3 py-2 text-center font-medium text-gray-700">Stock</th></tr></thead>
+                    <tbody>
+                      {componentsWithStock.map((c, idx) => (
+                        <tr key={idx} className="border-t border-gray-200">
+                          <td className="px-3 py-2 font-mono">{c.sku}</td>
+                          <td className="px-3 py-2">{c.name}</td>
+                          <td className="px-3 py-2 text-right">{c.requiredQty} {c.unit}</td>
+                          <td className="px-3 py-2 text-right">{c.onHand} {c.unit}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.inStock ? 'In stock' : 'Out of stock'}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
           </div>
         </div>
