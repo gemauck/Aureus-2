@@ -3508,27 +3508,36 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   // Get BOM for a production order and components with required qty vs on-hand (for expand/print)
+  // Only include components that have at least SKU or name, so we don't show blank rows
   const getProductionOrderComponentsWithStock = (order) => {
     const bom = order?.bomId ? boms.find(b => b.id === order.bomId) : boms.find(b => b.productSku === order?.productSku);
     if (!bom || !Array.isArray(bom.components) || bom.components.length === 0) {
       return [];
     }
     const orderQty = parseInt(order.quantity, 10) || 0;
-    return bom.components.map(comp => {
-      const requiredQty = (parseFloat(comp.quantity) || 0) * orderQty;
-      const invItem = inventory.find(i => (i.sku || '').toString().trim() === (comp.sku || '').toString().trim());
-      const onHand = (invItem?.quantity ?? 0) - (invItem?.allocatedQuantity ?? 0);
-      const inStock = onHand >= requiredQty;
-      return {
-        sku: comp.sku,
-        name: comp.name || comp.sku,
-        unit: comp.unit || '',
-        quantityPerUnit: parseFloat(comp.quantity) || 0,
-        requiredQty,
-        onHand: Math.max(0, onHand),
-        inStock
-      };
-    });
+    return bom.components
+      .filter(comp => {
+        const hasSku = (comp.sku || '').toString().trim() !== '';
+        const hasName = (comp.name || '').toString().trim() !== '';
+        return hasSku || hasName;
+      })
+      .map(comp => {
+        const sku = (comp.sku || '').toString().trim();
+        const name = (comp.name || '').toString().trim() || sku || '—';
+        const requiredQty = (parseFloat(comp.quantity) || 0) * orderQty;
+        const invItem = sku ? inventory.find(i => (i.sku || '').toString().trim() === sku) : null;
+        const onHand = (invItem?.quantity ?? 0) - (invItem?.allocatedQuantity ?? 0);
+        const inStock = onHand >= requiredQty;
+        return {
+          sku: sku || '—',
+          name: name || '—',
+          unit: comp.unit || '',
+          quantityPerUnit: parseFloat(comp.quantity) || 0,
+          requiredQty,
+          onHand: Math.max(0, onHand),
+          inStock
+        };
+      });
   };
 
   const ProductionView = () => {
