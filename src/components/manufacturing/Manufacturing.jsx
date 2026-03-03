@@ -3527,14 +3527,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const requiredQty = (parseFloat(comp.quantity) || 0) * orderQty;
         const invItem = sku ? inventory.find(i => (i.sku || '').toString().trim() === sku) : null;
         const onHand = (invItem?.quantity ?? 0) - (invItem?.allocatedQuantity ?? 0);
+        const onHandDisplay = Math.max(0, onHand);
         const inStock = onHand >= requiredQty;
+        const amountToOrder = Math.max(0, Math.ceil(requiredQty - onHand));
         return {
           sku: sku || '—',
           name: name || '—',
           unit: comp.unit || '',
           quantityPerUnit: parseFloat(comp.quantity) || 0,
           requiredQty,
-          onHand: Math.max(0, onHand),
+          onHand: onHandDisplay,
+          amountToOrder,
           inStock
         };
       });
@@ -3680,7 +3683,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                   <span className="ml-2 text-gray-700">{c.name}</span>
                                 </div>
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded font-medium ${c.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                  {c.requiredQty} req / {c.onHand} on hand — {c.inStock ? 'In stock' : 'Out of stock'}
+                                  {c.requiredQty} req / {c.onHand} on hand{c.amountToOrder > 0 ? ` / Order ${c.amountToOrder} ${c.unit}` : ''} — {c.inStock ? 'In stock' : 'Out of stock'}
                                 </span>
                               </div>
                             ))}
@@ -3876,6 +3879,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                   <th className="px-3 py-2 text-left font-medium text-gray-700">Component</th>
                                   <th className="px-3 py-2 text-right font-medium text-gray-700">Required</th>
                                   <th className="px-3 py-2 text-right font-medium text-gray-700">On hand</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700">Order</th>
                                   <th className="px-3 py-2 text-center font-medium text-gray-700">Stock</th>
                                 </tr>
                               </thead>
@@ -3886,6 +3890,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                     <td className="px-3 py-2 text-gray-900">{c.name}</td>
                                     <td className="px-3 py-2 text-right text-gray-900">{c.requiredQty} {c.unit}</td>
                                     <td className="px-3 py-2 text-right text-gray-900">{c.onHand} {c.unit}</td>
+                                    <td className="px-3 py-2 text-right font-medium">{c.amountToOrder > 0 ? `${c.amountToOrder} ${c.unit}` : '—'}</td>
                                     <td className="px-3 py-2 text-center">
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                         {c.inStock ? 'In stock' : 'Out of stock'}
@@ -7021,7 +7026,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   <div class="section">
     <div class="section-title">Components required</div>
     <table>
-      <thead><tr><th>SKU</th><th>Component</th><th>Required</th><th>On hand</th><th>Stock</th></tr></thead>
+      <thead><tr><th>SKU</th><th>Component</th><th>Required</th><th>On hand</th><th>Order</th><th>Stock</th></tr></thead>
       <tbody>
         ${componentsWithStock.map(c => `
         <tr>
@@ -7029,6 +7034,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           <td>${(c.name || '').replace(/</g, '&lt;')}</td>
           <td>${c.requiredQty} ${(c.unit || '').replace(/</g, '')}</td>
           <td>${c.onHand} ${(c.unit || '').replace(/</g, '')}</td>
+          <td>${c.amountToOrder > 0 ? c.amountToOrder + ' ' + (c.unit || '').replace(/</g, '') : '—'}</td>
           <td class="${c.inStock ? 'status-in' : 'status-out'}">${c.inStock ? 'In stock' : 'Out of stock'}</td>
         </tr>`).join('')}
       </tbody>
@@ -7087,7 +7093,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <p className="text-sm text-gray-500">No BOM linked or no components defined.</p>
                 ) : (
                   <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-                    <thead><tr className="bg-gray-100"><th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th><th className="px-3 py-2 text-left font-medium text-gray-700">Component</th><th className="px-3 py-2 text-right font-medium text-gray-700">Required</th><th className="px-3 py-2 text-right font-medium text-gray-700">On hand</th><th className="px-3 py-2 text-center font-medium text-gray-700">Stock</th></tr></thead>
+                    <thead><tr className="bg-gray-100"><th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th><th className="px-3 py-2 text-left font-medium text-gray-700">Component</th><th className="px-3 py-2 text-right font-medium text-gray-700">Required</th><th className="px-3 py-2 text-right font-medium text-gray-700">On hand</th><th className="px-3 py-2 text-right font-medium text-gray-700">Order</th><th className="px-3 py-2 text-center font-medium text-gray-700">Stock</th></tr></thead>
                     <tbody>
                       {componentsWithStock.map((c, idx) => (
                         <tr key={idx} className="border-t border-gray-200">
@@ -7095,6 +7101,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <td className="px-3 py-2">{c.name}</td>
                           <td className="px-3 py-2 text-right">{c.requiredQty} {c.unit}</td>
                           <td className="px-3 py-2 text-right">{c.onHand} {c.unit}</td>
+                          <td className="px-3 py-2 text-right font-medium">{c.amountToOrder > 0 ? `${c.amountToOrder} ${c.unit}` : '—'}</td>
                           <td className="px-3 py-2 text-center">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.inStock ? 'In stock' : 'Out of stock'}</span>
                           </td>
