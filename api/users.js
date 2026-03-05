@@ -54,6 +54,7 @@ async function handler(req, res) {
                             name: true,
                             role: true,
                             permissions: true,
+                            accessibleProjectIds: true,
                             status: true,
                             department: true,
                             phone: true,
@@ -67,13 +68,27 @@ async function handler(req, res) {
                             // emergencyContact, invitedBy
                             // These can be fetched on-demand when viewing user details
                         },
-                        orderBy: { createdAt: 'desc' },
-                        // No need to parse permissions here - client can do it if needed
+                        orderBy: { createdAt: 'desc' }
                     })
                     
-                    // Return permissions as-is (string) - client will parse if needed
-                    // This avoids expensive JSON parsing on server for every user
-                    users = usersQuery
+                    // Parse permissions and accessibleProjectIds so Edit User modal shows project checkboxes when opening from list
+                    users = usersQuery.map(u => {
+                        let parsedPermissions = []
+                        if (u.permissions) {
+                            try {
+                                const p = typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions
+                                parsedPermissions = Array.isArray(p) ? p : []
+                            } catch (_) {}
+                        }
+                        let parsedAccessibleProjectIds = []
+                        if (u.accessibleProjectIds) {
+                            try {
+                                const a = typeof u.accessibleProjectIds === 'string' ? JSON.parse(u.accessibleProjectIds) : u.accessibleProjectIds
+                                parsedAccessibleProjectIds = Array.isArray(a) ? a : []
+                            } catch (_) {}
+                        }
+                        return { ...u, permissions: parsedPermissions, accessibleProjectIds: parsedAccessibleProjectIds }
+                    })
                     
                     // Get all invitations (only for admins)
                     try {
