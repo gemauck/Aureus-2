@@ -20,12 +20,18 @@ const ResetPassword = () => {
         e.preventDefault();
         setError('');
         setStatus('');
+        const tokenFromUrl = new URLSearchParams(window.location.search).get('token') || '';
+        const submitToken = token || tokenFromUrl;
+        if (!submitToken) {
+            setError('Invalid reset link. Please use the link from your email.');
+            return;
+        }
         if (!password || !confirm) { setError('Enter and confirm your new password'); return; }
         if (password !== confirm) { setError('Passwords do not match'); return; }
         if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
         try {
             setSubmitting(true);
-            await window.api.resetPassword(token, password);
+            await window.api.resetPassword(submitToken, password);
             setStatus('Password updated. You can now sign in.');
             setTimeout(() => { window.location.href = '/'; }, 1500);
         } catch (e) {
