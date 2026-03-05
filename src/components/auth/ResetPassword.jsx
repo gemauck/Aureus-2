@@ -29,7 +29,9 @@ const ResetPassword = () => {
             setStatus('Password updated. You can now sign in.');
             setTimeout(() => { window.location.href = '/'; }, 1500);
         } catch (e) {
-            setError(e.message || 'Failed to reset password');
+            const msg = e?.message || 'Failed to reset password';
+            const details = e?.details && String(e.details).trim();
+            setError(details ? `${msg} — ${details}` : msg);
         } finally {
             setSubmitting(false);
         }

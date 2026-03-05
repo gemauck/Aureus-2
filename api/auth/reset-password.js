@@ -100,7 +100,8 @@ async function handler(req, res) {
     if (code === 'P2025' || /Record to update not found|Record not found/i.test(msg)) {
       return badRequest(res, 'Invalid or expired token')
     }
-    serverError(res, 'Internal server error', err?.message)
+    const details = `Step: ${lastStep}. ${code ? `Code: ${code}. ` : ''}${msg || 'Unknown error'}`
+    serverError(res, 'Internal server error', details)
   }
 }
 
