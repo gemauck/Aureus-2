@@ -26,6 +26,8 @@ async function handler(req, res) {
                     email: true,
                     name: true,
                     role: true,
+                    permissions: true,
+                    accessibleProjectIds: true,
                     status: true,
                     department: true,
                     jobTitle: true,
@@ -51,7 +53,29 @@ async function handler(req, res) {
                 return notFound(res, 'User not found')
             }
 
-            return ok(res, { user })
+            // Parse JSON fields for frontend (same shape as GET /api/users list)
+            let parsedPermissions = [];
+            if (user.permissions) {
+                try {
+                    const p = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions;
+                    parsedPermissions = Array.isArray(p) ? p : [];
+                } catch (_) {}
+            }
+            let parsedAccessibleProjectIds = [];
+            if (user.accessibleProjectIds) {
+                try {
+                    const a = typeof user.accessibleProjectIds === 'string' ? JSON.parse(user.accessibleProjectIds) : user.accessibleProjectIds;
+                    parsedAccessibleProjectIds = Array.isArray(a) ? a : [];
+                } catch (_) {}
+            }
+
+            return ok(res, {
+                user: {
+                    ...user,
+                    permissions: parsedPermissions,
+                    accessibleProjectIds: parsedAccessibleProjectIds
+                }
+            })
 
         } catch (error) {
             console.error('Get user error:', error)
