@@ -249,19 +249,24 @@ async function handler(req, res) {
 
         await ensureProjectSubresourceColumns();
 
-        // Check if user is guest and has access to this project
+        // Check if user is guest and has access to this project (load accessibleProjectIds from DB; JWT does not include it)
         const userRole = req.user?.role?.toLowerCase();
         let whereClause = { id };
         
         if (userRole === 'guest') {
           try {
-            // Parse accessibleProjectIds from user
             let accessibleProjectIds = [];
-            if (req.user?.accessibleProjectIds) {
-              if (typeof req.user.accessibleProjectIds === 'string') {
-                accessibleProjectIds = JSON.parse(req.user.accessibleProjectIds);
-              } else if (Array.isArray(req.user.accessibleProjectIds)) {
-                accessibleProjectIds = req.user.accessibleProjectIds;
+            if (req.user?.sub) {
+              const dbUser = await prisma.user.findUnique({
+                where: { id: req.user.sub },
+                select: { accessibleProjectIds: true }
+              });
+              if (dbUser?.accessibleProjectIds) {
+                if (typeof dbUser.accessibleProjectIds === 'string') {
+                  accessibleProjectIds = JSON.parse(dbUser.accessibleProjectIds);
+                } else if (Array.isArray(dbUser.accessibleProjectIds)) {
+                  accessibleProjectIds = dbUser.accessibleProjectIds;
+                }
               }
             }
             

@@ -1350,6 +1350,28 @@ async function handler(req, res) {
 
         const userRole = req.user?.role?.toLowerCase();
         
+        // For guest users, load accessibleProjectIds from DB (JWT does not include it)
+        let guestAccessibleProjectIds = null;
+        if (userRole === 'guest' && req.user?.sub) {
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: req.user.sub },
+              select: { accessibleProjectIds: true }
+            });
+            if (dbUser?.accessibleProjectIds) {
+              if (typeof dbUser.accessibleProjectIds === 'string') {
+                guestAccessibleProjectIds = JSON.parse(dbUser.accessibleProjectIds);
+              } else if (Array.isArray(dbUser.accessibleProjectIds)) {
+                guestAccessibleProjectIds = dbUser.accessibleProjectIds;
+              }
+            }
+            if (!Array.isArray(guestAccessibleProjectIds)) guestAccessibleProjectIds = [];
+          } catch (e) {
+            console.error('❌ Error loading guest accessibleProjectIds:', e);
+            guestAccessibleProjectIds = [];
+          }
+        }
+        
         // Parse pagination parameters
         const page = parseInt(req.query?.page) || 1;
         const limit = Math.min(parseInt(req.query?.limit) || 100, 500); // Default 100, max 500
@@ -1360,18 +1382,20 @@ async function handler(req, res) {
         // Build where clause
         let whereClause = {};
         
-        // For guest users, filter by accessibleProjectIds
+        // For guest users, filter by accessibleProjectIds (from DB)
         if (userRole === 'guest') {
           try {
-            // Parse accessibleProjectIds from user
-            let accessibleProjectIds = [];
-            if (req.user?.accessibleProjectIds) {
-              if (typeof req.user.accessibleProjectIds === 'string') {
-                accessibleProjectIds = JSON.parse(req.user.accessibleProjectIds);
-              } else if (Array.isArray(req.user.accessibleProjectIds)) {
-                accessibleProjectIds = req.user.accessibleProjectIds;
+            const accessibleProjectIds = guestAccessibleProjectIds ?? (() => {
+              let ids = [];
+              if (req.user?.accessibleProjectIds) {
+                if (typeof req.user.accessibleProjectIds === 'string') {
+                  try { ids = JSON.parse(req.user.accessibleProjectIds); } catch (_) {}
+                } else if (Array.isArray(req.user.accessibleProjectIds)) {
+                  ids = req.user.accessibleProjectIds;
+                }
               }
-            }
+              return ids;
+            })();
             
             // If no accessible projects specified, return empty array
             if (!accessibleProjectIds || accessibleProjectIds.length === 0) {

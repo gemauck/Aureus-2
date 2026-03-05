@@ -21,6 +21,7 @@ const UserManagement = () => {
     const [selectedPermissions, setSelectedPermissions] = useState([]);
     const [showEditUserModal, setShowEditUserModal] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [editFormAccessibleProjectIds, setEditFormAccessibleProjectIds] = useState([]);
     const [newInvitation, setNewInvitation] = useState({
         email: '',
         name: '',
@@ -76,6 +77,24 @@ const UserManagement = () => {
         
         loadProjects();
     }, [newUser.role, editingUser?.role]);
+
+    // Sync edit-form project selection when edit modal opens (so guest project checkboxes persist)
+    useEffect(() => {
+        if (!editingUser) {
+            setEditFormAccessibleProjectIds([]);
+            return;
+        }
+        if (editingUser.role !== 'guest') return;
+        let ids = [];
+        if (editingUser.accessibleProjectIds) {
+            if (typeof editingUser.accessibleProjectIds === 'string') {
+                try { ids = JSON.parse(editingUser.accessibleProjectIds); } catch (_) {}
+            } else if (Array.isArray(editingUser.accessibleProjectIds)) {
+                ids = editingUser.accessibleProjectIds;
+            }
+        }
+        setEditFormAccessibleProjectIds(Array.isArray(ids) ? ids : []);
+    }, [editingUser?.id, editingUser?.role, editingUser?.accessibleProjectIds]);
 
     const loadUsers = async () => {
         try {
@@ -1591,6 +1610,7 @@ const UserManagement = () => {
                                 onClick={() => {
                                     setShowEditUserModal(false);
                                     setEditingUser(null);
+                                    setEditFormAccessibleProjectIds([]);
                                 }}
                                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                             >
@@ -1601,21 +1621,9 @@ const UserManagement = () => {
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             const formData = new FormData(e.target);
-                            // Parse accessibleProjectIds if role is guest
-                            let accessibleProjectIds = [];
                             const role = formData.get('role');
-                            if (role === 'guest') {
-                                const projectIdsInput = formData.get('accessibleProjectIds');
-                                if (projectIdsInput) {
-                                    try {
-                                        const parsed = JSON.parse(projectIdsInput);
-                                        accessibleProjectIds = Array.isArray(parsed) ? parsed : [];
-                                    } catch (e) {
-                                        console.warn('Failed to parse accessibleProjectIds:', e);
-                                        accessibleProjectIds = [];
-                                    }
-                                }
-                            }
+                            // Use React state for guest project IDs so selections persist (hidden input is not reliable on submit)
+                            const accessibleProjectIds = role === 'guest' ? editFormAccessibleProjectIds : [];
                             
                             const userData = {
                                 name: formData.get('name'),
@@ -1624,7 +1632,7 @@ const UserManagement = () => {
                                 status: formData.get('status'),
                                 department: formData.get('department') || '',
                                 phone: formData.get('phone') || '',
-                                ...(role === 'guest' && { accessibleProjectIds: accessibleProjectIds })
+                                ...(role === 'guest' && { accessibleProjectIds })
                             };
                             
                             
@@ -1632,6 +1640,7 @@ const UserManagement = () => {
                             if (success) {
                                 setShowEditUserModal(false);
                                 setEditingUser(null);
+                                setEditFormAccessibleProjectIds([]);
                             }
                         }} className="space-y-4">
                             <div>
@@ -1670,15 +1679,9 @@ const UserManagement = () => {
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                                     required
                                     onChange={(e) => {
-                                        // Update accessibleProjectIds when role changes
+                                        // Clear project selection when role changes away from guest
                                         if (e.target.value !== 'guest') {
-                                            const form = e.target.closest('form');
-                                            if (form) {
-                                                const hiddenInput = form.querySelector('input[name="accessibleProjectIds"]');
-                                                if (hiddenInput) {
-                                                    hiddenInput.value = '[]';
-                                                }
-                                            }
+                                            setEditFormAccessibleProjectIds([]);
                                         }
                                     }}
                                 >
@@ -1743,24 +1746,7 @@ const UserManagement = () => {
                                     <input
                                         type="hidden"
                                         name="accessibleProjectIds"
-                                        value={JSON.stringify(
-                                            (() => {
-                                                // Parse existing accessibleProjectIds
-                                                let existingIds = [];
-                                                if (editingUser?.accessibleProjectIds) {
-                                                    if (typeof editingUser.accessibleProjectIds === 'string') {
-                                                        try {
-                                                            existingIds = JSON.parse(editingUser.accessibleProjectIds);
-                                                        } catch (e) {
-                                                            existingIds = [];
-                                                        }
-                                                    } else if (Array.isArray(editingUser.accessibleProjectIds)) {
-                                                        existingIds = editingUser.accessibleProjectIds;
-                                                    }
-                                                }
-                                                return existingIds;
-                                            })()
-                                        )}
+                                        value={JSON.stringify(editFormAccessibleProjectIds)}
                                     />
                                     {loadingProjects ? (
                                         <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
@@ -1775,22 +1761,7 @@ const UserManagement = () => {
                                         <div className={`border ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-gray-50'} rounded-lg p-3 max-h-60 overflow-y-auto`}>
                                             <div className="space-y-2" id="edit-user-projects-list">
                                                 {availableProjects.map(project => {
-                                                    const existingIds = (() => {
-                                                        let ids = [];
-                                                        if (editingUser?.accessibleProjectIds) {
-                                                            if (typeof editingUser.accessibleProjectIds === 'string') {
-                                                                try {
-                                                                    ids = JSON.parse(editingUser.accessibleProjectIds);
-                                                                } catch (e) {
-                                                                    ids = [];
-                                                                }
-                                                            } else if (Array.isArray(editingUser.accessibleProjectIds)) {
-                                                                ids = editingUser.accessibleProjectIds;
-                                                            }
-                                                        }
-                                                        return ids;
-                                                    })();
-                                                    const isSelected = existingIds.includes(project.id);
+                                                    const isSelected = editFormAccessibleProjectIds.includes(project.id);
                                                     return (
                                                         <label
                                                             key={project.id}
@@ -1798,25 +1769,15 @@ const UserManagement = () => {
                                                         >
                                                             <input
                                                                 type="checkbox"
-                                                                defaultChecked={isSelected}
+                                                                checked={isSelected}
                                                                 data-project-id={project.id}
                                                                 onChange={(e) => {
-                                                                    const hiddenInput = document.querySelector('input[name="accessibleProjectIds"]');
-                                                                    if (hiddenInput) {
-                                                                        let currentIds = [];
-                                                                        try {
-                                                                            currentIds = JSON.parse(hiddenInput.value);
-                                                                        } catch (e) {
-                                                                            currentIds = [];
-                                                                        }
-                                                                        if (e.target.checked) {
-                                                                            if (!currentIds.includes(project.id)) {
-                                                                                currentIds.push(project.id);
-                                                                            }
-                                                                        } else {
-                                                                            currentIds = currentIds.filter(id => id !== project.id);
-                                                                        }
-                                                                        hiddenInput.value = JSON.stringify(currentIds);
+                                                                    if (e.target.checked) {
+                                                                        setEditFormAccessibleProjectIds(prev => 
+                                                                            prev.includes(project.id) ? prev : [...prev, project.id]
+                                                                        );
+                                                                    } else {
+                                                                        setEditFormAccessibleProjectIds(prev => prev.filter(id => id !== project.id));
                                                                     }
                                                                 }}
                                                                 className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
@@ -1842,6 +1803,7 @@ const UserManagement = () => {
                                     onClick={() => {
                                         setShowEditUserModal(false);
                                         setEditingUser(null);
+                                        setEditFormAccessibleProjectIds([]);
                                     }}
                                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                 >
