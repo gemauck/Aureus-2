@@ -48,10 +48,10 @@ async function handler(req, res) {
     const passwordHash = await bcrypt.hash(password, 10)
 
     lastStep = 'transaction(user.update, passwordReset.update)'
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: false } }),
-      prisma.passwordReset.update({ where: { token: tokenTrimmed }, data: { usedAt: new Date() } })
-    ])
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: false } })
+      await tx.passwordReset.update({ where: { token: tokenTrimmed }, data: { usedAt: new Date() } })
+    })
 
     return ok(res, { message: 'Password has been reset successfully' })
   } catch (err) {
