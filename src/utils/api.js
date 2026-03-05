@@ -350,11 +350,15 @@ async function request(path, options = {}) {
         let errorMessage = 'Service unavailable - database connection issue';
         let errorCode = 'DATABASE_CONNECTION_ERROR';
         
-        // Try to parse error details from response
+        // Try to parse error details from response (support both { error: { code, message } } and flat { code, message })
         try {
           if (text) {
             const jsonData = JSON.parse(text);
-            if (jsonData.code === 'DATABASE_CONNECTION_ERROR') {
+            const err = jsonData?.error;
+            if (err && typeof err === 'object') {
+              errorMessage = err.message || errorMessage;
+              errorCode = err.code || errorCode;
+            } else if (jsonData.code === 'DATABASE_CONNECTION_ERROR') {
               errorMessage = jsonData.message || errorMessage;
               errorCode = jsonData.code;
             }
@@ -363,11 +367,11 @@ async function request(path, options = {}) {
           // If parsing fails, use default message
         }
         
-        const dbError = new Error(errorMessage);
-        dbError.status = 503;
-        dbError.code = errorCode;
-        dbError.isDatabaseError = true;
-        throw dbError;
+        const serviceError = new Error(errorMessage);
+        serviceError.status = 503;
+        serviceError.code = errorCode;
+        serviceError.isDatabaseError = errorCode === 'DATABASE_CONNECTION_ERROR';
+        throw serviceError;
       }
       
       const gatewayError = new Error(`Server unavailable (${res.status}): The server is temporarily unavailable. Please try again later.`);

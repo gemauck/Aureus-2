@@ -32,8 +32,25 @@ async function handler(req, res) {
     console.error('reset-password error:', err?.message || err)
     console.error('reset-password error code:', err?.code)
     if (err?.stack) console.error('reset-password stack:', err.stack)
-    if (err?.code === 'P2021' || (err?.message && /does not exist|PasswordReset/i.test(String(err.message)))) {
-      console.error('reset-password: PasswordReset table may be missing. Run: npx prisma migrate deploy')
+    const isMissingTableOrColumn =
+      err?.code === 'P2021' ||
+      err?.code === 'P2022' ||
+      (err?.message && /does not exist|relation.*PasswordReset|column.*does not exist/i.test(String(err.message)))
+    if (isMissingTableOrColumn) {
+      console.error('reset-password: PasswordReset table/column may be missing. Run the add_password_reset_table migration on the server.')
+      if (!res.headersSent) {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json')
+        res.end(
+          JSON.stringify({
+            error: {
+              code: 'PASSWORD_RESET_UNAVAILABLE',
+              message: 'Password reset is temporarily unavailable. Please contact your administrator.'
+            }
+          })
+        )
+        return
+      }
     }
     return serverError(res, 'Internal server error', err?.message)
   }

@@ -237,6 +237,11 @@ if [ -f "prisma/migrations/manual_add_inventory_box_number.sql" ]; then
     npx prisma db execute --file prisma/migrations/manual_add_inventory_box_number.sql --schema prisma/schema.prisma 2>/dev/null && echo "   ✅ boxNumber column OK" || echo "   ⚠️  Skipped (column may already exist or DB not available)"
 fi
 
+echo "🔧 Ensuring PasswordReset table exists (for forgot-password flow)..."
+if [ -f "prisma/migrations/add_password_reset_table.sql" ]; then
+    npx prisma db execute --file prisma/migrations/add_password_reset_table.sql --schema prisma/schema.prisma 2>/dev/null && echo "   ✅ PasswordReset table OK" || echo "   ⚠️  Skipped (table may already exist or DB not available)"
+fi
+
 echo ""
 echo "🔄 Restarting application with updated environment..."
 # Source environment to ensure DATABASE_URL is loaded
