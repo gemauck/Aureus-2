@@ -10,13 +10,14 @@ async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   try {
     const { email } = req.body || {}
-    if (!email) return badRequest(res, 'Email is required')
+    const emailNormalized = typeof email === 'string' ? email.trim().toLowerCase() : ''
+    if (!emailNormalized) return badRequest(res, 'Email is required')
 
     // Always respond success to avoid user enumeration
     const genericResponse = () => ok(res, { message: 'If the email exists, a reset link has been sent' })
 
-    // Find user silently
-    const user = await prisma.user.findUnique({ where: { email } })
+    // Find user silently (use normalized email for lookup)
+    const user = await prisma.user.findUnique({ where: { email: emailNormalized } })
     if (!user || user.status !== 'active') {
       return genericResponse()
     }
@@ -57,8 +58,10 @@ async function handler(req, res) {
 
     return genericResponse()
   } catch (err) {
-    console.error('request-password-reset error:', err)
-    return serverError(res, 'Internal server error', err.message)
+    console.error('request-password-reset error:', err?.message || err)
+    console.error('request-password-reset error code:', err?.code)
+    if (err?.stack) console.error('request-password-reset stack:', err.stack)
+    return serverError(res, 'Internal server error', err?.message)
   }
 }
 

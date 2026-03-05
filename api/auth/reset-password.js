@@ -8,10 +8,11 @@ async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   try {
     const { token, password } = req.body || {}
-    if (!token || !password) return badRequest(res, 'Token and password are required')
+    const tokenTrimmed = typeof token === 'string' ? token.trim() : ''
+    if (!tokenTrimmed || !password) return badRequest(res, 'Token and password are required')
     if (String(password).length < 8) return badRequest(res, 'Password must be at least 8 characters')
 
-    const reset = await prisma.passwordReset.findUnique({ where: { token } })
+    const reset = await prisma.passwordReset.findUnique({ where: { token: tokenTrimmed } })
     if (!reset) return badRequest(res, 'Invalid or expired token')
     if (reset.usedAt) return badRequest(res, 'Token already used')
     if (reset.expiresAt < new Date()) return badRequest(res, 'Token expired')
@@ -23,13 +24,18 @@ async function handler(req, res) {
 
     await prisma.$transaction([
       prisma.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: false } }),
-      prisma.passwordReset.update({ where: { token }, data: { usedAt: new Date() } })
+      prisma.passwordReset.update({ where: { token: tokenTrimmed }, data: { usedAt: new Date() } })
     ])
 
     return ok(res, { message: 'Password has been reset successfully' })
   } catch (err) {
-    console.error('reset-password error:', err)
-    return serverError(res, 'Internal server error', err.message)
+    console.error('reset-password error:', err?.message || err)
+    console.error('reset-password error code:', err?.code)
+    if (err?.stack) console.error('reset-password stack:', err.stack)
+    if (err?.code === 'P2021' || (err?.message && /does not exist|PasswordReset/i.test(String(err.message)))) {
+      console.error('reset-password: PasswordReset table may be missing. Run: npx prisma migrate deploy')
+    }
+    return serverError(res, 'Internal server error', err?.message)
   }
 }
 
