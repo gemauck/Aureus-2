@@ -44,6 +44,8 @@ const ResetPassword = () => {
                         <p className="text-sm text-gray-600">Choose a new password for your account</p>
                     </div>
                     <form onSubmit={onSubmit} className="space-y-4">
+                        {/* Hidden username for a11y / password manager (reset flow has no username) */}
+                        <input type="text" name="username" autoComplete="username" className="sr-only" tabIndex={-1} aria-hidden="true" />
                         {error && (
                             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">{error}</div>
                         )}
