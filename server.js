@@ -599,12 +599,36 @@ app.all('/api/users/change-password', async (req, res, next) => {
   } catch (e) {
     console.error('❌ Error in change-password handler:', e)
     if (!res.headersSent) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Internal server error',
         message: e.message,
         timestamp: new Date().toISOString()
       })
     }
+    return next(e)
+  }
+})
+
+// Explicit mapping for password reset (ensure these get express.json() body and are easy to find)
+app.all('/api/auth/request-password-reset', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'auth', 'request-password-reset.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in request-password-reset handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e?.message })
+    return next(e)
+  }
+})
+app.all('/api/auth/reset-password', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'auth', 'reset-password.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in reset-password handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e?.message })
     return next(e)
   }
 })

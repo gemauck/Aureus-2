@@ -24,7 +24,12 @@ async function handler(req, res) {
   }
   let lastStep = 'start'
   try {
-    const { token, password } = req.body || {}
+    const body = req.body
+    if (body === undefined || body === null) {
+      console.error('reset-password: req.body missing (middleware order?)')
+      return badRequest(res, 'Invalid request. Please try again.')
+    }
+    const { token, password } = body || {}
     const tokenTrimmed = typeof token === 'string' ? token.trim() : ''
     if (!tokenTrimmed || !password) return badRequest(res, 'Token and password are required')
     if (String(password).length < 8) return badRequest(res, 'Password must be at least 8 characters')
@@ -58,6 +63,22 @@ async function handler(req, res) {
     if (res.headersSent) return
     const code = err?.code
     const msg = String(err?.message || '')
+    const isPrismaClientMissing =
+      /is not a function|Cannot read propert(y|ies).*of undefined|passwordReset.*undefined/i.test(msg)
+    if (isPrismaClientMissing) {
+      console.error('reset-password: Prisma client may be missing passwordReset model or findUnique. Run npx prisma generate on the server.')
+      res.statusCode = 503
+      res.setHeader('Content-Type', 'application/json')
+      res.end(
+        JSON.stringify({
+          error: {
+            code: 'PASSWORD_RESET_UNAVAILABLE',
+            message: 'Password reset is temporarily unavailable. Please contact your administrator.'
+          }
+        })
+      )
+      return
+    }
     const isMissingTableOrColumn =
       code === 'P2021' ||
       code === 'P2022' ||
