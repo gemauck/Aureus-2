@@ -771,49 +771,30 @@ model DocumentSection {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project       Project               @relation("DocumentSections", fields: [projectId], references: [id], onDelete: Cascade)
-  documents     DocumentItem[]
-  subCategories DocumentSubCategory[]
+  project   Project        @relation("DocumentSections", fields: [projectId], references: [id], onDelete: Cascade)
+  documents DocumentItem[]
 
   @@index([projectId])
   @@index([projectId, year])
   @@index([order])
 }
 
-model DocumentSubCategory {
-  id        String   @id @default(cuid())
-  sectionId String
-  name      String
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  section   DocumentSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  documents DocumentItem[]
-
-  @@index([sectionId])
-  @@index([order])
-}
-
 model DocumentItem {
-  id             String    @id @default(cuid())
-  sectionId      String
-  subCategoryId  String?   // Optional: document belongs to a sub-category within the section
-  name           String
-  description    String    @default("")
-  required       Boolean   @default(false)
-  order          Int       @default(0)
-  assignedTo     String?   @default("[]") // JSON array of user ids/names for collection responsibility
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id          String   @id @default(cuid())
+  sectionId   String
+  name        String
+  description String   @default("")
+  required    Boolean  @default(false)
+  order       Int      @default(0)
+  assignedTo  String?  @default("[]") // JSON array of user ids/names for collection responsibility
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  section      DocumentSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  subCategory  DocumentSubCategory?  @relation(fields: [subCategoryId], references: [id], onDelete: SetNull)
-  statuses     DocumentItemStatus[]
-  comments     DocumentItemComment[]
+  section  DocumentSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  statuses DocumentItemStatus[]
+  comments DocumentItemComment[]
 
   @@index([sectionId])
-  @@index([subCategoryId])
   @@index([order])
 }
 
