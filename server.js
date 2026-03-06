@@ -2102,8 +2102,9 @@ app.get(/^\/api\/poa-review\/pyodide\/(.*)$/, async (req, res) => {
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
   let timeout = null
+  let handlerPath
   try {
-    const handlerPath = toHandlerPath(req.url)
+    handlerPath = toHandlerPath(req.url)
     if (process.env.NODE_ENV === 'development') {
       console.log(`🔍 Loading handler for ${req.method} ${req.url} -> ${handlerPath}`)
     }
@@ -2165,7 +2166,6 @@ app.use('/api', async (req, res) => {
       }
     } catch (handlerError) {
       clearTimeout(timeout)
-      
       // Log detailed error information
       console.error('❌ Handler execution error:', {
         method: req.method,
@@ -2228,7 +2228,6 @@ app.use('/api', async (req, res) => {
     
   } catch (error) {
     if (timeout) clearTimeout(timeout)
-    
     // GET document-collection-email-activity: never 500, always 200 + empty activity (even on load/other errors)
     const isGetActivity = req.method === 'GET' && (
       (req.url && req.url.includes('document-collection-email-activity')) ||
