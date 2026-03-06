@@ -7208,7 +7208,6 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 </tr>
                                             );
                                             });
-                                        });
                                     })()}
                                     </tbody>
                                 </table>
