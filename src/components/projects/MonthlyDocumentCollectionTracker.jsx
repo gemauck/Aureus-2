@@ -392,8 +392,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return out;
     };
 
-    // Build table rows for a section: subcategory header rows + document rows.
-    // Every subcategory gets a header row (even with 0 documents) so "Add sub-category" is visible.
+    // Build table rows for a section: subcategory header rows + document rows in display order
     const getSectionRows = (section) => {
         const docs = section.documents || [];
         const subCats = section.subCategories || [];
@@ -401,20 +400,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return docs.map((doc, i) => ({ type: 'document', document: doc, docIndex: i }));
         }
         const rows = [];
-        // Uncategorized documents first (no subcategory header)
-        const uncategorized = docs.filter(d => !d.subCategoryId);
-        uncategorized.forEach((doc, i) => {
-            const docIndex = docs.indexOf(doc);
-            rows.push({ type: 'document', document: doc, docIndex: docIndex >= 0 ? docIndex : i });
-        });
-        // Then each subcategory: header row + its documents
-        subCats.forEach((sc) => {
-            rows.push({ type: 'subcategory', subCategory: sc });
-            docs.forEach((doc, docIndex) => {
-                if (doc.subCategoryId === sc.id) {
-                    rows.push({ type: 'document', document: doc, docIndex });
-                }
-            });
+        let prevSubId = null;
+        docs.forEach((doc, docIndex) => {
+            if (doc.subCategoryId && doc.subCategoryId !== prevSubId) {
+                const sc = subCats.find(s => s.id === doc.subCategoryId);
+                if (sc) rows.push({ type: 'subcategory', subCategory: sc });
+                prevSubId = doc.subCategoryId;
+            }
+            rows.push({ type: 'document', document: doc, docIndex });
         });
         return rows;
     };
