@@ -8,6 +8,20 @@ import { parseJsonBody } from '../../_lib/body.js'
 import { normalizeDocumentCollectionCell, normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
 import { ok, badRequest, serverError } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
+import { appendFileSync, existsSync, mkdirSync } from 'fs'
+import { join } from 'path'
+
+function debugLogHandler (payload) {
+  try {
+    const dir = join(process.cwd(), '.cursor')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    const logPath = join(dir, 'debug-966947.log')
+    appendFileSync(logPath, JSON.stringify({ sessionId: '966947', ...payload, timestamp: payload.timestamp || Date.now() }) + '\n')
+  } catch (_) {}
+  try {
+    fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '966947' }, body: JSON.stringify({ sessionId: '966947', ...payload }) }).catch(() => {})
+  } catch (_) {}
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function parseCcFromText(text) {
@@ -173,6 +187,11 @@ function withGetSafe(fn) {
   const empty = JSON.stringify({ data: { sent: [], received: [] } })
   return function (req, res) {
     if (req.method !== 'GET') return fn(req, res)
+    // #region agent log
+    try {
+      debugLogHandler({ location: 'document-collection-email-activity.js:withGetSafe', message: 'handler GET entered', data: { method: req.method }, hypothesisId: 'C' })
+    } catch (_) {}
+    // #endregion
     const sendEmpty = () => {
       if (res.headersSent || res.writableEnded) return
       try {

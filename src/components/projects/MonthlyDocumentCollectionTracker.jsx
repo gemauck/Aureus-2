@@ -4188,9 +4188,16 @@ Abcotronics`;
                 cache: 'no-store',
                 headers: { Accept: 'application/json', 'Cache-Control': 'no-store', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
             })
-                .then((res) => res.json().catch(() => ({})))
-                .then((json) => {
+                .then((res) => {
+                    const ok = res.ok;
+                    return res.json().catch(() => ({})).then((json) => ({ ok, json }));
+                })
+                .then(({ ok, json }) => {
                     if (fetchId !== activityFetchIdRef.current) return;
+                    if (!ok) {
+                        setEmailActivity({ sent: [], received: [] });
+                        return;
+                    }
                     const data = json.data || json;
                     setEmailActivity({
                         sent: Array.isArray(data.sent) ? data.sent : [],
