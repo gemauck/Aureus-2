@@ -298,8 +298,22 @@ async function handler(req, res) {
     return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
   }
 
-  // Query by projectId + documentId + month + year only (no sectionId filter) so activity survives hard refresh
-  // regardless of which section the user opens after reload (same document id = same sent history)
+  try {
+    await getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q })
+    return
+  } catch (e) {
+    console.error('GET document-collection-email-activity error:', e)
+    if (!res.headersSent && !res.writableEnded) {
+      try {
+        return ok(res, { sent: [], received: [] })
+      } catch (_) {
+        try { res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } })) } catch (__) {}
+      }
+    }
+  }
+}
+
+async function getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q }) {
   const sentWhere = {
     projectId: cell.projectId,
     documentId: cell.documentId,
@@ -307,7 +321,6 @@ async function handler(req, res) {
     month: cell.month,
     kind: 'sent'
   }
-
   let sent = []
   try {
     if (prisma.documentCollectionEmailLog) {
@@ -582,7 +595,12 @@ async function handler(req, res) {
     return ok(res, { sent, received })
   } catch (e) {
     console.error('GET document-collection-email-activity error:', e)
-    return ok(res, { sent, received: [] })
+    try {
+      return ok(res, { sent, received: [] })
+    } catch (serialErr) {
+      console.error('GET document-collection-email-activity serialize error:', serialErr)
+      if (!res.headersSent && !res.writableEnded) return ok(res, { sent: [], received: [] })
+    }
   }
 }
 
