@@ -314,6 +314,23 @@ async function handler(req, res) {
 }
 
 async function getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q }) {
+  const sendEmpty = () => {
+    if (res.headersSent || res.writableEnded) return
+    try {
+      ok(res, { sent: [], received: [] })
+    } catch (_) {
+      try { res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } })) } catch (__) {}
+    }
+  }
+  try {
+    return await getDocumentCollectionEmailActivityInner(req, res, { cell, documentName, params, q })
+  } catch (e) {
+    console.error('GET document-collection-email-activity error:', e)
+    sendEmpty()
+  }
+}
+
+async function getDocumentCollectionEmailActivityInner(req, res, { cell, documentName, params, q }) {
   const sentWhere = {
     projectId: cell.projectId,
     documentId: cell.documentId,

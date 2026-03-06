@@ -6848,7 +6848,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                     </div>
                                                                 </>
                                                             ) : (
-                                                                <>
+                                                                <div className="contents">
                                                             {canDrag ? (
                                                                 <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
                                                                     <i className="fas fa-grip-vertical text-[10px]"></i>
@@ -7036,7 +7036,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 })()}
                                                             </div>
                                                             </div>
-                                                                </>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </td>
