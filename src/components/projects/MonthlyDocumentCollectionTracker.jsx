@@ -4000,16 +4000,20 @@ const getAssigneeColor = (identifier, users) => {
         const month = ctx?.month || '';
         const projectName = project?.name || 'Project';
         const currentPeriodText = `${month} ${selectedYear}`.trim();
+        // When doc is a sub-document, include parent so email references main/parent and relevant child
+        const parentDoc = ctx?.section?.documents?.find((d) => d.id === ctx?.doc?.parentId);
+        const parentName = parentDoc?.name || null;
+        const documentLabel = parentName ? `${parentName} – ${docName}` : docName;
         // Include section (location) in subject so reply matching can route to the correct section's document (e.g. Barberton vs Mafube)
         const defaultSubject = sectionName
-            ? `Abco Document / Data request: ${projectName} – ${sectionName} – ${docName} – ${currentPeriodText}`
-            : `Abco Document / Data request: ${projectName} – ${docName} – ${currentPeriodText}`;
+            ? `Abco Document / Data request: ${projectName} – ${sectionName} – ${documentLabel} – ${currentPeriodText}`
+            : `Abco Document / Data request: ${projectName} – ${documentLabel} – ${currentPeriodText}`;
         const defaultBody = `Hello Recipient Name,
 
 We are following up regarding the documents below. This request is for our internal records and audit trail.
 
 Requested details:
-• Document / Data: ${docName}
+• Document / Data: ${documentLabel}
 • Period: ${currentPeriodText}
 • Project: ${projectName}${sectionName ? `\n• Section: ${sectionName}` : ''}
 
@@ -4641,7 +4645,7 @@ Abcotronics`;
     <div style="background: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
       <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; font-weight: bold;">Context</div>
       <div style="font-size: 14px; color: #334155; line-height: 1.6;">
-        <strong>Document / Data:</strong> ${escapeHtml(docName)}<br>
+        <strong>Document / Data:</strong> ${escapeHtml(documentLabel)}<br>
         <strong>Period:</strong> ${escapeHtml(currentPeriodText)}<br>
         <strong>Project:</strong> ${escapeHtml(projectName)}${sectionName ? `<br><strong>Section:</strong> ${escapeHtml(sectionName)}` : ''}
       </div>

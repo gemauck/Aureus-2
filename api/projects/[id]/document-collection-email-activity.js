@@ -282,34 +282,38 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'GET, DELETE, PATCH').json({ error: 'Method not allowed' })
   }
 
-  const fullUrl = req.originalUrl || req.url || ''
-  const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
-  const params = new URLSearchParams(query)
-  const q = req.query || {}
-  const documentId = (params.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null)
-  const documentName = (params.get('documentName')?.trim() || (q.documentName != null ? String(q.documentName).trim() : null) || null)
-  const monthParam = params.get('month') ?? q.month
-  const yearParam = params.get('year') ?? q.year
-  const month = monthParam != null ? parseInt(String(monthParam), 10) : null
-  const year = yearParam != null ? parseInt(String(yearParam), 10) : null
-
-  const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
-  if (!cell) {
-    return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
+  const sendEmptyActivity = () => {
+    if (res.headersSent || res.writableEnded) return
+    try {
+      ok(res, { sent: [], received: [] })
+    } catch (_) {
+      try { res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } })) } catch (__) {}
+    }
   }
 
   try {
+    const fullUrl = req.originalUrl || req.url || ''
+    const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
+    const params = new URLSearchParams(query)
+    const q = req.query || {}
+    const documentId = (params.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null)
+    const documentName = (params.get('documentName')?.trim() || (q.documentName != null ? String(q.documentName).trim() : null) || null)
+    const monthParam = params.get('month') ?? q.month
+    const yearParam = params.get('year') ?? q.year
+    const month = monthParam != null ? parseInt(String(monthParam), 10) : null
+    const year = yearParam != null ? parseInt(String(yearParam), 10) : null
+
+    const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
+    if (!cell) {
+      return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
+    }
+
     await getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q })
     return
   } catch (e) {
     console.error('GET document-collection-email-activity error:', e)
-    if (!res.headersSent && !res.writableEnded) {
-      try {
-        return ok(res, { sent: [], received: [] })
-      } catch (_) {
-        try { res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } })) } catch (__) {}
-      }
-    }
+    sendEmptyActivity()
+    return
   }
 }
 
@@ -384,13 +388,17 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
               documentId: true,
               ...buildSentSelect({ includeMessageId: false })
             }
-            fallback = await prisma.documentCollectionEmailLog.findMany({
-              where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
-              orderBy: { createdAt: 'asc' },
-              select: fallbackSelectNoMessageId
-            })
+            try {
+              fallback = await prisma.documentCollectionEmailLog.findMany({
+                where: { projectId: cell.projectId, year: cell.year, month: cell.month, kind: 'sent' },
+                orderBy: { createdAt: 'asc' },
+                select: fallbackSelectNoMessageId
+              })
+            } catch (_) {
+              fallback = []
+            }
           } else {
-            throw fallbackErr
+            console.error('document-collection-email-activity: fallback query failed:', fallbackErr.message)
           }
         }
         const exactMatch = fallback
