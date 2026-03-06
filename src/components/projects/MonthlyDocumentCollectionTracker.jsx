@@ -3608,18 +3608,7 @@ const getAssigneeColor = (identifier, users) => {
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, doc, month, isSubRow = false) => {
-        // Sub-document rows: no status/mail/comment controls (parent row carries status)
-        if (isSubRow) {
-            return (
-                <td
-                    className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-50/30 text-gray-400"
-                    role="gridcell"
-                >
-                    <span className="sr-only">Sub-document (status on parent row)</span>
-                </td>
-            );
-        }
+    const renderStatusCell = (section, doc, month) => {
         const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(doc, month);
@@ -7040,7 +7029,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     </td>
                                                     {months.map((month) => (
                                                         <React.Fragment key={`${doc.id}-${month}`}>
-                                                            {renderStatusCell(section, doc, month, isSubRow)}
+                                                            {renderStatusCell(section, doc, month)}
                                                         </React.Fragment>
                                                     ))}
                                                     <td className="px-4 py-2 border-l-2 border-gray-200">
