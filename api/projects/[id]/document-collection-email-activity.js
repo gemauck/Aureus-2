@@ -144,6 +144,31 @@ async function refreshResendDeliveryStatus(sentLogs, { force = false } = {}) {
 }
 
 async function handler(req, res) {
+  const emptyPayload = JSON.stringify({ data: { sent: [], received: [] } })
+  const sendEmpty = () => {
+    if (res.headersSent || res.writableEnded) return
+    try {
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json')
+      res.end(emptyPayload)
+    } catch (_) {
+      try { if (res.end) res.end() } catch (__) {}
+    }
+  }
+
+  try {
+    return await runHandler(req, res, sendEmpty)
+  } catch (e) {
+    console.error('document-collection-email-activity handler error:', e)
+    if (req.method === 'GET') {
+      sendEmpty()
+    } else {
+      throw e
+    }
+  }
+}
+
+async function runHandler(req, res, sendEmptyActivity) {
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
   if (!projectId) {
     return badRequest(res, 'Project ID required')
@@ -283,18 +308,6 @@ async function handler(req, res) {
   }
 
   // GET: never 500 — catch every possible error and respond with 200 + empty activity
-  const emptyPayload = JSON.stringify({ data: { sent: [], received: [] } })
-  const sendEmptyActivity = () => {
-    if (res.headersSent || res.writableEnded) return
-    try {
-      res.statusCode = 200
-      res.setHeader('Content-Type', 'application/json')
-      res.end(emptyPayload)
-    } catch (_) {
-      try { res.end && res.end() } catch (__) {}
-    }
-  }
-
   try {
     const fullUrl = req.originalUrl || req.url || ''
     const query = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
