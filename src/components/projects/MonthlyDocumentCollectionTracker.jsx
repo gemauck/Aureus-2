@@ -6826,7 +6826,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 return (
                                                 <tr
                                                     key={doc.id}
-                                                    className={`transition-colors border-b border-gray-100 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'} ${isSubRow ? 'bg-gray-50/50' : ''}`}
+                                                    className={`transition-colors border-b border-gray-100 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'} ${isSubRow ? 'bg-gray-50/50' : ''} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}
                                                     draggable={canDrag}
                                                     onDragStart={canDrag ? (e) => handleDocumentDragStart(section.id, docIndex, e) : undefined}
                                                     onDragEnd={handleDocumentDragEnd}
@@ -6835,10 +6835,20 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={canDrag ? (e) => handleDocumentDrop(e, section.id, docIndex) : undefined}
                                                 >
                                                     <td
-                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-50' : 'bg-white'}`}
+                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-50' : isMasterGreyedOut ? 'bg-gray-200' : 'bg-white'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
+                                                            {isMasterGreyedOut ? (
+                                                                <>
+                                                                    <span className="inline-flex flex-shrink-0 w-4" aria-hidden="true"></span>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="text-sm font-semibold text-gray-500 leading-snug">{doc.name}</div>
+                                                                        <span className="sr-only">Parent row – status and options are on sub-document rows</span>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <>
                                                             {canDrag ? (
                                                                 <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
                                                                     <i className="fas fa-grip-vertical text-[10px]"></i>
@@ -7026,13 +7036,26 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 })()}
                                                             </div>
                                                             </div>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </td>
-                                                    {months.map((month) => (
-                                                        <React.Fragment key={`${doc.id}-${month}`}>
-                                                            {renderStatusCell(section, doc, month)}
-                                                        </React.Fragment>
-                                                    ))}
-                                                    <td className="px-4 py-2 border-l-2 border-gray-200">
+                                                    {isMasterGreyedOut ? (
+                                                        months.map((month) => (
+                                                            <td
+                                                                key={`${doc.id}-${month}`}
+                                                                className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200"
+                                                                role="gridcell"
+                                                            />
+                                                        ))
+                                                    ) : (
+                                                        months.map((month) => (
+                                                            <React.Fragment key={`${doc.id}-${month}`}>
+                                                                {renderStatusCell(section, doc, month)}
+                                                            </React.Fragment>
+                                                        ))
+                                                    )}
+                                                    <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
                                                         <div className="flex items-center gap-2 justify-center">
                                                             {!doc.parentId && (
                                                                 <button
