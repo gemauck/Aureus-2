@@ -282,12 +282,16 @@ async function handler(req, res) {
     return res.status(405).setHeader('Allow', 'GET, DELETE, PATCH').json({ error: 'Method not allowed' })
   }
 
+  // GET: never 500 — catch every possible error and respond with 200 + empty activity
+  const emptyPayload = JSON.stringify({ data: { sent: [], received: [] } })
   const sendEmptyActivity = () => {
     if (res.headersSent || res.writableEnded) return
     try {
-      ok(res, { sent: [], received: [] })
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json')
+      res.end(emptyPayload)
     } catch (_) {
-      try { res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } })) } catch (__) {}
+      try { res.end && res.end() } catch (__) {}
     }
   }
 
@@ -305,11 +309,14 @@ async function handler(req, res) {
 
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
     if (!cell) {
-      return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
+      if (!res.headersSent && !res.writableEnded) {
+        return badRequest(res, 'Query parameters documentId, month (1-12), and year are required')
+      }
+      return
     }
 
-    await getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q })
-    return
+    const result = await getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q })
+    return result
   } catch (e) {
     console.error('GET document-collection-email-activity error:', e)
     sendEmptyActivity()
@@ -318,12 +325,15 @@ async function handler(req, res) {
 }
 
 async function getDocumentCollectionEmailActivity(req, res, { cell, documentName, params, q }) {
+  const emptyPayload = JSON.stringify({ data: { sent: [], received: [] } })
   const sendEmpty = () => {
     if (res.headersSent || res.writableEnded) return
     try {
-      ok(res, { sent: [], received: [] })
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json')
+      res.end(emptyPayload)
     } catch (_) {
-      try { res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } })) } catch (__) {}
+      try { if (res.end) res.end() } catch (__) {}
     }
   }
   try {
@@ -620,11 +630,16 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
     return ok(res, { sent, received })
   } catch (e) {
     console.error('GET document-collection-email-activity error:', e)
-    try {
-      return ok(res, { sent, received: [] })
-    } catch (serialErr) {
-      console.error('GET document-collection-email-activity serialize error:', serialErr)
-      if (!res.headersSent && !res.writableEnded) return ok(res, { sent: [], received: [] })
+    if (!res.headersSent && !res.writableEnded) {
+      try {
+        ok(res, { sent: sent || [], received: [] })
+      } catch (_) {
+        try {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ data: { sent: sent || [], received: [] } }))
+        } catch (__) {}
+      }
     }
   }
 }
