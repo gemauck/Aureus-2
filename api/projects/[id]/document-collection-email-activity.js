@@ -171,21 +171,36 @@ async function handler(req, res) {
 /** For GET only: catch any error (including from auth) and send 200 + empty so the route never 500s. */
 function withGetSafe(fn) {
   const empty = JSON.stringify({ data: { sent: [], received: [] } })
-  return async function (req, res) {
+  return function (req, res) {
     if (req.method !== 'GET') return fn(req, res)
-    try {
-      const p = fn(req, res)
-      if (p != null && typeof p.then === 'function') await p
-    } catch (e) {
-      console.error('document-collection-email-activity GET safe wrapper:', e?.message || e)
-    }
-    if (!res.headersSent && !res.writableEnded) {
+    const sendEmpty = () => {
+      if (res.headersSent || res.writableEnded) return
       try {
         res.statusCode = 200
         res.setHeader('Content-Type', 'application/json')
         res.end(empty)
       } catch (_) {}
     }
+    let p
+    try {
+      p = fn(req, res)
+    } catch (e) {
+      console.error('document-collection-email-activity GET safe wrapper (sync):', e?.message || e)
+      sendEmpty()
+      return
+    }
+    if (p == null || typeof p.then !== 'function') {
+      if (!res.headersSent && !res.writableEnded) sendEmpty()
+      return
+    }
+    return p
+      .then(() => {
+        if (!res.headersSent && !res.writableEnded) sendEmpty()
+      })
+      .catch((e) => {
+        console.error('document-collection-email-activity GET safe wrapper:', e?.message || e)
+        sendEmpty()
+      })
   }
 }
 
