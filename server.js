@@ -350,19 +350,6 @@ const calendarNotesLimiter = rateLimit({
 // Apply calendar-notes limiter first (before general API limiter)
 app.use('/api/calendar-notes', calendarNotesLimiter)
 
-// GET document-collection-email-activity: MUST run first for /api so nothing else can 500 (before apiLimiter)
-app.use('/api', (req, res, next) => {
-  const raw = [req.url, req.originalUrl, req.path].filter(Boolean).join(' ')
-  const isGetActivity = req.method === 'GET' && raw.toLowerCase().includes('document-collection-email-activity')
-  if (isGetActivity && !res.headersSent && !res.writableEnded) {
-    res.setHeader('Content-Type', 'application/json')
-    res.setHeader('X-Document-Collection-Activity', 'ok')
-    res.status(200).end(JSON.stringify({ data: { sent: [], received: [] } }))
-    return
-  }
-  next()
-})
-
 // Apply general API rate limiting (skips calendar-notes)
 app.use('/api', apiLimiter)
 
