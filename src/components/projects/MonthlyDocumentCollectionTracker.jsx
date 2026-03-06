@@ -6835,7 +6835,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={canDrag ? (e) => handleDocumentDrop(e, section.id, docIndex) : undefined}
                                                 >
                                                     <td
-                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-50/50' : 'bg-white'}`}
+                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-100' : 'bg-white'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
