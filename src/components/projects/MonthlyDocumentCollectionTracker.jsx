@@ -1263,8 +1263,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
     }, [showTemplateModal, showApplyTemplateModal]);
     
-    // Build a lightweight template snapshot from the current year's sections,
-    // stripping out runtime-only fields like collectionStatus/comments.
     const buildTemplateSectionsFromCurrent = () => {
         return (sections || []).map(section => ({
             name: section.name,
@@ -1958,6 +1956,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // DOCUMENT CRUD
     // ============================================================
     
+    // Ordered rows for display: each root then its children (for sub-document hierarchy)
+    const getOrderedDocumentRows = (section) => {
+        const docs = section.documents || [];
+        const roots = docs.filter(d => !d.parentId);
+        const result = [];
+        roots.forEach(root => {
+            result.push({ doc: root, isSubRow: false });
+            docs.filter(d => d.parentId === root.id).forEach(child => {
+                result.push({ doc: child, isSubRow: true });
+            });
+        });
+        return result;
+    };
+
+    const hasChildDocuments = (section, doc) => {
+        if (!section || !section.documents || !doc) return false;
+        return section.documents.some(d => d.parentId === doc.id);
+    };
+    
     const handleAddDocument = (sectionId) => {
         if (!sectionId) {
             alert('Error: Cannot add document. Section ID is missing.');
@@ -1974,6 +1991,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setShowDocumentModal(true);
     };
     
+    const handleAddSubDocument = (sectionId, parentDoc) => {
+        const section = sections.find(s => String(s.id) === String(sectionId));
+        if (!section) return;
+        const ordered = getOrderedDocumentRows(section);
+        const parentRowIndex = ordered.findIndex(r => r.doc.id === parentDoc.id);
+        if (parentRowIndex === -1) return;
+        const newDoc = {
+            id: Date.now(),
+            name: 'New sub-document',
+            description: '',
+            collectionStatus: {},
+            comments: {},
+            assignedTo: [],
+            parentId: parentDoc.id
+        };
+        const newOrdered = [...ordered];
+        newOrdered.splice(parentRowIndex + 1, 0, { doc: newDoc, isSubRow: true });
+        const newDocuments = newOrdered.map(r => r.doc);
+        setSections(prev => prev.map(sec => String(sec.id) === String(sectionId) ? { ...sec, documents: newDocuments } : sec));
+        setEditingSectionId(sectionId);
+        setEditingDocument(newDoc);
+        setShowDocumentModal(true);
+    };
+    
     const handleSaveDocument = (documentData) => {
         if (!editingSectionId) {
             alert('Error: No section selected.');
@@ -1983,12 +2024,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setSections(prev => prev.map(section => {
             if (section.id === editingSectionId) {
                 if (editingDocument) {
-                    // Update existing document
+                    // Update existing document (preserve parentId for sub-documents)
                     return {
                         ...section,
                         documents: section.documents.map(doc => 
                             doc.id === editingDocument.id 
-                                ? { ...doc, ...documentData }
+                                ? { ...doc, ...documentData, parentId: doc.parentId }
                                 : doc
                         )
                     };
@@ -2683,7 +2724,8 @@ const getAssigneeColor = (identifier, users) => {
         }
         setSections(prev => prev.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
-            const docs = [...(section.documents || [])];
+            const ordered = getOrderedDocumentRows(section);
+            const docs = ordered.map(r => r.doc);
             const [removed] = docs.splice(drag.docIndex, 1);
             docs.splice(dropDocIndex, 0, removed);
             return { ...section, documents: docs };
@@ -2739,8 +2781,9 @@ const getAssigneeColor = (identifier, users) => {
                 for (let i = 0; i < 24; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
-                section.documents.forEach(doc => {
-                    const row = [`  ${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
+                getOrderedDocumentRows(section).forEach(({ doc, isSubRow }) => {
+                    const indent = isSubRow ? '    ' : '  ';
+                    const row = [`${indent}${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
                     
                     months.forEach(month => {
                         const status = getStatusForYear(doc.collectionStatus, month, selectedYear);
@@ -6776,25 +6819,37 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((doc, docIndex) => (
+                                            getOrderedDocumentRows(section).map(({ doc, isSubRow }, docIndex) => {
+                                                const hasChildren = hasChildDocuments(section, doc);
+                                                const isMasterGreyedOut = !doc.parentId && hasChildren;
+                                                const canDrag = !isSubRow && !isMasterGreyedOut;
+                                                return (
                                                 <tr
                                                     key={doc.id}
-                                                    className={`transition-colors border-b border-gray-100 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
-                                                    draggable
-                                                    onDragStart={(e) => handleDocumentDragStart(section.id, docIndex, e)}
+                                                    className={`transition-colors border-b border-gray-100 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'} ${isSubRow ? 'bg-gray-50/50' : ''}`}
+                                                    draggable={canDrag}
+                                                    onDragStart={canDrag ? (e) => handleDocumentDragStart(section.id, docIndex, e) : undefined}
                                                     onDragEnd={handleDocumentDragEnd}
-                                                    onDragOver={(e) => handleDocumentDragOver(e, section.id, docIndex)}
+                                                    onDragOver={canDrag ? (e) => handleDocumentDragOver(e, section.id, docIndex) : undefined}
                                                     onDragLeave={handleDocumentDragLeave}
-                                                    onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
+                                                    onDrop={canDrag ? (e) => handleDocumentDrop(e, section.id, docIndex) : undefined}
                                                 >
                                                     <td
-                                                        className="px-4 py-2 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
+                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-50/50' : 'bg-white'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
-                                                            <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
-                                                                <i className="fas fa-grip-vertical text-[10px]"></i>
-                                                            </span>
+                                                            {canDrag ? (
+                                                                <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
+                                                                    <i className="fas fa-grip-vertical text-[10px]"></i>
+                                                                </span>
+                                                            ) : isSubRow ? (
+                                                                <span className="inline-flex flex-shrink-0 mt-0.5 text-gray-400" title="Sub-document">
+                                                                    <i className="fas fa-level-down-alt text-[10px]"></i>
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex flex-shrink-0 w-4" aria-hidden="true"></span>
+                                                            )}
                                                             <div className="flex-1 min-w-0">
                                                             <div className="text-sm font-semibold text-gray-900 leading-snug">{doc.name}</div>
                                                             {doc.description && (() => {
@@ -6977,8 +7032,17 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             {renderStatusCell(section, doc, month)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-4 py-2 border-l-2 border-gray-200">
-                                                        <div className="flex items-center gap-2 justify-center">
+                                                    <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'opacity-60' : ''}`}>
+                                                        <div className={`flex items-center gap-2 justify-center ${isMasterGreyedOut ? 'pointer-events-none' : ''}`}>
+                                                            {!doc.parentId && !hasChildren && (
+                                                                <button
+                                                                    onClick={() => handleAddSubDocument(section.id, doc)}
+                                                                    className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                    title="Add sub-document"
+                                                                >
+                                                                    <i className="fas fa-layer-group text-sm"></i>
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}
                                                                 className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
@@ -6997,7 +7061,8 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            ))
+                                            );
+                                            })
                                         )}
                                     </tbody>
                                 </table>

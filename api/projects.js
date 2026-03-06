@@ -107,6 +107,7 @@ async function documentSectionsToJson(projectId, options = {}) {
             name: doc.name,
             description: doc.description || '',
             required: doc.required || false,
+            parentId: doc.parentId ?? null,
             collectionStatus,
             assignedTo,
             ...(includeComments ? { comments } : { comments: {} })
@@ -503,11 +504,14 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                       return '[]'
                     })()
 
+                    const parentIdVal = doc.parentId && String(doc.parentId).trim() ? doc.parentId : undefined
+
                     return {
                       name: doc.name || '',
                       description: doc.description || '',
                       required: doc.required || false,
                       order: docIdx,
+                      ...(parentIdVal ? { parentId: parentIdVal } : {}),
                       assignedTo: assignedToJson,
                       statuses: { create: statuses },
                       comments: { create: comments }
@@ -602,11 +606,14 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                     return '[]'
                   })()
 
+                  const parentIdVal = doc.parentId && String(doc.parentId).trim() ? doc.parentId : undefined
+
                   return {
                     name: doc.name || '',
                     description: doc.description || '',
                     required: doc.required || false,
                     order: docIdx,
+                    ...(parentIdVal ? { parentId: parentIdVal } : {}),
                     assignedTo: assignedToJson,
                     statuses: { create: statuses },
                     comments: { create: comments }

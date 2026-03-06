@@ -782,6 +782,7 @@ model DocumentSection {
 model DocumentItem {
   id          String   @id @default(cuid())
   sectionId   String
+  parentId    String?
   name        String
   description String   @default("")
   required    Boolean  @default(false)
@@ -791,10 +792,13 @@ model DocumentItem {
   updatedAt   DateTime @updatedAt
 
   section  DocumentSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  parent   DocumentItem?          @relation("DocumentItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children DocumentItem[]        @relation("DocumentItemHierarchy")
   statuses DocumentItemStatus[]
   comments DocumentItemComment[]
 
   @@index([sectionId])
+  @@index([parentId])
   @@index([order])
 }
 
