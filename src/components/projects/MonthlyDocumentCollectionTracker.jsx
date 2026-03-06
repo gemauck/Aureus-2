@@ -7027,12 +7027,22 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             </div>
                                                             </div>
                                                     </td>
-                                                    {months.map((month) => (
-                                                        <React.Fragment key={`${doc.id}-${month}`}>
-                                                            {renderStatusCell(section, doc, month)}
-                                                        </React.Fragment>
-                                                    ))}
-                                                    <td className="px-4 py-2 border-l-2 border-gray-200">
+                                                    {isMasterGreyedOut ? (
+                                                        months.map((month) => (
+                                                            <td
+                                                                key={`${doc.id}-${month}`}
+                                                                className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200"
+                                                                role="gridcell"
+                                                            />
+                                                        ))
+                                                    ) : (
+                                                        months.map((month) => (
+                                                            <React.Fragment key={`${doc.id}-${month}`}>
+                                                                {renderStatusCell(section, doc, month)}
+                                                            </React.Fragment>
+                                                        ))
+                                                    )}
+                                                    <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
                                                         <div className="flex items-center gap-2 justify-center">
                                                             {!doc.parentId && (
                                                                 <button
