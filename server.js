@@ -2229,6 +2229,16 @@ app.use('/api', async (req, res) => {
   } catch (error) {
     if (timeout) clearTimeout(timeout)
     
+    // GET document-collection-email-activity: never 500, always 200 + empty activity (even on load/other errors)
+    const isGetActivity = req.method === 'GET' && (
+      (req.url && req.url.includes('document-collection-email-activity')) ||
+      (typeof handlerPath === 'string' && handlerPath.includes('document-collection-email-activity'))
+    )
+    if (isGetActivity && !res.headersSent && !res.writableEnded) {
+      res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } }))
+      return
+    }
+    
     // Enhanced error logging with database connection detection
     const isDbError = error.code === 'P1001' || error.code === 'P1002' || error.code === 'P1008' || 
                       error.code === 'P1017' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' ||
