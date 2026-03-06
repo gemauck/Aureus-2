@@ -1611,20 +1611,20 @@ app.all('/api/projects', async (req, res, next) => {
   }
 })
 
-// Explicit GET for document-collection-email-activity: never 500, always 200 (empty or data)
+// Explicit GET for document-collection-email-activity: never 500/502, always 200 (empty or data)
 app.get('/api/projects/:id/document-collection-email-activity', async (req, res) => {
-  // #region agent log
-  try {
-    debugLog({ location: 'server.js:explicit-get-activity', message: 'explicit route hit', data: { method: req.method, url: req.url, originalUrl: req.originalUrl }, hypothesisId: 'A' })
-  } catch (_) {}
-  // #endregion
   const emptyPayload = JSON.stringify({ data: { sent: [], received: [] } })
+  let timeoutId = null
   const sendEmpty = () => {
     try {
       if (res.headersSent || res.writableEnded) return
+      if (timeoutId) clearTimeout(timeoutId)
+      timeoutId = null
       res.status(200).setHeader('Content-Type', 'application/json').end(emptyPayload)
     } catch (_) {}
   }
+  // If handler hangs, respond with empty after 12s to avoid proxy 502
+  timeoutId = setTimeout(() => { sendEmpty() }, 12000)
   // Wrap res so handler can never send 500 for this GET
   const origStatus = res.status.bind(res)
   const origEnd = res.end.bind(res)
@@ -1638,6 +1638,7 @@ app.get('/api/projects/:id/document-collection-email-activity', async (req, res)
     return origWriteHead(code, ...args)
   }
   res.end = function (chunk, encoding, cb) {
+    if (timeoutId) { clearTimeout(timeoutId); timeoutId = null }
     if (res.statusCode === 500) {
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json')
@@ -1648,21 +1649,11 @@ app.get('/api/projects/:id/document-collection-email-activity', async (req, res)
   try {
     const handlerPath = path.join(apiDir, 'projects', '[id]', 'document-collection-email-activity.js')
     const handler = await loadHandler(handlerPath)
-    // #region agent log
-    try {
-      debugLog({ location: 'server.js:after-loadHandler', message: 'handler loaded', data: { handlerPath }, hypothesisId: 'B' })
-    } catch (_) {}
-    // #endregion
     const result = handler(req, res)
     if (result != null && typeof result.then === 'function') {
       await result.catch(() => { sendEmpty() })
     }
   } catch (e) {
-    // #region agent log
-    try {
-      debugLog({ location: 'server.js:explicit-get-catch', message: 'explicit route catch', data: { error: e?.message }, hypothesisId: 'B' })
-    } catch (_) {}
-    // #endregion
     sendEmpty()
   }
   if (!res.headersSent && !res.writableEnded) {
