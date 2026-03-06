@@ -2181,7 +2181,15 @@ app.use('/api', async (req, res) => {
       
       // Only send error if response hasn't been sent
       if (!res.headersSent && !res.writableEnded) {
-        const isDevelopment = process.env.NODE_ENV === 'development'
+        // GET document-collection-email-activity: never 500, always 200 + empty activity
+        const isGetActivity = req.method === 'GET' && (
+          (req.url && req.url.includes('document-collection-email-activity')) ||
+          (handlerPath && handlerPath.includes('document-collection-email-activity'))
+        )
+        if (isGetActivity) {
+          res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } }))
+        } else {
+          const isDevelopment = process.env.NODE_ENV === 'development'
         
         // Check for database connection errors
         const isDbError = handlerError.code === 'P1001' || handlerError.code === 'P1002' || 
@@ -2209,6 +2217,7 @@ app.use('/api', async (req, res) => {
         }
         
         res.status(500).json(errorResponse)
+        }
       } else {
         console.error('⚠️ Cannot send error response - headers already sent or response ended')
       }
