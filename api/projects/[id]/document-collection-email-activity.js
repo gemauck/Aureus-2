@@ -168,26 +168,29 @@ async function handler(req, res) {
   }
 }
 
-/** For GET only: catch any error from the real handler and send 200 + empty so the route never 500s. */
+/** For GET only: catch any error (including from auth) and send 200 + empty so the route never 500s. */
 function withGetSafe(fn) {
+  const empty = JSON.stringify({ data: { sent: [], received: [] } })
   return async function (req, res) {
     if (req.method !== 'GET') return fn(req, res)
     try {
-      return await fn(req, res)
+      const p = fn(req, res)
+      if (p != null && typeof p.then === 'function') await p
     } catch (e) {
       console.error('document-collection-email-activity GET safe wrapper:', e?.message || e)
-      if (!res.headersSent && !res.writableEnded) {
-        try {
-          res.statusCode = 200
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ data: { sent: [], received: [] } }))
-        } catch (_) {}
-      }
+    }
+    if (!res.headersSent && !res.writableEnded) {
+      try {
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json')
+        res.end(empty)
+      } catch (_) {}
     }
   }
 }
 
-export default authRequired(withGetSafe(handler))
+// Outer wrapper catches GET errors from auth + handler; inner is auth then handler
+export default withGetSafe(authRequired(handler))
 
 async function runHandler(req, res, sendEmptyActivity) {
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
