@@ -3608,7 +3608,18 @@ const getAssigneeColor = (identifier, users) => {
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, doc, month) => {
+    const renderStatusCell = (section, doc, month, isSubRow = false) => {
+        // Sub-document rows: no status/mail/comment controls (parent row carries status)
+        if (isSubRow) {
+            return (
+                <td
+                    className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-50/30 text-gray-400"
+                    role="gridcell"
+                >
+                    <span className="sr-only">Sub-document (status on parent row)</span>
+                </td>
+            );
+        }
         const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(doc, month);
@@ -7029,12 +7040,12 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     </td>
                                                     {months.map((month) => (
                                                         <React.Fragment key={`${doc.id}-${month}`}>
-                                                            {renderStatusCell(section, doc, month)}
+                                                            {renderStatusCell(section, doc, month, isSubRow)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'opacity-60' : ''}`}>
-                                                        <div className={`flex items-center gap-2 justify-center ${isMasterGreyedOut ? 'pointer-events-none' : ''}`}>
-                                                            {!doc.parentId && !hasChildren && (
+                                                    <td className="px-4 py-2 border-l-2 border-gray-200">
+                                                        <div className="flex items-center gap-2 justify-center">
+                                                            {!doc.parentId && (
                                                                 <button
                                                                     onClick={() => handleAddSubDocument(section.id, doc)}
                                                                     className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
@@ -7043,21 +7054,25 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                     <i className="fas fa-layer-group text-sm"></i>
                                                                 </button>
                                                             )}
-                                                            <button
-                                                                onClick={() => handleEditDocument(section, doc)}
-                                                                className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                                                                title="Edit document"
-                                                            >
-                                                                <i className="fas fa-edit text-sm"></i>
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
-                                                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                type="button"
-                                                                title="Delete document"
-                                                            >
-                                                                <i className="fas fa-trash text-sm"></i>
-                                                            </button>
+                                                            <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>
+                                                                <button
+                                                                    onClick={() => handleEditDocument(section, doc)}
+                                                                    className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                    title="Edit document"
+                                                                    disabled={isMasterGreyedOut}
+                                                                >
+                                                                    <i className="fas fa-edit text-sm"></i>
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
+                                                                    className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                    type="button"
+                                                                    title="Delete document"
+                                                                    disabled={isMasterGreyedOut}
+                                                                >
+                                                                    <i className="fas fa-trash text-sm"></i>
+                                                                </button>
+                                                            </span>
                                                         </div>
                                                     </td>
                                                 </tr>
