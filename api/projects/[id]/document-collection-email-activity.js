@@ -161,12 +161,33 @@ async function handler(req, res) {
   } catch (e) {
     console.error('document-collection-email-activity handler error:', e)
     if (req.method === 'GET') {
-      sendEmpty()
+      try { sendEmpty() } catch (_) { /* never rethrow for GET */ }
     } else {
       throw e
     }
   }
 }
+
+/** For GET only: catch any error from the real handler and send 200 + empty so the route never 500s. */
+function withGetSafe(fn) {
+  return async function (req, res) {
+    if (req.method !== 'GET') return fn(req, res)
+    try {
+      return await fn(req, res)
+    } catch (e) {
+      console.error('document-collection-email-activity GET safe wrapper:', e?.message || e)
+      if (!res.headersSent && !res.writableEnded) {
+        try {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ data: { sent: [], received: [] } }))
+        } catch (_) {}
+      }
+    }
+  }
+}
+
+export default authRequired(withGetSafe(handler))
 
 async function runHandler(req, res, sendEmptyActivity) {
   const projectId = normalizeProjectIdFromRequest({ req, rawId: req.params?.id })
@@ -657,4 +678,3 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
   }
 }
 
-export default authRequired(handler)
