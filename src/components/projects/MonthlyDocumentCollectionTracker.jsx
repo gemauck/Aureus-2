@@ -238,18 +238,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, [project?.id]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
+    const [subCategoryActionsOpenId, setSubCategoryActionsOpenId] = useState(null);
     // Close section Actions dropdown when clicking outside (effect lives near state to avoid TDZ)
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (event.target.closest && !event.target.closest('[data-section-actions-dropdown]')) {
                 setSectionActionsOpenId(null);
             }
+            if (event.target.closest && !event.target.closest('[data-subcategory-actions-dropdown]')) {
+                setSubCategoryActionsOpenId(null);
+            }
         };
-        if (sectionActionsOpenId != null) {
+        if (sectionActionsOpenId != null || subCategoryActionsOpenId != null) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [sectionActionsOpenId]);
+    }, [sectionActionsOpenId, subCategoryActionsOpenId]);
 
     // Parse documentSections safely (legacy flat array support)
     // OPTIMIZED: Reduced retry attempts and improved early exit conditions
@@ -334,6 +338,80 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
     };
 
+    // Normalize section from API: set subCategoryId on each document from subCategories[].documents; preserve document order
+    const normalizeSectionFromApi = (section) => {
+        if (!section) return section;
+        const subCats = Array.isArray(section.subCategories) ? section.subCategories : [];
+        if (subCats.length === 0) {
+            return { ...section, subCategories: [] };
+        }
+        const docs = (section.documents || []).map((d) => {
+            let subId = null;
+            for (const sc of subCats) {
+                if ((sc.documents || []).some((x) => x && String(x.id) === String(d.id))) {
+                    subId = sc.id;
+                    break;
+                }
+            }
+            return { ...d, subCategoryId: subId };
+        });
+        return {
+            ...section,
+            documents: docs,
+            subCategories: subCats.map(({ id, name, order }) => ({ id, name, order: order ?? 0 }))
+        };
+    };
+
+    // Build API payload: when section has subCategories, send documents = uncategorized only and subCategories[].documents
+    const buildPayloadForApi = (sectionsByYear) => {
+        if (!sectionsByYear || typeof sectionsByYear !== 'object') return sectionsByYear || {};
+        const out = {};
+        for (const [yearKey, yearSections] of Object.entries(sectionsByYear)) {
+            if (!Array.isArray(yearSections)) {
+                out[yearKey] = yearSections;
+                continue;
+            }
+            out[yearKey] = yearSections.map((section) => {
+                const subCats = Array.isArray(section.subCategories) ? section.subCategories : [];
+                if (subCats.length === 0) {
+                    return section;
+                }
+                const uncategorized = (section.documents || []).filter(d => !d.subCategoryId);
+                return {
+                    ...section,
+                    documents: uncategorized,
+                    subCategories: subCats.map((sc) => ({
+                        id: sc.id,
+                        name: sc.name,
+                        order: sc.order ?? 0,
+                        documents: (section.documents || []).filter(d => d.subCategoryId === sc.id)
+                    }))
+                };
+            });
+        }
+        return out;
+    };
+
+    // Build table rows for a section: subcategory header rows + document rows in display order
+    const getSectionRows = (section) => {
+        const docs = section.documents || [];
+        const subCats = section.subCategories || [];
+        if (subCats.length === 0) {
+            return docs.map((doc, i) => ({ type: 'document', document: doc, docIndex: i }));
+        }
+        const rows = [];
+        let prevSubId = null;
+        docs.forEach((doc, docIndex) => {
+            if (doc.subCategoryId && doc.subCategoryId !== prevSubId) {
+                const sc = subCats.find(s => s.id === doc.subCategoryId);
+                if (sc) rows.push({ type: 'subcategory', subCategory: sc });
+                prevSubId = doc.subCategoryId;
+            }
+            rows.push({ type: 'document', document: doc, docIndex });
+        });
+        return rows;
+    };
+
     const inferYearsFromSections = (sections) => {
         const years = new Set();
         (sections || []).forEach(section => {
@@ -392,7 +470,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             for (let i = 0; i < yearKeys.length; i++) {
                 const yearKey = yearKeys[i];
                 const value = parsedValue[yearKey];
-                result[yearKey] = Array.isArray(value) ? value : parseSections(value);
+                const arr = Array.isArray(value) ? value : parseSections(value);
+                result[yearKey] = arr.map(normalizeSectionFromApi);
             }
             
             // Cache result
@@ -417,7 +496,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
 
         const result = {
-            [targetYear]: cloneSectionsArray(baseSections)
+            [targetYear]: cloneSectionsArray(baseSections).map(normalizeSectionFromApi)
         };
         
         // Cache result
@@ -522,6 +601,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
+    const [editingSubCategoryId, setEditingSubCategoryId] = useState(null);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [users, setUsers] = useState([]);
     const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
@@ -1080,9 +1160,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
         // Use ref (updated immediately by handlers) or fallback to state
         // Ref is updated synchronously before state updates, so it has the latest data
-        const payload = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
+        const rawPayload = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 
             ? sectionsRef.current 
             : sectionsByYear;
+        const payload = buildPayloadForApi(rawPayload);
         const serialized = JSON.stringify(payload);
         
         // Skip if data hasn't changed
@@ -1702,7 +1783,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const newSection = {
                 id: Date.now(),
                 ...sectionData,
-                documents: []
+                documents: [],
+                subCategories: []
             };
             setSections(prev => [...prev, newSection]);
         }
@@ -1715,6 +1797,54 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             saveTimeoutRef.current = null;
         }
         saveToDatabase({ skipParentUpdate: true });
+    };
+
+    const handleAddSubCategory = (sectionId) => {
+        const section = sections.find(s => String(s.id) === String(sectionId));
+        if (!section) return;
+        const name = window.prompt('Sub-category name');
+        if (!name || !name.trim()) return;
+        const subCats = Array.isArray(section.subCategories) ? section.subCategories : [];
+        const newSub = { id: `sub-${Date.now()}`, name: name.trim(), order: subCats.length };
+        setSections(prev => prev.map(s => 
+            String(s.id) === String(sectionId) 
+                ? { ...s, subCategories: [...subCats, newSub] }
+                : s
+        ));
+        setSectionActionsOpenId(null);
+        setTimeout(() => saveToDatabase({ skipParentUpdate: true }), 100);
+    };
+
+    const handleEditSubCategory = (section, subCategory) => {
+        const name = window.prompt('Sub-category name', subCategory.name || '');
+        if (name === null) return;
+        const trimmed = (name || '').trim();
+        if (!trimmed) return;
+        setSections(prev => prev.map(s => {
+            if (String(s.id) !== String(section.id)) return s;
+            const subCats = (s.subCategories || []).map(sc => 
+                String(sc.id) === String(subCategory.id) ? { ...sc, name: trimmed } : sc
+            );
+            return { ...s, subCategories: subCats };
+        }));
+        setSectionActionsOpenId(null);
+        setSubCategoryActionsOpenId(null);
+        setTimeout(() => saveToDatabase({ skipParentUpdate: true }), 100);
+    };
+
+    const handleDeleteSubCategory = (sectionId, subCategoryId) => {
+        if (!confirm('Delete this sub-category? Documents in it will become uncategorized.')) return;
+        setSections(prev => prev.map(s => {
+            if (String(s.id) !== String(sectionId)) return s;
+            const subCats = (s.subCategories || []).filter(sc => String(sc.id) !== String(subCategoryId));
+            const docs = (s.documents || []).map(d => 
+                d.subCategoryId === subCategoryId ? { ...d, subCategoryId: null } : d
+            );
+            return { ...s, subCategories: subCats, documents: docs };
+        }));
+        setSectionActionsOpenId(null);
+        setSubCategoryActionsOpenId(null);
+        setTimeout(() => saveToDatabase({ skipParentUpdate: true }), 100);
     };
 
     // Actual deletion logic extracted to separate function
@@ -1800,7 +1930,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             // Perform save asynchronously without blocking
             (async () => {
             try {
-                const payload = sectionsRef.current || {};
+                const payload = buildPayloadForApi(sectionsRef.current || {});
                 
                 if (isMonthlyDataReview) {
                     if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
@@ -1958,13 +2088,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // DOCUMENT CRUD
     // ============================================================
     
-    const handleAddDocument = (sectionId) => {
+    const handleAddDocument = (sectionId, subCategoryId) => {
         if (!sectionId) {
             alert('Error: Cannot add document. Section ID is missing.');
             return;
         }
         setEditingSectionId(sectionId);
         setEditingDocument(null);
+        setEditingSubCategoryId(subCategoryId ?? null);
         setShowDocumentModal(true);
     };
     
@@ -1999,12 +2130,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         ...documentData,
                         collectionStatus: documentData.collectionStatus || {},
                         comments: documentData.comments || {},
-                        assignedTo: documentData.assignedTo ?? []
+                        assignedTo: documentData.assignedTo ?? [],
+                        subCategoryId: editingSubCategoryId || null
                     };
-                    return {
-                        ...section,
-                        documents: [...section.documents, newDocument]
-                    };
+                    const docs = section.documents || [];
+                    let insertIndex = docs.length;
+                    if (editingSubCategoryId) {
+                        let lastIdx = -1;
+                        docs.forEach((d, i) => { if (d.subCategoryId === editingSubCategoryId) lastIdx = i; });
+                        insertIndex = lastIdx >= 0 ? lastIdx + 1 : docs.length;
+                    }
+                    const nextDocs = [...docs.slice(0, insertIndex), newDocument, ...docs.slice(insertIndex)];
+                    return { ...section, documents: nextDocs };
                 }
             }
             return section;
@@ -2013,6 +2150,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
+        setEditingSubCategoryId(null);
     };
 
     const normalizeAssignedTo = (doc) => {
@@ -6700,6 +6838,14 @@ Abcotronics`;
                                             </button>
                                             <button
                                                 type="button"
+                                                onClick={() => { handleAddSubCategory(section.id); setSectionActionsOpenId(null); }}
+                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-folder-plus text-primary-600"></i>
+                                                <span>Add sub-category</span>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 onClick={() => { handleEditSection(section); setSectionActionsOpenId(null); }}
                                                 className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                             >
@@ -6755,28 +6901,91 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                         className="bg-white divide-y divide-gray-200"
                                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                     >
-                                        {section.documents.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={14} className="px-8 py-12 text-center">
-                                                    <div className="flex flex-col items-center gap-3">
-                                                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-                                                            <i className="fas fa-file-alt text-2xl text-gray-400"></i>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-gray-700">No documents in this section</p>
-                                                            <p className="text-xs text-gray-500 mt-1">Get started by adding your first document</p>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => handleAddDocument(section.id)}
-                                                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
-                                                        >
-                                                            <i className="fas fa-plus"></i><span>Add Document</span>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            section.documents.map((doc, docIndex) => (
+                                        {(() => {
+                                            const rows = getSectionRows(section);
+                                            if (rows.length === 0) {
+                                                return (
+                                                    <tr>
+                                                        <td colSpan={14} className="px-8 py-12 text-center">
+                                                            <div className="flex flex-col items-center gap-3">
+                                                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                                                                    <i className="fas fa-file-alt text-2xl text-gray-400"></i>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm font-semibold text-gray-700">No documents in this section</p>
+                                                                    <p className="text-xs text-gray-500 mt-1">Get started by adding a document or sub-category</p>
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={() => handleAddDocument(section.id)}
+                                                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
+                                                                    >
+                                                                        <i className="fas fa-plus"></i><span>Add Document</span>
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleAddSubCategory(section.id)}
+                                                                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
+                                                                    >
+                                                                        <i className="fas fa-folder-plus"></i><span>Add sub-category</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+                                            return rows.map((row, rowIdx) => {
+                                                if (row.type === 'subcategory') {
+                                                    const sc = row.subCategory;
+                                                    const isOpen = subCategoryActionsOpenId === sc.id;
+                                                    return (
+                                                        <tr key={`sub-${sc.id}`} className="bg-gray-50 border-b border-gray-200">
+                                                            <td
+                                                                className="px-4 py-2 sticky left-0 bg-gray-100 z-20 border-r-2 border-gray-300"
+                                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
+                                                            >
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="text-sm font-semibold text-gray-700 pl-6">{sc.name}</span>
+                                                                    <div className="flex items-center gap-1">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleAddDocument(section.id, sc.id)}
+                                                                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded"
+                                                                            title="Add document to this sub-category"
+                                                                        >
+                                                                            <i className="fas fa-plus text-xs"></i>
+                                                                        </button>
+                                                                        <div className="relative" data-subcategory-actions-dropdown>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setSubCategoryActionsOpenId(isOpen ? null : sc.id)}
+                                                                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+                                                                                title="Sub-category actions"
+                                                                            >
+                                                                                <i className="fas fa-ellipsis-v text-xs"></i>
+                                                                            </button>
+                                                                            {isOpen && (
+                                                                                <div className="absolute right-0 mt-1 w-40 py-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                                                                                    <button type="button" onClick={() => { handleEditSubCategory(section, sc); setSubCategoryActionsOpenId(null); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                                                                        <i className="fas fa-edit text-gray-500"></i><span>Edit</span>
+                                                                                    </button>
+                                                                                    <button type="button" onClick={() => { handleDeleteSubCategory(section.id, sc.id); }} className="w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 flex items-center gap-2">
+                                                                                        <i className="fas fa-trash"></i><span>Delete</span>
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            {months.map((month) => <td key={month} className="border-l border-gray-100 bg-gray-50"></td>)}
+                                                            <td className="bg-gray-50 border-l-2 border-gray-300"></td>
+                                                        </tr>
+                                                    );
+                                                }
+                                                const doc = row.document;
+                                                const docIndex = row.docIndex;
+                                                return (
                                                 <tr
                                                     key={doc.id}
                                                     className={`transition-colors border-b border-gray-100 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
@@ -6997,8 +7206,10 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            ))
-                                        )}
+                                            );
+                                            });
+                                        });
+                                    })()}
                                     </tbody>
                                 </table>
                             </div>

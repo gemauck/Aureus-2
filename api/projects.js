@@ -12,6 +12,8 @@ let projectListColumnsMigrated = false;
 
 /**
  * Convert DocumentSection table data to JSON format (for backward compatibility)
+ * Output includes optional subCategories per section; each has nested documents.
+ * Section.documents remains a flat list for backward compatibility.
  */
 async function documentSectionsToJson(projectId, options = {}) {
   try {
@@ -33,7 +35,8 @@ async function documentSectionsToJson(projectId, options = {}) {
               ...(includeComments ? { comments: true } : {})
             },
             orderBy: { order: 'asc' }
-          }
+          },
+          subCategories: { orderBy: { order: 'asc' } }
         },
         orderBy: [{ year: 'desc' }, { order: 'asc' }]
       })
@@ -43,6 +46,52 @@ async function documentSectionsToJson(projectId, options = {}) {
       return null // Return null to indicate no table data, use JSON fallback
     }
 
+    const mapDocToJson = (doc) => {
+      const collectionStatus = {}
+      for (const status of (doc.statuses || [])) {
+        const key = `${status.year}-${String(status.month).padStart(2, '0')}`
+        collectionStatus[key] = status.status
+      }
+      const comments = {}
+      if (includeComments && doc.comments) {
+        for (const comment of doc.comments) {
+          const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
+          if (!comments[key]) comments[key] = []
+          let attachments = []
+          try {
+            attachments = typeof comment.attachments === 'string'
+              ? JSON.parse(comment.attachments || '[]')
+              : (Array.isArray(comment.attachments) ? comment.attachments : [])
+          } catch (_) {}
+          comments[key].push({
+            id: comment.id,
+            text: comment.text,
+            author: comment.author,
+            authorId: comment.authorId,
+            authorName: comment.author,
+            createdAt: comment.createdAt,
+            date: comment.createdAt,
+            attachments
+          })
+        }
+      }
+      let assignedTo = []
+      if (doc.assignedTo) {
+        try {
+          assignedTo = typeof doc.assignedTo === 'string' ? JSON.parse(doc.assignedTo || '[]') : (Array.isArray(doc.assignedTo) ? doc.assignedTo : [])
+        } catch (_) {}
+      }
+      return {
+        id: doc.id,
+        name: doc.name,
+        description: doc.description || '',
+        required: doc.required || false,
+        collectionStatus,
+        assignedTo,
+        ...(includeComments ? { comments } : { comments: {} })
+      }
+    }
+
     // Group by year: { "2024": [...], "2025": [...] }
     const byYear = {}
     for (const section of sections) {
@@ -50,68 +99,35 @@ async function documentSectionsToJson(projectId, options = {}) {
         byYear[section.year] = []
       }
 
+      const docs = section.documents || []
+      const subCats = section.subCategories || []
+
+      const documentsFlat = []
+      const subCategoriesJson = []
+
+      if (subCats.length > 0) {
+        const uncategorized = docs.filter(d => !d.subCategoryId).map(mapDocToJson)
+        uncategorized.forEach(d => documentsFlat.push(d))
+        for (const sc of subCats) {
+          const subDocs = docs.filter(d => d.subCategoryId === sc.id).map(mapDocToJson)
+          subCategoriesJson.push({
+            id: sc.id,
+            name: sc.name,
+            order: sc.order,
+            documents: subDocs
+          })
+          subDocs.forEach(d => documentsFlat.push(d))
+        }
+      } else {
+        docs.map(mapDocToJson).forEach(d => documentsFlat.push(d))
+      }
+
       const sectionData = {
         id: section.id,
         name: section.name,
         description: section.description || '',
-        documents: section.documents.map(doc => {
-          // Build collectionStatus object: { "2024-01": "collected", ... }
-          const collectionStatus = {}
-          for (const status of doc.statuses) {
-            const key = `${status.year}-${String(status.month).padStart(2, '0')}`
-            collectionStatus[key] = status.status
-          }
-
-          // Build comments object: { "2024-01": [...], ... }
-          const comments = {}
-          if (includeComments && doc.comments) {
-            for (const comment of doc.comments) {
-              const key = `${comment.year}-${String(comment.month).padStart(2, '0')}`
-              if (!comments[key]) {
-                comments[key] = []
-              }
-              let attachments = []
-              if (comment.attachments) {
-                try {
-                  attachments = typeof comment.attachments === 'string'
-                    ? JSON.parse(comment.attachments || '[]')
-                    : (Array.isArray(comment.attachments) ? comment.attachments : [])
-                } catch (_) {
-                  attachments = []
-                }
-              }
-              comments[key].push({
-                id: comment.id,
-                text: comment.text,
-                author: comment.author,
-                authorId: comment.authorId,
-                authorName: comment.author,
-                createdAt: comment.createdAt,
-                date: comment.createdAt,
-                attachments
-              })
-            }
-          }
-
-          let assignedTo = []
-          if (doc.assignedTo) {
-            try {
-              assignedTo = typeof doc.assignedTo === 'string' ? JSON.parse(doc.assignedTo || '[]') : (Array.isArray(doc.assignedTo) ? doc.assignedTo : [])
-            } catch (_) {
-              assignedTo = []
-            }
-          }
-
-          return {
-            id: doc.id,
-            name: doc.name,
-            description: doc.description || '',
-            required: doc.required || false,
-            collectionStatus,
-            assignedTo,
-            ...(includeComments ? { comments } : { comments: {} })
-          }
-        })
+        documents: documentsFlat,
+        subCategories: subCategoriesJson
       }
 
       byYear[section.year].push(sectionData)
@@ -338,25 +354,104 @@ function mergeExistingCommentsIntoPayload(existingByYear, incomingSections) {
           existingDocsByName.set(docName, d)
         }
       }
+      if (existingSection && Array.isArray(existingSection.subCategories)) {
+        for (const sc of existingSection.subCategories) {
+          for (const d of sc.documents || []) {
+            const docName = (d && d.name != null) ? String(d.name) : ''
+            existingDocsByName.set(docName, d)
+          }
+        }
+      }
+      const mergeDocComments = (doc) => {
+        const existingDoc = existingDocsByName.get((doc.name != null) ? String(doc.name) : '')
+        const existingComments = (existingDoc && existingDoc.comments && typeof existingDoc.comments === 'object') ? existingDoc.comments : {}
+        const incomingComments = (doc.comments && typeof doc.comments === 'object') ? doc.comments : {}
+        const mergedComments = { ...existingComments }
+        for (const [key, arr] of Object.entries(incomingComments)) {
+          const list = Array.isArray(arr) ? arr : (arr != null ? [arr] : [])
+          if (list.length > 0) mergedComments[key] = list
+        }
+        return { ...doc, comments: mergedComments }
+      }
+      const mergedDocuments = section.documents.map(mergeDocComments)
+      const mergedSubCategories = Array.isArray(section.subCategories)
+        ? section.subCategories.map((sc) => ({
+            ...sc,
+            documents: (sc.documents || []).map(mergeDocComments)
+          }))
+        : undefined
       return {
         ...section,
-        documents: section.documents.map((doc) => {
-          const existingDoc = existingDocsByName.get((doc.name != null) ? String(doc.name) : '')
-          const existingComments = (existingDoc && existingDoc.comments && typeof existingDoc.comments === 'object') ? existingDoc.comments : {}
-          const incomingComments = (doc.comments && typeof doc.comments === 'object') ? doc.comments : {}
-          const mergedComments = { ...existingComments }
-          for (const [key, arr] of Object.entries(incomingComments)) {
-            const list = Array.isArray(arr) ? arr : (arr != null ? [arr] : [])
-            if (list.length > 0) {
-              mergedComments[key] = list
-            }
-          }
-          return { ...doc, comments: mergedComments }
-        })
+        documents: mergedDocuments,
+        ...(mergedSubCategories !== undefined ? { subCategories: mergedSubCategories } : {})
       }
     })
   }
   return merged
+}
+
+/**
+ * Build Prisma create payload for one DocumentItem (statuses, comments, assignedTo).
+ * Used when saving document sections with or without sub-categories.
+ */
+function buildDocumentItemCreatePayload(doc, docIdx) {
+  const statuses = []
+  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+    for (const [key, status] of Object.entries(doc.collectionStatus)) {
+      const parts = key.split('-')
+      if (parts.length >= 2) {
+        const y = parseInt(parts[0], 10)
+        const m = parseInt(parts[1], 10)
+        if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+          statuses.push({ year: y, month: m, status: String(status || 'pending') })
+        }
+      }
+    }
+  }
+  const comments = []
+  if (doc.comments && typeof doc.comments === 'object') {
+    for (const [key, commentArray] of Object.entries(doc.comments)) {
+      const parts = key.split('-')
+      if (parts.length >= 2) {
+        const y = parseInt(parts[0], 10)
+        const m = parseInt(parts[1], 10)
+        if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+          for (const comment of commentList) {
+            if (comment && (comment.text || comment)) {
+              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
+              const commentId = comment.id != null ? String(comment.id) : undefined
+              comments.push({
+                ...(commentId ? { id: commentId } : {}),
+                year: y,
+                month: m,
+                text: comment.text || String(comment),
+                author: comment.author || comment.authorName || '',
+                authorId: comment.authorId || null,
+                attachments: JSON.stringify(atts)
+              })
+            }
+          }
+        }
+      }
+    }
+  }
+  const assignedToJson = (() => {
+    const val = doc.assignedTo
+    if (val == null) return '[]'
+    if (Array.isArray(val)) return JSON.stringify(val)
+    if (typeof val === 'string') return val
+    return '[]'
+  })()
+  return {
+    name: doc.name || '',
+    description: doc.description || '',
+    required: doc.required || false,
+    order: docIdx,
+    assignedTo: assignedToJson,
+    statuses: { create: statuses },
+    comments: { create: comments }
+  }
 }
 
 /**
@@ -438,88 +533,63 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
             continue;
           }
 
-          try {
-            await prisma.documentSection.create({
-              data: {
-                projectId,
-                year,
-                name: section.name || '',
-                description: section.description || '',
-                order: i,
-                documents: {
-                  create: (section.documents || []).map((doc, docIdx) => {
-                    const statuses = []
-                    if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
-                      for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                        const parts = key.split('-')
-                        if (parts.length >= 2) {
-                          const year = parseInt(parts[0], 10)
-                          const month = parseInt(parts[1], 10)
-                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            statuses.push({
-                              year,
-                              month,
-                              status: String(status || 'pending')
-                            })
-                          }
-                        }
-                      }
-                    }
+          const subCats = Array.isArray(section.subCategories) ? section.subCategories : []
+          const hasSubCategories = subCats.length > 0
 
-                    const comments = []
-                    if (doc.comments && typeof doc.comments === 'object') {
-                      for (const [key, commentArray] of Object.entries(doc.comments)) {
-                        const parts = key.split('-')
-                        if (parts.length >= 2) {
-                          const year = parseInt(parts[0], 10)
-                          const month = parseInt(parts[1], 10)
-                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
-                            for (const comment of commentList) {
-                              if (comment && (comment.text || comment)) {
-                                const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                                const commentId = comment.id != null ? String(comment.id) : undefined
-                                comments.push({
-                                  ...(commentId ? { id: commentId } : {}),
-                                  year,
-                                  month,
-                                  text: comment.text || String(comment),
-                                  author: comment.author || comment.authorName || '',
-                                  authorId: comment.authorId || null,
-                                  attachments: JSON.stringify(atts)
-                                })
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-
-                    const assignedToJson = (() => {
-                      const val = doc.assignedTo
-                      if (val == null) return '[]'
-                      if (Array.isArray(val)) return JSON.stringify(val)
-                      if (typeof val === 'string') return val
-                      return '[]'
-                    })()
-
-                    return {
-                      name: doc.name || '',
-                      description: doc.description || '',
-                      required: doc.required || false,
-                      order: docIdx,
-                      assignedTo: assignedToJson,
-                      statuses: { create: statuses },
-                      comments: { create: comments }
-                    }
-                  })
-                }
+          if (hasSubCategories) {
+            const subDocIds = new Set()
+            for (const sc of subCats) {
+              for (const d of sc.documents || []) {
+                if (d && d.id) subDocIds.add(String(d.id))
               }
-            });
-            totalSectionsCreated++;
-          } catch (createError) {
-            console.error(`❌ Error creating document section "${section.name}" for year ${year}:`, createError);
-            throw createError; // Re-throw to be caught by outer catch
+            }
+            const uncategorized = (section.documents || []).filter(d => d && !subDocIds.has(String(d.id)))
+            try {
+              await prisma.documentSection.create({
+                data: {
+                  projectId,
+                  year,
+                  name: section.name || '',
+                  description: section.description || '',
+                  order: i,
+                  documents: {
+                    create: uncategorized.map((doc, docIdx) => buildDocumentItemCreatePayload(doc, docIdx))
+                  },
+                  subCategories: {
+                    create: subCats.map((sc, scIdx) => ({
+                      name: sc.name || '',
+                      order: sc.order != null ? sc.order : scIdx,
+                      documents: {
+                        create: (sc.documents || []).map((doc, docIdx) => buildDocumentItemCreatePayload(doc, docIdx))
+                      }
+                    }))
+                  }
+                }
+              })
+              totalSectionsCreated++
+            } catch (createError) {
+              console.error(`❌ Error creating document section "${section.name}" (with sub-categories) for year ${year}:`, createError.message)
+              throw createError
+            }
+          } else {
+            try {
+              await prisma.documentSection.create({
+                data: {
+                  projectId,
+                  year,
+                  name: section.name || '',
+                  description: section.description || '',
+                  order: i,
+                  documents: {
+                    create: (section.documents || []).map((doc, docIdx) => buildDocumentItemCreatePayload(doc, docIdx))
+                  }
+                }
+              })
+              totalSectionsCreated++
+            } catch (createError) {
+              console.error(`❌ Error creating document section "${section.name}" for year ${year}:`, createError);
+              throw createError; // Re-throw to be caught by outer catch
+            }
           }
         }
       }
@@ -546,72 +616,7 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
               description: section.description || '',
               order: i,
               documents: {
-                create: (section.documents || []).map((doc, docIdx) => {
-                  const statuses = []
-                  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
-                    for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                      const parts = key.split('-')
-                      if (parts.length >= 2) {
-                        const year = parseInt(parts[0], 10)
-                        const month = parseInt(parts[1], 10)
-                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                          statuses.push({
-                            year,
-                            month,
-                            status: String(status || 'pending')
-                          })
-                        }
-                      }
-                    }
-                  }
-
-                  const comments = []
-                  if (doc.comments && typeof doc.comments === 'object') {
-                    for (const [key, commentArray] of Object.entries(doc.comments)) {
-                      const parts = key.split('-')
-                      if (parts.length >= 2) {
-                        const year = parseInt(parts[0], 10)
-                        const month = parseInt(parts[1], 10)
-                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
-                          for (const comment of commentList) {
-                            if (comment && (comment.text || comment)) {
-                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                              const commentId = comment.id != null ? String(comment.id) : undefined
-                              comments.push({
-                                ...(commentId ? { id: commentId } : {}),
-                                year,
-                                month,
-                                text: comment.text || String(comment),
-                                author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null,
-                                attachments: JSON.stringify(atts)
-                              })
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-
-                  const assignedToJson = (() => {
-                    const val = doc.assignedTo
-                    if (val == null) return '[]'
-                    if (Array.isArray(val)) return JSON.stringify(val)
-                    if (typeof val === 'string') return val
-                    return '[]'
-                  })()
-
-                  return {
-                    name: doc.name || '',
-                    description: doc.description || '',
-                    required: doc.required || false,
-                    order: docIdx,
-                    assignedTo: assignedToJson,
-                    statuses: { create: statuses },
-                    comments: { create: comments }
-                  }
-                })
+                create: (section.documents || []).map((doc, docIdx) => buildDocumentItemCreatePayload(doc, docIdx))
               }
             }
           });

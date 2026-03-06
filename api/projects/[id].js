@@ -143,7 +143,8 @@ async function loadProjectWithRelations(projectId) {
             }
           },
           orderBy: { order: 'asc' }
-        }
+        },
+        subCategories: { orderBy: { order: 'asc' } }
       },
       orderBy: [{ year: 'desc' }, { order: 'asc' }]
     }).catch(e => { console.warn('⚠️ documentSectionsTable load skipped:', e.message); return []; }) : Promise.resolve([]),
