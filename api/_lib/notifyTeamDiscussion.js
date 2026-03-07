@@ -1,11 +1,11 @@
 /**
  * Notify team members and @mentioned users for team discussions.
  * - New discussion: in-app + email to all team members (except author).
- * - New reply: in-app + email to all team members (except author); @mentions get mention notification (including non-team members).
+ * - New reply: uses same path as other sections (notifyCommentParticipants for reply emails) + mention type for @mentioned users.
  */
 import { prisma } from './prisma.js'
 import { createNotificationForUser } from '../notifications.js'
-import { resolveMentionedUserIds } from './notifyCommentParticipants.js'
+import { resolveMentionedUserIds, notifyCommentParticipants } from './notifyCommentParticipants.js'
 
 /** Decode common HTML entities so @ and names are preserved for mention parsing */
 function decodeHtmlEntities(text) {
@@ -129,20 +129,17 @@ export async function notifyTeamDiscussionReply(opts) {
     }
   })
 
-  // 4) Team members who were NOT mentioned get type 'comment' (so they get "X replied" not "X mentioned you")
-  const replyTitle = `New reply in ${teamName || teamId}: ${(discussionTitle || 'Discussion').slice(0, 50)}${(discussionTitle || '').length > 50 ? '…' : ''}`
-  const replyMessage = `${authorName || 'Someone'} replied: "${preview}"`
-  const teamOnlyRecipients = teamRecipients.filter((id) => !mentionedSet.has(String(id)))
-  if (teamOnlyRecipients.length === 0) return
-
-  const teamResults = await Promise.allSettled(
-    teamOnlyRecipients.map((userId) =>
-      createNotificationForUser(userId, 'comment', replyTitle, replyMessage, link, metadata)
-    )
-  )
-  teamResults.forEach((r, i) => {
-    if (r.status === 'rejected') {
-      console.error('Team discussion reply notification failed for user', teamOnlyRecipients[i], r.reason)
-    }
+  // 4) Team members who were NOT mentioned get "comment" via same path as helpdesk/project-comments/meeting-notes
+  const contextTitle = `Team: ${teamName || teamId} — ${(discussionTitle || 'Discussion').slice(0, 50)}${(discussionTitle || '').length > 50 ? '…' : ''}`
+  await notifyCommentParticipants({
+    commentAuthorId: authorIdStr || undefined,
+    commentText: plainText,
+    entityAuthorId: null,
+    priorCommentAuthorIds: teamRecipients,
+    priorCommentTexts: [],
+    authorName: authorName || 'Someone',
+    contextTitle,
+    link,
+    metadata: { ...metadata, commentText: replyBody || '', fullComment: replyBody || '' }
   })
 }

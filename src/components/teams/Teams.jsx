@@ -872,19 +872,19 @@ const Teams = () => {
             {selectedTeam && (
                 <div className="space-y-6">
                     {/* Team Header */}
-                    <div className={`bg-gradient-to-r from-${selectedTeam.color}-500 to-${selectedTeam.color}-600 rounded-xl p-4 text-white`}>
+                    <div className={`rounded-xl p-4 border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                         <div className="flex items-center gap-3 mb-3">
-                            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                                <i className={`fas ${selectedTeam.icon} text-2xl`}></i>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                <i className={`fas ${selectedTeam.icon} text-2xl ${isDark ? 'text-gray-300' : 'text-gray-600'}`}></i>
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold">{selectedTeam.name}</h2>
-                                <p className="text-xs opacity-90">{selectedTeam.description}</p>
+                                <h2 className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{selectedTeam.name}</h2>
+                                <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{selectedTeam.description}</p>
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm">
+                        <div className={`flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>
                             <div>
-                                <span className="opacity-75">Discussions: </span>
+                                <span>Discussions: </span>
                                 <span className="font-bold">{getTeamCounts(selectedTeam?.id)?.discussions ?? 0}</span>
                             </div>
                         </div>
