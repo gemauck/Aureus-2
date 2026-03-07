@@ -152,6 +152,8 @@
         'components/teams/ChecklistModal.jsx',
         'components/teams/NoticeModal.jsx',
         'components/teams/WorkflowExecutionModal.jsx',
+        'components/teams/DiscussionModal.jsx',
+        'components/teams/TeamDiscussions.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
         'components/teams/POAReview.jsx',
         'components/teams/TeamModals.jsx',
@@ -174,6 +176,10 @@
         // Leave Platform - Load before Manufacturing for better availability
         'components/leave-platform/LeavePlatform.jsx',
         'components/leave-platform/EmployeeDetail.jsx',
+        // HR - Load QuickBooksPayrollSync before Payroll (Payroll uses it)
+        'components/hr/QuickBooksPayrollSync.jsx',
+        'components/hr/Attendance.jsx',
+        'components/hr/Payroll.jsx',
         
         // Manufacturing
         'components/manufacturing/locations/StockLocations.jsx',

@@ -8,12 +8,32 @@ const Attendance = () => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [filterEmployee, setFilterEmployee] = useState('all');
     const [viewMode, setViewMode] = useState('daily'); // daily or monthly
-
-    const employees = storage.getEmployees() || [];
+    const [employees, setEmployees] = useState([]);
 
     useEffect(() => {
         loadAttendanceRecords();
+        loadEmployees();
     }, []);
+
+    const loadEmployees = () => {
+        const fromStorage = storage.getEmployees();
+        if (fromStorage && Array.isArray(fromStorage) && fromStorage.length > 0) {
+            setEmployees(fromStorage);
+            return;
+        }
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load users')))
+            .then(data => {
+                const users = data.users || data.data?.users || [];
+                const list = users.map(u => ({ id: u.id, name: u.name || u.email || String(u.id) }));
+                setEmployees(list);
+            })
+            .catch(err => {
+                console.warn('Attendance: could not load employees from API', err);
+            });
+    };
 
     const loadAttendanceRecords = () => {
         const saved = storage.getAttendanceRecords() || [];

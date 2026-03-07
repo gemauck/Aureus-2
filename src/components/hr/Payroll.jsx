@@ -10,13 +10,33 @@ const Payroll = () => {
     const [filterEmployee, setFilterEmployee] = useState('all');
     const [showQBSyncModal, setShowQBSyncModal] = useState(false);
     const [qbConnected, setQBConnected] = useState(false);
-
-    const employees = storage.getEmployees() || [];
+    const [employees, setEmployees] = useState([]);
 
     useEffect(() => {
         loadPayrollRecords();
         checkQBConnection();
+        loadEmployees();
     }, []);
+
+    const loadEmployees = () => {
+        const fromStorage = storage.getEmployees();
+        if (fromStorage && Array.isArray(fromStorage) && fromStorage.length > 0) {
+            setEmployees(fromStorage);
+            return;
+        }
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load users')))
+            .then(data => {
+                const users = data.users || data.data?.users || [];
+                const list = users.map(u => ({ id: u.id, name: u.name || u.email || String(u.id), email: u.email, salary: u.salary }));
+                setEmployees(list);
+            })
+            .catch(err => {
+                console.warn('Payroll: could not load employees from API', err);
+            });
+    };
 
     const checkQBConnection = () => {
         const connection = storage.getQBConnection();

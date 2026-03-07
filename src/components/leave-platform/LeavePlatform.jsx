@@ -706,7 +706,10 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         { id: 'apply', label: 'Apply for Leave', icon: 'fa-plus-circle' },
         { id: 'balances', label: 'Leave Balances', icon: 'fa-chart-pie' },
         { id: 'calendar', label: 'Leave Calendar', icon: 'fa-calendar' },
-                { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' }
+                { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' },
+                { id: 'attendance', label: 'Attendance', icon: 'fa-clock' },
+                { id: 'payroll', label: 'Payroll', icon: 'fa-money-check-alt' },
+                { id: 'rules-policies', label: 'Rules & Policies', icon: 'fa-file-contract' }
             ];
 
             if (isAdmin) {
@@ -1112,6 +1115,32 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     ) : (
                         <AccessNotice />
                     );
+            case 'attendance':
+                    if (window.Attendance && typeof window.Attendance === 'function') {
+                        const AttendanceComponent = window.Attendance;
+                        return <AttendanceComponent />;
+                    }
+                    return (
+                        <div className="text-center py-12">
+                            <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
+                            <p className="text-gray-600">Loading Attendance...</p>
+                            <p className="text-xs text-gray-400 mt-2">If this does not load, refresh the page.</p>
+                        </div>
+                    );
+            case 'payroll':
+                    if (window.Payroll && typeof window.Payroll === 'function') {
+                        const PayrollComponent = window.Payroll;
+                        return <PayrollComponent />;
+                    }
+                    return (
+                        <div className="text-center py-12">
+                            <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
+                            <p className="text-gray-600">Loading Payroll...</p>
+                            <p className="text-xs text-gray-400 mt-2">If this does not load, refresh the page.</p>
+                        </div>
+                    );
+            case 'rules-policies':
+                    return <RulesPoliciesView />;
             default:
                     return (
                         <OverviewView
@@ -1135,8 +1164,8 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Leave Platform</h2>
-                    <p className="text-sm text-gray-500 mt-0.5">Manage your leave applications and balances - BCEA Compliant</p>
+                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Leave and HR</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">Manage leave and HR – BCEA Compliant</p>
                 </div>
             </div>
 
@@ -2625,6 +2654,67 @@ const BirthdaysView = ({ birthdays, onRefresh }) => {
     );
 };
 
+// Rules and Policies View – display area for leave/HR rules and company policies
+const RulesPoliciesView = () => {
+    const [customContent, setCustomContent] = useState('');
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('leave_hr_rules_policies_content');
+            if (stored) setCustomContent(stored);
+        } catch (e) {
+            console.warn('RulesPoliciesView: could not read stored content', e);
+        }
+    }, []);
+
+    return (
+        <div className="space-y-6 max-w-4xl">
+            <div>
+                <h3 className="text-lg font-semibold text-gray-900">Rules and Policies</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Leave, HR and company policies for your reference.</p>
+            </div>
+
+            {customContent ? (
+                <div
+                    className="prose prose-sm max-w-none p-4 bg-white border border-gray-200 rounded-lg"
+                    dangerouslySetInnerHTML={{ __html: customContent }}
+                />
+            ) : null}
+
+            <div className="space-y-4">
+                <section className="bg-white border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <i className="fas fa-umbrella-beach text-primary-600"></i>
+                        Leave policy
+                    </h4>
+                    <p className="text-sm text-gray-600 mt-2">
+                        Leave is managed in line with the Basic Conditions of Employment Act (BCEA). Annual leave, sick leave, family responsibility leave, maternity and paternity leave, and other types are available as per the Leave Balances and Apply for Leave sections. Approval is required from your designated leave approver.
+                    </p>
+                </section>
+
+                <section className="bg-white border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <i className="fas fa-clock text-primary-600"></i>
+                        Attendance and working hours
+                    </h4>
+                    <p className="text-sm text-gray-600 mt-2">
+                        Attendance and working hours are recorded in the Attendance section. Ensure you clock in and out as required. Contact your manager or HR for local attendance rules and any flexible-working arrangements.
+                    </p>
+                </section>
+
+                <section className="bg-white border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <i className="fas fa-file-contract text-primary-600"></i>
+                        General policies
+                    </h4>
+                    <p className="text-sm text-gray-600 mt-2">
+                        Company-wide rules and policies (code of conduct, grievance procedure, etc.) are published here when provided by HR. If you do not see a specific policy, please contact HR or your manager.
+                    </p>
+                </section>
+            </div>
+        </div>
+    );
+};
+
 // Import Balances View
 const ImportBalancesView = ({ onImport }) => {
     const [file, setFile] = useState(null);
@@ -2658,7 +2748,9 @@ const ImportBalancesView = ({ onImport }) => {
                 setFile(null);
                 onImport();
             } else {
-                alert('Failed to import leave balances');
+                const data = await response.json().catch(() => ({}));
+                const message = data.message || data.error || 'Failed to import leave balances';
+                alert(message);
             }
         } catch (error) {
             console.error('Error importing:', error);
@@ -2671,6 +2763,10 @@ const ImportBalancesView = ({ onImport }) => {
     return (
         <div className="max-w-2xl space-y-4">
             <h3 className="text-lg font-semibold">Import Leave Balances</h3>
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <p className="font-medium mb-1">Bulk CSV/Excel import is not yet available.</p>
+                <p className="text-amber-700">Use the <strong>Leave Balances</strong> tab to add or update balances per employee, or use the API (<code className="bg-amber-100 px-1 rounded">POST /api/leave-platform/balances</code>) to create balances individually.</p>
+            </div>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                 <input
                     type="file"

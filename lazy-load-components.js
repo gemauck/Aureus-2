@@ -79,6 +79,8 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/teams/ChecklistModal.jsx',
         './src/components/teams/NoticeModal.jsx',
         './src/components/teams/WorkflowExecutionModal.jsx',
+        './src/components/teams/DiscussionModal.jsx',
+        './src/components/teams/TeamDiscussions.jsx',
         './src/components/teams/ManagementMeetingNotes.jsx',
         './src/components/teams/POAReview.jsx',
         './src/components/teams/JobCardModal.jsx',
@@ -95,7 +97,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         
         // Manufacturing - MOVED from index.html to lazy loading for better performance
         './src/components/manufacturing/locations/StockLocations.jsx',
-        './src/components/manufacturing/StockTransactions.jsx',
+        './src/components/manufacturing/ManufacturingMovementsView.jsx',
         './src/components/manufacturing/JobCards.jsx',
         './src/components/manufacturing/Manufacturing.jsx',
         './src/components/service-maintenance/ServiceAndMaintenance.jsx',
@@ -132,6 +134,10 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         // Leave Platform - Load EmployeeDetail BEFORE LeavePlatform since it depends on it
         './src/components/leave-platform/EmployeeDetail.jsx',
         './src/components/leave-platform/LeavePlatform.jsx',
+        // HR - QuickBooksPayrollSync before Payroll
+        './src/components/hr/QuickBooksPayrollSync.jsx',
+        './src/components/hr/Attendance.jsx',
+        './src/components/hr/Payroll.jsx',
         
         // Account & Settings
         './src/components/account/Account.jsx',

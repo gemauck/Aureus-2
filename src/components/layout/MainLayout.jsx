@@ -1124,7 +1124,7 @@ const MainLayout = () => {
         return () => (
             <div className="text-center py-12 text-gray-500">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
-                <p>Leave Platform loading...</p>
+                <p>Leave and HR loading...</p>
                 <p className="text-xs text-gray-400 mt-2">Component status: {typeof window.LeavePlatform}</p>
             </div>
         );
@@ -1137,7 +1137,7 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
-        { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: 'ACCESS_LEAVE_PLATFORM' },
+        { id: 'leave-platform', label: 'Leave and HR', icon: 'fa-calendar-alt', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
         { id: 'helpdesk', label: 'Helpdesk', icon: 'fa-headset', permission: 'ACCESS_HELPDESK' },
@@ -1321,7 +1321,7 @@ const MainLayout = () => {
                         return <div key="leave-platform-error" className="p-8 text-center">
                             <div className="text-red-600 mb-4">
                                 <i className="fas fa-exclamation-triangle text-4xl mb-4"></i>
-                                <p>Leave Platform component not loaded. Please refresh the page.</p>
+                                <p>Leave and HR component not loaded. Please refresh the page.</p>
                                 <p className="text-sm text-gray-500 mt-2">Checking component availability...</p>
                             </div>
                         </div>;
