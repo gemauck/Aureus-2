@@ -4699,7 +4699,9 @@ Abcotronics`;
                 const yearNum = selectedYear != null && !isNaN(selectedYear) ? parseInt(selectedYear, 10) : null;
                 const hasCellKeys = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
                 const hasCellContext = !!(ctx?.section?.id && ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum);
-                const sendUrl = hasCellKeys
+                // Always send cell keys in body and URL when we have doc + period so activity is saved (redundant if body is stripped)
+                const includeCellInBody = !!(ctx?.doc?.id && monthNum >= 1 && monthNum <= 12 && yearNum && project?.id);
+                const sendUrl = includeCellInBody
                     ? `${base}/api/projects/${project.id}/document-collection-send-email?documentId=${encodeURIComponent(String(ctx.doc.id))}&month=${Number(monthNum)}&year=${Number(yearNum)}`
                     : `${base}/api/projects/${project.id}/document-collection-send-email`;
                 const res = await fetch(sendUrl, {
@@ -4708,7 +4710,7 @@ Abcotronics`;
                     headers: {
                         'Content-Type': 'application/json',
                         Accept: 'application/json',
-                        ...(hasCellKeys ? {
+                        ...(includeCellInBody ? {
                             'X-Document-Id': String(ctx.doc.id).trim(),
                             'X-Month': String(monthNum),
                             'X-Year': String(yearNum)
@@ -4722,7 +4724,7 @@ Abcotronics`;
                         ...(htmlPayload ? { html: htmlPayload } : {}),
                         text: sanitized.cleanedBody.trim(),
                         ...(requesterEmail ? { requesterEmail } : {}),
-                        ...(hasCellKeys
+                        ...(includeCellInBody
                             ? {
                                 projectId: String(project.id).trim(),
                                 documentId: String(ctx.doc.id).trim(),

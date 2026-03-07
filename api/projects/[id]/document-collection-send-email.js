@@ -108,6 +108,20 @@ async function handler(req, res) {
     const cell = normalizeDocumentCollectionCell({ projectId, documentId, month, year })
     const hasCellContext = !!cell
 
+    // Log when cell is missing despite having recipients (helps debug activity not persisting)
+    if (!cell && body && (body.to?.length || body.subject)) {
+      const bodyKeys = typeof body === 'object' ? Object.keys(body) : []
+      console.warn('document-collection-send-email: cell missing — activity will not save', {
+        projectId,
+        documentId,
+        month,
+        year,
+        bodyKeys,
+        fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') ?? q.month, year: query.get('year') ?? q.year },
+        fromHeaders: { 'x-document-id': h['x-document-id'], 'x-month': h['x-month'], 'x-year': h['x-year'] }
+      })
+    }
+
     if (!subject) {
       return badRequest(res, 'Subject is required')
     }
