@@ -5,11 +5,16 @@
 import { prisma } from './prisma.js';
 import { createNotificationForUser } from '../notifications.js';
 
-const MENTION_REGEX = /@([A-Za-z0-9._-]+(?:\s+[A-Za-z0-9._-]+)*)/g;
+// Match @mention: allow letters, digits, dots, underscores, hyphens, apostrophe (O'Brien), and spaces between words
+const MENTION_REGEX = /@([A-Za-z0-9._'-]+(?:\s+[A-Za-z0-9._'-]+)*)/g;
 
+/** Normalize for matching: lowercase, strip non-alphanumeric, collapse accents (é -> e) */
 function normalize(s) {
     if (!s) return '';
-    return String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const str = String(s).toLowerCase();
+    // NFD = decomposed accents so "é" -> "e" + combining accent; then remove combining marks
+    const decomposed = str.normalize && typeof str.normalize('NFD') === 'string' ? str.normalize('NFD').replace(/\p{M}/gu, '') : str;
+    return decomposed.replace(/[^a-z0-9]/g, '');
 }
 
 /**
@@ -48,7 +53,9 @@ export async function resolveAuthorNamesToUserIds(authorNames) {
  */
 export async function resolveMentionedUserIds(commentText) {
     if (!commentText || typeof commentText !== 'string') return [];
-    const matches = [...commentText.matchAll(MENTION_REGEX)];
+    const str = String(commentText).trim();
+    if (!str.includes('@')) return [];
+    const matches = [...str.matchAll(MENTION_REGEX)];
     const rawNames = [...new Set(matches.map((m) => (m[1] || '').trim()).filter(Boolean))];
     if (rawNames.length === 0) return [];
 
@@ -59,12 +66,17 @@ export async function resolveMentionedUserIds(commentText) {
     const ids = [];
     for (const raw of rawNames) {
         const norm = normalize(raw);
+        if (!norm) continue;
         const user = users.find((u) => {
             const n = normalize(u.name || '');
             const e = normalize((u.email || '').split('@')[0]);
-            return n === norm || e === norm || n.includes(norm) || norm.includes(n) || (e && e.includes(norm));
+            const fullEmail = normalize((u.email || '').replace('@', ''));
+            return n === norm || e === norm || fullEmail === norm || n.includes(norm) || norm.includes(n) || (e && e.includes(norm)) || (fullEmail && fullEmail.includes(norm));
         });
-        if (user && !ids.includes(user.id)) ids.push(user.id);
+        if (user) {
+            const idStr = String(user.id);
+            if (!ids.includes(idStr)) ids.push(idStr);
+        }
     }
     return ids;
 }

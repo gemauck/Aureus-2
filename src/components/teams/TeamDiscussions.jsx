@@ -310,7 +310,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                         <window.RichTextEditor
                                             value={replyBody}
                                             onChange={setReplyBody}
-                                            placeholder="Write a reply…"
+                                            placeholder="Write a reply… (use @Name to mention someone)"
                                             rows={3}
                                             isDark={isDark}
                                             className="min-h-[80px]"
@@ -319,11 +319,12 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                         <textarea
                                             value={replyBody}
                                             onChange={(e) => setReplyBody(e.target.value)}
-                                            placeholder="Write a reply…"
+                                            placeholder="Write a reply… (use @Name to mention someone)"
                                             rows={3}
                                             className={`w-full px-3 py-2 text-sm border rounded-lg ${input}`}
                                         />
                                     )}
+                                    <p className={`text-xs ${textMuted}`}>Type @ followed by a name to notify that person.</p>
                                     {replyAttachments.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {replyAttachments.map((att, idx) => (

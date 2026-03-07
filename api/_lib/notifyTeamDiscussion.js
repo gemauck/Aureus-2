@@ -7,13 +7,29 @@ import { prisma } from './prisma.js'
 import { createNotificationForUser } from '../notifications.js'
 import { resolveMentionedUserIds } from './notifyCommentParticipants.js'
 
+/** Decode common HTML entities so @ and names are preserved for mention parsing */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return ''
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#64;|&#x40;/gi, '@')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+}
+
 /** Strip HTML to plain text for mention parsing */
 function stripHtml(html) {
   if (!html || typeof html !== 'string') return ''
-  return html
+  const raw = String(html)
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  return decodeHtmlEntities(raw)
 }
 
 /**
