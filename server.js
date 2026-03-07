@@ -2163,16 +2163,6 @@ app.get(/^\/api\/poa-review\/pyodide\/(.*)$/, async (req, res) => {
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
-  // GET document-collection-email-activity: short-circuit so catch-all never 500s
-  const isGetActivity = req.method === 'GET' && (
-    (req.url && req.url.includes('document-collection-email-activity')) ||
-    (req.originalUrl && req.originalUrl.includes('document-collection-email-activity'))
-  )
-  if (isGetActivity && !res.headersSent && !res.writableEnded) {
-    res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } }))
-    return
-  }
-
   let timeout = null
   let handlerPath
   try {
