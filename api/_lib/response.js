@@ -5,14 +5,46 @@ function safeJsonReplacer(key, value) {
   return value
 }
 
+// Replacer that also drops circular references so serialization never throws
+function safeJsonReplacerWithCircularRefCheck() {
+  const seen = new WeakSet()
+  return function (key, value) {
+    if (value !== null && typeof value === 'object') {
+      if (seen.has(value)) return undefined
+      seen.add(value)
+    }
+    return safeJsonReplacer(key, value)
+  }
+}
+
+function safeStringify(payload) {
+  try {
+    return JSON.stringify(payload, safeJsonReplacerWithCircularRefCheck())
+  } catch (e) {
+    console.error('safeStringify failed:', e)
+    throw e
+  }
+}
+
 export function ok(res, data) {
   // Prevent sending response if already sent
   if (res.headersSent || res.writableEnded) {
     console.warn('⚠️ ok: Response already sent, skipping response')
     return
   }
-  
-  const serialized = JSON.stringify({ data }, safeJsonReplacer)
+
+  let serialized
+  try {
+    serialized = safeStringify({ data })
+  } catch (e) {
+    console.error('ok(): serialization failed', e)
+    if (!res.headersSent) {
+      res.statusCode = 500
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: { code: 'SERVER_ERROR', message: 'Response serialization failed', details: e.message } }))
+    }
+    return
+  }
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 200
@@ -27,8 +59,19 @@ export function created(res, data) {
     console.warn('⚠️ created: Response already sent, skipping response')
     return
   }
-  
-  const serialized = JSON.stringify({ data }, safeJsonReplacer)
+
+  let serialized
+  try {
+    serialized = safeStringify({ data })
+  } catch (e) {
+    console.error('created(): serialization failed', e)
+    if (!res.headersSent) {
+      res.statusCode = 500
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: { code: 'SERVER_ERROR', message: 'Response serialization failed', details: e.message } }))
+    }
+    return
+  }
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 201

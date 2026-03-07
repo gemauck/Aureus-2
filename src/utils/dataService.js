@@ -437,6 +437,260 @@
         }
     },
 
+    // Discussions (API-only)
+    async getTeamDiscussions(teamId, params = {}) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) return [];
+            const q = new URLSearchParams({ teamId: teamId || '' });
+            if (params.type) q.set('type', params.type);
+            if (params.pinned !== undefined) q.set('pinned', String(params.pinned));
+            const response = await fetch(`/api/teams/discussions?${q}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) throw new Error(`Failed to fetch discussions: ${response.status}`);
+            const data = await response.json();
+            return data.data?.discussions || [];
+        } catch (e) {
+            console.error('getTeamDiscussions:', e);
+            return [];
+        }
+    },
+
+    async getDiscussion(discussionId) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) return null;
+            const response = await fetch(`/api/teams/discussions/${discussionId}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const msg = data?.error?.message || data?.error || `Failed to fetch discussion: ${response.status}`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            return data.data?.discussion ?? null;
+        } catch (e) {
+            console.error('getDiscussion:', e);
+            throw e;
+        }
+    },
+
+    async createDiscussion(payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch('/api/teams/discussions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Create discussion failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.discussion;
+    },
+
+    async updateDiscussion(id, payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${id}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Update discussion failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.discussion;
+    },
+
+    async deleteDiscussion(id) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Delete discussion failed: ${response.status}`);
+        return true;
+    },
+
+    async getDiscussionReplies(discussionId) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) return [];
+            const response = await fetch(`/api/teams/discussions/${discussionId}/replies`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.data?.replies || [];
+        } catch (e) {
+            console.error('getDiscussionReplies:', e);
+            return [];
+        }
+    },
+
+    async addDiscussionReply(discussionId, body, authorId, authorName, attachments = []) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${discussionId}/replies`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body, authorId, authorName, attachments: Array.isArray(attachments) ? attachments : [] })
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Add reply failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.reply;
+    },
+
+    async updateDiscussionReply(discussionId, replyId, body) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${discussionId}/replies/${replyId}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body })
+        });
+        if (!response.ok) throw new Error(`Update reply failed: ${response.status}`);
+        const data = await response.json();
+        return data.data?.reply;
+    },
+
+    async deleteDiscussionReply(discussionId, replyId) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${discussionId}/replies/${replyId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Delete reply failed: ${response.status}`);
+        return true;
+    },
+
+    async getDiscussionChecklists(discussionId) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) return [];
+            const response = await fetch(`/api/teams/discussions/${discussionId}/checklists`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.data?.checklists || [];
+        } catch (e) {
+            console.error('getDiscussionChecklists:', e);
+            return [];
+        }
+    },
+
+    async addDiscussionChecklist(discussionId, payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${discussionId}/checklists`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`Add checklist failed: ${response.status}`);
+        const data = await response.json();
+        return data.data?.checklist;
+    },
+
+    async updateDiscussionChecklist(discussionId, checklistId, payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${discussionId}/checklists/${checklistId}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`Update checklist failed: ${response.status}`);
+        const data = await response.json();
+        return data.data?.checklist;
+    },
+
+    async deleteDiscussionChecklist(discussionId, checklistId) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/discussions/${discussionId}/checklists/${checklistId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Delete checklist failed: ${response.status}`);
+        return true;
+    },
+
+    async getTeamTasksForTeam(teamId, discussionId = null) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) return [];
+            const q = new URLSearchParams({ teamId: teamId || '' });
+            if (discussionId) q.set('discussionId', discussionId);
+            const response = await fetch(`/api/teams/tasks?${q}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.data?.tasks || [];
+        } catch (e) {
+            console.error('getTeamTasksForTeam:', e);
+            return [];
+        }
+    },
+
+    async createTeamTask(payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch('/api/teams/tasks', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Create task failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.task;
+    },
+
+    async updateTeamTask(taskId, payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/tasks/${taskId}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`Update task failed: ${response.status}`);
+        const data = await response.json();
+        return data.data?.task;
+    },
+
+    async deleteTeamTask(taskId) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Delete task failed: ${response.status}`);
+        return true;
+    },
+
     async getManagementMeetingNotes() {
         return safeStorageCall(window.storage, 'getManagementMeetingNotes', []);
     },

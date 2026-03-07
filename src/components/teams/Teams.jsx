@@ -1,11 +1,8 @@
 // Get dependencies from window
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const storage = window.storage;
-const DocumentModal = window.DocumentModal;
-const WorkflowModal = window.WorkflowModal;
-const ChecklistModal = window.ChecklistModal;
-const NoticeModal = window.NoticeModal;
-const WorkflowExecutionModal = window.WorkflowExecutionModal;
+const TeamDiscussions = window.TeamDiscussions;
+const DiscussionModal = window.DiscussionModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
 const Teams = () => {
@@ -230,10 +227,23 @@ const Teams = () => {
     }
     const isDark = themeResult?.isDark || false;
     
+    // Query params from search or from hash (#/teams/id?tab=discussions&discussion=id)
+    const getSearchParams = () => {
+        const hash = window.location.hash || '';
+        if (hash.indexOf('?') !== -1) {
+            return new URLSearchParams(hash.slice(hash.indexOf('?') + 1));
+        }
+        return new URLSearchParams(window.location.search);
+    };
+
     // Initialize activeTab from URL or default to 'overview'
     const getTabFromURL = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('tab') || 'overview';
+        const urlParams = getSearchParams();
+        const tab = urlParams.get('tab') || 'overview';
+        // Map legacy tabs to discussions
+        if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
+        if (['overview', 'discussions', 'meeting-notes', 'poa-review'].includes(tab)) return tab;
+        return 'overview';
     };
     
     // ALL useState hooks must be declared before any useEffect hooks
@@ -297,27 +307,8 @@ const Teams = () => {
     const isInitialMount = useRef(true);
     
     // Modal states
-    const [showDocumentModal, setShowDocumentModal] = useState(false);
-    const [showWorkflowModal, setShowWorkflowModal] = useState(false);
-    const [showChecklistModal, setShowChecklistModal] = useState(false);
-    const [showNoticeModal, setShowNoticeModal] = useState(false);
-    const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
-    const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
-    
-    // Data states
-    const [documents, setDocuments] = useState([]);
-    const [workflows, setWorkflows] = useState([]);
-    const [checklists, setChecklists] = useState([]);
-    const [notices, setNotices] = useState([]);
-    const [workflowExecutions, setWorkflowExecutions] = useState([]);
-    
-    // Edit states
-    const [editingDocument, setEditingDocument] = useState(null);
-    const [editingWorkflow, setEditingWorkflow] = useState(null);
-    const [editingChecklist, setEditingChecklist] = useState(null);
-    const [editingNotice, setEditingNotice] = useState(null);
-    const [executingWorkflow, setExecutingWorkflow] = useState(null);
-    const [viewingDocument, setViewingDocument] = useState(null);
+    // Discussions overview (for Recent Activity when no team selected)
+    const [allDiscussions, setAllDiscussions] = useState([]);
     
     // State to track ManagementMeetingNotes availability
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
@@ -326,7 +317,7 @@ const Teams = () => {
     useEffect(() => {
         if (teamsLoading || teams.length === 0) return; // Wait for teams to load
         
-        const urlParams = new URLSearchParams(window.location.search);
+        const urlParams = getSearchParams();
         const teamId = urlParams.get('team');
         if (teamId) {
             const team = teams.find(t => t.id === teamId || String(t.id) === String(teamId));
@@ -352,7 +343,7 @@ const Teams = () => {
         // On initial mount, check if URL already has the correct params
         // If so, don't update URL to preserve params like month and week
         if (isInitialMount.current) {
-            const urlParams = new URLSearchParams(window.location.search);
+            const urlParams = getSearchParams();
             const urlTab = urlParams.get('tab') || 'overview';
             const urlTeam = urlParams.get('team');
             
@@ -436,8 +427,8 @@ const Teams = () => {
                 return urlTab;
             });
             
-            // Read team from URL
-            const urlParams = new URLSearchParams(window.location.search);
+            // Read team from URL (search or hash)
+            const urlParams = getSearchParams();
             const teamId = urlParams.get('team');
             if (teamId && teams.length > 0) {
                 const team = teams.find(t => t.id === teamId || String(t.id) === String(teamId));
@@ -541,209 +532,52 @@ const Teams = () => {
         return () => clearInterval(interval);
     }, []);
 
-    // Load data from data service
+    // Load discussions for overview (Recent Activity) when no team selected
     useEffect(() => {
-        const loadData = async () => {
+        let cancelled = false;
+        const load = async () => {
             try {
-                
-                // Safely call dataService methods with better error handling
-                const getSafeData = async (method) => {
-                    try {
-                        if (!window.dataService || typeof window.dataService[method] !== 'function') {
-                            return [];
-                        }
-                        const result = await window.dataService[method]();
-                        return Array.isArray(result) ? result : [];
-                    } catch (err) {
-                        console.warn(`⚠️ Teams: Error loading ${method}:`, err);
-                        return [];
-                    }
-                };
-                
-                const [savedDocuments, savedWorkflows, savedChecklists, savedNoticesResult] = await Promise.all([
-                    getSafeData('getTeamDocuments'),
-                    getSafeData('getTeamWorkflows'),
-                    getSafeData('getTeamChecklists'),
-                    selectedTeam ? (async () => {
-                        try {
-                            return await window.dataService.getTeamNotices(selectedTeam.id);
-                        } catch (err) {
-                            console.warn('⚠️ Teams: Error loading team notices:', err);
-                            return [];
-                        }
-                    })() : Promise.resolve([])
-                ]);
-                
-                const savedNotices = Array.isArray(savedNoticesResult) ? savedNoticesResult : [];
-                
-                // Ensure all values are arrays, even if they returned null/undefined
-                const documents = Array.isArray(savedDocuments) ? savedDocuments : [];
-                const workflows = Array.isArray(savedWorkflows) ? savedWorkflows : [];
-                const checklists = Array.isArray(savedChecklists) ? savedChecklists : [];
-                const notices = Array.isArray(savedNotices) ? savedNotices : [];
-                
-                // Safely parse workflow executions
-                let savedExecutions = [];
-                try {
-                    const executionsStr = localStorage.getItem('abcotronics_workflow_executions');
-                    if (executionsStr) {
-                        const parsed = JSON.parse(executionsStr);
-                        savedExecutions = Array.isArray(parsed) ? parsed : [];
-                    }
-                } catch (parseError) {
-                    console.warn('⚠️ Teams: Error parsing workflow executions:', parseError);
-                    savedExecutions = [];
+                if (!window.dataService?.getTeamDiscussions) {
+                    setIsReady(true);
+                    return;
                 }
-
-
-                setDocuments(documents);
-                setWorkflows(workflows);
-                setChecklists(checklists);
-                setNotices(notices);
-                setWorkflowExecutions(savedExecutions);
-                
-                // Set ready immediately - no artificial delay needed
-                setIsReady(true);
-            } catch (error) {
-                console.error('❌ Teams: Error loading data:', error);
-                // Set empty arrays on error to prevent null reference errors
-                setDocuments([]);
-                setWorkflows([]);
-                setChecklists([]);
-                setNotices([]);
-                setWorkflowExecutions([]);
-                setIsReady(true); // Show error state
+                const list = await window.dataService.getTeamDiscussions();
+                if (!cancelled) {
+                    setAllDiscussions(Array.isArray(list) ? list : []);
+                }
+            } catch (e) {
+                if (!cancelled) setAllDiscussions([]);
+            } finally {
+                if (!cancelled) setIsReady(true);
             }
         };
-        
-        loadData();
+        load();
+        return () => { cancelled = true; };
     }, []);
 
-    const accessibleDocuments = useMemo(() => {
-        return isAdminUser
-            ? documents
-            : documents.filter((d) => (d.team || '').toString().trim().toLowerCase() !== 'management');
-    }, [documents, isAdminUser]);
+    // Team discussion counts from API (teams list includes counts.discussions)
+    const getTeamCounts = useCallback((teamId) => {
+        const team = teams.find(t => t.id === teamId);
+        const discussions = team?.counts?.discussions ?? 0;
+        return { discussions };
+    }, [teams]);
 
-    const accessibleWorkflows = useMemo(() => {
-        return isAdminUser
-            ? workflows
-            : workflows.filter((w) => (w.team || '').toString().trim().toLowerCase() !== 'management');
-    }, [workflows, isAdminUser]);
-
-    const accessibleChecklists = useMemo(() => {
-        return isAdminUser
-            ? checklists
-            : checklists.filter((c) => (c.team || '').toString().trim().toLowerCase() !== 'management');
-    }, [checklists, isAdminUser]);
-
-    const accessibleNotices = useMemo(() => {
-        return isAdminUser
-            ? notices
-            : notices.filter((n) => (n.team || '').toString().trim().toLowerCase() !== 'management');
-    }, [notices, isAdminUser]);
-
-    const accessibleWorkflowExecutions = useMemo(() => {
-        return isAdminUser
-            ? workflowExecutions
-            : workflowExecutions.filter(
-                  (execution) => (execution.team || '').toString().trim().toLowerCase() !== 'management'
-              );
-    }, [workflowExecutions, isAdminUser]);
-
-    // Get counts for selected team - memoized per team to avoid recalculation
-    const teamCountsCache = useMemo(() => {
-        const cache = {};
-        teams.forEach(team => {
-            cache[team.id] = {
-                documents: accessibleDocuments.filter(d => d.teamId === team.id || d.team === team.id).length,
-                workflows: accessibleWorkflows.filter(w => w.teamId === team.id || w.team === team.id).length,
-                checklists: accessibleChecklists.filter(c => c.teamId === team.id || c.team === team.id).length,
-                notices: accessibleNotices.filter(n => n.teamId === team.id || n.team === team.id).length
-            };
-        });
-        return cache;
-    }, [teams, accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
-
-    const getTeamCounts = (teamId) => {
-        return teamCountsCache[teamId] || { documents: 0, workflows: 0, checklists: 0, notices: 0 };
-    };
-
-    // Filter data by selected team - memoized to avoid recalculation
-    // Use selectedTeam?.id instead of selectedTeam object to avoid unnecessary recalculations
-    const selectedTeamId = selectedTeam?.id;
-    const filteredDocuments = useMemo(() => {
-        return selectedTeamId 
-            ? accessibleDocuments.filter(d => d.team === selectedTeamId)
-            : accessibleDocuments;
-    }, [selectedTeamId, accessibleDocuments]);
-    
-    const filteredWorkflows = useMemo(() => {
-        return selectedTeamId 
-            ? accessibleWorkflows.filter(w => w.team === selectedTeamId)
-            : accessibleWorkflows;
-    }, [selectedTeamId, accessibleWorkflows]);
-    
-    const filteredChecklists = useMemo(() => {
-        return selectedTeamId 
-            ? accessibleChecklists.filter(c => c.team === selectedTeamId)
-            : accessibleChecklists;
-    }, [selectedTeamId, accessibleChecklists]);
-    
-    const filteredNotices = useMemo(() => {
-        return selectedTeamId 
-            ? accessibleNotices.filter(n => n.team === selectedTeamId)
-            : accessibleNotices;
-    }, [selectedTeamId, accessibleNotices]);
-
-    // Search functionality - inline to avoid circular dependencies
-    const displayDocuments = useMemo(() => {
-        if (!searchTerm) return filteredDocuments;
-        return filteredDocuments.filter(item => 
-            ['title', 'category', 'description'].some(field => 
-                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
-    }, [filteredDocuments, searchTerm]);
-    
-    const displayWorkflows = useMemo(() => {
-        if (!searchTerm) return filteredWorkflows;
-        return filteredWorkflows.filter(item => 
-            ['title', 'description'].some(field => 
-                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
-    }, [filteredWorkflows, searchTerm]);
-    
-    const displayChecklists = useMemo(() => {
-        if (!searchTerm) return filteredChecklists;
-        return filteredChecklists.filter(item => 
-            ['title', 'description'].some(field => 
-                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
-    }, [filteredChecklists, searchTerm]);
-    
-    const displayNotices = useMemo(() => {
-        if (!searchTerm) return filteredNotices;
-        return filteredNotices.filter(item => 
-            ['title', 'content'].some(field => 
-                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
-    }, [filteredNotices, searchTerm]);
-
-    // Recent activity across all teams - memoized to avoid recalculation on every render
+    // Recent activity from discussions
     const recentActivity = useMemo(() => {
-        return [
-            ...accessibleDocuments.map(d => ({ ...d, type: 'document', icon: 'file-alt' })),
-            ...accessibleWorkflows.map(w => ({ ...w, type: 'workflow', icon: 'project-diagram' })),
-            ...accessibleChecklists.map(c => ({ ...c, type: 'checklist', icon: 'tasks' })),
-            ...accessibleNotices.map(n => ({ ...n, type: 'notice', icon: 'bullhorn' }))
-        ]
-            .sort((a, b) => new Date(b.createdAt || b.updatedAt || b.date) - new Date(a.createdAt || a.updatedAt || a.date))
-            .slice(0, 10);
-    }, [accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
+        return (allDiscussions || [])
+            .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+            .slice(0, 10)
+            .map(d => ({
+                ...d,
+                title: d.title,
+                type: d.type === 'notice' ? 'notice' : 'discussion',
+                icon: d.type === 'notice' ? 'bullhorn' : 'comments',
+                teamId: d.teamId,
+                team: d.team?.id || d.teamId,
+                createdAt: d.createdAt,
+                updatedAt: d.updatedAt
+            }));
+    }, [allDiscussions]);
 
     useEffect(() => {
         if (selectedTeam && !isTeamAccessible(selectedTeam.id)) {
@@ -770,153 +604,15 @@ const Teams = () => {
             });
         }
         
-        // Only set tab to 'documents' if not already set from URL
-        const urlParams = new URLSearchParams(window.location.search);
+        // Only set tab to 'discussions' if not already set from URL
+        const urlParams = getSearchParams();
         const urlTab = urlParams.get('tab');
         if (!urlTab || urlTab === 'overview') {
-            setActiveTab('documents');
+            setActiveTab('discussions');
         } else {
             setActiveTab(urlTab);
         }
     }, [isTeamAccessible]);
-
-    // Save handlers
-    const handleSaveDocument = async (documentData) => {
-        const existingIndex = documents.findIndex(d => d.id === documentData.id);
-        let updatedDocuments;
-        
-        if (existingIndex >= 0) {
-            updatedDocuments = [...documents];
-            updatedDocuments[existingIndex] = documentData;
-        } else {
-            updatedDocuments = [...documents, documentData];
-        }
-        
-        setDocuments(updatedDocuments);
-        await window.dataService.setTeamDocuments(updatedDocuments);
-        setEditingDocument(null);
-    };
-
-    const handleSaveWorkflow = async (workflowData) => {
-        const existingIndex = workflows.findIndex(w => w.id === workflowData.id);
-        let updatedWorkflows;
-        
-        if (existingIndex >= 0) {
-            updatedWorkflows = [...workflows];
-            updatedWorkflows[existingIndex] = workflowData;
-        } else {
-            updatedWorkflows = [...workflows, workflowData];
-        }
-        
-        setWorkflows(updatedWorkflows);
-        await window.dataService.setTeamWorkflows(updatedWorkflows);
-        setEditingWorkflow(null);
-    };
-
-    const handleSaveChecklist = async (checklistData) => {
-        const existingIndex = checklists.findIndex(c => c.id === checklistData.id);
-        let updatedChecklists;
-        
-        if (existingIndex >= 0) {
-            updatedChecklists = [...checklists];
-            updatedChecklists[existingIndex] = checklistData;
-        } else {
-            updatedChecklists = [...checklists, checklistData];
-        }
-        
-        setChecklists(updatedChecklists);
-        await window.dataService.setTeamChecklists(updatedChecklists);
-        setEditingChecklist(null);
-    };
-
-    const handleSaveNotice = async (noticeData) => {
-        const existingIndex = notices.findIndex(n => n.id === noticeData.id);
-        let updatedNotices;
-        
-        if (existingIndex >= 0) {
-            updatedNotices = [...notices];
-            updatedNotices[existingIndex] = noticeData;
-        } else {
-            updatedNotices = [...notices, noticeData];
-        }
-        
-        // Save notice to API
-        try {
-            const savedNotice = await window.dataService.setTeamNotices(noticeData);
-            // Update local state with saved notice (which may have server-generated ID)
-            const finalNotices = existingIndex >= 0 
-                ? notices.map((n, idx) => idx === existingIndex ? savedNotice : n)
-                : [...notices, savedNotice];
-            setNotices(finalNotices);
-        } catch (error) {
-            console.error('Error saving team notice:', error);
-            alert(`Failed to save notice: ${error.message}`);
-            return;
-        }
-        setEditingNotice(null);
-    };
-
-    const handleWorkflowExecutionComplete = (executionData) => {
-        const execution = {
-            id: Date.now().toString(),
-            workflowId: executingWorkflow.id,
-            workflowTitle: executingWorkflow.title,
-            team: executingWorkflow.team,
-            ...executionData
-        };
-        
-        const updatedExecutions = [...workflowExecutions, execution];
-        setWorkflowExecutions(updatedExecutions);
-        localStorage.setItem('abcotronics_workflow_executions', JSON.stringify(updatedExecutions));
-    };
-
-    // Delete handlers
-    const handleDeleteDocument = async (id) => {
-        if (confirm('Are you sure you want to delete this document?')) {
-            const updatedDocuments = documents.filter(d => d.id !== id);
-            setDocuments(updatedDocuments);
-            await window.dataService.setTeamDocuments(updatedDocuments);
-        }
-    };
-
-    const handleDeleteWorkflow = async (id) => {
-        if (confirm('Are you sure you want to delete this workflow?')) {
-            const updatedWorkflows = workflows.filter(w => w.id !== id);
-            setWorkflows(updatedWorkflows);
-            await window.dataService.setTeamWorkflows(updatedWorkflows);
-        }
-    };
-
-    const handleDeleteChecklist = async (id) => {
-        if (confirm('Are you sure you want to delete this checklist?')) {
-            const updatedChecklists = checklists.filter(c => c.id !== id);
-            setChecklists(updatedChecklists);
-            await window.dataService.setTeamChecklists(updatedChecklists);
-        }
-    };
-
-    const handleDeleteNotice = async (id) => {
-        if (confirm('Are you sure you want to delete this notice?')) {
-            try {
-                await window.dataService.deleteTeamNotice(id);
-                const updatedNotices = notices.filter(n => n.id !== id);
-                setNotices(updatedNotices);
-            } catch (error) {
-                console.error('Error deleting team notice:', error);
-                alert(`Failed to delete notice: ${error.message}`);
-            }
-        }
-    };
-
-    const handleExecuteWorkflow = (workflow) => {
-        setExecutingWorkflow(workflow);
-        setShowWorkflowExecutionModal(true);
-    };
-
-    const handleViewDocument = (document) => {
-        setViewingDocument(document);
-        setShowDocumentViewModal(true);
-    };
 
     // Show minimal loading state to prevent renderer crash
     if (!isReady) {
@@ -935,32 +631,6 @@ const Teams = () => {
                     <div className="text-center py-12">
                         <div className={`inline-block animate-spin rounded-full h-8 w-8 border-b-2 mb-3 ${isDark ? 'border-blue-400' : 'border-blue-600'}`}></div>
                         <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading Teams module...</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-    
-    // Additional safety check - if data arrays are too large, show warning
-    if (documents.length > 1000 || workflows.length > 1000 || checklists.length > 1000 || notices.length > 1000) {
-        return (
-            <div className="space-y-6">
-                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
-                        <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
-                        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Centralized documentation, workflows, and team collaboration</p>
-                    </div>
-                </div>
-                <div className={`${isDark ? 'bg-amber-900/20 border-amber-800' : 'bg-amber-50 border-amber-200'} border rounded-xl p-5 shadow-sm`}>
-                    <div className="flex items-start">
-                        <i className={`fas fa-exclamation-triangle mt-0.5 mr-3 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}></i>
-                        <div>
-                            <h3 className={`text-sm font-semibold mb-1 ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Too much data</h3>
-                            <p className={`text-sm ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Please contact support.</p>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1018,7 +688,7 @@ const Teams = () => {
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Search documents, workflows, checklists..."
+                                    placeholder="Search discussions…"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
@@ -1042,52 +712,16 @@ const Teams = () => {
                         </div>
                         <div className={`flex items-center flex-wrap sm:flex-nowrap gap-2 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 shrink-0`} role="group" aria-label="Section tabs">
                             <button
-                                onClick={() => setActiveTab('documents')}
+                                onClick={() => setActiveTab('discussions')}
                                 className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                    activeTab === 'documents'
+                                    activeTab === 'discussions'
                                         ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
                                         : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                             >
-                                <i className="fas fa-file-alt mr-1.5"></i>
-                                <span className="hidden sm:inline">Documents</span>
-                                <span className="sm:hidden">Docs</span>
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('workflows')}
-                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                    activeTab === 'workflows'
-                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                }`}
-                            >
-                                <i className="fas fa-project-diagram mr-1.5"></i>
-                                <span className="hidden sm:inline">Workflows</span>
-                                <span className="sm:hidden">Work</span>
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('checklists')}
-                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                    activeTab === 'checklists'
-                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                }`}
-                            >
-                                <i className="fas fa-tasks mr-1.5"></i>
-                                <span className="hidden sm:inline">Checklists</span>
-                                <span className="sm:hidden">Check</span>
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('notices')}
-                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                    activeTab === 'notices'
-                                        ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                        : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                }`}
-                            >
-                                <i className="fas fa-bullhorn mr-1.5"></i>
-                                <span className="hidden sm:inline">Notices</span>
-                                <span className="sm:hidden">Notice</span>
+                                <i className="fas fa-comments mr-1.5"></i>
+                                <span className="hidden sm:inline">Discussions</span>
+                                <span className="sm:hidden">Discuss</span>
                             </button>
                             {selectedTeam?.id === 'management' && (
                                 <button
@@ -1126,48 +760,17 @@ const Teams = () => {
             {!selectedTeam && (
                 <div className="space-y-6">
                     {/* Quick Stats */}
-                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                         <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Documents</p>
-                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleDocuments.length}</p>
+                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Discussions</p>
+                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                        {teams.reduce((sum, t) => sum + (t.counts?.discussions ?? 0), 0)}
+                                    </p>
                                 </div>
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                    <i className={`fas fa-file-alt ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
-                                </div>
-                            </div>
-                        </div>
-                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Workflows</p>
-                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleWorkflows.filter(w => w.status === 'Active').length}</p>
-                                </div>
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                    <i className={`fas fa-project-diagram ${isDark ? 'text-purple-400' : 'text-purple-600'} text-sm`}></i>
-                                </div>
-                            </div>
-                        </div>
-                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Checklists</p>
-                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleChecklists.length}</p>
-                                </div>
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                    <i className={`fas fa-tasks ${isDark ? 'text-green-400' : 'text-green-600'} text-sm`}></i>
-                                </div>
-                            </div>
-                        </div>
-                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Executions</p>
-                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{accessibleWorkflowExecutions.length}</p>
-                                </div>
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                    <i className={`fas fa-play-circle ${isDark ? 'text-amber-400' : 'text-amber-600'} text-sm`}></i>
+                                    <i className={`fas fa-comments ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
                                 </div>
                             </div>
                         </div>
@@ -1214,9 +817,7 @@ const Teams = () => {
                                             </span>
                                         )}
                                         <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                            <span><i className="fas fa-file-alt mr-1"></i>{counts.documents}</span>
-                                            <span><i className="fas fa-project-diagram mr-1"></i>{counts.workflows}</span>
-                                            <span><i className="fas fa-tasks mr-1"></i>{counts.checklists}</span>
+                                            <span><i className="fas fa-comments mr-1"></i>{counts.docussions}</span>
                                         </div>
                                     </button>
                                 );
@@ -1275,381 +876,17 @@ const Teams = () => {
                         </div>
                         <div className="flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm">
                             <div>
-                                <span className="opacity-75">Documents: </span>
-                                <span className="font-bold">{filteredDocuments.length}</span>
-                            </div>
-                            <div>
-                                <span className="opacity-75">Workflows: </span>
-                                <span className="font-bold">{filteredWorkflows.length}</span>
-                            </div>
-                            <div>
-                                <span className="opacity-75">Checklists: </span>
-                                <span className="font-bold">{filteredChecklists.length}</span>
-                            </div>
-                            <div>
-                                <span className="opacity-75">Notices: </span>
-                                <span className="font-bold">{filteredNotices.length}</span>
+                                <span className="opacity-75">Discussions: </span>
+                                <span className="font-bold">{getTeamCounts(selectedTeam?.id)?.discussions ?? 0}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                        <button
-                            onClick={() => {
-                                setEditingDocument(null);
-                                setShowDocumentModal(true);
-                            }}
-                            className="px-3 py-2.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
-                        >
-                            <i className="fas fa-plus mr-1.5"></i>
-                            <span className="hidden sm:inline">Add Document</span>
-                            <span className="sm:hidden">Document</span>
-                        </button>
-                        <button
-                            onClick={() => {
-                                setEditingWorkflow(null);
-                                setShowWorkflowModal(true);
-                            }}
-                            className="px-3 py-2.5 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
-                        >
-                            <i className="fas fa-plus mr-1.5"></i>
-                            <span className="hidden sm:inline">Create Workflow</span>
-                            <span className="sm:hidden">Workflow</span>
-                        </button>
-                        <button
-                            onClick={() => {
-                                setEditingChecklist(null);
-                                setShowChecklistModal(true);
-                            }}
-                            className="px-3 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
-                        >
-                            <i className="fas fa-plus mr-1.5"></i>
-                            <span className="hidden sm:inline">New Checklist</span>
-                            <span className="sm:hidden">Checklist</span>
-                        </button>
-                        <button
-                            onClick={() => {
-                                setEditingNotice(null);
-                                setShowNoticeModal(true);
-                            }}
-                            className="px-3 py-2.5 sm:py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
-                        >
-                            <i className="fas fa-plus mr-1.5"></i>
-                            <span className="hidden sm:inline">Post Notice</span>
-                            <span className="sm:hidden">Notice</span>
-                        </button>
-                    </div>
-
                     {/* Content Display Based on Active Tab */}
                     <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                        {activeTab === 'documents' && (
-                            <div>
-									<h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Documents Library</h3>
-                                {displayDocuments.length > 0 ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                                        {displayDocuments.map(doc => (
-                                            <div key={doc.id} className={`border rounded-xl p-4 hover:shadow-md transition-all duration-200 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                                                <div className="flex items-start justify-between mb-2">
-										<div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                            <i className={`fas fa-file-alt text-sm ${isDark ? 'text-blue-400' : 'text-blue-600'}`}></i>
-                                                    </div>
-                                                    <div className="flex gap-1">
-                                                        <button
-                                                            onClick={() => handleViewDocument(doc)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
-                                                            title="View"
-                                                        >
-                                                            <i className="fas fa-eye text-sm sm:text-xs"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingDocument(doc);
-                                                                setShowDocumentModal(true);
-                                                            }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
-                                                            title="Edit"
-                                                        >
-                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteDocument(doc.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
-                                                            title="Delete"
-                                                        >
-                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-										<span className={`px-2 py-0.5 text-xs rounded-lg mb-2 inline-block ${isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                    {doc.category}
-                                                </span>
-										<h4 className={`font-semibold text-sm mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{doc.title}</h4>
-										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{doc.description}</p>
-										<div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    <span>v{doc.version}</span>
-                                                    <span>{new Date(doc.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12">
-                                        <i className={`fas fa-file-alt text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No documents yet</p>
-                                        <button 
-                                            onClick={() => {
-                                                setEditingDocument(null);
-                                                setShowDocumentModal(true);
-                                            }}
-                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
-                                        >
-                                            Add First Document
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                        {activeTab === 'discussions' && TeamDiscussions && (
+                            <TeamDiscussions team={selectedTeam} isDark={isDark} searchTerm={searchTerm} initialDiscussionId={getSearchParams().get('discussion') || undefined} />
                         )}
-
-                        {activeTab === 'workflows' && (
-                            <div>
-                                <h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Workflows & Processes</h3>
-                                {displayWorkflows.length > 0 ? (
-									<div className="space-y-3">
-                                        {displayWorkflows.map(workflow => (
-                                            <div key={workflow.id} className={`border rounded-xl p-4 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                                                <div className="flex items-start justify-between mb-2">
-                                                    <div className="flex items-center gap-3 flex-1">
-										<div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                            <i className={`fas fa-project-diagram text-sm ${isDark ? 'text-purple-400' : 'text-purple-600'}`}></i>
-                                                        </div>
-                                                        <div className="flex-1">
-												<h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{workflow.title}</h4>
-												<p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{workflow.description}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-1 flex-wrap">
-                                                        <button
-                                                            onClick={() => handleExecuteWorkflow(workflow)}
-                                                            className={`px-2 py-2 sm:py-1 rounded text-xs transition font-medium min-h-[44px] sm:min-h-0 ${isDark ? 'bg-green-900 text-green-300 hover:bg-green-800' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
-                                                            title="Execute Workflow"
-                                                        >
-                                                            <i className="fas fa-play mr-1"></i>
-                                                            <span className="hidden sm:inline">Execute</span>
-                                                            <span className="sm:hidden">Run</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingWorkflow(workflow);
-                                                                setShowWorkflowModal(true);
-                                                            }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
-                                                            title="Edit"
-                                                        >
-                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteWorkflow(workflow.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
-                                                            title="Delete"
-                                                        >
-                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                
-										<div className="flex items-center gap-2 mb-2">
-                                                    <span className={`px-2 py-1 text-xs rounded ${
-												workflow.status === 'Active' ? isDark ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700' :
-												workflow.status === 'Draft' ? isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700' :
-												isDark ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
-                                                    }`}>
-                                                        {workflow.status}
-                                                    </span>
-											{workflow.tags && workflow.tags.map(tag => (
-												<span key={tag} className={`px-2 py-1 text-xs rounded ${isDark ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
-                                                            {tag}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                                
-										<div className={`flex items-center gap-4 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    <span><i className="fas fa-layer-group mr-1"></i>{workflow.steps?.length || 0} steps</span>
-                                                    <span><i className="fas fa-clock mr-1"></i>Updated {new Date(workflow.updatedAt).toLocaleDateString('en-ZA')}</span>
-                                                    <span><i className="fas fa-play-circle mr-1"></i>
-                                                        {accessibleWorkflowExecutions.filter(e => e.workflowId === workflow.id).length} executions
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12">
-                                        <i className={`fas fa-project-diagram text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No workflows yet</p>
-                                        <button 
-                                            onClick={() => {
-                                                setEditingWorkflow(null);
-                                                setShowWorkflowModal(true);
-                                            }}
-                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
-                                        >
-                                            Create First Workflow
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {activeTab === 'checklists' && (
-                            <div>
-									<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Checklists & Forms</h3>
-                                {displayChecklists.length > 0 ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
-                                        {displayChecklists.map(checklist => (
-                                            <div key={checklist.id} className={`border rounded-xl p-4 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                                                <div className="flex items-start justify-between mb-2">
-                                                    <div className="flex items-center gap-3 flex-1">
-										<div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                            <i className={`fas fa-tasks text-sm ${isDark ? 'text-green-400' : 'text-green-600'}`}></i>
-                                                        </div>
-                                                        <div>
-                                                <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{checklist.title}</h4>
-                                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{checklist.items?.length || 0} items</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-1">
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingChecklist(checklist);
-                                                                setShowChecklistModal(true);
-                                                            }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
-                                                            title="Edit"
-                                                        >
-                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteChecklist(checklist.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
-                                                            title="Delete"
-                                                        >
-                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-										<span className={`px-2 py-1 text-xs rounded mb-2 inline-block ${isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                    {checklist.category}
-                                                </span>
-										<p className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{checklist.description}</p>
-                                        <div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    <span><i className="fas fa-check-circle mr-1"></i>{checklist.frequency}</span>
-                                                    <button className={`font-medium ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}>
-                                                        Use Template →
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12">
-                                        <i className={`fas fa-tasks text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No checklists yet</p>
-                                        <button 
-                                            onClick={() => {
-                                                setEditingChecklist(null);
-                                                setShowChecklistModal(true);
-                                            }}
-                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
-                                        >
-                                            Create First Checklist
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {activeTab === 'notices' && (
-                            <div>
-								<h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Notice Board</h3>
-                                {displayNotices.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {displayNotices.map(notice => {
-                                            const priorityClasses = notice.priority === 'Critical' || notice.priority === 'High' 
-                                                ? isDark ? 'border-red-400 bg-red-900/30' : 'border-red-500 bg-red-50'
-                                                : notice.priority === 'Medium'
-                                                ? isDark ? 'border-yellow-400 bg-yellow-900/30' : 'border-yellow-500 bg-yellow-50'
-                                                : isDark ? 'border-blue-400 bg-blue-900/30' : 'border-blue-500 bg-blue-50';
-                                            
-                                            const iconClasses = notice.priority === 'Critical' || notice.priority === 'High'
-                                                ? isDark ? 'text-red-400' : 'text-red-600'
-                                                : notice.priority === 'Medium'
-                                                ? isDark ? 'text-yellow-400' : 'text-yellow-600'
-                                                : isDark ? 'text-blue-400' : 'text-blue-600';
-                                            
-                                            const badgeClasses = notice.priority === 'Critical' || notice.priority === 'High'
-                                                ? isDark ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700'
-                                                : notice.priority === 'Medium'
-                                                ? isDark ? 'bg-yellow-900/50 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
-                                                : isDark ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700';
-                                            
-                                            return (
-                                            <div key={notice.id} className={`border-l-4 rounded-xl p-4 ${priorityClasses}`}>
-                                                <div className="flex items-start justify-between mb-2">
-                                                    <div className="flex items-center gap-2 flex-1">
-                                                        <i className={`fas fa-bullhorn ${iconClasses}`}></i>
-												<h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{notice.title}</h4>
-                                                    </div>
-                                                    <div className="flex gap-1 flex-wrap items-center">
-                                                        <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClasses}`}>
-                                                            {notice.priority}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingNotice(notice);
-                                                                setShowNoticeModal(true);
-                                                            }}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
-                                                            title="Edit"
-                                                        >
-                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteNotice(notice.id)}
-                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
-                                                            title="Delete"
-                                                        >
-                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-												<p className={`text-sm mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{notice.content}</p>
-												<div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                    <span><i className="fas fa-user mr-1"></i>{notice.author}</span>
-                                                    <span>{new Date(notice.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                                </div>
-                                            </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12">
-                                        <i className={`fas fa-bullhorn text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No notices yet</p>
-                                        <button 
-                                            onClick={() => {
-                                                setEditingNotice(null);
-                                                setShowNoticeModal(true);
-                                            }}
-                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
-                                        >
-                                            Post First Notice
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
                         {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
                             const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;
                             
@@ -1720,154 +957,6 @@ const Teams = () => {
                 </div>
             )}
 
-            {/* Modals */}
-            {showDocumentModal && (
-                <DocumentModal
-                    isOpen={showDocumentModal}
-                    onClose={() => {
-                        setShowDocumentModal(false);
-                        setEditingDocument(null);
-                    }}
-                    team={selectedTeam}
-                    document={editingDocument}
-                    onSave={handleSaveDocument}
-                />
-            )}
-
-            {showWorkflowModal && (
-                <WorkflowModal
-                    isOpen={showWorkflowModal}
-                    onClose={() => {
-                        setShowWorkflowModal(false);
-                        setEditingWorkflow(null);
-                    }}
-                    team={selectedTeam}
-                    workflow={editingWorkflow}
-                    onSave={handleSaveWorkflow}
-                />
-            )}
-
-            {showChecklistModal && (
-                <ChecklistModal
-                    isOpen={showChecklistModal}
-                    onClose={() => {
-                        setShowChecklistModal(false);
-                        setEditingChecklist(null);
-                    }}
-                    team={selectedTeam}
-                    checklist={editingChecklist}
-                    onSave={handleSaveChecklist}
-                />
-            )}
-
-            {showNoticeModal && (
-                <NoticeModal
-                    isOpen={showNoticeModal}
-                    onClose={() => {
-                        setShowNoticeModal(false);
-                        setEditingNotice(null);
-                    }}
-                    team={selectedTeam}
-                    notice={editingNotice}
-                    onSave={handleSaveNotice}
-                />
-            )}
-
-            {showWorkflowExecutionModal && (
-                <WorkflowExecutionModal
-                    isOpen={showWorkflowExecutionModal}
-                    onClose={() => {
-                        setShowWorkflowExecutionModal(false);
-                        setExecutingWorkflow(null);
-                    }}
-                    workflow={executingWorkflow}
-                    onComplete={handleWorkflowExecutionComplete}
-                />
-            )}
-
-            {/* Document View Modal */}
-            {showDocumentViewModal && viewingDocument && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                    <div className={`rounded-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-lg ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
-                        <div className={`sticky top-0 border-b px-4 py-3 flex items-center justify-between z-10 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                            <div className="flex-1 min-w-0 pr-2">
-                                <h3 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{viewingDocument.title}</h3>
-                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    {viewingDocument.category} • Version {viewingDocument.version}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setShowDocumentViewModal(false);
-                                    setViewingDocument(null);
-                                }}
-                                className={`text-gray-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 ${isDark ? 'hover:text-gray-200 text-gray-400' : 'hover:text-gray-600'}`}
-                            >
-                                <i className="fas fa-times text-lg"></i>
-                            </button>
-                        </div>
-
-                        <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-                            {viewingDocument.description && (
-                                <div className={`border rounded-xl p-4 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
-                                    <p className={`text-sm ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>{viewingDocument.description}</p>
-                                </div>
-                            )}
-
-                            <div className="prose prose-sm max-w-none">
-                                <pre className={`whitespace-pre-wrap font-sans text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                    {viewingDocument.content}
-                                </pre>
-                            </div>
-
-                            {viewingDocument.attachments && viewingDocument.attachments.length > 0 && (
-                                <div>
-                                    <h4 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Attachments</h4>
-                                    <div className="space-y-2">
-                                        {viewingDocument.attachments.map((att, idx) => (
-                                            <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
-                                                <div className="flex items-center gap-2">
-                                                    <i className={`fas fa-file text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
-                                                    <span className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{att.name}</span>
-                                                </div>
-                                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                    {(att.size / 1024).toFixed(2)} KB
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {viewingDocument.tags && viewingDocument.tags.length > 0 && (
-                                <div>
-                                    <h4 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Tags</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {viewingDocument.tags.map(tag => (
-                                            <span key={tag} className={`px-2 py-1 rounded text-xs ${isDark ? 'bg-primary-900/50 text-primary-300' : 'bg-primary-100 text-primary-700'}`}>
-                                                {tag}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className={`pt-4 border-t flex items-center justify-between text-xs ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
-                                <span>Created by {viewingDocument.createdBy}</span>
-                                <span>
-                                    Last updated: {new Date(viewingDocument.updatedAt).toLocaleDateString('en-ZA', {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                    })}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

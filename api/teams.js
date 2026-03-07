@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { notifyTeamDiscussionCreated, notifyTeamDiscussionReply } from './_lib/notifyTeamDiscussion.js'
 
 // Management access control helpers
 const MANAGEMENT_TEAM_ID = 'management'
@@ -105,7 +106,7 @@ async function handler(req, res) {
     const resourceId = pathSegments[1] // ID for sub-resources or team ID
     const isAdmin = isAdminUser(req.user)
 
-    // Handle sub-resources (documents, workflows, checklists, notices, tasks, executions)
+    // Handle sub-resources (documents, workflows, checklists, notices, tasks, executions, discussions)
     if (subResource === 'documents') {
       return await handleDocuments(req, res, resourceId, isAdmin)
     }
@@ -117,6 +118,19 @@ async function handler(req, res) {
     }
     if (subResource === 'notices') {
       return await handleNotices(req, res, resourceId, isAdmin)
+    }
+    if (subResource === 'discussions') {
+      const thirdSegment = pathSegments[2]
+      const discussionId = pathSegments[1]
+      if (thirdSegment === 'replies') {
+        const replyId = pathSegments[3]
+        return await handleDiscussionReplies(req, res, discussionId, replyId, isAdmin)
+      }
+      if (thirdSegment === 'checklists') {
+        const checklistId = pathSegments[3]
+        return await handleDiscussionChecklists(req, res, discussionId, checklistId, isAdmin)
+      }
+      return await handleDiscussions(req, res, discussionId, isAdmin)
     }
     if (subResource === 'tasks') {
       return await handleTasks(req, res, resourceId, isAdmin)
@@ -158,6 +172,7 @@ async function handler(req, res) {
                 workflows: true,
                 checklists: true,
                 notices: true,
+                discussions: true,
                 tasks: true,
                 memberships: true
               }
@@ -185,6 +200,7 @@ async function handler(req, res) {
             workflows: team._count.workflows,
             checklists: team._count.checklists,
             notices: team._count.notices,
+            discussions: team._count.discussions,
             tasks: team._count.tasks
           },
           createdAt: team.createdAt,
@@ -234,6 +250,7 @@ async function handler(req, res) {
                 workflows: true,
                 checklists: true,
                 notices: true,
+                discussions: true,
                 tasks: true,
                 memberships: true
               }
@@ -264,6 +281,7 @@ async function handler(req, res) {
             workflows: team._count.workflows,
             checklists: team._count.checklists,
             notices: team._count.notices,
+            discussions: team._count.discussions,
             tasks: team._count.tasks
           },
           createdAt: team.createdAt,
@@ -455,6 +473,7 @@ async function handler(req, res) {
                 workflows: true,
                 checklists: true,
                 notices: true,
+                discussions: true,
                 tasks: true
               }
             }
@@ -470,6 +489,7 @@ async function handler(req, res) {
                         existingTeam._count.workflows > 0 ||
                         existingTeam._count.checklists > 0 ||
                         existingTeam._count.notices > 0 ||
+                        existingTeam._count.discussions > 0 ||
                         existingTeam._count.tasks > 0
 
         if (hasData) {
@@ -1110,12 +1130,333 @@ async function handleNotices(req, res, noticeId, isAdmin) {
   }
 }
 
+// Discussion handlers
+async function handleDiscussions(req, res, discussionId, isAdmin) {
+  try {
+    if (req.method === 'GET' && !discussionId) {
+      const url = new URL(req.url, `http://${req.headers.host}`)
+      const { teamId, team, type, pinned } = Object.fromEntries(url.searchParams)
+      const targetTeamId = teamId || team
+
+      if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
+        return denyManagementAccess(res)
+      }
+
+      let where = {}
+      if (targetTeamId) where.teamId = targetTeamId
+      if (type) where.type = type
+      if (pinned !== undefined && pinned !== '') where.pinned = pinned === 'true'
+
+      if (!isAdmin) {
+        where = withManagementRestriction(where)
+      }
+
+      const discussions = await prisma.teamDiscussion.findMany({
+        where,
+        include: {
+          team: { select: { id: true, name: true, color: true, icon: true } },
+          _count: { select: { replies: true, checklists: true, tasks: true } }
+        },
+        orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }]
+      })
+      return ok(res, { discussions })
+    }
+
+    if (req.method === 'GET' && discussionId) {
+      const raw = await prisma.teamDiscussion.findUnique({
+        where: { id: discussionId },
+        include: {
+          team: { select: { id: true, name: true, color: true, icon: true } },
+          replies: true,
+          checklists: true,
+          tasks: true
+        }
+      })
+      if (!raw) return notFound(res, 'Discussion not found')
+      if (!isAdmin && isManagementTeam(raw.teamId)) {
+        return denyManagementAccess(res)
+      }
+      // Build a plain serializable object (no Prisma refs / circular refs)
+      const replies = (raw.replies || []).filter(Boolean).slice()
+        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
+        .map((r) => ({ id: r.id, discussionId: r.discussionId, body: r.body, attachments: r.attachments || [], authorId: r.authorId, authorName: r.authorName, createdAt: r.createdAt, updatedAt: r.updatedAt }))
+      const checklists = (raw.checklists || []).filter(Boolean).slice()
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
+        .map((c) => ({ id: c.id, discussionId: c.discussionId, title: c.title, items: c.items, sortOrder: c.sortOrder, createdAt: c.createdAt, updatedAt: c.updatedAt }))
+      const tasks = (raw.tasks || []).filter(Boolean).slice()
+        .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+        .map((t) => ({ id: t.id, teamId: t.teamId, discussionId: t.discussionId, title: t.title, description: t.description, status: t.status, priority: t.priority, assigneeId: t.assigneeId, dueDate: t.dueDate, tags: t.tags, attachments: t.attachments, ownerId: t.ownerId, createdAt: t.createdAt, updatedAt: t.updatedAt }))
+      const discussion = {
+        id: raw.id,
+        teamId: raw.teamId,
+        title: raw.title,
+        body: raw.body,
+        authorId: raw.authorId,
+        authorName: raw.authorName,
+        type: raw.type,
+        pinned: raw.pinned,
+        ownerId: raw.ownerId,
+        createdAt: raw.createdAt,
+        updatedAt: raw.updatedAt,
+        team: raw.team ? { id: raw.team.id, name: raw.team.name, color: raw.team.color, icon: raw.team.icon } : null,
+        replies,
+        checklists,
+        tasks
+      }
+      return ok(res, { discussion })
+    }
+
+    if (req.method === 'POST' && !discussionId) {
+      const body = await parseJsonBody(req)
+      const { teamId, team, title, body: bodyText, authorId, authorName, type, pinned } = body
+      const targetTeamId = teamId || team
+
+      if (!targetTeamId) return badRequest(res, 'teamId is required')
+      if (!title) return badRequest(res, 'title is required')
+      if (!isAdmin && isManagementTeam(targetTeamId)) return denyManagementAccess(res)
+
+      const discussion = await prisma.teamDiscussion.create({
+        data: {
+          teamId: targetTeamId,
+          title,
+          body: bodyText || '',
+          authorId: authorId || getOwnerId(req) || '',
+          authorName: authorName || '',
+          type: type || 'discussion',
+          pinned: Boolean(pinned),
+          ownerId: getOwnerId(req)
+        },
+        include: {
+          team: { select: { id: true, name: true, color: true, icon: true } }
+        }
+      })
+      try {
+        await notifyTeamDiscussionCreated({
+          teamId: targetTeamId,
+          teamName: discussion.team?.name,
+          discussionId: discussion.id,
+          discussionTitle: discussion.title,
+          authorId: discussion.authorId,
+          authorName: discussion.authorName || authorName
+        })
+      } catch (notifyErr) {
+        console.error('Notify team discussion created failed:', notifyErr)
+      }
+      return created(res, { discussion })
+    }
+
+    if (req.method === 'PUT' && discussionId) {
+      const existing = await prisma.teamDiscussion.findUnique({
+        where: { id: discussionId },
+        include: { team: true }
+      })
+      if (!existing) return notFound(res, 'Discussion not found')
+      if (!isAdmin && isManagementTeam(existing.teamId)) return denyManagementAccess(res)
+
+      const body = await parseJsonBody(req)
+      const { title, body: bodyText, type, pinned } = body
+      const updateData = {}
+      if (title !== undefined) updateData.title = title
+      if (bodyText !== undefined) updateData.body = bodyText
+      if (type !== undefined) updateData.type = type
+      if (pinned !== undefined) updateData.pinned = Boolean(pinned)
+
+      const raw = await prisma.teamDiscussion.update({
+        where: { id: discussionId },
+        data: updateData,
+        include: {
+          team: { select: { id: true, name: true, color: true, icon: true } },
+          replies: true,
+          checklists: true,
+          tasks: true
+        }
+      })
+      const discussion = {
+        ...raw,
+        replies: (raw.replies || []).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map(({ discussion, ...r }) => r),
+        checklists: (raw.checklists || []).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt)).map(({ discussion, ...c }) => c),
+        tasks: (raw.tasks || []).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).map(({ discussion, ...t }) => t)
+      }
+      return ok(res, { discussion })
+    }
+
+    if (req.method === 'DELETE' && discussionId) {
+      const existing = await prisma.teamDiscussion.findUnique({
+        where: { id: discussionId },
+        include: { team: true }
+      })
+      if (!existing) return notFound(res, 'Discussion not found')
+      if (!isAdmin && isManagementTeam(existing.teamId)) return denyManagementAccess(res)
+
+      await prisma.teamDiscussion.delete({ where: { id: discussionId } })
+      return ok(res, { success: true })
+    }
+
+    return badRequest(res, 'Method not allowed')
+  } catch (error) {
+    console.error('Error handling discussions:', error)
+    if (error.code === 'P2003') return notFound(res, 'Team not found')
+    return serverError(res, 'Failed to process discussion request', error.message)
+  }
+}
+
+async function handleDiscussionReplies(req, res, discussionId, replyId, isAdmin) {
+  try {
+    const discussion = await prisma.teamDiscussion.findUnique({
+      where: { id: discussionId },
+      select: { id: true, teamId: true }
+    })
+    if (!discussion) return notFound(res, 'Discussion not found')
+    if (!isAdmin && isManagementTeam(discussion.teamId)) return denyManagementAccess(res)
+
+    if (req.method === 'GET') {
+      const replies = await prisma.discussionReply.findMany({
+        where: { discussionId },
+        orderBy: { createdAt: 'asc' }
+      })
+      return ok(res, { replies })
+    }
+
+    if (req.method === 'POST' && !replyId) {
+      const body = await parseJsonBody(req)
+      const { body: bodyText, authorId, authorName, attachments } = body
+      if (!bodyText || !String(bodyText).trim()) return badRequest(res, 'body is required')
+
+      const attachmentList = Array.isArray(attachments) ? attachments : []
+      const reply = await prisma.discussionReply.create({
+        data: {
+          discussionId,
+          body: String(bodyText).trim(),
+          attachments: attachmentList,
+          authorId: authorId || getOwnerId(req) || '',
+          authorName: authorName || ''
+        }
+      })
+      try {
+        const disc = await prisma.teamDiscussion.findUnique({
+          where: { id: discussionId },
+          select: { title: true, teamId: true, team: { select: { name: true } } }
+        })
+        if (disc) {
+          await notifyTeamDiscussionReply({
+            teamId: disc.teamId,
+            teamName: disc.team?.name,
+            discussionId,
+            discussionTitle: disc.title,
+            replyBody: String(bodyText).trim(),
+            authorId: reply.authorId,
+            authorName: reply.authorName || authorName
+          })
+        }
+      } catch (notifyErr) {
+        console.error('Notify team discussion reply failed:', notifyErr)
+      }
+      return created(res, { reply })
+    }
+
+    if (req.method === 'PUT' && replyId) {
+      const body = await parseJsonBody(req)
+      const { body: bodyText } = body
+      const existing = await prisma.discussionReply.findUnique({
+        where: { id: replyId },
+        include: { discussion: true }
+      })
+      if (!existing || existing.discussionId !== discussionId) return notFound(res, 'Reply not found')
+      const reply = await prisma.discussionReply.update({
+        where: { id: replyId },
+        data: bodyText !== undefined ? { body: String(bodyText).trim() } : {}
+      })
+      return ok(res, { reply })
+    }
+
+    if (req.method === 'DELETE' && replyId) {
+      const existing = await prisma.discussionReply.findUnique({
+        where: { id: replyId }
+      })
+      if (!existing || existing.discussionId !== discussionId) return notFound(res, 'Reply not found')
+      await prisma.discussionReply.delete({ where: { id: replyId } })
+      return ok(res, { success: true })
+    }
+
+    return badRequest(res, 'Method not allowed')
+  } catch (error) {
+    console.error('Error handling discussion replies:', error)
+    return serverError(res, 'Failed to process reply request', error.message)
+  }
+}
+
+async function handleDiscussionChecklists(req, res, discussionId, checklistId, isAdmin) {
+  try {
+    const discussion = await prisma.teamDiscussion.findUnique({
+      where: { id: discussionId },
+      select: { id: true, teamId: true }
+    })
+    if (!discussion) return notFound(res, 'Discussion not found')
+    if (!isAdmin && isManagementTeam(discussion.teamId)) return denyManagementAccess(res)
+
+    if (req.method === 'GET') {
+      const checklists = await prisma.discussionChecklist.findMany({
+        where: { discussionId },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }]
+      })
+      return ok(res, { checklists })
+    }
+
+    if (req.method === 'POST' && !checklistId) {
+      const body = await parseJsonBody(req)
+      const { title, items } = body
+      const itemsArr = Array.isArray(items) ? items : (typeof items === 'string' ? JSON.parse(items || '[]') : [])
+      const checklist = await prisma.discussionChecklist.create({
+        data: {
+          discussionId,
+          title: title || 'Checklist',
+          items: itemsArr,
+          sortOrder: body.sortOrder != null ? Number(body.sortOrder) : 0
+        }
+      })
+      return created(res, { checklist })
+    }
+
+    if (req.method === 'PUT' && checklistId) {
+      const body = await parseJsonBody(req)
+      const { title, items, sortOrder } = body
+      const existing = await prisma.discussionChecklist.findUnique({
+        where: { id: checklistId }
+      })
+      if (!existing || existing.discussionId !== discussionId) return notFound(res, 'Checklist not found')
+      const updateData = {}
+      if (title !== undefined) updateData.title = title
+      if (items !== undefined) updateData.items = Array.isArray(items) ? items : (typeof items === 'string' ? JSON.parse(items || '[]') : existing.items)
+      if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder)
+      const checklist = await prisma.discussionChecklist.update({
+        where: { id: checklistId },
+        data: updateData
+      })
+      return ok(res, { checklist })
+    }
+
+    if (req.method === 'DELETE' && checklistId) {
+      const existing = await prisma.discussionChecklist.findUnique({
+        where: { id: checklistId }
+      })
+      if (!existing || existing.discussionId !== discussionId) return notFound(res, 'Checklist not found')
+      await prisma.discussionChecklist.delete({ where: { id: checklistId } })
+      return ok(res, { success: true })
+    }
+
+    return badRequest(res, 'Method not allowed')
+  } catch (error) {
+    console.error('Error handling discussion checklists:', error)
+    return serverError(res, 'Failed to process checklist request', error.message)
+  }
+}
+
 // Task handlers
 async function handleTasks(req, res, taskId, isAdmin) {
   try {
     if (req.method === 'GET' && !taskId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
-      const { team, teamId } = Object.fromEntries(url.searchParams)
+      const { team, teamId, discussionId } = Object.fromEntries(url.searchParams)
       const targetTeamId = teamId || team
 
       if (targetTeamId && !isAdmin && isManagementTeam(targetTeamId)) {
@@ -1125,6 +1466,9 @@ async function handleTasks(req, res, taskId, isAdmin) {
       let where = {}
       if (targetTeamId) {
         where.teamId = targetTeamId
+      }
+      if (discussionId) {
+        where.discussionId = discussionId
       }
 
       if (!isAdmin) {
@@ -1151,7 +1495,7 @@ async function handleTasks(req, res, taskId, isAdmin) {
 
     if (req.method === 'POST' && !taskId) {
       const body = await parseJsonBody(req)
-      const { team, teamId, tags, attachments, ...rest } = body
+      const { team, teamId, tags, attachments, discussionId, ...rest } = body
       const targetTeamId = teamId || team
 
       if (!targetTeamId) {
@@ -1169,6 +1513,7 @@ async function handleTasks(req, res, taskId, isAdmin) {
         tags: typeof tags === 'string' ? JSON.parse(tags || '[]') : (tags || []),
         attachments: typeof attachments === 'string' ? JSON.parse(attachments || '[]') : (attachments || [])
       }
+      if (discussionId != null) taskData.discussionId = discussionId
 
       const task = await prisma.teamTask.create({
         data: taskData,
@@ -1198,7 +1543,7 @@ async function handleTasks(req, res, taskId, isAdmin) {
       }
 
       const body = await parseJsonBody(req)
-      const { team, teamId, tags, attachments, ...rest } = body
+      const { team, teamId, tags, attachments, discussionId, ...rest } = body
       const targetTeamId = teamId || team || existingTask.teamId
 
       if (!isAdmin && (isManagementTeam(existingTask.teamId) || isManagementTeam(targetTeamId))) {
@@ -1215,6 +1560,7 @@ async function handleTasks(req, res, taskId, isAdmin) {
       if (attachments !== undefined) {
         updateData.attachments = typeof attachments === 'string' ? JSON.parse(attachments || '[]') : attachments
       }
+      if (discussionId !== undefined) updateData.discussionId = discussionId || null
 
       const task = await prisma.teamTask.update({
         where: { id: taskId },
