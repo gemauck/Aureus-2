@@ -124,7 +124,7 @@ const Teams = () => {
                     throw new Error('Invalid response from server. Try again.');
                 }
                 if (data.data && Array.isArray(data.data.teams)) {
-                    // Format teams to match expected structure
+                    // Format teams to match expected structure (include memberships for admin member management)
                     const formattedTeams = data.data.teams
                         .map(team => ({
                             id: team.id,
@@ -134,7 +134,9 @@ const Teams = () => {
                             description: team.description || '',
                             members: team.members || 0,
                             permissions: team.permissions || [],
-                            isActive: team.isActive !== false
+                            isActive: team.isActive !== false,
+                            memberships: team.memberships || [],
+                            counts: team.counts || {}
                         }))
                         .filter(team => {
                             // Filter out Default Team
@@ -241,7 +243,7 @@ const Teams = () => {
         const tab = urlParams.get('tab') || 'overview';
         // Map legacy tabs to discussions
         if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
-        if (['overview', 'discussions', 'meeting-notes', 'poa-review'].includes(tab)) return tab;
+        if (['overview', 'discussions', 'meeting-notes', 'poa-review', 'members'].includes(tab)) return tab;
         return 'overview';
     };
     
@@ -313,6 +315,10 @@ const Teams = () => {
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
     // Force re-render when on discussions tab until lazy-loaded TeamDiscussions is available
     const [, setDiscussionsReadyTick] = useState(0);
+    // Members management (admin only)
+    const [membersLoading, setMembersLoading] = useState(false);
+    const [availableUsers, setAvailableUsers] = useState([]);
+    const [addMemberUserId, setAddMemberUserId] = useState('');
     
     // Validate selectedTeam from URL after component mounts, teams load, and isAdminUser is computed
     useEffect(() => {
@@ -594,6 +600,112 @@ const Teams = () => {
         }
     }, [selectedTeam, isTeamAccessible]);
 
+    // Load users for add-member dropdown when Members tab is shown
+    useEffect(() => {
+        if (!isAdminUser || activeTab !== 'members' || !selectedTeam) return;
+        let cancelled = false;
+        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        if (!token) return;
+        fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load users')))
+            .then(data => {
+                if (cancelled) return;
+                const users = data.data?.users || data.users || [];
+                setAvailableUsers(Array.isArray(users) ? users : []);
+            })
+            .catch(() => {
+                if (!cancelled) setAvailableUsers([]);
+            });
+        return () => { cancelled = true; };
+    }, [isAdminUser, activeTab, selectedTeam?.id]);
+
+    // Refresh teams and update selectedTeam
+    const refreshTeams = useCallback(async () => {
+        const teamIdToKeep = selectedTeam?.id;
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) return;
+            const response = await fetch('/api/teams', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data.data && Array.isArray(data.data.teams)) {
+                const formatted = data.data.teams
+                    .map(team => ({
+                        id: team.id,
+                        name: team.name,
+                        icon: team.icon || '',
+                        color: team.color || 'blue',
+                        description: team.description || '',
+                        members: team.members || 0,
+                        permissions: team.permissions || [],
+                        isActive: team.isActive !== false,
+                        memberships: team.memberships || [],
+                        counts: team.counts || {}
+                    }))
+                    .filter(t => {
+                        const n = (t.name || '').toLowerCase();
+                        const i = (t.id || '').toLowerCase();
+                        return n !== 'default team' && i !== 'default' && i !== 'default-team';
+                    });
+                setTeams(formatted);
+                if (teamIdToKeep) {
+                    const updated = formatted.find(t => t.id === teamIdToKeep || String(t.id) === String(teamIdToKeep));
+                    if (updated) setSelectedTeam(updated);
+                }
+            }
+        } catch (e) { console.warn('Teams: refresh failed', e); }
+    }, [selectedTeam?.id]);
+
+    const addMemberToTeam = useCallback(async (userId) => {
+        if (!selectedTeam?.id || !userId) return;
+        setMembersLoading(true);
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) throw new Error('Not authenticated');
+            const res = await fetch(`/api/teams/${selectedTeam.id}/members`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, role: 'user' })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error?.message || 'Failed to add member');
+            }
+            setAddMemberUserId('');
+            await refreshTeams();
+        } catch (e) {
+            if (typeof window.alert === 'function') window.alert(e.message || 'Failed to add member');
+        } finally {
+            setMembersLoading(false);
+        }
+    }, [selectedTeam?.id, refreshTeams]);
+
+    const removeMemberFromTeam = useCallback(async (userId) => {
+        if (!selectedTeam?.id || !userId) return;
+        if (!window.confirm('Remove this member from the team?')) return;
+        setMembersLoading(true);
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            if (!token) throw new Error('Not authenticated');
+            const res = await fetch(`/api/teams/${selectedTeam.id}/members/${encodeURIComponent(userId)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error?.message || 'Failed to remove member');
+            }
+            await refreshTeams();
+        } catch (e) {
+            if (typeof window.alert === 'function') window.alert(e.message || 'Failed to remove member');
+        } finally {
+            setMembersLoading(false);
+        }
+    }, [selectedTeam?.id, refreshTeams]);
+
     const handleSelectTeam = useCallback((team) => {
         if (!isTeamAccessible(team.id)) {
             if (typeof window.alert === 'function') {
@@ -757,6 +869,20 @@ const Teams = () => {
                                     <i className="fas fa-file-excel mr-1.5"></i>
                                     <span className="hidden sm:inline">POA Review</span>
                                     <span className="sm:hidden">POA</span>
+                                </button>
+                            )}
+                            {isAdminUser && selectedTeam && (
+                                <button
+                                    onClick={() => setActiveTab('members')}
+                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                        activeTab === 'members'
+                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <i className="fas fa-user-plus mr-1.5"></i>
+                                    <span className="hidden sm:inline">Members</span>
+                                    <span className="sm:hidden">Members</span>
                                 </button>
                             )}
                         </div>
@@ -971,6 +1097,81 @@ const Teams = () => {
                                 </div>
                             );
                         })()}
+
+                        {activeTab === 'members' && isAdminUser && selectedTeam && (
+                            <div className="space-y-4">
+                                <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Team Members</h3>
+                                <div className="flex flex-wrap items-end gap-2 mb-4">
+                                    <div className="flex-1 min-w-[200px]">
+                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Add member</label>
+                                        <select
+                                            value={addMemberUserId}
+                                            onChange={(e) => setAddMemberUserId(e.target.value)}
+                                            disabled={membersLoading}
+                                            className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                                                isDark
+                                                    ? 'bg-gray-800 border-gray-700 text-gray-200'
+                                                    : 'bg-white border-gray-300 text-gray-900'
+                                            }`}
+                                        >
+                                            <option value="">Select a user…</option>
+                                            {(availableUsers || [])
+                                                .filter(u => !(selectedTeam.memberships || []).some(m => String(m.userId) === String(u.id)))
+                                                .map(u => (
+                                                    <option key={u.id} value={u.id}>
+                                                        {u.name || u.email || u.username || u.id} {u.email ? `(${u.email})` : ''}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                    <button
+                                        onClick={() => addMemberToTeam(addMemberUserId)}
+                                        disabled={!addMemberUserId || membersLoading}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                            addMemberUserId && !membersLoading
+                                                ? isDark ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                                : isDark ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        {membersLoading ? 'Adding…' : 'Add'}
+                                    </button>
+                                </div>
+                                <ul className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-200'}`}>
+                                    {(selectedTeam.memberships || []).length === 0 ? (
+                                        <li className={`py-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No members yet.</li>
+                                    ) : (selectedTeam.memberships || []).map((m) => (
+                                        <li key={m.userId} className="flex items-center justify-between py-3 first:pt-0">
+                                            <div>
+                                                <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                    {m.user?.name || m.user?.email || m.userId}
+                                                </span>
+                                                {m.user?.email && (
+                                                    <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                        {m.user.email}
+                                                    </span>
+                                                )}
+                                                {m.role && (
+                                                    <span className={`ml-2 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
+                                                        {m.role}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => removeMemberFromTeam(m.userId)}
+                                                disabled={membersLoading}
+                                                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                                                    isDark
+                                                        ? 'text-red-400 hover:bg-gray-800'
+                                                        : 'text-red-600 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                Remove
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
 
                     </div>
                 </div>

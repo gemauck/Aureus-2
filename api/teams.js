@@ -139,6 +139,13 @@ async function handler(req, res) {
       return await handleExecutions(req, res, isAdmin)
     }
 
+    // Handle team members (admin only): /api/teams/:teamId/members, /api/teams/:teamId/members/:userId
+    if (pathSegments.length >= 2 && pathSegments[1] === 'members') {
+      const targetTeamId = pathSegments[0]
+      const memberUserId = pathSegments[2] || null
+      return await handleTeamMembers(req, res, targetTeamId, memberUserId, isAdmin)
+    }
+
     // Handle base team routes
     const teamId = pathSegments[0] // Could be team ID or empty for list
 
@@ -519,6 +526,60 @@ async function handler(req, res) {
   } catch (error) {
     console.error('Error in teams handler:', error)
     return serverError(res, 'Internal server error', error.message)
+  }
+}
+
+// Team members (admin only): POST add, DELETE remove, GET list
+async function handleTeamMembers(req, res, teamId, memberUserId, isAdmin) {
+  try {
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can manage team members' })
+    }
+    if (!teamId) return badRequest(res, 'teamId is required')
+
+    const team = await prisma.team.findUnique({ where: { id: teamId } })
+    if (!team) return notFound(res, 'Team not found')
+
+    if (req.method === 'GET') {
+      const memberships = await prisma.membership.findMany({
+        where: { teamId },
+        include: { user: { select: { id: true, name: true, email: true, role: true } } }
+      })
+      return ok(res, {
+        members: memberships.map((m) => ({ userId: m.userId, user: m.user, role: m.role }))
+      })
+    }
+
+    if (req.method === 'POST' && !memberUserId) {
+      const body = await parseJsonBody(req)
+      const { userId, role = 'user' } = body
+      if (!userId) return badRequest(res, 'userId is required')
+      await prisma.membership.upsert({
+        where: { userId_teamId: { userId: String(userId), teamId } },
+        update: { role: String(role) },
+        create: { userId: String(userId), teamId, role: String(role) }
+      })
+      const memberships = await prisma.membership.findMany({
+        where: { teamId },
+        include: { user: { select: { id: true, name: true, email: true, role: true } } }
+      })
+      return created(res, {
+        members: memberships.map((m) => ({ userId: m.userId, user: m.user, role: m.role }))
+      })
+    }
+
+    if (req.method === 'DELETE' && memberUserId) {
+      await prisma.membership.deleteMany({
+        where: { teamId, userId: String(memberUserId) }
+      })
+      return ok(res, { success: true, message: 'Member removed' })
+    }
+
+    return badRequest(res, 'Method not allowed')
+  } catch (error) {
+    if (error.code === 'P2025' || error.code === 'P2018') return notFound(res, 'User or team not found')
+    console.error('Team members handler error:', error)
+    return serverError(res, 'Failed to manage team members', error.message)
   }
 }
 
