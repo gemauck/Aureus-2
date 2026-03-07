@@ -10425,16 +10425,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             {activeTab === 'production' && <ProductionView />}
             {activeTab === 'sales' && <SalesOrdersView />}
             {activeTab === 'purchase' && <PurchaseOrdersView />}
-            {activeTab === 'movements' && (
-              (window.ManufacturingMovementsView ? createElement(window.ManufacturingMovementsView, {
-                movements,
-                movementsLoadedFromAPI,
-                onRecordMovement: openAddMovementModal,
-                onRefreshMovements: handleRefreshMovements,
-                onDeleteMovement: handleDeleteMovement,
-                getStatusColor,
-                getLocationLabel
-              }) : (
+            {activeTab === 'movements' && (window.ManufacturingMovementsView
+              ? createElement(window.ManufacturingMovementsView, {
+                  movements,
+                  movementsLoadedFromAPI,
+                  onRecordMovement: openAddMovementModal,
+                  onRefreshMovements: handleRefreshMovements,
+                  onDeleteMovement: handleDeleteMovement,
+                  getStatusColor,
+                  getLocationLabel
+                })
+              : (
                 <div className="p-4 text-gray-500">Loading movements view…</div>
               )
             )}
