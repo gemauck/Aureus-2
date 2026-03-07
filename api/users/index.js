@@ -5,6 +5,7 @@ import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import bcrypt from 'bcryptjs'
+import { addUserToAbcoAllStaff } from '../_lib/addToAbcoAllStaff.js'
 
 async function handler(req, res) {
     if (req.method === 'GET') {
@@ -160,6 +161,8 @@ async function handler(req, res) {
                     provider: 'local'
                 }
             })
+
+            await addUserToAbcoAllStaff(prisma, newUser.id, newUser.role)
 
 
             return ok(res, { 

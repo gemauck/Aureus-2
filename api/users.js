@@ -7,6 +7,7 @@ import { withLogging } from './_lib/logger.js'
 import { sendNotificationEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
+import { addUserToAbcoAllStaff } from './_lib/addToAbcoAllStaff.js'
 
 async function handler(req, res) {
     if (req.method === 'GET') {
@@ -184,6 +185,8 @@ async function handler(req, res) {
                     provider: 'local'
                 }
             })
+
+            await addUserToAbcoAllStaff(prisma, user.id, user.role)
 
 
             // Attempt to send a welcome email with the temporary password

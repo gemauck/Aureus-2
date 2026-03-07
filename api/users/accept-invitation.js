@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import bcrypt from 'bcryptjs'
+import { addUserToAbcoAllStaff } from '../_lib/addToAbcoAllStaff.js'
 
 async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
@@ -133,6 +134,7 @@ async function handler(req, res) {
                     jobTitle: jobTitle.trim() || ''
                 }
             })
+            await addUserToAbcoAllStaff(prisma, newUser.id, newUser.role)
         } catch (dbError) {
             const isConnectionError = 
                 dbError.message?.includes("Can't reach database server") ||

@@ -108,6 +108,30 @@ async function main() {
         'Manage regulatory documentation, policies, and control mappings',
         'Enforce policy acknowledgment and training completion workflows'
       ]
+    },
+    { 
+      id: 'project-management', 
+      name: 'Project Management', 
+      icon: 'fa-project-diagram', 
+      color: 'cyan',
+      description: 'Project planning, tracking, and delivery',
+      permissions: [
+        'Create and manage project plans, schedules, and milestones',
+        'Assign resources and track project progress',
+        'View project dashboards and status reports'
+      ]
+    },
+    { 
+      id: 'abco-all-staff', 
+      name: 'Abco All Staff', 
+      icon: 'fa-users', 
+      color: 'teal',
+      description: 'All staff company-wide announcements and collaboration',
+      permissions: [
+        'Receive and participate in company-wide announcements',
+        'Access shared resources and general communications',
+        'Collaborate across departments and roles'
+      ]
     }
   ]
 
@@ -160,6 +184,26 @@ async function main() {
       update: { role: 'admin' },
       create: { userId: user.id, teamId: managementTeam.id, role: 'admin' }
     })
+  }
+
+  // Ensure all non-guest users are in Abco All Staff team
+  const abcoAllStaffTeam = await prisma.team.findUnique({
+    where: { id: 'abco-all-staff' }
+  })
+  if (abcoAllStaffTeam) {
+    const nonGuestUsers = await prisma.user.findMany({
+      where: {
+        role: { notIn: ['guest', 'Guest'] }
+      },
+      select: { id: true }
+    })
+    for (const u of nonGuestUsers) {
+      await prisma.membership.upsert({
+        where: { userId_teamId: { userId: u.id, teamId: 'abco-all-staff' } },
+        update: {},
+        create: { userId: u.id, teamId: 'abco-all-staff', role: 'user' }
+      })
+    }
   }
 
   // Create Acme Corp with test data for Calendar, Contracts, and Notes tabs

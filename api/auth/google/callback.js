@@ -5,6 +5,7 @@ import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
 import { signAccessToken, signRefreshToken } from '../../_lib/jwt.js'
 import { getAppUrl } from '../../_lib/getAppUrl.js'
+import { addUserToAbcoAllStaff } from '../../_lib/addToAbcoAllStaff.js'
 
 async function handler(req, res) {
     if (req.method !== 'GET') return badRequest(res, 'Invalid method')
@@ -77,6 +78,7 @@ async function handler(req, res) {
                     status: 'active'
                 }
             })
+            await addUserToAbcoAllStaff(prisma, user.id, user.role)
         } else {
             // Update existing user
             user = await prisma.user.update({
@@ -87,6 +89,7 @@ async function handler(req, res) {
                     lastLoginAt: new Date()
                 }
             })
+            await addUserToAbcoAllStaff(prisma, user.id, user.role)
         }
         
         // Generate JWT tokens
