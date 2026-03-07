@@ -34,16 +34,32 @@ function stripHtml(html) {
 
 /**
  * Get all user IDs that are members of the team (from Membership).
+ * When the team has no memberships, falls back to anyone who has posted in this team (discussion or reply authors)
+ * so notification emails still get sent.
  * @param {string} teamId
  * @returns {Promise<string[]>}
  */
 export async function getTeamMemberUserIds(teamId) {
   if (!teamId) return []
+  const id = String(teamId)
   const memberships = await prisma.membership.findMany({
-    where: { teamId: String(teamId) },
+    where: { teamId: id },
     select: { userId: true }
   })
-  return [...new Set(memberships.map((m) => m.userId).filter(Boolean))]
+  let ids = [...new Set(memberships.map((m) => m.userId).filter(Boolean))]
+  if (ids.length > 0) return ids
+  // Fallback: team has no memberships — use anyone who has posted in this team (discussions or replies)
+  const [discussionAuthors, replyAuthors] = await Promise.all([
+    prisma.teamDiscussion.findMany({ where: { teamId: id }, select: { authorId: true } }),
+    prisma.discussionReply.findMany({
+      where: { discussion: { teamId: id } },
+      select: { authorId: true }
+    })
+  ])
+  const fromDiscussions = discussionAuthors.map((d) => d.authorId).filter(Boolean)
+  const fromReplies = replyAuthors.map((r) => r.authorId).filter(Boolean)
+  ids = [...new Set([...fromDiscussions, ...fromReplies])]
+  return ids
 }
 
 /**
