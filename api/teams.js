@@ -9,6 +9,7 @@ import { notifyTeamDiscussionCreated, notifyTeamDiscussionReply } from './_lib/n
 
 // Management access control helpers
 const MANAGEMENT_TEAM_ID = 'management'
+const SUPER_ADMIN_ROLES = new Set(['superadmin', 'super-admin', 'super_admin'])
 const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const MANAGEMENT_FORBIDDEN_MESSAGE = 'Only administrators can access the Management team.'
@@ -46,6 +47,14 @@ const normalizePermissions = (permissions) => {
     }
   }
   return []
+}
+
+const isSuperAdminUser = (user) => {
+  if (!user) return false
+  const role = (user.role || '').toString().trim().toLowerCase()
+  if (SUPER_ADMIN_ROLES.has(role)) return true
+  const permissions = normalizePermissions(user.permissions).map((p) => (p || '').toString().trim().toLowerCase())
+  return permissions.some((p) => SUPER_ADMIN_ROLES.has(p))
 }
 
 const isAdminUser = (user) => {
@@ -93,6 +102,34 @@ const getOwnerId = (req) => {
   return req.user?.id || req.user?.userId || null
 }
 
+// SuperAdmin sees all; Admin and others must be members
+async function requireTeamMembershipOrSuperAdmin(prisma, res, userId, teamId, isSuperAdmin, isAdmin) {
+  if (!teamId) return true
+  if (isSuperAdmin) return true
+  if (!userId) {
+    res.status(403).json({ error: 'You must be a member of this team to access it' })
+    return false
+  }
+  const member = await prisma.membership.findUnique({
+    where: { userId_teamId: { userId: String(userId), teamId: String(teamId) } }
+  })
+  if (!member) {
+    res.status(403).json({ error: 'You must be a member of this team to access it' })
+    return false
+  }
+  return true
+}
+
+// Get team IDs the user is a member of (for non-admins when filtering list queries)
+async function getMemberTeamIds(prisma, userId) {
+  if (!userId) return []
+  const memberships = await prisma.membership.findMany({
+    where: { userId: String(userId) },
+    select: { teamId: true }
+  })
+  return memberships.map((m) => m.teamId)
+}
+
 async function handler(req, res) {
   try {
     // Parse URL path to determine route
@@ -105,55 +142,65 @@ async function handler(req, res) {
     const subResource = pathSegments[0] // documents, workflows, checklists, notices, tasks, executions
     const resourceId = pathSegments[1] // ID for sub-resources or team ID
     const isAdmin = isAdminUser(req.user)
+    const isSuperAdmin = isSuperAdminUser(req.user)
 
     // Handle sub-resources (documents, workflows, checklists, notices, tasks, executions, discussions)
     if (subResource === 'documents') {
-      return await handleDocuments(req, res, resourceId, isAdmin)
+      return await handleDocuments(req, res, resourceId, isAdmin, isSuperAdmin)
     }
     if (subResource === 'workflows') {
-      return await handleWorkflows(req, res, resourceId, isAdmin)
+      return await handleWorkflows(req, res, resourceId, isAdmin, isSuperAdmin)
     }
     if (subResource === 'checklists') {
-      return await handleChecklists(req, res, resourceId, isAdmin)
+      return await handleChecklists(req, res, resourceId, isAdmin, isSuperAdmin)
     }
     if (subResource === 'notices') {
-      return await handleNotices(req, res, resourceId, isAdmin)
+      return await handleNotices(req, res, resourceId, isAdmin, isSuperAdmin)
     }
     if (subResource === 'discussions') {
       const thirdSegment = pathSegments[2]
       const discussionId = pathSegments[1]
       if (thirdSegment === 'replies') {
         const replyId = pathSegments[3]
-        return await handleDiscussionReplies(req, res, discussionId, replyId, isAdmin)
+        return await handleDiscussionReplies(req, res, discussionId, replyId, isAdmin, isSuperAdmin)
       }
       if (thirdSegment === 'checklists') {
         const checklistId = pathSegments[3]
-        return await handleDiscussionChecklists(req, res, discussionId, checklistId, isAdmin)
+        return await handleDiscussionChecklists(req, res, discussionId, checklistId, isAdmin, isSuperAdmin)
       }
-      return await handleDiscussions(req, res, discussionId, isAdmin)
+      return await handleDiscussions(req, res, discussionId, isAdmin, isSuperAdmin)
     }
     if (subResource === 'tasks') {
-      return await handleTasks(req, res, resourceId, isAdmin)
+      return await handleTasks(req, res, resourceId, isAdmin, isSuperAdmin)
     }
     if (subResource === 'executions') {
-      return await handleExecutions(req, res, isAdmin)
+      return await handleExecutions(req, res, isAdmin, isSuperAdmin)
     }
 
-    // Handle team members (admin only): /api/teams/:teamId/members, /api/teams/:teamId/members/:userId
+    // Handle team members (superadmin: any team; admin: only teams they are members of)
     if (pathSegments.length >= 2 && pathSegments[1] === 'members') {
       const targetTeamId = pathSegments[0]
       const memberUserId = pathSegments[2] || null
-      return await handleTeamMembers(req, res, targetTeamId, memberUserId, isAdmin)
+      return await handleTeamMembers(req, res, targetTeamId, memberUserId, isAdmin, isSuperAdmin)
     }
 
     // Handle base team routes
     const teamId = pathSegments[0] // Could be team ID or empty for list
 
-    // GET /api/teams - List all teams
+    // GET /api/teams - List all teams (SuperAdmin sees all; Admin and others see only teams they are members of)
     if (req.method === 'GET' && !teamId) {
       try {
+        const currentUserId = getOwnerId(req)
+        const where = isSuperAdmin
+          ? {}
+          : {
+              isActive: true,
+              id: { not: MANAGEMENT_TEAM_ID },
+              memberships: { some: { userId: String(currentUserId) } }
+            }
+
         const teams = await prisma.team.findMany({
-          where: isAdmin ? {} : { isActive: true },
+          where,
           include: {
             memberships: {
               include: {
@@ -227,6 +274,9 @@ async function handler(req, res) {
         if (!isAdmin && isManagementTeam(teamId)) {
           return denyManagementAccess(res)
         }
+
+        const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), teamId, isSuperAdmin, isAdmin)
+        if (!allowed) return
 
         const team = await prisma.team.findUnique({
           where: { id: teamId },
@@ -529,8 +579,8 @@ async function handler(req, res) {
   }
 }
 
-// Team members (admin only): POST add, DELETE remove, GET list
-async function handleTeamMembers(req, res, teamId, memberUserId, isAdmin) {
+// Team members: SuperAdmin can manage any team; Admin can manage only teams they are members of
+async function handleTeamMembers(req, res, teamId, memberUserId, isAdmin, isSuperAdmin) {
   try {
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only administrators can manage team members' })
@@ -539,6 +589,12 @@ async function handleTeamMembers(req, res, teamId, memberUserId, isAdmin) {
 
     const team = await prisma.team.findUnique({ where: { id: teamId } })
     if (!team) return notFound(res, 'Team not found')
+
+    // Admin (not SuperAdmin) must be a member to add/remove members
+    if (!isSuperAdmin) {
+      const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), teamId, false, isAdmin)
+      if (!allowed) return
+    }
 
     if (req.method === 'GET') {
       const memberships = await prisma.membership.findMany({
@@ -584,7 +640,7 @@ async function handleTeamMembers(req, res, teamId, memberUserId, isAdmin) {
 }
 
 // Document handlers
-async function handleDocuments(req, res, documentId, isAdmin) {
+async function handleDocuments(req, res, documentId, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET' && !documentId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -595,12 +651,20 @@ async function handleDocuments(req, res, documentId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!allowed) return
+      }
+
       let where = {}
       if (targetTeamId) {
         where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
       }
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -634,6 +698,9 @@ async function handleDocuments(req, res, documentId, isAdmin) {
       if (!isAdmin && isManagementTeam(targetTeamId)) {
         return denyManagementAccess(res)
       }
+
+      const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!allowed) return
 
       const documentData = {
         ...rest,
@@ -678,6 +745,10 @@ async function handleDocuments(req, res, documentId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const effectiveTeamId = targetTeamId || existingDocument.teamId
+      const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), effectiveTeamId, isSuperAdmin, isAdmin)
+      if (!allowed) return
+
       const updateData = { ...rest }
       if (targetTeamId && targetTeamId !== existingDocument.teamId) {
         updateData.teamId = targetTeamId
@@ -721,6 +792,9 @@ async function handleDocuments(req, res, documentId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existingDocument.teamId, isSuperAdmin, isAdmin)
+      if (!allowed) return
+
       await prisma.teamDocument.delete({
         where: { id: documentId }
       })
@@ -739,7 +813,7 @@ async function handleDocuments(req, res, documentId, isAdmin) {
 }
 
 // Workflow handlers
-async function handleWorkflows(req, res, workflowId, isAdmin) {
+async function handleWorkflows(req, res, workflowId, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET' && !workflowId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -750,12 +824,20 @@ async function handleWorkflows(req, res, workflowId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!allowed) return
+      }
+
       let where = {}
       if (targetTeamId) {
         where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
       }
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -789,6 +871,9 @@ async function handleWorkflows(req, res, workflowId, isAdmin) {
       if (!isAdmin && isManagementTeam(targetTeamId)) {
         return denyManagementAccess(res)
       }
+
+      const allowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!allowed) return
 
       const workflowData = {
         ...rest,
@@ -833,6 +918,10 @@ async function handleWorkflows(req, res, workflowId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const effectiveTeamId = targetTeamId || existingWorkflow.teamId
+      const wfAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), effectiveTeamId, isSuperAdmin, isAdmin)
+      if (!wfAllowed) return
+
       const updateData = { ...rest }
       if (targetTeamId && targetTeamId !== existingWorkflow.teamId) {
         updateData.teamId = targetTeamId
@@ -876,6 +965,9 @@ async function handleWorkflows(req, res, workflowId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const wfDelAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existingWorkflow.teamId, isSuperAdmin, isAdmin)
+      if (!wfDelAllowed) return
+
       await prisma.teamWorkflow.delete({
         where: { id: workflowId }
       })
@@ -894,7 +986,7 @@ async function handleWorkflows(req, res, workflowId, isAdmin) {
 }
 
 // Checklist handlers
-async function handleChecklists(req, res, checklistId, isAdmin) {
+async function handleChecklists(req, res, checklistId, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET' && !checklistId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -905,12 +997,20 @@ async function handleChecklists(req, res, checklistId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const clAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!clAllowed) return
+      }
+
       let where = {}
       if (targetTeamId) {
         where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
       }
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -944,6 +1044,9 @@ async function handleChecklists(req, res, checklistId, isAdmin) {
       if (!isAdmin && isManagementTeam(targetTeamId)) {
         return denyManagementAccess(res)
       }
+
+      const clPostAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!clPostAllowed) return
 
       const checklistData = {
         ...rest,
@@ -987,6 +1090,10 @@ async function handleChecklists(req, res, checklistId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const clEffTeamId = targetTeamId || existingChecklist.teamId
+      const clPutAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), clEffTeamId, isSuperAdmin, isAdmin)
+      if (!clPutAllowed) return
+
       const updateData = { ...rest }
       if (targetTeamId && targetTeamId !== existingChecklist.teamId) {
         updateData.teamId = targetTeamId
@@ -1027,6 +1134,9 @@ async function handleChecklists(req, res, checklistId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const clDelAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existingChecklist.teamId, isSuperAdmin, isAdmin)
+      if (!clDelAllowed) return
+
       await prisma.teamChecklist.delete({
         where: { id: checklistId }
       })
@@ -1045,7 +1155,7 @@ async function handleChecklists(req, res, checklistId, isAdmin) {
 }
 
 // Notice handlers
-async function handleNotices(req, res, noticeId, isAdmin) {
+async function handleNotices(req, res, noticeId, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET' && !noticeId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -1056,12 +1166,20 @@ async function handleNotices(req, res, noticeId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const nAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!nAllowed) return
+      }
+
       let where = {}
       if (targetTeamId) {
         where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
       }
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -1095,6 +1213,9 @@ async function handleNotices(req, res, noticeId, isAdmin) {
       if (!isAdmin && isManagementTeam(targetTeamId)) {
         return denyManagementAccess(res)
       }
+
+      const nPostAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!nPostAllowed) return
 
       const noticeData = {
         ...rest,
@@ -1137,6 +1258,10 @@ async function handleNotices(req, res, noticeId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const nEffTeamId = targetTeamId || existingNotice.teamId
+      const nPutAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), nEffTeamId, isSuperAdmin, isAdmin)
+      if (!nPutAllowed) return
+
       const updateData = { ...rest }
       if (targetTeamId && targetTeamId !== existingNotice.teamId) {
         updateData.teamId = targetTeamId
@@ -1174,6 +1299,9 @@ async function handleNotices(req, res, noticeId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const nDelAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existingNotice.teamId, isSuperAdmin, isAdmin)
+      if (!nDelAllowed) return
+
       await prisma.teamNotice.delete({
         where: { id: noticeId }
       })
@@ -1192,7 +1320,7 @@ async function handleNotices(req, res, noticeId, isAdmin) {
 }
 
 // Discussion handlers
-async function handleDiscussions(req, res, discussionId, isAdmin) {
+async function handleDiscussions(req, res, discussionId, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET' && !discussionId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -1203,12 +1331,22 @@ async function handleDiscussions(req, res, discussionId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const dAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!dAllowed) return
+      }
+
       let where = {}
-      if (targetTeamId) where.teamId = targetTeamId
+      if (targetTeamId) {
+        where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
+      }
       if (type) where.type = type
       if (pinned !== undefined && pinned !== '') where.pinned = pinned === 'true'
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -1237,6 +1375,8 @@ async function handleDiscussions(req, res, discussionId, isAdmin) {
       if (!isAdmin && isManagementTeam(raw.teamId)) {
         return denyManagementAccess(res)
       }
+      const dSingleAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), raw.teamId, isSuperAdmin, isAdmin)
+      if (!dSingleAllowed) return
       // Build a plain serializable object (no Prisma refs / circular refs)
       const replies = (raw.replies || []).filter(Boolean).slice()
         .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
@@ -1276,6 +1416,9 @@ async function handleDiscussions(req, res, discussionId, isAdmin) {
       if (!title) return badRequest(res, 'title is required')
       if (!isAdmin && isManagementTeam(targetTeamId)) return denyManagementAccess(res)
 
+      const dPostAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!dPostAllowed) return
+
       const discussion = await prisma.teamDiscussion.create({
         data: {
           teamId: targetTeamId,
@@ -1314,6 +1457,9 @@ async function handleDiscussions(req, res, discussionId, isAdmin) {
       if (!existing) return notFound(res, 'Discussion not found')
       if (!isAdmin && isManagementTeam(existing.teamId)) return denyManagementAccess(res)
 
+      const dPutAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existing.teamId, isSuperAdmin, isAdmin)
+      if (!dPutAllowed) return
+
       const body = await parseJsonBody(req)
       const { title, body: bodyText, type, pinned } = body
       const updateData = {}
@@ -1349,6 +1495,9 @@ async function handleDiscussions(req, res, discussionId, isAdmin) {
       if (!existing) return notFound(res, 'Discussion not found')
       if (!isAdmin && isManagementTeam(existing.teamId)) return denyManagementAccess(res)
 
+      const dDelAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existing.teamId, isSuperAdmin, isAdmin)
+      if (!dDelAllowed) return
+
       await prisma.teamDiscussion.delete({ where: { id: discussionId } })
       return ok(res, { success: true })
     }
@@ -1361,7 +1510,7 @@ async function handleDiscussions(req, res, discussionId, isAdmin) {
   }
 }
 
-async function handleDiscussionReplies(req, res, discussionId, replyId, isAdmin) {
+async function handleDiscussionReplies(req, res, discussionId, replyId, isAdmin, isSuperAdmin) {
   try {
     const discussion = await prisma.teamDiscussion.findUnique({
       where: { id: discussionId },
@@ -1369,6 +1518,9 @@ async function handleDiscussionReplies(req, res, discussionId, replyId, isAdmin)
     })
     if (!discussion) return notFound(res, 'Discussion not found')
     if (!isAdmin && isManagementTeam(discussion.teamId)) return denyManagementAccess(res)
+
+    const drAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), discussion.teamId, isSuperAdmin, isAdmin)
+    if (!drAllowed) return
 
     if (req.method === 'GET') {
       const replies = await prisma.discussionReply.findMany({
@@ -1446,7 +1598,7 @@ async function handleDiscussionReplies(req, res, discussionId, replyId, isAdmin)
   }
 }
 
-async function handleDiscussionChecklists(req, res, discussionId, checklistId, isAdmin) {
+async function handleDiscussionChecklists(req, res, discussionId, checklistId, isAdmin, isSuperAdmin) {
   try {
     const discussion = await prisma.teamDiscussion.findUnique({
       where: { id: discussionId },
@@ -1454,6 +1606,9 @@ async function handleDiscussionChecklists(req, res, discussionId, checklistId, i
     })
     if (!discussion) return notFound(res, 'Discussion not found')
     if (!isAdmin && isManagementTeam(discussion.teamId)) return denyManagementAccess(res)
+
+    const dcAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), discussion.teamId, isSuperAdmin, isAdmin)
+    if (!dcAllowed) return
 
     if (req.method === 'GET') {
       const checklists = await prisma.discussionChecklist.findMany({
@@ -1513,7 +1668,7 @@ async function handleDiscussionChecklists(req, res, discussionId, checklistId, i
 }
 
 // Task handlers
-async function handleTasks(req, res, taskId, isAdmin) {
+async function handleTasks(req, res, taskId, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET' && !taskId) {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -1524,15 +1679,23 @@ async function handleTasks(req, res, taskId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const tAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!tAllowed) return
+      }
+
       let where = {}
       if (targetTeamId) {
         where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
       }
       if (discussionId) {
         where.discussionId = discussionId
       }
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -1566,6 +1729,9 @@ async function handleTasks(req, res, taskId, isAdmin) {
       if (!isAdmin && isManagementTeam(targetTeamId)) {
         return denyManagementAccess(res)
       }
+
+      const tPostAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!tPostAllowed) return
 
       const taskData = {
         ...rest,
@@ -1611,6 +1777,10 @@ async function handleTasks(req, res, taskId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const tEffTeamId = targetTeamId || existingTask.teamId
+      const tPutAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), tEffTeamId, isSuperAdmin, isAdmin)
+      if (!tPutAllowed) return
+
       const updateData = { ...rest }
       if (targetTeamId && targetTeamId !== existingTask.teamId) {
         updateData.teamId = targetTeamId
@@ -1655,6 +1825,9 @@ async function handleTasks(req, res, taskId, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      const tDelAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), existingTask.teamId, isSuperAdmin, isAdmin)
+      if (!tDelAllowed) return
+
       await prisma.teamTask.delete({
         where: { id: taskId }
       })
@@ -1673,7 +1846,7 @@ async function handleTasks(req, res, taskId, isAdmin) {
 }
 
 // Execution handlers
-async function handleExecutions(req, res, isAdmin) {
+async function handleExecutions(req, res, isAdmin, isSuperAdmin) {
   try {
     if (req.method === 'GET') {
       const url = new URL(req.url, `http://${req.headers.host}`)
@@ -1684,11 +1857,21 @@ async function handleExecutions(req, res, isAdmin) {
         return denyManagementAccess(res)
       }
 
+      if (targetTeamId) {
+        const eAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+        if (!eAllowed) return
+      }
+
       let where = {}
       if (workflowId) where.workflowId = workflowId
-      if (targetTeamId) where.teamId = targetTeamId
+      if (targetTeamId) {
+        where.teamId = targetTeamId
+      } else if (!isSuperAdmin) {
+        const memberTeamIds = (await getMemberTeamIds(prisma, getOwnerId(req))).filter((id) => id !== MANAGEMENT_TEAM_ID)
+        where.teamId = { in: memberTeamIds }
+      }
 
-      if (!isAdmin) {
+      if (!isSuperAdmin && targetTeamId) {
         where = withManagementRestriction(where)
       }
 
@@ -1728,6 +1911,9 @@ async function handleExecutions(req, res, isAdmin) {
       if (!isAdmin && isManagementTeam(targetTeamId)) {
         return denyManagementAccess(res)
       }
+
+      const ePostAllowed = await requireTeamMembershipOrSuperAdmin(prisma, res, getOwnerId(req), targetTeamId, isSuperAdmin, isAdmin)
+      if (!ePostAllowed) return
 
       const executionData = {
         ...rest,
