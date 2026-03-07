@@ -1,7 +1,6 @@
-// Get dependencies from window
+// Get dependencies from window (DiscussionModal, ManagementMeetingNotes read at load; TeamDiscussions read at render so lazy load works)
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const storage = window.storage;
-const TeamDiscussions = window.TeamDiscussions;
 const DiscussionModal = window.DiscussionModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
@@ -312,6 +311,8 @@ const Teams = () => {
     
     // State to track ManagementMeetingNotes availability
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
+    // Force re-render when on discussions tab until lazy-loaded TeamDiscussions is available
+    const [, setDiscussionsReadyTick] = useState(0);
     
     // Validate selectedTeam from URL after component mounts, teams load, and isAdminUser is computed
     useEffect(() => {
@@ -531,6 +532,13 @@ const Teams = () => {
 
         return () => clearInterval(interval);
     }, []);
+
+    // When on discussions tab, re-render periodically until lazy-loaded TeamDiscussions is available
+    useEffect(() => {
+        if (activeTab !== 'discussions' || window.TeamDiscussions) return;
+        const id = setInterval(() => setDiscussionsReadyTick((t) => t + 1), 300);
+        return () => clearInterval(id);
+    }, [activeTab]);
 
     // Load discussions for overview (Recent Activity) when no team selected
     useEffect(() => {
@@ -884,9 +892,20 @@ const Teams = () => {
 
                     {/* Content Display Based on Active Tab */}
                     <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                        {activeTab === 'discussions' && TeamDiscussions && (
-                            <TeamDiscussions team={selectedTeam} isDark={isDark} searchTerm={searchTerm} initialDiscussionId={getSearchParams().get('discussion') || undefined} />
-                        )}
+                        {activeTab === 'discussions' && (() => {
+                            const TeamDiscussionsComponent = window.TeamDiscussions;
+                            if (!TeamDiscussionsComponent) {
+                                return (
+                                    <div className={`flex items-center justify-center py-16 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <span className="animate-spin mr-2 inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full"></span>
+                                        <span className="text-sm">Loading discussions…</span>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <TeamDiscussionsComponent team={selectedTeam} isDark={isDark} searchTerm={searchTerm} initialDiscussionId={getSearchParams().get('discussion') || undefined} />
+                            );
+                        })()}
                         {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
                             const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;
                             
