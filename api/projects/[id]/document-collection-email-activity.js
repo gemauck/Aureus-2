@@ -8,20 +8,6 @@ import { parseJsonBody } from '../../_lib/body.js'
 import { normalizeDocumentCollectionCell, normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
 import { ok, badRequest, serverError } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
-import { appendFileSync, existsSync, mkdirSync } from 'fs'
-import { join } from 'path'
-
-function debugLogHandler (payload) {
-  try {
-    const dir = join(process.cwd(), '.cursor')
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    const logPath = join(dir, 'debug-966947.log')
-    appendFileSync(logPath, JSON.stringify({ sessionId: '966947', ...payload, timestamp: payload.timestamp || Date.now() }) + '\n')
-  } catch (_) {}
-  try {
-    fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '966947' }, body: JSON.stringify({ sessionId: '966947', ...payload }) }).catch(() => {})
-  } catch (_) {}
-}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function parseCcFromText(text) {
@@ -187,11 +173,6 @@ function withGetSafe(fn) {
   const empty = JSON.stringify({ data: { sent: [], received: [] } })
   return function (req, res) {
     if (req.method !== 'GET') return fn(req, res)
-    // #region agent log
-    try {
-      debugLogHandler({ location: 'document-collection-email-activity.js:withGetSafe', message: 'handler GET entered', data: { method: req.method }, hypothesisId: 'C' })
-    } catch (_) {}
-    // #endregion
     const sendEmpty = () => {
       if (res.headersSent || res.writableEnded) return
       try {
@@ -638,11 +619,14 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
     }
   }
 
+  // Only await Resend delivery-status refresh when user clicked Refresh; otherwise return DB data immediately to avoid timeout/502
   if (sent.length > 0) {
-    try {
-      const forceRefresh = params.get('refresh') === '1' || (q.refresh != null && String(q.refresh) === '1')
-      sent = await refreshResendDeliveryStatus(sent, { force: forceRefresh })
-    } catch (_) {}
+    const forceRefresh = params.get('refresh') === '1' || (q.refresh != null && String(q.refresh) === '1')
+    if (forceRefresh) {
+      try {
+        sent = await refreshResendDeliveryStatus(sent, { force: true })
+      } catch (_) {}
+    }
   }
 
   try {
@@ -669,8 +653,61 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
       select: { id: true, text: true, attachments: true, createdAt: true }
     })
 
+    // Include received emails for other documents with the same name (same project/year/month) so replies show even when matched to a different section's doc
+    let receivedRowsExtended = receivedRows
+    if (documentName && (documentName || '').trim()) {
+      try {
+        let docsByName = await prisma.documentItem.findMany({
+          where: {
+            name: { equals: documentName.trim(), mode: 'insensitive' },
+            section: { projectId: cell.projectId }
+          },
+          select: { id: true },
+          take: 20
+        })
+        if (docsByName.length === 0) {
+          docsByName = await prisma.documentItem.findMany({
+            where: {
+              name: { contains: documentName.trim(), mode: 'insensitive' },
+              section: { projectId: cell.projectId }
+            },
+            select: { id: true },
+            take: 20
+          })
+        }
+        const docIds = docsByName.map((d) => d.id).filter((id) => String(id) !== String(cell.documentId))
+        if (docIds.length > 0) {
+          const extraReceived = await prisma.documentItemComment.findMany({
+            where: {
+              itemId: { in: docIds },
+              year: cell.year,
+              month: cell.month,
+              OR: [
+                { author: 'Email from Client' },
+                { text: { startsWith: 'Email from Client' } }
+              ]
+            },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, text: true, attachments: true, createdAt: true }
+          })
+          const seen = new Set(receivedRows.map((r) => r.id))
+          for (const r of extraReceived) {
+            if (!seen.has(r.id)) {
+              seen.add(r.id)
+              receivedRowsExtended = receivedRowsExtended.concat(r)
+            }
+          }
+          if (receivedRowsExtended.length > receivedRows.length) {
+            receivedRowsExtended.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('document-collection-email-activity: received by-name fallback failed', fallbackErr?.message || fallbackErr)
+      }
+    }
+
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const received = receivedRows.map((r) => {
+    const received = receivedRowsExtended.map((r) => {
       let attachments = []
       if (r.attachments) {
         try {

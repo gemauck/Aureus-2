@@ -422,7 +422,14 @@ async function handler(req, res) {
       if (sent.length === 0) {
         console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId') ?? q.documentId, month: body.month ?? query.get('month') ?? q.month, year: body.year ?? query.get('year') ?? q.year })
       } else if (!cell) {
-        console.warn('document-collection-send-email: skipping activity log (no cell) — activity will not persist after refresh', { projectId, fromBody: { documentId: body.documentId, month: body.month, year: body.year }, fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') || q.month, year: query.get('year') || q.year }, expressQuery: q, parsed: { documentId, month, year } })
+        console.warn('document-collection-send-email: skipping activity log (no cell) — activity will not persist after refresh', {
+          projectId,
+          fromBody: { documentId: body.documentId, month: body.month, year: body.year },
+          fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') || q.month, year: query.get('year') || q.year },
+          fromHeaders: { 'x-document-id': h['x-document-id'], 'x-month': h['x-month'], 'x-year': h['x-year'] },
+          expressQuery: q,
+          parsed: { documentId, month, year }
+        })
       }
     }
 
