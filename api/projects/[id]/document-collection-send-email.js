@@ -86,6 +86,10 @@ async function handler(req, res) {
     const queryString = (typeof fullUrl === 'string' ? fullUrl : '').split('?')[1] || ''
     const query = new URLSearchParams(queryString)
     const q = req.query || {}
+    // Prefer URL-parsed query for cell keys (some proxies/loaders may not set req.query for POST)
+    const qDoc = query.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null
+    const qMonth = query.get('month') != null ? parseInt(String(query.get('month')), 10) : (q.month != null ? parseInt(String(q.month), 10) : null)
+    const qYear = query.get('year') != null ? parseInt(String(query.get('year')), 10) : (q.year != null ? parseInt(String(q.year), 10) : null)
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
     const cc = Array.isArray(body.cc) ? body.cc : (typeof body.cc === 'string' ? [body.cc] : [])
     const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
@@ -94,12 +98,12 @@ async function handler(req, res) {
     const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
     const requesterEmail = typeof body.requesterEmail === 'string' ? body.requesterEmail.trim() : ''
     // Cell keys: body first, then URL query (manual), then Express req.query so reply always persists
-    let documentId = (body.documentId != null ? String(body.documentId).trim() : null) || query.get('documentId')?.trim() || (q.documentId != null ? String(q.documentId).trim() : null) || null
-    let month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (query.get('month') != null ? parseInt(String(query.get('month')), 10) : (q.month != null ? parseInt(String(q.month), 10) : null))
-    let year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (query.get('year') != null ? parseInt(String(query.get('year')), 10) : (q.year != null ? parseInt(String(q.year), 10) : null))
-    if (documentId == null && q.documentId != null) documentId = String(q.documentId).trim()
-    if (month == null || isNaN(month)) month = q.month != null ? parseInt(String(q.month), 10) : null
-    if (year == null || isNaN(year)) year = q.year != null ? parseInt(String(q.year), 10) : null
+    let documentId = (body.documentId != null ? String(body.documentId).trim() : null) || qDoc || null
+    let month = body.month != null ? (typeof body.month === 'number' ? body.month : parseInt(String(body.month), 10)) : (qMonth != null && !isNaN(qMonth) ? qMonth : null)
+    let year = body.year != null ? (typeof body.year === 'number' ? body.year : parseInt(String(body.year), 10)) : (qYear != null && !isNaN(qYear) ? qYear : null)
+    if (documentId == null && qDoc != null) documentId = qDoc
+    if (month == null || isNaN(month)) month = qMonth
+    if (year == null || isNaN(year)) year = qYear
     // Header fallback (proxies sometimes strip query/body for POST)
     const h = req.headers || {}
     if (documentId == null && h['x-document-id']) documentId = String(h['x-document-id']).trim()
@@ -117,7 +121,7 @@ async function handler(req, res) {
         month,
         year,
         bodyKeys,
-        fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') ?? q.month, year: query.get('year') ?? q.year },
+        fromQuery: { documentId: qDoc || query.get('documentId') || q.documentId, month: qMonth ?? query.get('month') ?? q.month, year: qYear ?? query.get('year') ?? q.year },
         fromHeaders: { 'x-document-id': h['x-document-id'], 'x-month': h['x-month'], 'x-year': h['x-year'] }
       })
     }
@@ -387,6 +391,10 @@ async function handler(req, res) {
                 month: parsed.month,
                 year: parsed.year
               }
+              // Prefer request month/year when present so we persist to the year the user is viewing (not just subject)
+              if (monthNum != null && yearNum != null) {
+                fallbackCell = { ...fallbackCell, month: monthNum, year: yearNum }
+              }
             }
           } catch (lookupErr) {
             console.warn('document-collection-send-email: fallback doc lookup failed', lookupErr.message)
@@ -434,12 +442,12 @@ async function handler(req, res) {
       }
     } else {
       if (sent.length === 0) {
-        console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? query.get('documentId') ?? q.documentId, month: body.month ?? query.get('month') ?? q.month, year: body.year ?? query.get('year') ?? q.year })
+        console.log('document-collection-send-email: skipping activity log (no successful sends)', { hasCell: !!cell, projectId, documentId: body.documentId ?? qDoc ?? q.documentId, month: body.month ?? qMonth ?? q.month, year: body.year ?? qYear ?? q.year })
       } else if (!cell) {
         console.warn('document-collection-send-email: skipping activity log (no cell) — activity will not persist after refresh', {
           projectId,
           fromBody: { documentId: body.documentId, month: body.month, year: body.year },
-          fromQuery: { documentId: query.get('documentId') || q.documentId, month: query.get('month') || q.month, year: query.get('year') || q.year },
+          fromQuery: { documentId: qDoc || query.get('documentId') || q.documentId, month: qMonth ?? query.get('month') ?? q.month, year: qYear ?? query.get('year') ?? q.year },
           fromHeaders: { 'x-document-id': h['x-document-id'], 'x-month': h['x-month'], 'x-year': h['x-year'] },
           expressQuery: q,
           parsed: { documentId, month, year }
