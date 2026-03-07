@@ -93,16 +93,16 @@ export async function notifyTeamDiscussionCreated(opts) {
   const link = buildTeamsDiscussionLink(teamId, discussionId)
   const metadata = { teamId, discussionId, discussionTitle, source: 'team_discussion', teamName: teamLabel }
 
-  const results = await Promise.allSettled(
-    recipientIds.map((userId) =>
-      createNotificationForUser(userId, 'comment', title, message, link, metadata)
-    )
-  )
-  results.forEach((r, i) => {
-    if (r.status === 'rejected') {
-      console.error('Team discussion created notification failed for user', recipientIds[i], r.reason)
+  // Send sequentially with small delay to avoid email provider rate limiting (e.g. Resend)
+  for (let i = 0; i < recipientIds.length; i++) {
+    const userId = recipientIds[i]
+    try {
+      await createNotificationForUser(userId, 'comment', title, message, link, metadata)
+      if (i < recipientIds.length - 1) await new Promise((r) => setTimeout(r, 300))
+    } catch (e) {
+      console.error('Team discussion created notification failed for user', userId, e)
     }
-  })
+  }
 }
 
 /**
