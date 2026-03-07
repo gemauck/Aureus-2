@@ -218,6 +218,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
             });
         } catch (e) {
             console.error('Failed to send email notification to', id, e);
+            console.error('📧 Notification email not sent. Ensure RESEND_API_KEY (or SENDGRID_API_KEY/SMTP) is set and sending domain is verified. Recipient:', targetUser.email);
         }
     }
     return { notification, created: !!notification };

@@ -18,6 +18,14 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
     const [modalInitialType, setModalInitialType] = useState('discussion');
     const ds = window.dataService;
 
+    // @mention picker: users list and suggestion state
+    const [mentionUsers, setMentionUsers] = useState([]);
+    const [mentionOpen, setMentionOpen] = useState(false);
+    const [mentionStart, setMentionStart] = useState(null);
+    const [mentionSuggestions, setMentionSuggestions] = useState([]);
+    const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+    const replyInputRef = useRef(null);
+
     const loadDiscussions = useCallback(async () => {
         if (!team?.id || !ds?.getTeamDiscussions) return;
         setLoading(true);
@@ -75,6 +83,83 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
             (d.authorName || '').toLowerCase().includes(q)
         );
     }, [discussions, searchTerm]);
+
+    // Load users for @mention picker when reply area is relevant
+    useEffect(() => {
+        if (!selected || !team?.id) return;
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+                if (!token) return;
+                const res = await fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } });
+                if (!res.ok || cancelled) return;
+                const data = await res.json();
+                const users = data.data?.users || data.users || [];
+                if (!cancelled) setMentionUsers(Array.isArray(users) ? users : []);
+            } catch (e) {
+                if (!cancelled) setMentionUsers([]);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, [selected, team?.id]);
+
+    const handleReplyChange = (e) => {
+        const value = e.target.value;
+        const cursorPos = e.target.selectionStart ?? value.length;
+        setReplyBody(value);
+        const textBefore = value.substring(0, cursorPos);
+        const match = textBefore.match(/@([\w.\s'-]*)$/);
+        if (match) {
+            const query = (match[1] || '').toLowerCase().trim();
+            const filtered = mentionUsers.filter(u => {
+                const name = (u.name || '').toLowerCase();
+                const email = (u.email || '').toLowerCase();
+                return name.includes(query) || email.includes(query) || (u.name || u.email || '').toLowerCase().includes(query);
+            });
+            setMentionStart(match.index);
+            setMentionSuggestions(filtered);
+            setMentionOpen(filtered.length > 0);
+            setMentionSelectedIndex(0);
+        } else {
+            setMentionOpen(false);
+        }
+    };
+    const insertMention = (user) => {
+        const name = user.name || user.email || 'User';
+        const current = replyBody || '';
+        const start = mentionStart ?? 0;
+        const afterMatch = current.slice(start).match(/@[\w.\s'-]*/);
+        const end = afterMatch ? start + afterMatch[0].length : start + 1;
+        const before = current.slice(0, start);
+        const after = current.slice(end);
+        const next = before + `@${name} ` + after;
+        setReplyBody(next);
+        setMentionOpen(false);
+        setMentionSuggestions([]);
+        setTimeout(() => {
+            replyInputRef.current?.focus();
+            const pos = start + name.length + 2;
+            replyInputRef.current?.setSelectionRange(pos, pos);
+        }, 0);
+    };
+    const handleReplyKeyDown = (e) => {
+        if (mentionOpen && mentionSuggestions.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setMentionSelectedIndex(i => (i < mentionSuggestions.length - 1 ? i + 1 : i));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setMentionSelectedIndex(i => (i > 0 ? i - 1 : 0));
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                insertMention(mentionSuggestions[mentionSelectedIndex]);
+            } else if (e.key === 'Escape') {
+                setMentionOpen(false);
+            }
+        }
+    };
 
     const handleSaveDiscussion = async (payload) => {
         if (!ds) return;
@@ -157,7 +242,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
     }, []);
 
     const handleAddReply = async () => {
-        const bodyTrim = (replyBody || '').replace(/<[^>]*>/g, '').trim();
+        const bodyTrim = (replyBody || '').trim();
         if (!selected || (!bodyTrim && replyAttachments.length === 0) || !ds?.addDiscussionReply) return;
         const user = window.storage?.getUser?.() || {};
         setReplySubmitting(true);
@@ -292,7 +377,12 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                     {(detail.replies || []).map(r => (
                                         <div key={r.id} className={`pl-3 border-l-2 ${isDark ? 'border-gray-700' : 'border-gray-200'} py-1`}>
                                             <p className={`text-xs ${textMuted}`}>{r.authorName} · {r.createdAt ? new Date(r.createdAt).toLocaleString('en-ZA') : ''}</p>
-                                            <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert ${isDark ? 'prose-p:text-gray-200' : ''}`} dangerouslySetInnerHTML={{ __html: r.body || '' }} />
+                                            <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert ${isDark ? 'prose-p:text-gray-200' : ''}`}>
+                                                {(r.body || '').includes('<') && (r.body || '').includes('>')
+                                                    ? <div dangerouslySetInnerHTML={{ __html: r.body || '' }} />
+                                                    : <div className="whitespace-pre-wrap break-words">{(r.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</div>
+                                                }
+                                            </div>
                                             {(r.attachments || []).length > 0 && (
                                                 <div className="mt-2 flex flex-wrap gap-2">
                                                     {(r.attachments || []).map((att, idx) => (
@@ -306,25 +396,40 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                     ))}
                                 </div>
                                 <div className="mt-3 space-y-2">
-                                    {window.RichTextEditor ? (
-                                        <window.RichTextEditor
-                                            value={replyBody}
-                                            onChange={setReplyBody}
-                                            placeholder="Write a reply… (use @Name to mention someone)"
-                                            rows={3}
-                                            isDark={isDark}
-                                            className="min-h-[80px]"
-                                        />
-                                    ) : (
+                                    <div className="relative">
                                         <textarea
+                                            ref={replyInputRef}
                                             value={replyBody}
-                                            onChange={(e) => setReplyBody(e.target.value)}
-                                            placeholder="Write a reply… (use @Name to mention someone)"
+                                            onChange={handleReplyChange}
+                                            onKeyDown={handleReplyKeyDown}
+                                            placeholder="Write a reply… (type @ to mention someone)"
                                             rows={3}
                                             className={`w-full px-3 py-2 text-sm border rounded-lg ${input}`}
                                         />
-                                    )}
-                                    <p className={`text-xs ${textMuted}`}>Type @ followed by a name to notify that person.</p>
+                                        {mentionOpen && mentionSuggestions.length > 0 && (
+                                            <ul
+                                                className={`absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
+                                                style={{ bottom: '100%' }}
+                                            >
+                                                {mentionSuggestions.map((user, idx) => (
+                                                    <li key={user.id}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => insertMention(user)}
+                                                            className={`w-full text-left px-3 py-2 flex items-center gap-2 ${idx === mentionSelectedIndex ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''} ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-900'}`}
+                                                        >
+                                                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shrink-0 ${isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-200 text-gray-700'}`}>
+                                                                {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+                                                            </span>
+                                                            <span className="truncate">{user.name || user.email}</span>
+                                                            {user.email && user.name && <span className={`text-xs truncate ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{user.email}</span>}
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <p className={`text-xs ${textMuted}`}>Type @ to search and select a person to mention.</p>
                                     {replyAttachments.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {replyAttachments.map((att, idx) => (
@@ -340,7 +445,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                         <button type="button" onClick={() => replyFileInputRef.current?.click()} disabled={replySubmitting} className={`px-3 py-2 text-sm rounded-lg ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}>
                                             <i className="fas fa-paperclip mr-1"></i> Attach files
                                         </button>
-                                        <button type="button" onClick={handleAddReply} disabled={replySubmitting || ((!replyBody || !replyBody.replace(/<[^>]*>/g, '').trim()) && replyAttachments.length === 0)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                                        <button type="button" onClick={handleAddReply} disabled={replySubmitting || (!(replyBody || '').trim() && replyAttachments.length === 0)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
                                             {replySubmitting ? '…' : 'Reply'}
                                         </button>
                                     </div>

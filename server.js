@@ -2551,6 +2551,15 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`📁 Serving from: ${rootDir}`)
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'production'}`)
   console.log(`📂 API directory: ${apiDir}`)
+  if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.startsWith('re_')) {
+    console.log('📧 Email: Resend configured (notification emails will be sent)')
+  } else if (process.env.SENDGRID_API_KEY || (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.'))) {
+    console.log('📧 Email: SendGrid configured (notification emails will be sent)')
+  } else if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    console.log('📧 Email: SMTP configured (notification emails will be sent)')
+  } else {
+    console.warn('📧 Email: Not configured — set RESEND_API_KEY, SENDGRID_API_KEY, or SMTP_* so notification emails work')
+  }
   
   // Setup daily leave notification cron job (runs at 8:00 AM daily)
   if (process.env.ENABLE_LEAVE_EMAIL_NOTIFICATIONS !== 'false') {
