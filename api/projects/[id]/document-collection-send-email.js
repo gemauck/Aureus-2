@@ -250,6 +250,7 @@ async function handler(req, res) {
     let activityPersisted = false
     let logId = null
     let warning = null
+    let savedCellInfo = null
     const bodyForStorage = typeof text === 'string' && text.trim()
       ? text.trim().slice(0, 50000)
       : typeof html === 'string' && html
@@ -300,6 +301,7 @@ async function handler(req, res) {
           const log = await prisma.documentCollectionEmailLog.create({ data: logData })
           activityPersisted = true
           logId = log.id
+          savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
           console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
         } catch (logErr) {
           const msg = String(logErr?.message || '')
@@ -312,6 +314,7 @@ async function handler(req, res) {
               const log = await prisma.documentCollectionEmailLog.create({ data: minimalLogData })
               activityPersisted = true
               logId = log.id
+              savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
               console.log('document-collection-send-email: activity log created (minimal)', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
             } catch (retryErr) {
               console.error('document-collection-send-email: log create failed (minimal):', retryErr.message, { projectId: cell.projectId, documentId: cell.documentId })
@@ -333,6 +336,7 @@ async function handler(req, res) {
               }
             })
             activityPersisted = true
+            savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
             console.log('document-collection-send-email: activity fallback saved as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
           } catch (commentErr) {
             console.error('document-collection-send-email: fallback comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
@@ -395,6 +399,25 @@ async function handler(req, res) {
               if (monthNum != null && yearNum != null) {
                 fallbackCell = { ...fallbackCell, month: monthNum, year: yearNum }
               }
+            } else if (parsed.docName || (monthNum ?? parsed.month) || (yearNum ?? parsed.year)) {
+              // Last resort: no doc matched by name but we have period — use first document in project so activity still shows
+              const firstDoc = await prisma.documentItem.findFirst({
+                where: { section: { projectId: String(projectId).trim() } },
+                select: { id: true },
+                orderBy: { id: 'asc' }
+              }).catch(() => null)
+              if (firstDoc) {
+                const m = monthNum ?? parsed.month
+                const y = yearNum ?? parsed.year
+                if (m >= 1 && m <= 12 && y) {
+                  fallbackCell = {
+                    projectId: String(projectId).trim(),
+                    documentId: String(firstDoc.id),
+                    month: m,
+                    year: y
+                  }
+                }
+              }
             }
           } catch (lookupErr) {
             console.warn('document-collection-send-email: fallback doc lookup failed', lookupErr.message)
@@ -416,6 +439,7 @@ async function handler(req, res) {
           })
           activityPersisted = true
           logId = log.id
+          savedCellInfo = { documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year }
           warning = 'Email sent, but activity context was reconstructed. Please verify the activity list.'
           console.log('document-collection-send-email: activity log created via fallback', { logId: log.id, projectId: fallbackCell.projectId, documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year })
         } catch (fallbackLogErr) {
@@ -430,6 +454,7 @@ async function handler(req, res) {
               }
             })
             activityPersisted = true
+            savedCellInfo = { documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year }
             warning = 'Email sent, activity saved as comment fallback.'
             console.log('document-collection-send-email: activity fallback comment saved via fallback cell', { documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year })
           } catch (fallbackCommentErr) {
@@ -455,7 +480,15 @@ async function handler(req, res) {
       }
     }
 
-    return ok(res, { sent, failed, activityPersisted, logId: logId || undefined, messageId: messageIdForReply || undefined, ...(warning ? { warning } : {}) })
+    return ok(res, {
+      sent,
+      failed,
+      activityPersisted,
+      logId: logId || undefined,
+      messageId: messageIdForReply || undefined,
+      ...(savedCellInfo ? { savedCell: savedCellInfo } : {}),
+      ...(warning ? { warning } : {})
+    })
   } catch (e) {
     console.error('POST /api/projects/:id/document-collection-send-email error:', e)
     return serverError(res, e.message || 'Failed to send document request emails')
