@@ -134,6 +134,11 @@ export async function createNotificationForUser(targetUserId, type, title, messa
 
     const shouldSendEmail = (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||
         (type === 'task' && settings.emailTasks) || (type === 'invoice' && settings.emailInvoices) || (type === 'system' && settings.emailSystem);
+    if (!targetUser.email) {
+        if (type === 'comment' || type === 'mention') console.warn('📧 Notification: user has no email, skipping:', id, targetUser.name);
+    } else if (!shouldSendEmail && (type === 'comment' || type === 'mention')) {
+        console.warn('📧 Notification: user has emailComments/emailMentions disabled, skipping:', id, targetUser.email);
+    }
     if (shouldSendEmail && targetUser.email) {
         try {
             let projectName = null, clientName = null, commentText = null, commentLink = validLink || link || null, taskTitle = null;

@@ -87,20 +87,29 @@ export async function notifyTeamDiscussionCreated(opts) {
   const recipientIds = memberIds.filter((id) => authorIdStr !== String(id))
   if (recipientIds.length === 0) return
 
+  // Log recipients for debugging when some don't receive
+  const recipientUsers = await prisma.user.findMany({
+    where: { id: { in: recipientIds } },
+    select: { id: true, email: true, name: true }
+  })
+  console.log(`📧 Team discussion notification: ${recipientIds.length} recipients for team ${teamId}`, recipientUsers.map((u) => ({ id: u.id, email: u.email, name: u.name })))
+
   const teamLabel = teamName || teamId
   const title = `New discussion in ${teamLabel}: ${(discussionTitle || 'Untitled').slice(0, 60)}${(discussionTitle || '').length > 60 ? '…' : ''}`
   const message = `${authorName || 'Someone'} started a discussion: "${(discussionTitle || '').slice(0, 80)}${(discussionTitle || '').length > 80 ? '…' : ''}"`
   const link = buildTeamsDiscussionLink(teamId, discussionId)
   const metadata = { teamId, discussionId, discussionTitle, source: 'team_discussion', teamName: teamLabel }
 
-  // Send sequentially with small delay to avoid email provider rate limiting (e.g. Resend)
+  // Send sequentially with delay to avoid email provider rate limiting (e.g. Resend)
+  const delayMs = 500
   for (let i = 0; i < recipientIds.length; i++) {
     const userId = recipientIds[i]
+    const rec = recipientUsers.find((u) => u.id === userId)
     try {
       await createNotificationForUser(userId, 'comment', title, message, link, metadata)
-      if (i < recipientIds.length - 1) await new Promise((r) => setTimeout(r, 300))
+      if (i < recipientIds.length - 1) await new Promise((r) => setTimeout(r, delayMs))
     } catch (e) {
-      console.error('Team discussion created notification failed for user', userId, e)
+      console.error('📧 Team discussion notification failed for user', rec?.email || userId, e)
     }
   }
 }
