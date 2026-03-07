@@ -9,7 +9,7 @@ import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notif
 
 // Department definitions
 const DEPARTMENTS = [
-  { id: 'management', name: 'Director + General' },
+  { id: 'management', name: 'Management' },
   { id: 'compliance', name: 'Compliance' },
   { id: 'finance', name: 'Finance' },
   { id: 'technical', name: 'Technical' },

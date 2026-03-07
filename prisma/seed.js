@@ -15,7 +15,7 @@ async function main() {
   const teamsData = [
     { 
       id: 'management', 
-      name: 'Director + General', 
+      name: 'Management', 
       icon: 'fa-user-tie', 
       color: 'blue',
       description: 'Executive leadership and strategic planning',
