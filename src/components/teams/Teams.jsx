@@ -97,6 +97,7 @@ const Teams = () => {
                 if (!token) {
                     console.warn('Teams: No auth token available');
                     setTeamsLoading(false);
+                    setIsReady(true);
                     return;
                 }
 
@@ -158,6 +159,7 @@ const Teams = () => {
                 setTeams([]);
             } finally {
                 setTeamsLoading(false);
+                setIsReady(true);
             }
         };
 
@@ -308,9 +310,6 @@ const Teams = () => {
     const isInitialMount = useRef(true);
     
     // Modal states
-    // Discussions overview (for Recent Activity when no team selected)
-    const [allDiscussions, setAllDiscussions] = useState([]);
-    
     // State to track ManagementMeetingNotes availability
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
     // Force re-render when on discussions tab until lazy-loaded TeamDiscussions is available
@@ -319,6 +318,9 @@ const Teams = () => {
     const [membersLoading, setMembersLoading] = useState(false);
     const [availableUsers, setAvailableUsers] = useState([]);
     const [addMemberUserId, setAddMemberUserId] = useState('');
+    const [addMemberSearch, setAddMemberSearch] = useState('');
+    const [addMemberPickerOpen, setAddMemberPickerOpen] = useState(false);
+    const addMemberInputRef = useRef(null);
     
     // Validate selectedTeam from URL after component mounts, teams load, and isAdminUser is computed
     useEffect(() => {
@@ -546,29 +548,6 @@ const Teams = () => {
         return () => clearInterval(id);
     }, [activeTab]);
 
-    // Load discussions for overview (Recent Activity) when no team selected
-    useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                if (!window.dataService?.getTeamDiscussions) {
-                    setIsReady(true);
-                    return;
-                }
-                const list = await window.dataService.getTeamDiscussions();
-                if (!cancelled) {
-                    setAllDiscussions(Array.isArray(list) ? list : []);
-                }
-            } catch (e) {
-                if (!cancelled) setAllDiscussions([]);
-            } finally {
-                if (!cancelled) setIsReady(true);
-            }
-        };
-        load();
-        return () => { cancelled = true; };
-    }, []);
-
     // Team discussion counts from API (teams list includes counts.discussions)
     const getTeamCounts = useCallback((teamId) => {
         const team = teams.find(t => t.id === teamId);
@@ -576,23 +555,7 @@ const Teams = () => {
         return { discussions };
     }, [teams]);
 
-    // Recent activity from discussions
-    const recentActivity = useMemo(() => {
-        return (allDiscussions || [])
-            .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-            .slice(0, 10)
-            .map(d => ({
-                ...d,
-                title: d.title,
-                type: d.type === 'notice' ? 'notice' : 'discussion',
-                icon: d.type === 'notice' ? 'bullhorn' : 'comments',
-                teamId: d.teamId,
-                team: d.team?.id || d.teamId,
-                createdAt: d.createdAt,
-                updatedAt: d.updatedAt
-            }));
-    }, [allDiscussions]);
-
+    // Validate selectedTeam from URL
     useEffect(() => {
         if (selectedTeam && !isTeamAccessible(selectedTeam.id)) {
             setSelectedTeam(null);
@@ -675,6 +638,7 @@ const Teams = () => {
                 throw new Error(err?.error?.message || 'Failed to add member');
             }
             setAddMemberUserId('');
+            setAddMemberSearch('');
             await refreshTeams();
         } catch (e) {
             if (typeof window.alert === 'function') window.alert(e.message || 'Failed to add member');
@@ -893,23 +857,6 @@ const Teams = () => {
             {/* Overview - All Teams Grid */}
             {!selectedTeam && (
                 <div className="space-y-6">
-                    {/* Quick Stats */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className={`rounded-xl border p-4 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className={`text-xs mb-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Discussions</p>
-                                    <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                        {teams.reduce((sum, t) => sum + (t.counts?.discussions ?? 0), 0)}
-                                    </p>
-                                </div>
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                    <i className={`fas fa-comments ${isDark ? 'text-blue-400' : 'text-blue-600'} text-sm`}></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     {/* Teams Grid */}
                     <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
                         <h2 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Department Teams</h2>
@@ -957,39 +904,6 @@ const Teams = () => {
                                 );
                             })}
                         </div>
-                    </div>
-
-                    {/* Recent Activity */}
-                    <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                        <h2 className={`text-sm font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Recent Activity</h2>
-                        {recentActivity.length > 0 ? (
-                            <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-200'}`}>
-                                {recentActivity.map((item, idx) => {
-                                    const team = teams.find(t => t.id === (item.teamId || item.team));
-                                    return (
-                                        <div key={idx} className="flex items-center gap-3 py-3 first:pt-0">
-                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                                <i className={`fas fa-${item.icon} text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-medium truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.title}</p>
-                                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    {team?.name} • {item.type}
-                                                </p>
-                                            </div>
-                                            <span className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                {new Date(item.createdAt || item.updatedAt || item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="text-center py-10">
-                                <i className={`fas fa-history text-3xl mb-2 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
-                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No activity yet</p>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
@@ -1098,31 +1012,73 @@ const Teams = () => {
                             );
                         })()}
 
-                        {activeTab === 'members' && isAdminUser && selectedTeam && (
+                        {activeTab === 'members' && isAdminUser && selectedTeam && (() => {
+                            const addableUsers = (availableUsers || []).filter(u =>
+                                !(selectedTeam.memberships || []).some(m => String(m.userId) === String(u.id))
+                            );
+                            const q = (addMemberSearch || '').trim().toLowerCase();
+                            const filteredUsers = q
+                                ? addableUsers.filter(u => {
+                                    const name = (u.name || '').toLowerCase();
+                                    const email = (u.email || '').toLowerCase();
+                                    return name.includes(q) || email.includes(q) || (u.name || u.email || '').includes(q);
+                                })
+                                : addableUsers;
+                            const showPicker = addMemberPickerOpen && filteredUsers.length > 0;
+                            const selectedUser = addMemberUserId ? addableUsers.find(u => String(u.id) === String(addMemberUserId)) : null;
+                            return (
                             <div className="space-y-4">
                                 <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Team Members</h3>
                                 <div className="flex flex-wrap items-end gap-2 mb-4">
-                                    <div className="flex-1 min-w-[200px]">
+                                    <div className="flex-1 min-w-[200px] relative">
                                         <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Add member</label>
-                                        <select
-                                            value={addMemberUserId}
-                                            onChange={(e) => setAddMemberUserId(e.target.value)}
+                                        <input
+                                            ref={addMemberInputRef}
+                                            type="text"
+                                            value={selectedUser ? `${selectedUser.name || selectedUser.email || ''}${selectedUser.email ? ` (${selectedUser.email})` : ''}` : addMemberSearch}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                setAddMemberUserId('');
+                                                setAddMemberSearch(v);
+                                                setAddMemberPickerOpen(true);
+                                            }}
+                                            onFocus={() => setAddMemberPickerOpen(true)}
+                                            onBlur={() => setTimeout(() => setAddMemberPickerOpen(false), 150)}
+                                            placeholder="Type to search by name or email…"
                                             disabled={membersLoading}
                                             className={`w-full px-3 py-2 rounded-lg border text-sm ${
                                                 isDark
                                                     ? 'bg-gray-800 border-gray-700 text-gray-200'
                                                     : 'bg-white border-gray-300 text-gray-900'
                                             }`}
-                                        >
-                                            <option value="">Select a user…</option>
-                                            {(availableUsers || [])
-                                                .filter(u => !(selectedTeam.memberships || []).some(m => String(m.userId) === String(u.id)))
-                                                .map(u => (
-                                                    <option key={u.id} value={u.id}>
-                                                        {u.name || u.email || u.username || u.id} {u.email ? `(${u.email})` : ''}
-                                                    </option>
+                                        />
+                                        {showPicker && (
+                                            <ul
+                                                className={`absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-lg border shadow-lg py-1 ${
+                                                    isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                                                }`}
+                                            >
+                                                {filteredUsers.slice(0, 20).map(u => (
+                                                    <li key={u.id}>
+                                                        <button
+                                                            type="button"
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                setAddMemberUserId(u.id);
+                                                                setAddMemberSearch('');
+                                                                setAddMemberPickerOpen(false);
+                                                                addMemberInputRef.current?.focus();
+                                                            }}
+                                                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                                                isDark ? 'hover:bg-gray-700 text-gray-100' : 'hover:bg-gray-50 text-gray-900'
+                                                            }`}
+                                                        >
+                                                            {u.name || u.email || u.username || u.id} {u.email ? <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>({u.email})</span> : ''}
+                                                        </button>
+                                                    </li>
                                                 ))}
-                                        </select>
+                                            </ul>
+                                        )}
                                     </div>
                                     <button
                                         onClick={() => addMemberToTeam(addMemberUserId)}
@@ -1171,7 +1127,8 @@ const Teams = () => {
                                     ))}
                                 </ul>
                             </div>
-                        )}
+                            );
+                        })()}
 
                     </div>
                 </div>
