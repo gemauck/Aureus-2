@@ -307,7 +307,7 @@ async function runHandler(req, res, sendEmptyActivity) {
       }
       const comment = await prisma.documentItemComment.findUnique({
         where: { id },
-        include: { item: { select: { section: { select: { projectId: true } } } } } }
+        include: { item: { select: { section: { select: { projectId: true } } } } }
       })
       if (!comment || String(comment.item?.section?.projectId) !== projectId) {
         return badRequest(res, 'Received comment not found or access denied')
