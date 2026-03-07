@@ -8,6 +8,7 @@ const AuditTrail = () => {
     const [filterModule, setFilterModule] = useState('all');
     const [filterAction, setFilterAction] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
+    const [filterByEmail, setFilterByEmail] = useState('');
     const [dateRange, setDateRange] = useState('all'); // Show all logs by default
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
@@ -73,9 +74,9 @@ const AuditTrail = () => {
     // Apply filters whenever they change
     useEffect(() => {
         applyFilters();
-    }, [logs, searchTerm, filterModule, filterAction, filterUser, dateRange]);
+    }, [logs, searchTerm, filterModule, filterAction, filterUser, filterByEmail, dateRange]);
 
-    const loadLogs = async () => {
+    const loadLogs = async (options = {}) => {
         if (!AuditLogger || typeof AuditLogger.getAll !== 'function') {
             console.error('AuditLogger.getAll not available');
             setError('AuditLogger not available. Please refresh the page.');
@@ -86,8 +87,15 @@ const AuditTrail = () => {
         setIsLoading(true);
         setError(null);
         try {
+            const emailFilter = options.email !== undefined ? options.email : filterByEmail;
+            if (emailFilter && isAdmin()) {
+                setFilterByEmail(emailFilter);
+            } else if (options.email === '') {
+                setFilterByEmail('');
+            }
             console.log('📊 Loading audit logs...');
-            const allLogs = await AuditLogger.getAll();
+            const getAllOptions = (emailFilter && isAdmin()) ? { email: emailFilter } : {};
+            const allLogs = await AuditLogger.getAll(getAllOptions);
             console.log('📊 Raw audit logs response:', allLogs);
             
             // Ensure allLogs is an array
@@ -164,6 +172,15 @@ const AuditTrail = () => {
         // User filter (only applies if admin, or if filtering own logs)
         if (filterUser !== 'all') {
             filtered = filtered.filter(log => log.userId === filterUser);
+        }
+
+        // Filter by email (admin: show only logs for this email; works with API or client-side)
+        if (filterByEmail && filterByEmail.trim()) {
+            const emailLower = filterByEmail.trim().toLowerCase();
+            filtered = filtered.filter(log => {
+                const logEmail = (log.userEmail || log.details?.email || '').toLowerCase();
+                return logEmail && logEmail.indexOf(emailLower) !== -1;
+            });
         }
 
         // Search filter
@@ -286,6 +303,7 @@ const AuditTrail = () => {
             case 'export': return 'text-purple-600 bg-purple-50';
             case 'login': return 'text-teal-600 bg-teal-50';
             case 'logout': return 'text-orange-600 bg-orange-50';
+            case 'view': return 'text-slate-600 bg-slate-50';
             default: return 'text-gray-600 bg-gray-50';
         }
     };
@@ -299,6 +317,7 @@ const AuditTrail = () => {
             case 'export': return 'fa-file-export';
             case 'login': return 'fa-sign-in-alt';
             case 'logout': return 'fa-sign-out-alt';
+            case 'view': return 'fa-eye';
             default: return 'fa-circle';
         }
     };
@@ -322,6 +341,26 @@ const AuditTrail = () => {
                     <p className="text-xs text-gray-700 font-medium">
                         Showing your activity only ({currentUser.name || currentUser.email || 'User'})
                     </p>
+                </div>
+            )}
+
+            {/* Preset: Show activity for garethm@abcotronics.co.za (admin only) */}
+            {userIsAdmin && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-600 font-medium">Show activity for:</span>
+                    <button
+                        type="button"
+                        onClick={() => loadLogs({ email: 'garethm@abcotronics.co.za' })}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-primary-500 text-primary-700 bg-primary-50 hover:bg-primary-100 font-medium"
+                    >
+                        garethm@abcotronics.co.za
+                    </button>
+                    {filterByEmail ? (
+                        <span className="text-xs text-gray-600">
+                            Showing: <strong>{filterByEmail}</strong>
+                            <button type="button" onClick={() => { setFilterByEmail(''); loadLogs({ email: '' }); }} className="ml-2 text-primary-600 hover:underline">Clear</button>
+                        </span>
+                    ) : null}
                 </div>
             )}
 
@@ -425,6 +464,22 @@ const AuditTrail = () => {
                             ))}
                         </select>
                     </div>
+                    {/* Filter by email (admin) - optional server-side refetch */}
+                    {userIsAdmin && (
+                        <div className="lg:col-span-2">
+                            <label className="text-[10px] font-medium text-gray-700 mb-1 block">Filter by email</label>
+                            <div className="flex gap-1">
+                                <input
+                                    type="text"
+                                    value={filterByEmail}
+                                    onChange={(e) => setFilterByEmail(e.target.value)}
+                                    placeholder="e.g. garethm@abcotronics.co.za"
+                                    className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg"
+                                />
+                                <button type="button" onClick={() => loadLogs({ email: filterByEmail || undefined })} className="text-xs px-2 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Apply</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-2 flex items-center justify-between">

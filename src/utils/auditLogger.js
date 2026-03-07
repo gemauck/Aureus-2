@@ -219,11 +219,18 @@ const AuditLogger = {
     },
     
     // Get all audit logs (from backend if available, otherwise from localStorage)
-    getAll: async () => {
+    // options: { email: string } - filter by user email (admin only, server-side)
+    getAll: async (options = {}) => {
         try {
             const token = window.storage?.getToken?.();
             if (token) {
-                const response = await fetch('/api/audit-logs', {
+                const params = new URLSearchParams();
+                if (options.email) {
+                    params.set('email', options.email);
+                }
+                const query = params.toString();
+                const url = query ? `/api/audit-logs?${query}` : '/api/audit-logs';
+                const response = await fetch(url, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -254,7 +261,8 @@ const AuditLogger = {
                             if (migrationResult && migrationResult.migrated > 0) {
                                 console.log(`✅ Migrated ${migrationResult.migrated} logs, re-fetching from backend...`);
                                 // Re-fetch after migration
-                                const retryResponse = await fetch('/api/audit-logs', {
+                                const retryUrl = query ? `/api/audit-logs?${query}` : '/api/audit-logs';
+                                const retryResponse = await fetch(retryUrl, {
                                     method: 'GET',
                                     headers: {
                                         'Authorization': `Bearer ${token}`,

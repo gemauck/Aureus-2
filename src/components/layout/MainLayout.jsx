@@ -153,6 +153,7 @@ const MainLayout = () => {
         // Guard to prevent infinite loops
         let isNavigating = false;
         let lastProcessedRoute = null;
+        let lastLoggedPage = null;
         let navigationTimeout = null;
         let routeChangeCallCount = 0;
         const MAX_ROUTE_CHANGE_CALLS = 5; // Maximum calls per second
@@ -232,6 +233,21 @@ const MainLayout = () => {
             
             lastProcessedRoute = routeKey;
             setCurrentPage(nextPage);
+            
+            // Audit: log page/section view for "track every interaction" (once per main section)
+            if (nextPage !== lastLoggedPage && window.AuditLogger && window.storage) {
+                try {
+                    const u = window.storage.getUser();
+                    if (u && u.id && u.id !== 'system') {
+                        const path = (route?.segments && route.segments.length)
+                            ? `/${nextPage}/${route.segments.join('/')}` : `/${nextPage}`;
+                        window.AuditLogger.log('view', nextPage, { path }, u);
+                        lastLoggedPage = nextPage;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
             
             // Check if route contains an entity ID and open it
             // Handle both simple URLs (/projects/123) and nested URLs (/projects/123/tasks/task456)

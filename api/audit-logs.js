@@ -140,6 +140,7 @@ async function handler(req, res) {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const queryParams = url.searchParams;
       const userId = queryParams.get('userId');
+      const email = queryParams.get('email');
       const module = queryParams.get('module');
       const action = queryParams.get('action');
       const startDate = queryParams.get('startDate');
@@ -153,8 +154,18 @@ async function handler(req, res) {
       const isAdmin = user.role?.toLowerCase() === 'admin';
       if (!isAdmin) {
         where.actorId = user.id;
-      } else if (userId) {
-        where.actorId = userId;
+      } else {
+        if (email) {
+          const userByEmail = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
+            select: { id: true }
+          });
+          if (userByEmail) {
+            where.actorId = userByEmail.id;
+          }
+        } else if (userId) {
+          where.actorId = userId;
+        }
       }
 
       if (module) {
@@ -238,6 +249,7 @@ async function handler(req, res) {
             timestamp: log.createdAt.toISOString(),
             user: userName,
             userId: log.actorId,
+            userEmail: log.actor?.email || null,
             userRole: userRole,
             action: log.action,
             module: log.entity,
