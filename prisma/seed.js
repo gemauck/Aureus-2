@@ -184,6 +184,26 @@ async function main() {
       update: { role: 'admin' },
       create: { userId: user.id, teamId: managementTeam.id, role: 'admin' }
     })
+
+    // Add all SuperAdmin users to Management team so they have full access
+    const superAdminUsers = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: { equals: 'superadmin', mode: 'insensitive' } },
+          { role: { equals: 'super-admin', mode: 'insensitive' } },
+          { role: { equals: 'super_admin', mode: 'insensitive' } },
+          { role: { equals: 'system_admin', mode: 'insensitive' } }
+        ]
+      },
+      select: { id: true }
+    })
+    for (const u of superAdminUsers) {
+      await prisma.membership.upsert({
+        where: { userId_teamId: { userId: u.id, teamId: 'management' } },
+        update: { role: 'admin' },
+        create: { userId: u.id, teamId: 'management', role: 'admin' }
+      })
+    }
   }
 
   // Ensure all non-guest users are in Abco All Staff team

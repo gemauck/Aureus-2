@@ -9,7 +9,7 @@ import { notifyTeamDiscussionCreated, notifyTeamDiscussionReply } from './_lib/n
 
 // Management access control helpers
 const MANAGEMENT_TEAM_ID = 'management'
-const SUPER_ADMIN_ROLES = new Set(['superadmin', 'super-admin', 'super_admin'])
+const SUPER_ADMIN_ROLES = new Set(['superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const MANAGEMENT_FORBIDDEN_MESSAGE = 'Only administrators can access the Management team.'
@@ -97,9 +97,9 @@ const withManagementRestriction = (where = {}) => {
   }
 }
 
-// Helper function to get ownerId from request
+// Helper function to get ownerId from request (JWT uses sub for user id)
 const getOwnerId = (req) => {
-  return req.user?.id || req.user?.userId || null
+  return req.user?.id || req.user?.userId || req.user?.sub || null
 }
 
 // SuperAdmin sees all; Admin and others must be members
