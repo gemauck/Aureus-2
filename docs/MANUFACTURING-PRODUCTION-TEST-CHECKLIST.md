@@ -55,3 +55,10 @@ This runs: **Functionality** (API: locations, inventory one-per-SKU, movements, 
 
 - If automated run is done **without** `TEST_EMAIL` and `TEST_PASSWORD`, login and all dependent checks are skipped (no failures).
 - Production URL is set via `TEST_URL` (default: `https://abcoafrica.co.za`).
+
+## API and architecture (for reference)
+
+- **API integration test (no browser):** `npm run test:manufacturing:api` or `TEST_URL=... TEST_EMAIL=... TEST_PASSWORD=... node tests/manufacturing-api-integration-tests.js`. Covers GET locations, inventory, stock-movements; optional POST movement with auth.
+- **Pagination:** GET `/api/manufacturing/inventory` and GET `/api/manufacturing/stock-movements` accept optional `page` (1-based) and `pageSize` (default 100, max 200). Omit for full list.
+- **Sync on demand:** Global inventory sync does not run on every request. To run (e.g. from cron): POST `/api/manufacturing/sync` (auth required).
+- **Movements tab:** Shows loading state until API returns; initial state is no longer from cache.

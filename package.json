@@ -26,6 +26,7 @@
     "test:safety": "node tests/deployment-safety-test.js",
     "test:all": "npm run test:safety && npm run test:deploy",
     "test:manufacturing": "node tests/manufacturing-browser-test.js",
+    "test:manufacturing:api": "node tests/manufacturing-api-integration-tests.js",
     "test:prod:manufacturing": "node scripts/test-production-manufacturing.js",
     "test:manufacturing:production:full": "node scripts/test-manufacturing-production-full.js",
     "test:prod:crm": "node scripts/test-production-crm.js",

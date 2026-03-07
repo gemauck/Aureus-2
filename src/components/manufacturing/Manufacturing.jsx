@@ -43,6 +43,23 @@ function safeSetItem(key, value) {
   }
 }
 
+// Non-blocking toast for success/error feedback (avoids disruptive alert() where appropriate)
+function showToast(message, type = 'info') {
+  if (typeof window.showNotification === 'function') {
+    window.showNotification(message, type === 'error' ? 'error' : 'success');
+    return;
+  }
+  const el = document.createElement('div');
+  el.setAttribute('role', 'alert');
+  const isError = type === 'error';
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:90%;padding:12px 20px;' +
+    (isError ? 'background:#991b1b;color:#fecaca;' : 'background:#1e293b;color:#f1f5f9;') +
+    'border-radius:8px;font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => { el.remove(); }, 4000);
+}
+
 // Wrap component definition in try-catch to catch any errors during definition
 let Manufacturing;
 try {
@@ -173,16 +190,9 @@ try {
   const [expandedProductionOrderId, setExpandedProductionOrderId] = useState(null);
   const [salesOrders, setSalesOrders] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-  // Initialize movements from localStorage if available
-  const [movements, setMovements] = useState(() => {
-    try {
-      const cached = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-      return cached;
-    } catch (e) {
-      console.error('Error loading cached movements:', e);
-      return [];
-    }
-  });
+  // Movements: start empty and show loading until API returns (avoid stale cache on first paint)
+  const [movements, setMovements] = useState([]);
+  const [movementsLoadedFromAPI, setMovementsLoadedFromAPI] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -367,7 +377,6 @@ try {
         const cachedProductionOrders = JSON.parse(localStorage.getItem('manufacturing_production_orders') || '[]');
         const cachedSalesOrders = JSON.parse(localStorage.getItem('manufacturing_sales_orders') || '[]');
         const cachedPurchaseOrders = JSON.parse(localStorage.getItem('manufacturing_purchase_orders') || '[]');
-        const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
         const cachedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
 
         if (cachedInventory.length > 0) {
@@ -385,9 +394,7 @@ try {
         if (cachedPurchaseOrders.length > 0) {
           setPurchaseOrders(cachedPurchaseOrders);
         }
-        if (cachedMovements.length > 0) {
-          setMovements(cachedMovements);
-        }
+        // Do not set movements from cache - show loading until API returns
         if (cachedSuppliers.length > 0) {
           setSuppliers(cachedSuppliers);
         }
@@ -608,14 +615,18 @@ try {
                 }, {});
                 
                 setMovements(processed);
+                setMovementsLoadedFromAPI(true);
                 safeSetItem('manufacturing_movements', JSON.stringify(processed));
                 return { type: 'movements', data: processed };
               })
               .catch(error => {
                 console.error('Error loading stock movements:', error);
+                setMovementsLoadedFromAPI(true);
                 return { type: 'movements', error };
               })
           );
+        } else {
+          setMovementsLoadedFromAPI(true);
         }
 
         // Suppliers
@@ -4861,6 +4872,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         console.error('❌ Error deleting stock movement:', error);
         alert(`Failed to delete stock movement: ${error.message}`);
       }
+    }
+  };
+
+  const handleRefreshMovements = async () => {
+    try {
+      if (window.DatabaseAPI?.getStockMovements) {
+        const movementsResponse = await window.DatabaseAPI.getStockMovements();
+        const movementsData = movementsResponse?.data?.movements || [];
+        const typeBreakdown = movementsData.reduce((acc, m) => {
+          acc[m.type] = (acc[m.type] || 0) + 1;
+          return acc;
+        }, {});
+        const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+        setMovements(processed);
+        safeSetItem('manufacturing_movements', JSON.stringify(processed));
+        showToast(`Refreshed! Found ${movementsData.length} stock movements. Types: ${Object.keys(typeBreakdown).join(', ')}`, 'success');
+      }
+    } catch (error) {
+      console.error('Error refreshing movements:', error);
+      showToast('Failed to refresh movements: ' + error.message, 'error');
     }
   };
 
@@ -9350,217 +9381,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     );
   };
 
-  const MovementsView = ({ onRecordMovement }) => {
-    // No blocking operations - movements are already loaded from parent
-    
-    // Handler for opening the record movement modal - direct call
-    const handleRecordClick = (e) => {
-      e?.preventDefault();
-      e?.stopPropagation();
-      
-      
-      // Call the parent function directly
-      if (onRecordMovement && typeof onRecordMovement === 'function') {
-        onRecordMovement();
-      } else {
-        console.error('❌ onRecordMovement not available, trying direct call...');
-        // Direct fallback - call parent's function
-        try {
-          setFormData({
-            type: 'receipt',
-            sku: '',
-            itemName: '',
-            quantity: '',
-            unitCost: '',
-            fromLocation: '',
-            toLocation: '',
-            reference: '',
-            notes: '',
-            date: new Date().toISOString().split('T')[0]
-          });
-          setModalType('add_movement');
-          setShowModal(true);
-        } catch (error) {
-          console.error('❌ Error:', error);
-          alert('Error opening modal: ' + error.message);
-        }
-      }
-    };
-
-    const handleRefreshMovements = async () => {
-      try {
-        if (window.DatabaseAPI?.getStockMovements) {
-          const movementsResponse = await window.DatabaseAPI.getStockMovements();
-          const movementsData = movementsResponse?.data?.movements || [];
-          
-          // Log breakdown to verify all types
-          const typeBreakdown = movementsData.reduce((acc, m) => {
-            acc[m.type] = (acc[m.type] || 0) + 1;
-            return acc;
-          }, {});
-          
-          const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
-          setMovements(processed);
-          safeSetItem('manufacturing_movements', JSON.stringify(processed));
-          alert(`✅ Refreshed! Found ${movementsData.length} stock movements. Types: ${Object.keys(typeBreakdown).join(', ')}`);
-        }
-      } catch (error) {
-        console.error('Error refreshing movements:', error);
-        alert('Failed to refresh movements: ' + error.message);
-      }
-    };
-
-    return (
-      <div className="space-y-3">
-        {/* Controls */}
-        <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">
-              Stock Movements
-              {movements.length > 0 && (
-                <span className="ml-2 text-xs font-normal text-gray-500">
-                  ({movements.length} records
-                  {(() => {
-                    const typeCounts = movements.reduce((acc, m) => {
-                      acc[m.type] = (acc[m.type] || 0) + 1;
-                      return acc;
-                    }, {});
-                    const breakdown = Object.entries(typeCounts)
-                      .map(([type, count]) => `${type}: ${count}`)
-                      .join(', ');
-                    return breakdown ? ` - ${breakdown}` : '';
-                  })()})
-                </span>
-              )}
-            </h3>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={handleRefreshMovements}
-                className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-                title="Refresh movements list"
-                type="button"
-              >
-                <i className="fas fa-sync-alt text-xs"></i>
-                Refresh
-              </button>
-              <button className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                <i className="fas fa-filter text-xs"></i>
-                Filter
-              </button>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleRecordClick(e);
-                }}
-                onMouseDown={(e) => e.preventDefault()}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors cursor-pointer"
-                type="button"
-                aria-label="Record Stock Movement"
-              >
-                <i className="fas fa-plus text-xs"></i>
-                Record Movement
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Movements Table */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Movement ID</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Item</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Quantity</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">From Location</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">To Location</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Performed By</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Notes</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {movements.length === 0 ? (
-                  <tr>
-                    <td colSpan="11" className="px-3 py-8 text-center text-sm text-gray-500">
-                      No stock movements found. Click "Record Movement" to create one.
-                    </td>
-                  </tr>
-                ) : (
-                  (() => {
-                    // Log all movements being displayed
-                    return movements.map(movement => (
-                      <tr key={movement.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.movementId || movement.id}</td>
-                        <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
-                            {movement.type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
-                          <div className="text-xs text-gray-500">{movement.sku}</div>
-                        </td>
-                        <td className={`px-3 py-2 text-sm font-semibold text-right ${
-                          movement.type === 'receipt' || movement.type === 'production' 
-                            ? 'text-green-600' 
-                            : movement.type === 'consumption' || movement.type === 'sale'
-                            ? 'text-red-600'
-                            : 'text-gray-900'
-                        }`}>
-                          {(() => {
-                            // Normalize display: receipts should show positive, consumption should show negative
-                            const qty = parseFloat(movement.quantity) || 0;
-                            if (movement.type === 'receipt' || movement.type === 'production') {
-                              return `+${Math.abs(qty)}`;
-                            } else if (movement.type === 'consumption' || movement.type === 'sale') {
-                              return `${-Math.abs(qty)}`;
-                            } else {
-                              // Adjustment or other types - show as-is
-                              return qty > 0 ? `+${qty}` : `${qty}`;
-                            }
-                          })()}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-gray-600">{getLocationLabel(movement.fromLocation)}</td>
-                        <td className="px-3 py-2 text-sm text-gray-600">{getLocationLabel(movement.toLocation) || '-'}</td>
-                        <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
-                        <td className="px-3 py-2 text-sm text-gray-600">{movement.performedBy}</td>
-                        <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleDeleteMovement(movement.id);
-                              }}
-                              className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer border border-red-200"
-                              title="Delete Movement"
-                              type="button"
-                              style={{ minWidth: '32px', minHeight: '32px' }}
-                            >
-                              <i className="fas fa-trash text-sm"></i>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ));
-                  })()
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Inventory Item Detail View Component
   const InventoryItemDetailView = () => {
     if (!viewingInventoryItemDetail) return null;
@@ -10606,9 +10426,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             {activeTab === 'sales' && <SalesOrdersView />}
             {activeTab === 'purchase' && <PurchaseOrdersView />}
             {activeTab === 'movements' && (
-              <MovementsView 
-                onRecordMovement={openAddMovementModal}
-              />
+              (window.ManufacturingMovementsView ? createElement(window.ManufacturingMovementsView, {
+                movements,
+                movementsLoadedFromAPI,
+                onRecordMovement: openAddMovementModal,
+                onRefreshMovements: handleRefreshMovements,
+                onDeleteMovement: handleDeleteMovement,
+                getStatusColor,
+                getLocationLabel
+              }) : (
+                <div className="p-4 text-gray-500">Loading movements view…</div>
+              )
             )}
             {activeTab === 'suppliers' && <SuppliersView />}
             {activeTab === 'locations' && window.StockLocations && (

@@ -436,11 +436,7 @@ async function handler(req, res) {
     // Ensure BOM migration is applied (non-blocking, safe)
     ensureBOMMigration().catch(() => {}) // Ignore errors, don't await
 
-    // Sync inventory across locations (non-blocking, don't await to avoid blocking requests)
-    syncInventoryAcrossAllLocations().catch((error) => {
-      console.warn('⚠️ Global inventory sync skipped:', error.message)
-    })
-    
+    // Sync no longer runs on every request; run via POST /api/manufacturing/sync when needed (e.g. cron)
     // Strip query parameters and hash from URL path before parsing
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
@@ -517,6 +513,17 @@ async function handler(req, res) {
       } catch (error) {
         console.error('❌ Failed to purge manufacturing data:', error)
         return serverError(res, 'Failed to purge manufacturing data', error.message)
+      }
+    }
+
+    // SYNC INVENTORY ACROSS LOCATIONS (on-demand, e.g. for cron)
+    if (req.method === 'POST' && resourceType === 'sync') {
+      try {
+        await syncInventoryAcrossAllLocations(true)
+        return ok(res, { synced: true })
+      } catch (error) {
+        console.error('❌ Sync manufacturing inventory failed:', error)
+        return serverError(res, 'Sync failed', error.message)
       }
     }
 
@@ -929,15 +936,30 @@ async function handler(req, res) {
           items = await buildAllLocationsInventoryResponse()
         }
 
+        // Optional pagination: page (1-based), pageSize (default 100, max 200). Omit for full list.
+        const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 0) || 1
+        const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
+        const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
+
         // Format dates for response
-        const formatted = items.map(item => ({
+        let formatted = items.map(item => ({
           ...item,
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
           updatedAt: formatDate(item.updatedAt)
         }))
-        
-        return ok(res, { inventory: formatted })
+
+        let pagination = null
+        if (pageSize != null) {
+          const total = formatted.length
+          const start = (page - 1) * pageSize
+          formatted = formatted.slice(start, start + pageSize)
+          pagination = { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
+        }
+
+        const payload = { inventory: formatted }
+        if (pagination) payload.pagination = pagination
+        return ok(res, payload)
       } catch (error) {
         console.error('❌ Failed to list inventory:', error)
         return serverError(res, 'Failed to list inventory', error.message)
@@ -3178,20 +3200,34 @@ async function handler(req, res) {
   // STOCK MOVEMENTS (aggregate movements, legacy)
   if (resourceType === 'stock-movements') {
     // LIST (GET /api/manufacturing/stock-movements)
+    // Optional query: page (1-based), pageSize (default 100, max 200). Omit for full list (backward compatible).
     if (req.method === 'GET' && !id) {
       try {
-        const owner = req.user?.sub
-        // Fetch ALL movements - no filtering by type
-        const movements = await prisma.stockMovement.findMany({
-          orderBy: { date: 'desc' }
-        })
-        
-        // Log movement type breakdown for debugging
+        const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 1)
+        const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
+        const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
+
+        const orderBy = { date: 'desc' }
+        let movements
+        let total = 0
+
+        if (pageSize != null) {
+          total = await prisma.stockMovement.count()
+          movements = await prisma.stockMovement.findMany({
+            orderBy,
+            skip: (page - 1) * pageSize,
+            take: pageSize
+          })
+        } else {
+          movements = await prisma.stockMovement.findMany({ orderBy })
+          total = movements.length
+        }
+
         const typeBreakdown = movements.reduce((acc, m) => {
-          acc[m.type] = (acc[m.type] || 0) + 1;
-          return acc;
-        }, {});
-        
+          acc[m.type] = (acc[m.type] || 0) + 1
+          return acc
+        }, {})
+
         const formatted = movements.map(movement => ({
           ...movement,
           id: movement.id,
@@ -3199,8 +3235,12 @@ async function handler(req, res) {
           createdAt: formatDate(movement.createdAt),
           updatedAt: formatDate(movement.updatedAt)
         }))
-        
-        return ok(res, { movements: formatted })
+
+        const payload = { movements: formatted }
+        if (pageSize != null) {
+          payload.pagination = { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
+        }
+        return ok(res, payload)
       } catch (error) {
         console.error('❌ Failed to list stock movements:', error)
         return serverError(res, 'Failed to list stock movements', error.message)
