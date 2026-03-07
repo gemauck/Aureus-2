@@ -11,20 +11,37 @@
  * - Missing backups before destructive operations
  * - Dangerous environment variable changes
  * - Rollback capability
- * 
+ * - API handler syntax (prevents deploy when a handler has parse errors)
+ *
  * Exit code 0 = all tests passed, 1 = tests failed (deployment blocked)
  */
 
 import 'dotenv/config'
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs'
 import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { dirname, join, relative } from 'path'
 import { execSync } from 'child_process'
 import { PrismaClient } from '@prisma/client'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const projectRoot = join(__dirname, '..')
+
+/** Recursively collect all .js files under a directory (does not follow symlinks). */
+function collectJsFiles(dir) {
+  const files = []
+  if (!existsSync(dir)) return files
+  const entries = readdirSync(dir, { withFileTypes: true })
+  for (const e of entries) {
+    const full = join(dir, e.name)
+    if (e.isDirectory()) {
+      if (e.name !== 'node_modules') files.push(...collectJsFiles(full))
+    } else if (e.isFile() && e.name.endsWith('.js')) {
+      files.push(full)
+    }
+  }
+  return files
+}
 
 // Configuration
 const MAX_CRITICAL_FAILURES = 1 // Block deployment on any critical failure
@@ -915,6 +932,44 @@ async function testDangerousNpmOperations() {
     return true
 }
 
+// Test: API handler syntax — catch parse errors (e.g. missing brace) before deploy
+async function testApiHandlerSyntax() {
+    console.log('\n📄 Testing API Handler Syntax (CRITICAL)...')
+    
+    const apiDir = join(projectRoot, 'api')
+    if (!existsSync(apiDir)) {
+        logTest('API Handler Syntax', true, 'No api/ directory (skipped)', true)
+        return true
+    }
+    
+    const files = collectJsFiles(apiDir)
+    const failures = []
+    
+    for (const filePath of files) {
+        const relPath = relative(projectRoot, filePath)
+        try {
+            execSync(process.execPath, ['--check', filePath], {
+                encoding: 'utf8',
+                stdio: 'pipe',
+                cwd: projectRoot
+            })
+        } catch (err) {
+            const message = (err.stderr || err.message || String(err)).split('\n')[0] || 'Parse error'
+            failures.push({ file: relPath, message })
+        }
+    }
+    
+    if (failures.length > 0) {
+        for (const { file, message } of failures) {
+            logTest('API Handler Syntax', false, `${file}: ${message}`, true)
+        }
+        return false
+    }
+    
+    logTest('API Handler Syntax', true, `All ${files.length} API handler(s) parse successfully`, true)
+    return true
+}
+
 // Main test runner
 async function runAllTests() {
     console.log('🛡️  Starting Deployment Safety Test Suite')
@@ -932,6 +987,7 @@ async function runAllTests() {
             testEnvironmentVariableSafety,
             testDatabaseConnectionValidation,
             testSafeMigrationWrapper,
+            testApiHandlerSyntax,
         ]
         
         for (const test of criticalTests) {
