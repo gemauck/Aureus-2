@@ -6,8 +6,9 @@ const Users = () => {
     const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
     const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
     
-    // Check if current user is admin (case-insensitive)
-    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    // Check if current user is admin or SuperAdmin (case-insensitive)
+    const userRole = currentUser?.role?.toLowerCase();
+    const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
     
     const [users, setUsers] = useState([]);
     const [showUserModal, setShowUserModal] = useState(false);

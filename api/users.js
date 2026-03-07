@@ -19,7 +19,8 @@ async function handler(req, res) {
             }
             
             const userRole = req.user?.role?.toLowerCase();
-            const isAdmin = userRole === 'admin';
+            const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+            const isAdmin = ADMIN_ROLES.includes(userRole);
 
             // All authenticated users get basic user info for mentions
             // Only admins get full employee profile data
@@ -150,8 +151,10 @@ async function handler(req, res) {
 
     if (req.method === 'POST') {
         try {
-            // Check if user is admin
-            if (!req.user || req.user.role !== 'admin') {
+            // Check if user is admin or SuperAdmin
+            const userRole = req.user?.role?.toLowerCase();
+            const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
+            if (!req.user || !isAdmin) {
                 return unauthorized(res, 'Admin access required')
             }
 
@@ -277,19 +280,21 @@ async function handler(req, res) {
 
             // Allow users to update their own profile or admins to update anyone
             const currentUserId = req.user.sub || req.user.id
-            if (currentUserId !== userId && req.user.role !== 'admin') {
+            const reqUserRole = req.user?.role?.toLowerCase();
+            const reqIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(reqUserRole);
+            if (currentUserId !== userId && !reqIsAdmin) {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
 
             // Only admins can change roles
             if (updateData.role !== undefined && updateData.role !== null) {
-                // Get current user from database to check role
                 const currentUserRecord = await prisma.user.findUnique({
                     where: { id: currentUserId },
                     select: { role: true }
                 })
-                
-                if (!currentUserRecord || currentUserRecord.role !== 'admin') {
+                const dbRole = currentUserRecord?.role?.toLowerCase();
+                const dbIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(dbRole);
+                if (!currentUserRecord || !dbIsAdmin) {
                     return unauthorized(res, 'Only administrators can change user roles')
                 }
             }
@@ -405,8 +410,10 @@ async function handler(req, res) {
         }
         
         try {
-            // Check if user is admin (req.user is set by authRequired)
-            if (!req.user || req.user.role !== 'admin') {
+            // Check if user is admin or SuperAdmin
+            const delUserRole = req.user?.role?.toLowerCase();
+            const delIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(delUserRole);
+            if (!req.user || !delIsAdmin) {
                 return unauthorized(res, 'Admin access required')
             }
 

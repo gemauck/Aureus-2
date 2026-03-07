@@ -4,8 +4,9 @@ const { useState, useEffect } = React;
 const UserManagement = () => {
     const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
     
-    // Check if current user is admin (case-insensitive)
-    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    // Check if current user is admin or SuperAdmin (case-insensitive)
+    const userRole = currentUser?.role?.toLowerCase();
+    const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
     
     const [users, setUsers] = useState([]);
     const [invitations, setInvitations] = useState([]);
@@ -1057,7 +1058,8 @@ const UserManagement = () => {
                                                     } else {
                                                         // No custom permissions - use defaults based on role
                                                         const permissionCategories = window.PERMISSION_CATEGORIES || {};
-                                                        const isAdmin = user?.role?.toLowerCase() === 'admin';
+                                                        const editUserRole = user?.role?.toLowerCase();
+                                                        const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(editUserRole);
                                                         
                                                         Object.values(permissionCategories).forEach(category => {
                                                             // Add public permissions (all users)
@@ -2018,7 +2020,8 @@ const UserManagement = () => {
                                     adminOnly: false
                                 });
                                 
-                                const isAdmin = editingUserPermissions?.role?.toLowerCase() === 'admin';
+                                const editUserRole = editingUserPermissions?.role?.toLowerCase();
+                                const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(editUserRole);
                                 
                                 return Object.values(permissionCategories).map((category) => {
                                     const isAdminOnly = category.adminOnly;

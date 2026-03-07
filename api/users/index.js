@@ -10,9 +10,11 @@ import { addUserToAbcoAllStaff } from '../_lib/addToAbcoAllStaff.js'
 async function handler(req, res) {
     if (req.method === 'GET') {
         try {
-            // Check if user has permission to manage users (accept both uppercase and lowercase admin)
+            // Check if user has permission to manage users (admin, SuperAdmin, or manage_users)
             const userRole = req.user?.role?.toLowerCase();
-            if (!req.user || (userRole !== 'admin' && !req.user.permissions?.includes('manage_users'))) {
+            const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+            const isAdminOrSuperAdmin = adminRoles.includes(userRole);
+            if (!req.user || (!isAdminOrSuperAdmin && !req.user.permissions?.includes('manage_users'))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
@@ -109,9 +111,10 @@ async function handler(req, res) {
 
     if (req.method === 'POST') {
         try {
-            // Check if user has permission to manage users (accept both uppercase and lowercase admin)
-            const userRole = req.user?.role?.toLowerCase();
-            if (!req.user || (userRole !== 'admin' && !req.user.permissions?.includes('manage_users'))) {
+            // Check if user has permission to manage users (admin, SuperAdmin, or manage_users)
+            const postUserRole = req.user?.role?.toLowerCase();
+            const postIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(postUserRole);
+            if (!req.user || (!postIsAdmin && !req.user.permissions?.includes('manage_users'))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
@@ -188,9 +191,10 @@ async function handler(req, res) {
 
     if (req.method === 'PUT') {
         try {
-            // Check if user has permission to manage users (accept both uppercase and lowercase admin)
-            const userRole = req.user?.role?.toLowerCase();
-            if (!req.user || (userRole !== 'admin' && !req.user.permissions?.includes('manage_users'))) {
+            // Check if user has permission to manage users (admin, SuperAdmin, or manage_users)
+            const putUserRole = req.user?.role?.toLowerCase();
+            const putIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(putUserRole);
+            if (!req.user || (!putIsAdmin && !req.user.permissions?.includes('manage_users'))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
@@ -388,9 +392,11 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
         try {
-            // Check if user has permission to manage users (accept both uppercase and lowercase admin)
-            const userRole = req.user?.role?.toLowerCase();
-            if (!req.user || (userRole !== 'admin' && !req.user.permissions?.includes('manage_users'))) {
+            // Check if user has permission to manage users (admin, SuperAdmin, or manage_users)
+            const adminUserRole = req.user?.role?.toLowerCase();
+            const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+            const hasAdminAccess = adminRoles.includes(adminUserRole);
+            if (!req.user || (!hasAdminAccess && !req.user.permissions?.includes('manage_users'))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
