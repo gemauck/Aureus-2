@@ -1202,8 +1202,9 @@ const MainLayout = () => {
                 return true;
             }
             
-            // Admin users always have access to everything
-            if (userRole === 'admin') {
+            // Admin and SuperAdmin users always have access to everything
+            const adminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
+            if (adminOrSuperAdmin) {
                 return true;
             }
             
@@ -1222,7 +1223,7 @@ const MainLayout = () => {
             // Fallback: if PermissionChecker not available, use role-based check
             // This handles the case where permissions.js hasn't loaded yet
             if (item.permission === 'ACCESS_USERS') {
-                return userRole === 'admin';
+                return adminOrSuperAdmin;
             }
             
             // All other permissions are public (accessible to all non-guest users)
@@ -1247,7 +1248,7 @@ const MainLayout = () => {
 
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        return userRole === 'admin';
+        return ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
     }, [user?.role]);
 
     React.useEffect(() => {

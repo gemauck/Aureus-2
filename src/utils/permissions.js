@@ -193,6 +193,12 @@ export const ROLE_PERMISSIONS = {
         permissions: ['all'], // Special case - admin has all permissions
         color: 'red'
     },
+    superadmin: {
+        name: 'Super Administrator',
+        description: 'Full system access including all teams and user management',
+        permissions: ['all'],
+        color: 'red'
+    },
     manager: {
         name: 'Manager',
         description: 'Manage projects, teams, and assigned resources',
@@ -238,7 +244,8 @@ export class PermissionChecker {
     }
 
     hasPermission(permission) {
-        const isAdmin = this.userRole?.toLowerCase() === 'admin';
+        const role = this.userRole?.toLowerCase();
+        const isAdminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(role);
         
         // Admin-only permissions: Users
         const adminOnlyPermissions = [
@@ -248,14 +255,13 @@ export class PermissionChecker {
             PERMISSIONS.SYSTEM_SETTINGS
         ];
         
-        // If permission is admin-only and user is not admin, deny access
-        if (adminOnlyPermissions.includes(permission) && !isAdmin) {
+        // If permission is admin-only and user is not admin/superadmin, deny access
+        if (adminOnlyPermissions.includes(permission) && !isAdminOrSuperAdmin) {
             return false;
         }
         
-        // CRITICAL: Admins always have all permissions, regardless of custom permissions
-        // This ensures admins can always access everything, even if custom permissions are set
-        if (isAdmin) {
+        // CRITICAL: Admin and SuperAdmin always have all permissions, regardless of custom permissions
+        if (isAdminOrSuperAdmin) {
             return true;
         }
         
@@ -307,7 +313,7 @@ export class PermissionChecker {
         if (this.customPermissions && this.customPermissions.length > 0) {
             // If custom permissions include 'all', grant access (unless admin-only and not admin)
             if (this.customPermissions.includes('all')) {
-                if (!isAdmin && adminOnlyPermissions.includes(permission)) {
+                if (!isAdminOrSuperAdmin && adminOnlyPermissions.includes(permission)) {
                     return false;
                 }
                 return true;
@@ -331,7 +337,7 @@ export class PermissionChecker {
         // Check role-based permissions
         if (this.rolePermissions.includes('all')) {
             // For non-admin users with 'all', they still don't get admin-only permissions
-            if (!isAdmin && adminOnlyPermissions.includes(permission)) {
+            if (!isAdminOrSuperAdmin && adminOnlyPermissions.includes(permission)) {
                 return false;
             }
             return true;

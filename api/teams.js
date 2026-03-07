@@ -271,7 +271,8 @@ async function handler(req, res) {
     // GET /api/teams/:id - Get single team
     if (req.method === 'GET' && teamId) {
       try {
-        if (!isAdmin && isManagementTeam(teamId)) {
+        // Management team: Admin and SuperAdmin only
+        if (isManagementTeam(teamId) && !isAdmin && !isSuperAdmin) {
           return denyManagementAccess(res)
         }
 
