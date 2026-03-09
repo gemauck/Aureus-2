@@ -30,9 +30,18 @@ async function handler(req, res) {
             // Ignore if permissions disallow DDL; proceed and let Prisma error if table truly missing
         }
 
-        const { email, name, role = 'user', invitedBy, accessibleProjectIds = [] } = req.body || {}
+        const { email, name: rawName, role = 'user', invitedBy, accessibleProjectIds = [] } = req.body || {}
         // Use authenticated user's ID as the inviter, fallback to body or 'system'
         const inviterId = req.user?.sub || invitedBy || 'system'
+        
+        // Require email; default name to email prefix if missing so modal-only email still works
+        const name = (rawName && String(rawName).trim()) || (email && String(email).split('@')[0]) || ''
+        if (!email || !String(email).trim()) {
+            return badRequest(res, 'Email is required')
+        }
+        if (!name) {
+            return badRequest(res, 'Name is required')
+        }
         
         // Prepare accessibleProjectIds - ensure it's a JSON string
         let accessibleProjectIdsJson = '[]';
@@ -49,10 +58,6 @@ async function handler(req, res) {
         }
         
         
-        if (!email || !name) {
-            return badRequest(res, 'Email and name are required')
-        }
-
         // Check if user already exists
         const existingUser = await prisma.user.findUnique({ where: { email } })
         if (existingUser) {

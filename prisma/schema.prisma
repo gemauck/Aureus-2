@@ -1827,6 +1827,8 @@ model Notification {
   @@index([read])
   @@index([createdAt])
   @@index([type])
+  @@index([userId, createdAt])
+  @@index([userId, read])
 }
 
 // Subscriptions to comment threads (clients, leads, document items, etc.). Tasks use task.subscribers.

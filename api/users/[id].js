@@ -91,7 +91,9 @@ async function handler(req, res) {
 
             // Allow users to update their own profile or admins to update anyone
             const currentUserId = req.user.sub || req.user.id
-            if (currentUserId !== userId && req.user.role !== 'admin') {
+            const reqUserRole = (req.user?.role || '').toString().trim().toLowerCase()
+            const reqIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(reqUserRole)
+            if (currentUserId !== userId && !reqIsAdmin) {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
 
@@ -104,8 +106,9 @@ async function handler(req, res) {
                     where: { id: currentUserId },
                     select: { role: true }
                 })
-                
-                if (!currentUserRecord || currentUserRecord.role !== 'admin') {
+                const dbRole = (currentUserRecord?.role || '').toString().trim().toLowerCase()
+                const dbIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(dbRole)
+                if (!currentUserRecord || !dbIsAdmin) {
                     return unauthorized(res, 'Only administrators can change user roles')
                 }
             }
@@ -168,8 +171,9 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
         try {
-            
-            if (!req.user || req.user.role !== 'admin') {
+            const userRole = (req.user?.role || '').toString().trim().toLowerCase()
+            const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole)
+            if (!req.user || !isAdmin) {
                 return unauthorized(res, 'Admin access required')
             }
 

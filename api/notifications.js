@@ -265,9 +265,11 @@ async function handler(req, res) {
                         orderBy: { createdAt: 'desc' },
                         take: limit,
                         skip: offset
+                        // Uses index (userId, createdAt) when available for fast list + sort
                     }),
                     prisma.notification.count({
                         where: { userId, read: false }
+                        // Uses index (userId, read) when available for fast unread count
                     })
                 ]);
 
