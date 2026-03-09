@@ -191,13 +191,18 @@ async function handler(req, res) {
     if (req.method === 'GET' && !teamId) {
       try {
         const currentUserId = getOwnerId(req)
-        const where = isSuperAdmin
-          ? {}
-          : {
-              isActive: true,
-              id: { not: MANAGEMENT_TEAM_ID },
-              memberships: { some: { userId: String(currentUserId) } }
-            }
+        let where
+        if (isSuperAdmin) {
+          where = {}
+        } else {
+          const memberTeamIds = await getMemberTeamIds(prisma, currentUserId)
+          const isAdminMemberOfManagement = isAdmin && memberTeamIds.includes(MANAGEMENT_TEAM_ID)
+          where = {
+            isActive: true,
+            ...(isAdminMemberOfManagement ? {} : { id: { not: MANAGEMENT_TEAM_ID } }),
+            memberships: { some: { userId: String(currentUserId) } }
+          }
+        }
 
         const teams = await prisma.team.findMany({
           where,
