@@ -93,6 +93,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionTimestampRef = useRef(null); // Track when deletion started
+    // Single ref for queue + processing flag (avoids ReferenceError when handleDeleteSection runs from main bundle)
+    const deletionQueueRef = useRef({ queue: [], isProcessing: false });
     const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     
@@ -1609,20 +1611,20 @@ const gridColumns = React.useMemo(() => (
     
     // Process deletion queue sequentially
     const processDeletionQueue = async () => {
-        if (isProcessingDeletionQueueRef.current || deletionQueueRef.current.length === 0) {
+        if (deletionQueueRef.current.isProcessing || deletionQueueRef.current.queue.length === 0) {
             return;
         }
         
-        isProcessingDeletionQueueRef.current = true;
+        deletionQueueRef.current.isProcessing = true;
         
-        while (deletionQueueRef.current.length > 0) {
-            const { sectionId, event } = deletionQueueRef.current.shift();
+        while (deletionQueueRef.current.queue.length > 0) {
+            const { sectionId, event } = deletionQueueRef.current.queue.shift();
             await performDeletion(sectionId, event);
             // Wait a bit between deletions to ensure state is stable
             await new Promise(resolve => setTimeout(resolve, 200));
         }
         
-        isProcessingDeletionQueueRef.current = false;
+        deletionQueueRef.current.isProcessing = false;
     };
     
     // Public handler that queues deletions
@@ -1652,12 +1654,12 @@ const gridColumns = React.useMemo(() => (
         }
         
         // If a deletion is already in progress, queue this one
-        if (isDeletingRef.current || isProcessingDeletionQueueRef.current) {
+        if (isDeletingRef.current || deletionQueueRef.current.isProcessing) {
             console.log('📋 Queuing deletion request:', normalizedSectionId);
-            deletionQueueRef.current.push({ sectionId, event });
+            deletionQueueRef.current.queue.push({ sectionId, event });
             // Start processing queue if not already processing
             setTimeout(() => {
-                if (!isProcessingDeletionQueueRef.current) {
+                if (!deletionQueueRef.current.isProcessing) {
                     processDeletionQueue();
                 }
             }, 0);
