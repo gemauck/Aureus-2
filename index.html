@@ -832,8 +832,14 @@
                     allErrorText.includes('rate limit') ||
                     (error && typeof error === 'object' && (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED'));
                 
-                // Only log non-database, non-opportunities-api, non-projects-api, non-server, non-already-exists, non-not-found, and non-rate-limit errors
-                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError && !isNotFoundError && !isRateLimitError) {
+                // Check for auth (401) - expected when session expired or not logged in (e.g. /api/notifications)
+                const isAuthError = 
+                    allErrorText.includes('401') ||
+                    allErrorText.includes('unauthorized') ||
+                    (error && typeof error === 'object' && (error.status === 401 || error.code === 401));
+                
+                // Only log non-database, non-opportunities-api, non-projects-api, non-server, non-already-exists, non-not-found, non-rate-limit, and non-auth errors
+                if (!isDatabaseError && !isOpportunitiesApiError && !isProjectsApiError && !isServerError && !isAlreadyExistsError && !isNotFoundError && !isRateLimitError && !isAuthError) {
                     console.error('🚨 Unhandled Promise Rejection:', {
                         reason: error,
                         promise: event.promise,

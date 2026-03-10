@@ -1,7 +1,7 @@
 import { prisma } from './_lib/prisma.js';
 import { verifyToken } from './_lib/jwt.js';
 import { parseJsonBody } from './_lib/body.js';
-import { created, ok, badRequest, serverError, unauthorized } from './_lib/response.js';
+import { created, ok, badRequest, serverError, unauthorized, forbidden } from './_lib/response.js';
 
 async function handler(req, res) {
   try {
@@ -135,7 +135,13 @@ async function handler(req, res) {
     }
 
     // Get Audit Logs (GET /api/audit-logs)
+    // Only garethm@abcotronics.co.za can view the detailed audit trail (all users' interactions)
     if (req.method === 'GET') {
+      const viewerEmail = (user.email || '').toLowerCase();
+      if (viewerEmail !== 'garethm@abcotronics.co.za') {
+        return forbidden(res, 'Only garethm@abcotronics.co.za can view the detailed audit trail. All users\' interactions are tracked, but access to this report is restricted.');
+      }
+
       // Parse query parameters from req.url
       const url = new URL(req.url, `http://${req.headers.host}`);
       const queryParams = url.searchParams;

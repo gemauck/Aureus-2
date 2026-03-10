@@ -4,12 +4,23 @@ const { useState, useEffect } = React;
 const Reports = () => {
     // Get report components from window
     const AuditTrail = window.AuditTrail;
-    const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
-    const [activeTab, setActiveTab] = useState('audit');
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
     const isAdmin = user?.role?.toLowerCase() === 'admin';
+    const canViewAuditTrail = (user?.email || '').toLowerCase() === 'garethm@abcotronics.co.za';
+
+    const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
+    const [activeTab, setActiveTab] = useState(canViewAuditTrail ? 'audit' : (isAdmin ? 'feedback' : 'restricted'));
+
+    // When user loads, set correct default tab
+    useEffect(() => {
+        if (canViewAuditTrail && activeTab === 'restricted') {
+            setActiveTab('audit');
+        } else if (isAdmin && !canViewAuditTrail && activeTab === 'restricted') {
+            setActiveTab('feedback');
+        }
+    }, [canViewAuditTrail, isAdmin]);
 
     // Wait for FeedbackViewer to load
     useEffect(() => {
@@ -63,18 +74,20 @@ const Reports = () => {
             {/* Tabs */}
             <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                 <nav className="flex space-x-4">
-                    <button
-                        onClick={() => setActiveTab('audit')}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                            activeTab === 'audit'
-                                ? 'border-primary-500 text-primary-600'
-                                : isDark
-                                    ? 'border-transparent text-gray-400 hover:text-gray-300'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        Audit Trail
-                    </button>
+                    {canViewAuditTrail && (
+                        <button
+                            onClick={() => setActiveTab('audit')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                activeTab === 'audit'
+                                    ? 'border-primary-500 text-primary-600'
+                                    : isDark
+                                        ? 'border-transparent text-gray-400 hover:text-gray-300'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Audit Trail
+                        </button>
+                    )}
                     {isAdmin && (
                         <button
                             onClick={() => setActiveTab('feedback')}
@@ -99,9 +112,20 @@ const Reports = () => {
 
             {/* Content */}
             <div>
-                {activeTab === 'audit' && (
+                {activeTab === 'audit' && canViewAuditTrail && (
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
                         {AuditTrail ? <AuditTrail /> : <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading...</div>}
+                    </div>
+                )}
+                {activeTab === 'restricted' && !canViewAuditTrail && (
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-8 text-center`}>
+                        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Access to the detailed audit trail is restricted to garethm@abcotronics.co.za.
+                        </p>
+                        <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            All users&apos; interactions are tracked in detail; only Gareth can view this report.
+                        </p>
                     </div>
                 )}
                 {activeTab === 'feedback' && isAdmin && (

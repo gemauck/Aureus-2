@@ -1978,18 +1978,18 @@ function initializeProjectDetail() {
     }, []);
 
     // OPTIMIZED: Use tasks from project prop if available, otherwise load from API
-    // This avoids unnecessary API calls when project data already includes tasks
+    // Only run when project.id changes to avoid re-running on every parent re-render (project object reference churn).
+    // Task list updates from project prop are handled by the separate effect that syncs project?.tasksList/tasks into state.
     useEffect(() => {
         if (!project?.id) return;
-        
-        // Check if project prop already has tasks (API returns tasksList; some code paths use tasks)
+        const projectId = project.id;
         const projectTasks = getTasksFromProject(project);
         if (Array.isArray(projectTasks) && projectTasks.length > 0) {
             console.log('⚡ ProjectDetail: Using tasks from project prop (no API call needed):', projectTasks.length);
             setTasks(prev => mergeTaskComments(prev, projectTasks));
             tasksRef.current = mergeTaskComments(tasksRef.current || [], projectTasks);
             const refreshInterval = setInterval(() => {
-                loadTasksFromAPI(project.id).then(apiTasks => {
+                loadTasksFromAPI(projectId).then(apiTasks => {
                     if (apiTasks && Array.isArray(apiTasks)) {
                         setTasks(prev => mergeTaskComments(prev, apiTasks));
                         tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
@@ -1999,7 +1999,7 @@ function initializeProjectDetail() {
             return () => clearInterval(refreshInterval);
         } else {
             const loadTasks = async () => {
-                const apiTasks = await loadTasksFromAPI(project.id);
+                const apiTasks = await loadTasksFromAPI(projectId);
                 if (apiTasks != null && Array.isArray(apiTasks)) {
                     setTasks(prev => mergeTaskComments(prev, apiTasks));
                     tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
@@ -2012,7 +2012,9 @@ function initializeProjectDetail() {
             const refreshInterval = setInterval(() => loadTasks(), 30000);
             return () => clearInterval(refreshInterval);
         }
-    }, [project?.id, project?.tasksList, project?.tasks, loadTasksFromAPI, mergeTaskComments]);
+        // Intentionally depend only on project.id; project tasks are synced by the effect that watches project?.tasksList/tasks
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id]);
     
     // CRITICAL: Initialize default taskLists when project loads with empty taskLists
     // This ensures default lists are shown even if project.taskLists is an empty array from the database
