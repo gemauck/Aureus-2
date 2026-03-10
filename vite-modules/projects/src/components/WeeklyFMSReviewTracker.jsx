@@ -49,8 +49,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionTimestampRef = useRef(null); // Track when deletion started
-    const deletionQueueRef = useRef([]); // Queue for pending deletions when one is already in progress
-    const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
+    // Single ref for queue + processing flag to avoid closure/bundler scope issues (ReferenceError in handleDeleteSection)
+    const deletionQueueRef = useRef({ queue: [], isProcessing: false });
     const scrollSyncRootRef = useRef(null);
     const isScrollingRef = useRef(false);
     
@@ -1697,20 +1697,20 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     // Process deletion queue sequentially
     const processDeletionQueue = async () => {
-        if (isProcessingDeletionQueueRef.current || deletionQueueRef.current.length === 0) {
+        if (deletionQueueRef.current.isProcessing || deletionQueueRef.current.queue.length === 0) {
             return;
         }
         
-        isProcessingDeletionQueueRef.current = true;
+        deletionQueueRef.current.isProcessing = true;
         
-        while (deletionQueueRef.current.length > 0) {
-            const { sectionId, event } = deletionQueueRef.current.shift();
+        while (deletionQueueRef.current.queue.length > 0) {
+            const { sectionId, event } = deletionQueueRef.current.queue.shift();
             await performDeletion(sectionId, event);
             // Wait a bit between deletions to ensure state is stable
             await new Promise(resolve => setTimeout(resolve, 200));
         }
         
-        isProcessingDeletionQueueRef.current = false;
+        deletionQueueRef.current.isProcessing = false;
     };
     
     // Public handler that queues deletions
@@ -1740,12 +1740,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         
         // If a deletion is already in progress, queue this one
-        if (isDeletingRef.current || isProcessingDeletionQueueRef.current) {
+        if (isDeletingRef.current || deletionQueueRef.current.isProcessing) {
             console.log('📋 Queuing deletion request:', normalizedSectionId);
-            deletionQueueRef.current.push({ sectionId, event });
+            deletionQueueRef.current.queue.push({ sectionId, event });
             // Start processing queue if not already processing
             setTimeout(() => {
-                if (!isProcessingDeletionQueueRef.current) {
+                if (!deletionQueueRef.current.isProcessing) {
                     processDeletionQueue();
                 }
             }, 0);
