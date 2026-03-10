@@ -361,6 +361,84 @@ function mergeExistingCommentsIntoPayload(existingByYear, incomingSections) {
 }
 
 /**
+ * Build the create payload for a single DocumentItem (statuses, comments, assignedTo, etc.).
+ * Used when creating section with root documents first, then children with mapped parentId.
+ * @param {object} doc - Frontend document object
+ * @param {number} docIdx - Order index
+ * @param {string|null} parentId - If set, include parentId (for child documents); otherwise omit (root)
+ */
+function buildDocumentItemCreateData(doc, docIdx, parentId = null) {
+  const statuses = []
+  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
+    for (const [key, status] of Object.entries(doc.collectionStatus)) {
+      const parts = key.split('-')
+      if (parts.length >= 2) {
+        const year = parseInt(parts[0], 10)
+        const month = parseInt(parts[1], 10)
+        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+          statuses.push({
+            year,
+            month,
+            status: String(status || 'pending')
+          })
+        }
+      }
+    }
+  }
+
+  const comments = []
+  if (doc.comments && typeof doc.comments === 'object') {
+    for (const [key, commentArray] of Object.entries(doc.comments)) {
+      const parts = key.split('-')
+      if (parts.length >= 2) {
+        const year = parseInt(parts[0], 10)
+        const month = parseInt(parts[1], 10)
+        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
+          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
+          for (const comment of commentList) {
+            if (comment && (comment.text || comment)) {
+              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
+              const commentId = comment.id != null ? String(comment.id) : undefined
+              comments.push({
+                ...(commentId ? { id: commentId } : {}),
+                year,
+                month,
+                text: comment.text || String(comment),
+                author: comment.author || comment.authorName || '',
+                authorId: comment.authorId || null,
+                attachments: JSON.stringify(atts)
+              })
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const assignedToJson = (() => {
+    const val = doc.assignedTo
+    if (val == null) return '[]'
+    if (Array.isArray(val)) return JSON.stringify(val)
+    if (typeof val === 'string') return val
+    return '[]'
+  })()
+
+  const data = {
+    name: doc.name || '',
+    description: doc.description || '',
+    required: doc.required || false,
+    order: docIdx,
+    assignedTo: assignedToJson,
+    statuses: { create: statuses },
+    comments: { create: comments }
+  }
+  if (parentId != null && String(parentId).trim() !== '') {
+    data.parentId = String(parentId).trim()
+  }
+  return data
+}
+
+/**
  * Save documentSections JSON to table structure
  */
 async function saveDocumentSectionsToTable(projectId, jsonData) {
@@ -439,8 +517,13 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
             continue;
           }
 
+          const allDocs = section.documents || []
+          const roots = allDocs.filter((d) => !d.parentId || String(d.parentId).trim() === '')
+          const children = allDocs.filter((d) => d.parentId && String(d.parentId).trim() !== '')
+
           try {
-            await prisma.documentSection.create({
+            // Create section with root documents only (parentId would reference non-existent id otherwise)
+            const created = await prisma.documentSection.create({
               data: {
                 projectId,
                 year,
@@ -448,79 +531,34 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
                 description: section.description || '',
                 order: i,
                 documents: {
-                  create: (section.documents || []).map((doc, docIdx) => {
-                    const statuses = []
-                    if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
-                      for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                        const parts = key.split('-')
-                        if (parts.length >= 2) {
-                          const year = parseInt(parts[0], 10)
-                          const month = parseInt(parts[1], 10)
-                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            statuses.push({
-                              year,
-                              month,
-                              status: String(status || 'pending')
-                            })
-                          }
-                        }
-                      }
-                    }
-
-                    const comments = []
-                    if (doc.comments && typeof doc.comments === 'object') {
-                      for (const [key, commentArray] of Object.entries(doc.comments)) {
-                        const parts = key.split('-')
-                        if (parts.length >= 2) {
-                          const year = parseInt(parts[0], 10)
-                          const month = parseInt(parts[1], 10)
-                          if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                            const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
-                            for (const comment of commentList) {
-                              if (comment && (comment.text || comment)) {
-                                const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                                const commentId = comment.id != null ? String(comment.id) : undefined
-                                comments.push({
-                                  ...(commentId ? { id: commentId } : {}),
-                                  year,
-                                  month,
-                                  text: comment.text || String(comment),
-                                  author: comment.author || comment.authorName || '',
-                                  authorId: comment.authorId || null,
-                                  attachments: JSON.stringify(atts)
-                                })
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-
-                    const assignedToJson = (() => {
-                      const val = doc.assignedTo
-                      if (val == null) return '[]'
-                      if (Array.isArray(val)) return JSON.stringify(val)
-                      if (typeof val === 'string') return val
-                      return '[]'
-                    })()
-
-                    const parentIdVal = doc.parentId && String(doc.parentId).trim() ? doc.parentId : undefined
-
-                    return {
-                      name: doc.name || '',
-                      description: doc.description || '',
-                      required: doc.required || false,
-                      order: docIdx,
-                      ...(parentIdVal ? { parentId: parentIdVal } : {}),
-                      assignedTo: assignedToJson,
-                      statuses: { create: statuses },
-                      comments: { create: comments }
-                    }
-                  })
+                  create: roots.map((doc, docIdx) => buildDocumentItemCreateData(doc, docIdx, null))
                 }
+              },
+              include: { documents: { orderBy: { order: 'asc' } } }
+            })
+
+            const clientIdToNewId = {}
+            created.documents.forEach((d, idx) => {
+              if (roots[idx] && roots[idx].id != null) {
+                clientIdToNewId[String(roots[idx].id)] = d.id
               }
-            });
-            totalSectionsCreated++;
+            })
+
+            for (let cIdx = 0; cIdx < children.length; cIdx++) {
+              const doc = children[cIdx]
+              const newParentId = doc.parentId ? clientIdToNewId[String(doc.parentId)] : null
+              if (doc.parentId && newParentId == null) {
+                console.warn(`⚠️ Child document "${doc.name}" references unknown parentId "${doc.parentId}", skipping parentId`)
+              }
+              await prisma.documentItem.create({
+                data: {
+                  sectionId: created.id,
+                  ...buildDocumentItemCreateData(doc, roots.length + cIdx, newParentId || undefined)
+                }
+              })
+            }
+
+            totalSectionsCreated++
           } catch (createError) {
             console.error(`❌ Error creating document section "${section.name}" for year ${year}:`, createError);
             throw createError; // Re-throw to be caught by outer catch
@@ -541,8 +579,12 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
           continue;
         }
 
+        const allDocs = section.documents || []
+        const roots = allDocs.filter((d) => !d.parentId || String(d.parentId).trim() === '')
+        const children = allDocs.filter((d) => d.parentId && String(d.parentId).trim() !== '')
+
         try {
-          await prisma.documentSection.create({
+          const created = await prisma.documentSection.create({
             data: {
               projectId,
               year: currentYear,
@@ -550,79 +592,34 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
               description: section.description || '',
               order: i,
               documents: {
-                create: (section.documents || []).map((doc, docIdx) => {
-                  const statuses = []
-                  if (doc.collectionStatus && typeof doc.collectionStatus === 'object') {
-                    for (const [key, status] of Object.entries(doc.collectionStatus)) {
-                      const parts = key.split('-')
-                      if (parts.length >= 2) {
-                        const year = parseInt(parts[0], 10)
-                        const month = parseInt(parts[1], 10)
-                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                          statuses.push({
-                            year,
-                            month,
-                            status: String(status || 'pending')
-                          })
-                        }
-                      }
-                    }
-                  }
-
-                  const comments = []
-                  if (doc.comments && typeof doc.comments === 'object') {
-                    for (const [key, commentArray] of Object.entries(doc.comments)) {
-                      const parts = key.split('-')
-                      if (parts.length >= 2) {
-                        const year = parseInt(parts[0], 10)
-                        const month = parseInt(parts[1], 10)
-                        if (!isNaN(year) && !isNaN(month) && month >= 1 && month <= 12) {
-                          const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
-                          for (const comment of commentList) {
-                            if (comment && (comment.text || comment)) {
-                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                              const commentId = comment.id != null ? String(comment.id) : undefined
-                              comments.push({
-                                ...(commentId ? { id: commentId } : {}),
-                                year,
-                                month,
-                                text: comment.text || String(comment),
-                                author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null,
-                                attachments: JSON.stringify(atts)
-                              })
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-
-                  const assignedToJson = (() => {
-                    const val = doc.assignedTo
-                    if (val == null) return '[]'
-                    if (Array.isArray(val)) return JSON.stringify(val)
-                    if (typeof val === 'string') return val
-                    return '[]'
-                  })()
-
-                  const parentIdVal = doc.parentId && String(doc.parentId).trim() ? doc.parentId : undefined
-
-                  return {
-                    name: doc.name || '',
-                    description: doc.description || '',
-                    required: doc.required || false,
-                    order: docIdx,
-                    ...(parentIdVal ? { parentId: parentIdVal } : {}),
-                    assignedTo: assignedToJson,
-                    statuses: { create: statuses },
-                    comments: { create: comments }
-                  }
-                })
+                create: roots.map((doc, docIdx) => buildDocumentItemCreateData(doc, docIdx, null))
               }
+            },
+            include: { documents: { orderBy: { order: 'asc' } } }
+          })
+
+          const clientIdToNewId = {}
+          created.documents.forEach((d, idx) => {
+            if (roots[idx] && roots[idx].id != null) {
+              clientIdToNewId[String(roots[idx].id)] = d.id
             }
-          });
-          totalSectionsCreated++;
+          })
+
+          for (let cIdx = 0; cIdx < children.length; cIdx++) {
+            const doc = children[cIdx]
+            const newParentId = doc.parentId ? clientIdToNewId[String(doc.parentId)] : null
+            if (doc.parentId && newParentId == null) {
+              console.warn(`⚠️ Child document "${doc.name}" references unknown parentId "${doc.parentId}", skipping parentId`)
+            }
+            await prisma.documentItem.create({
+              data: {
+                sectionId: created.id,
+                ...buildDocumentItemCreateData(doc, roots.length + cIdx, newParentId || undefined)
+              }
+            })
+          }
+
+          totalSectionsCreated++
         } catch (createError) {
           console.error(`❌ Error creating document section "${section.name}":`, createError);
           throw createError;

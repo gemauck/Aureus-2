@@ -890,6 +890,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
     }, [project?.id, selectedYear, loadData]);
 
+    // Restore from last browser backup (e.g. after a failed save that cleared the server)
+    const handleRestoreFromBackup = useCallback(() => {
+        if (isMonthlyDataReview || !project?.id) return;
+        const key = getSnapshotKey(project.id);
+        if (!key || typeof window === 'undefined' || !window.localStorage) return;
+        const raw = window.localStorage.getItem(key);
+        if (!raw || !raw.trim()) {
+            alert('No browser backup found for this project. Use the same browser where you last had the data.');
+            return;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            const normalized = normalizeSectionsByYear(parsed, selectedYear);
+            if (!normalized || typeof normalized !== 'object' || Object.keys(normalized).length === 0) {
+                alert('Backup is empty.');
+                return;
+            }
+            setSectionsByYear(normalized);
+            sectionsRef.current = normalized;
+            lastSavedDataRef.current = raw;
+            if (typeof saveToDatabase === 'function') saveToDatabase();
+        } catch (e) {
+            console.warn('Restore from backup failed:', e);
+            alert('Backup data is invalid or corrupted.');
+        }
+    }, [project?.id, selectedYear, isMonthlyDataReview]);
+
     // When tab becomes visible and we have no sections, refetch (fixes "empty in this tab, works in new incognito")
     useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -6694,6 +6721,16 @@ Abcotronics`;
                                 >
                                     {isLoading ? 'Loading…' : 'Retry load'}
                                 </button>
+                                {!isMonthlyDataReview && (
+                                    <button
+                                        type="button"
+                                        onClick={handleRestoreFromBackup}
+                                        className="px-4 py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 text-sm font-medium border border-emerald-300"
+                                        title="Restore from last backup saved in this browser (e.g. recover File 6 after a failed save)"
+                                    >
+                                        <i className="fas fa-undo mr-1"></i> Restore from browser backup
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={handleAddSection}
