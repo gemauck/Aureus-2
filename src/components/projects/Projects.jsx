@@ -4074,7 +4074,7 @@ const Projects = () => {
                                                             aria-expanded={allTasksAssigneeOpenTaskId === task.id}
                                                             aria-haspopup="listbox"
                                                         >
-                                                            <span className="truncate">{task.assigneeId != null ? (task.assignee || (allTasksUsers.find(u => String(u.id) === String(task.assigneeId))?.name || allTasksUsers.find(u => String(u.id) === String(task.assigneeId))?.email || 'Assigned') : 'Unassigned'}</span>
+                                                            <span className="truncate">{task.assigneeId != null ? (task.assignee || (allTasksUsers.find(u => String(u.id) === String(task.assigneeId))?.name || allTasksUsers.find(u => String(u.id) === String(task.assigneeId))?.email || 'Assigned')) : 'Unassigned'}</span>
                                                             <i className="fas fa-chevron-down text-xs opacity-70 flex-shrink-0" aria-hidden="true"></i>
                                                         </button>
                                                         {allTasksAssigneeOpenTaskId === task.id && (
