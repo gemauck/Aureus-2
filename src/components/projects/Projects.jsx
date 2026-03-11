@@ -3846,11 +3846,17 @@ const Projects = () => {
                 });
                 const data = res?.data ?? res;
                 const updated = data?.task || data;
+                if (!updated || !updated.id) return;
                 setAllTasksList(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t));
                 if (allTasksSelectedTask?.id === taskId) setAllTasksSelectedTask(prev => prev ? { ...prev, ...updated } : null);
             } catch (err) {
                 console.warn('All Tasks: patch failed', err);
             }
+        };
+        const getAllTasksDueDateValue = (task) => {
+            if (!task?.dueDate) return '';
+            const d = typeof task.dueDate === 'string' ? task.dueDate : (task.dueDate?.toISOString?.() || String(task.dueDate));
+            return d.slice(0, 10);
         };
         const handleAllTasksSort = (col) => {
             setAllTasksSortColumn(col);
@@ -4062,8 +4068,11 @@ const Projects = () => {
                                                 <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <input
                                                         type="date"
-                                                        value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-                                                        onChange={(e) => patchTaskInAllTasks(task.id, { dueDate: e.target.value || null })}
+                                                        value={getAllTasksDueDateValue(task)}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value || null;
+                                                            patchTaskInAllTasks(task.id, { dueDate: val });
+                                                        }}
                                                         className={`w-full min-w-[132px] py-1 px-2 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 ${
                                                             isDark
                                                                 ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500 [color-scheme:dark]'
