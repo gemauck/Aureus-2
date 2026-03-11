@@ -3854,7 +3854,11 @@ const Projects = () => {
                                         sortedAllTasks.map(task => (
                                             <tr
                                                 key={task.id}
-                                                className={`border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => openTaskInProject(task)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskInProject(task); } }}
+                                                className={`border-b cursor-pointer ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
                                             >
                                                 <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
                                                 <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
@@ -3867,7 +3871,7 @@ const Projects = () => {
                                                 <td className="py-2.5 px-2">{task.priority || '—'}</td>
                                                 <td className="py-2.5 px-2">{task.assignee || '—'}</td>
                                                 <td className="py-2.5 px-2">{formatDueDate(task.dueDate)}</td>
-                                                <td className="py-2.5 px-2">
+                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <button
                                                         type="button"
                                                         onClick={() => openTaskInProject(task)}
