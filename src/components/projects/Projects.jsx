@@ -218,6 +218,8 @@ const Projects = () => {
     const [allTasksFilterStatus, setAllTasksFilterStatus] = useState('all');
     const [allTasksFilterProject, setAllTasksFilterProject] = useState('all');
     const [allTasksSearch, setAllTasksSearch] = useState('');
+    const [allTasksSortColumn, setAllTasksSortColumn] = useState('task');
+    const [allTasksSortDir, setAllTasksSortDir] = useState('asc');
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -3389,6 +3391,31 @@ const Projects = () => {
         return list;
     }, [allTasksList, allTasksSearch, allTasksFilterStatus, allTasksFilterProject]);
 
+    const sortedAllTasks = useMemo(() => {
+        const list = [...filteredAllTasks];
+        const col = allTasksSortColumn;
+        const dir = allTasksSortDir === 'asc' ? 1 : -1;
+        const getVal = (t) => {
+            switch (col) {
+                case 'task': return (t.title || '').toLowerCase();
+                case 'project': return (t.project?.name || (t.projectId ? `Project ${t.projectId}` : '')).toLowerCase();
+                case 'client': return (t.project?.clientName || '').toLowerCase();
+                case 'status': return (t.status || '').toLowerCase();
+                case 'priority': return (t.priority || '').toLowerCase();
+                case 'assignee': return (t.assignee || '').toLowerCase();
+                case 'dueDate': return t.dueDate ? new Date(t.dueDate).getTime() : 0;
+                default: return '';
+            }
+        };
+        list.sort((a, b) => {
+            const va = getVal(a);
+            const vb = getVal(b);
+            if (col === 'dueDate') return (va - vb) * dir;
+            return String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' }) * dir;
+        });
+        return list;
+    }, [filteredAllTasks, allTasksSortColumn, allTasksSortDir]);
+
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
         
@@ -3704,6 +3731,31 @@ const Projects = () => {
             setShowAllTasksView(false);
             window.location.hash = `#/projects/${projectId}?tab=tasks&task=${encodeURIComponent(task.id)}`;
         };
+        const handleAllTasksSort = (col) => {
+            setAllTasksSortColumn(col);
+            setAllTasksSortDir(prev => (allTasksSortColumn === col ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
+        };
+        const SortableTh = ({ column, label }) => {
+            const active = allTasksSortColumn === column;
+            const asc = allTasksSortDir === 'asc';
+            return (
+                <th
+                    role="columnheader"
+                    aria-sort={active ? (asc ? 'ascending' : 'descending') : 'none'}
+                    className={`text-left py-3 px-2 font-medium cursor-pointer select-none hover:underline ${isDark ? 'text-gray-300 hover:text-gray-100' : 'text-gray-700 hover:text-gray-900'}`}
+                    onClick={() => handleAllTasksSort(column)}
+                >
+                    <span className="inline-flex items-center gap-1">
+                        {label}
+                        {active ? (
+                            <i className={`fas fa-caret-${asc ? 'up' : 'down'} text-xs opacity-80`} aria-hidden="true"></i>
+                        ) : (
+                            <i className="fas fa-sort text-xs opacity-50" aria-hidden="true"></i>
+                        )}
+                    </span>
+                </th>
+            );
+        };
         return (
             <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -3779,18 +3831,18 @@ const Projects = () => {
                             <table className="w-full text-sm border-collapse">
                                 <thead>
                                     <tr className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-200'}>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Task</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Priority</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assignee</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Due date</th>
+                                        <SortableTh column="task" label="Task" />
+                                        <SortableTh column="project" label="Project" />
+                                        <SortableTh column="client" label="Client" />
+                                        <SortableTh column="status" label="Status" />
+                                        <SortableTh column="priority" label="Priority" />
+                                        <SortableTh column="assignee" label="Assignee" />
+                                        <SortableTh column="dueDate" label="Due date" />
                                         <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredAllTasks.length === 0 ? (
+                                    {sortedAllTasks.length === 0 ? (
                                         <tr>
                                             <td colSpan={8} className={`py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {allTasksList.length === 0 && !allTasksLoading
@@ -3799,7 +3851,7 @@ const Projects = () => {
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredAllTasks.map(task => (
+                                        sortedAllTasks.map(task => (
                                             <tr
                                                 key={task.id}
                                                 className={`border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
