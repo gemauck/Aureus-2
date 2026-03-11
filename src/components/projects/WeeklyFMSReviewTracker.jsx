@@ -603,6 +603,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             console.log('⏸️ Load skipped: save in progress');
             return;
         }
+        // Don't overwrite state while a delete is in progress (we have correct optimistic state)
+        if (isDeletingRef.current) {
+            console.log('⏸️ Load skipped: deletion in progress');
+            return;
+        }
         setIsLoading(true);
         try {
             if (apiRef.current) {
@@ -1577,84 +1582,72 @@ const gridColumns = React.useMemo(() => (
         const snapshotBeforeDeletion = JSON.stringify(sectionsRef.current);
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
+        // Compute the new state synchronously so we can save it reliably (ref is updated in setState updater which runs async)
+        const currentState = sectionsRef.current || {};
+        const yearSections = currentState[selectedYear] || [];
+        const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+        const updatedSectionsByYear = { ...currentState, [selectedYear]: filtered };
+        const payloadToSave = updatedSectionsByYear;
+        const serializedToSave = JSON.stringify(payloadToSave);
+        
         // Defer state update to next frame so click handler returns immediately
         // UI will update within 16ms (next animation frame)
         requestAnimationFrame(() => {
-            // Update state and ref atomically - OPTIMISTIC UPDATE (UI updates in next frame)
-            setSectionsByYear(prev => {
-                const yearSections = prev[selectedYear] || [];
-                const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
-                
-                const updatedSectionsByYear = {
-                    ...prev,
-                    [selectedYear]: filtered
-                };
-                
-                // Immediately update the ref synchronously
-                sectionsRef.current = updatedSectionsByYear;
-                
-                // CRITICAL: Update saved data ref IMMEDIATELY after state update
-                const deletedSectionSnapshot = JSON.stringify(updatedSectionsByYear);
-                lastSavedDataRef.current = deletedSectionSnapshot;
-                
-                // Persist snapshot to localStorage immediately (before database save)
-                const snapshotKey = getSnapshotKey(project.id);
-                if (snapshotKey && window.localStorage) {
-                    try {
-                        window.localStorage.setItem(snapshotKey, deletedSectionSnapshot);
-                        console.log('💾 Deletion snapshot saved to localStorage immediately');
-                    } catch (storageError) {
-                        console.warn('⚠️ Failed to save weekly FMS review snapshot to localStorage:', storageError);
-                    }
-                }
-                
-                return updatedSectionsByYear;
-            });
+            // Update state and ref to match the payload we're about to save
+            sectionsRef.current = payloadToSave;
+            lastSavedDataRef.current = serializedToSave;
+            setSectionsByYear(payloadToSave);
             
-            // Save in background (non-blocking) - UI already updated optimistically
-            const deletedSectionSnapshot = JSON.stringify(sectionsRef.current);
+            // Persist snapshot to localStorage immediately (before database save)
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    window.localStorage.setItem(snapshotKey, serializedToSave);
+                    console.log('💾 Deletion snapshot saved to localStorage immediately');
+                } catch (storageError) {
+                    console.warn('⚠️ Failed to save weekly FMS review snapshot to localStorage:', storageError);
+                }
+            }
+            
             isSavingRef.current = true;
             
-            // Perform save asynchronously without blocking
+            // Save the computed payload (not ref) so delete always persists
             (async () => {
             try {
-                const payload = sectionsRef.current || {};
-                const serialized = JSON.stringify(payload);
-                // Use dedicated endpoint first (direct fetch) so delete always persists
                 try {
-                    await saveWeeklyFMSToDedicatedEndpoint(project.id, serialized);
+                    await saveWeeklyFMSToDedicatedEndpoint(project.id, serializedToSave);
                 } catch (directErr) {
                     console.warn('Dedicated endpoint save failed on delete, trying fallback:', directErr.message);
                     if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
-                        await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
+                        await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serializedToSave);
                     } else if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
+                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, payloadToSave, false);
                     } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                        const updatePayload = {
-                            weeklyFMSReviewSections: serialized
-                        };
-                        await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                        await window.DatabaseAPI.updateProject(project.id, {
+                            weeklyFMSReviewSections: serializedToSave
+                        });
                     } else {
                         throw new Error('No available API for saving document sections');
                     }
                 }
                 
-                // Update saved data ref to match deleted state
-                const currentStateSnapshot = JSON.stringify(sectionsRef.current);
-                lastSavedDataRef.current = currentStateSnapshot;
+                lastSavedDataRef.current = serializedToSave;
+                sectionsRef.current = payloadToSave;
                 
                 console.log('✅ Section deletion saved successfully');
                 
-                // Update localStorage snapshot to match deleted state
                 const snapshotKey = getSnapshotKey(project.id);
                 if (snapshotKey && window.localStorage) {
                     try {
-                        window.localStorage.setItem(snapshotKey, currentStateSnapshot);
+                        window.localStorage.setItem(snapshotKey, serializedToSave);
                         console.log('💾 Deletion snapshot updated in localStorage after successful save');
                     } catch (storageError) {
                         console.warn('⚠️ Failed to update weekly FMS review snapshot in localStorage:', storageError);
                     }
                 }
+                
+                // Don't refetch after delete: GET can return stale data (race) and overwrite our correct state
+                // Cache was already invalidated in saveWeeklyFMSToDedicatedEndpoint; next natural load will be fresh.
                 
                 // Clear the deleting flag after successful save - wait longer to ensure DB save completes
                 // Increased from 3000ms to 5000ms to give database more time to persist
