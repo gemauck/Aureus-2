@@ -115,9 +115,6 @@ function debugLog (payload) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     fs.appendFileSync(DEBUG_LOG_PATH, line)
   } catch (_) {}
-  try {
-    fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '966947' }, body: line }).catch(() => {})
-  } catch (_) {}
 }
 
 function toHandlerPath(urlPath) {
