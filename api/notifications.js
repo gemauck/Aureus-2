@@ -41,10 +41,12 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         });
     }
 
-    let shouldCreateInApp = (type === 'mention' && settings.inAppMentions) || (type === 'comment' && settings.inAppComments) ||
+    const metadataObj = typeof metadata === 'string' ? (() => { try { return JSON.parse(metadata); } catch (_) { return {}; } })() : (metadata || {});
+    // Team discussion notifications always show in the bell (discussions section = in-app)
+    const isTeamDiscussion = metadataObj.source === 'team_discussion' || metadataObj.source === 'team_discussion_reply';
+    let shouldCreateInApp = isTeamDiscussion || (type === 'mention' && settings.inAppMentions) || (type === 'comment' && settings.inAppComments) ||
         (type === 'task' && settings.inAppTasks) || (type === 'invoice' && settings.inAppInvoices) || (type === 'system' && settings.inAppSystem);
 
-    const metadataObj = typeof metadata === 'string' ? (() => { try { return JSON.parse(metadata); } catch (_) { return {}; } })() : (metadata || {});
     let validLink = link || '';
     // Prefer frontend-supplied link whenever it has tracker section+document (correct cell; docMonth/docWeek may be in hash)
     const linkHasDocSectionId = validLink && String(validLink).includes('docSectionId=');
