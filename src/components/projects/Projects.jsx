@@ -3849,95 +3849,109 @@ const Projects = () => {
                 <th
                     role="columnheader"
                     aria-sort={active ? (asc ? 'ascending' : 'descending') : 'none'}
-                    className={`text-left py-3 px-2 font-medium cursor-pointer select-none hover:underline ${isDark ? 'text-gray-300 hover:text-gray-100' : 'text-gray-700 hover:text-gray-900'}`}
+                    className={`text-left py-3 px-3 font-medium cursor-pointer select-none ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
                     onClick={() => handleAllTasksSort(column)}
                 >
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1.5">
                         {label}
                         {active ? (
-                            <i className={`fas fa-caret-${asc ? 'up' : 'down'} text-xs opacity-80`} aria-hidden="true"></i>
+                            <i className={`fas fa-caret-${asc ? 'up' : 'down'} text-xs opacity-70`} aria-hidden="true"></i>
                         ) : (
-                            <i className="fas fa-sort text-xs opacity-50" aria-hidden="true"></i>
+                            <i className="fas fa-sort text-xs opacity-40" aria-hidden="true"></i>
                         )}
                     </span>
                 </th>
             );
         };
         return (
-            <div className="space-y-4">
+            <div className="space-y-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                     <button
                         type="button"
                         onClick={() => setShowAllTasksView(false)}
-                        className={`p-2 rounded-lg transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
+                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
                         aria-label="Back to projects"
                     >
                         <i className="fas fa-arrow-left" aria-hidden="true"></i>
+                        Back
                     </button>
-                    <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                    <h1 className={`text-xl font-semibold tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                         All Tasks
                     </h1>
-                    <div className="w-8" aria-hidden="true"></div>
+                    <div className="w-20" aria-hidden="true"></div>
                 </div>
-                <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                    <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                        <div className="flex-1 relative">
-                            <input
-                                type="text"
-                                placeholder="Filter by task, project, client, or assignee..."
-                                value={allTasksSearch}
-                                onChange={(e) => setAllTasksSearch(e.target.value)}
-                                className={`w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm ${
-                                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
-                                }`}
-                                aria-label="Search tasks"
-                            />
-                            <i className={`fas fa-search absolute left-3 top-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                <div className={`rounded-xl border shadow-sm overflow-hidden ${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`p-4 sm:p-5 border-b ${isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-100 bg-gray-50/70'}`}>
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                            <div className="flex-1 relative">
+                                <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none ${isDark ? 'text-gray-500' : 'text-gray-400'}`} aria-hidden="true"></i>
+                                <input
+                                    type="text"
+                                    placeholder="Filter by task, project, client, or assignee..."
+                                    value={allTasksSearch}
+                                    onChange={(e) => setAllTasksSearch(e.target.value)}
+                                    className={`w-full pl-9 pr-4 py-2.5 rounded-lg text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+                                        isDark
+                                            ? 'bg-gray-800 border-gray-600 text-gray-200 placeholder-gray-500 focus:ring-blue-500/50 focus:border-gray-500'
+                                            : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-blue-400/40 focus:border-blue-400'
+                                    }`}
+                                    aria-label="Search tasks"
+                                />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                                <select
+                                    value={allTasksFilterStatus}
+                                    onChange={(e) => setAllTasksFilterStatus(e.target.value)}
+                                    className={`min-w-[140px] px-3 py-2.5 rounded-lg text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer ${
+                                        isDark
+                                            ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                            : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/40 focus:border-blue-400'
+                                    }`}
+                                    aria-label="Filter by status"
+                                >
+                                    <option value="all">All statuses</option>
+                                    <option value="todo">To Do</option>
+                                    <option value="in-progress">In Progress</option>
+                                    <option value="in_progress">In Progress (alt)</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="done">Done</option>
+                                </select>
+                                <select
+                                    value={allTasksFilterProject}
+                                    onChange={(e) => setAllTasksFilterProject(e.target.value)}
+                                    className={`min-w-[180px] px-3 py-2.5 rounded-lg text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer ${
+                                        isDark
+                                            ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                            : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/40 focus:border-blue-400'
+                                    }`}
+                                    aria-label="Filter by project"
+                                >
+                                    <option value="all">All projects</option>
+                                    {allTasksUniqueProjectNames.map(name => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                        <select
-                            value={allTasksFilterStatus}
-                            onChange={(e) => setAllTasksFilterStatus(e.target.value)}
-                            className={`px-4 py-2.5 border rounded-lg text-sm ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                            }`}
-                            aria-label="Filter by status"
-                        >
-                            <option value="all">All statuses</option>
-                            <option value="todo">To Do</option>
-                            <option value="in-progress">In Progress</option>
-                            <option value="in_progress">In Progress (alt)</option>
-                            <option value="completed">Completed</option>
-                            <option value="done">Done</option>
-                        </select>
-                        <select
-                            value={allTasksFilterProject}
-                            onChange={(e) => setAllTasksFilterProject(e.target.value)}
-                            className={`px-4 py-2.5 border rounded-lg text-sm min-w-[180px] ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                            }`}
-                            aria-label="Filter by project"
-                        >
-                            <option value="all">All projects</option>
-                            {allTasksUniqueProjectNames.map(name => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
                     </div>
                     {allTasksError && (
-                        <div className={`mb-4 p-3 rounded-lg text-sm ${isDark ? 'bg-red-900/30 text-red-200' : 'bg-red-50 text-red-800'}`}>
-                            <i className="fas fa-exclamation-circle mr-2"></i>{allTasksError}
+                        <div className={`mx-4 mt-4 p-3 rounded-lg text-sm flex items-center gap-2 ${isDark ? 'bg-red-900/20 text-red-300 border border-red-800/50' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                            <i className="fas fa-exclamation-circle flex-shrink-0" aria-hidden="true"></i>
+                            <span>{allTasksError}</span>
                         </div>
                     )}
                     {allTasksLoading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-                            <span className={`ml-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
+                        <div className="flex items-center justify-center py-16">
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="animate-spin rounded-full h-9 w-9 border-2 border-blue-500 border-t-transparent"></div>
+                                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
+                            </div>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm border-collapse">
                                 <thead>
-                                    <tr className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-200'}>
+                                    <tr className={isDark ? 'bg-gray-800/50 border-b border-gray-700' : 'bg-gray-50 border-b border-gray-200'}>
                                         <SortableTh column="task" label="Task" />
                                         <SortableTh column="project" label="Project" />
                                         <SortableTh column="client" label="Client" />
@@ -3945,13 +3959,13 @@ const Projects = () => {
                                         <SortableTh column="priority" label="Priority" />
                                         <SortableTh column="assignee" label="Assignee" />
                                         <SortableTh column="dueDate" label="Due date" />
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
+                                        <th className={`text-left py-3 px-3 font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {sortedAllTasks.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} className={`py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            <td colSpan={8} className={`py-12 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {allTasksList.length === 0 && !allTasksLoading
                                                     ? 'No tasks found. Tasks are created inside each project.'
                                                     : 'No tasks match your filters.'}
@@ -3965,16 +3979,21 @@ const Projects = () => {
                                                 tabIndex={0}
                                                 onClick={() => openTaskModal(task)}
                                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskModal(task); } }}
-                                                className={`border-b cursor-pointer ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
+                                                className={`border-b transition-colors ${isDark ? 'border-gray-800/80 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50/80'}`}
                                             >
-                                                <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
-                                                <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
-                                                <td className="py-2.5 px-2">{task.project?.clientName || '—'}</td>
-                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-3 px-3 font-medium">{task.title || '—'}</td>
+                                                <td className="py-3 px-3">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
+                                                <td className="py-3 px-3">{task.project?.clientName || '—'}</td>
+                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         value={task.status || ''}
                                                         onChange={(e) => patchTaskInAllTasks(task.id, { status: e.target.value })}
-                                                        className={`w-full max-w-[140px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        className={`w-full min-w-[130px] py-2 px-3 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                            isDark
+                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                                                : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400'
+                                                        }`}
+                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")` }}
                                                         aria-label="Status"
                                                     >
                                                         <option value="todo">To Do</option>
@@ -3984,11 +4003,16 @@ const Projects = () => {
                                                         <option value="done">Done</option>
                                                     </select>
                                                 </td>
-                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         value={task.priority || 'Medium'}
                                                         onChange={(e) => patchTaskInAllTasks(task.id, { priority: e.target.value })}
-                                                        className={`w-full max-w-[120px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        className={`w-full min-w-[110px] py-2 px-3 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                            isDark
+                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                                                : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400'
+                                                        }`}
+                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")` }}
                                                         aria-label="Priority"
                                                     >
                                                         <option value="Low">Low</option>
@@ -3996,7 +4020,7 @@ const Projects = () => {
                                                         <option value="High">High</option>
                                                     </select>
                                                 </td>
-                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         value={task.assigneeId || ''}
                                                         onChange={(e) => {
@@ -4004,7 +4028,12 @@ const Projects = () => {
                                                             const user = allTasksUsers.find(u => u.id === val);
                                                             patchTaskInAllTasks(task.id, { assigneeId: val || null, assignee: user ? (user.name || '') : '' });
                                                         }}
-                                                        className={`w-full max-w-[160px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        className={`w-full min-w-[140px] py-2 px-3 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                            isDark
+                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                                                : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/50 focus:border-blue-400'
+                                                        }`}
+                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")` }}
                                                         aria-label="Assignee"
                                                     >
                                                         <option value="">Unassigned</option>
@@ -4013,34 +4042,38 @@ const Projects = () => {
                                                         ))}
                                                     </select>
                                                 </td>
-                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                                                     <input
                                                         type="date"
                                                         value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
                                                         onChange={(e) => patchTaskInAllTasks(task.id, { dueDate: e.target.value || null })}
-                                                        className={`w-full max-w-[140px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        className={`w-full min-w-[132px] py-2 px-3 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+                                                            isDark
+                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500 [color-scheme:dark]'
+                                                                : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400 [color-scheme:light]'
+                                                        }`}
                                                         aria-label="Due date"
                                                     />
                                                 </td>
-                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
-                                                    <div className="flex items-center gap-2">
+                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                    <div className="flex items-center gap-1">
                                                         <button
                                                             type="button"
                                                             onClick={() => openTaskInProject(task)}
-                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-blue-400 hover:bg-gray-700' : 'text-blue-600 hover:bg-gray-100'}`}
+                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-blue-400 hover:bg-gray-700 hover:text-blue-300' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-700'}`}
                                                             title="Open in project"
                                                             aria-label="Open in project"
                                                         >
-                                                            <i className="fas fa-external-link-alt" aria-hidden="true"></i>
+                                                            <i className="fas fa-external-link-alt text-sm" aria-hidden="true"></i>
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDeleteTaskInAllTasks(task)}
-                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-100'}`}
+                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-red-400 hover:bg-gray-700 hover:text-red-300' : 'text-red-600 hover:bg-red-50 hover:text-red-700'}`}
                                                             title="Delete task"
                                                             aria-label="Delete task"
                                                         >
-                                                            <i className="fas fa-trash" aria-hidden="true"></i>
+                                                            <i className="fas fa-trash text-sm" aria-hidden="true"></i>
                                                         </button>
                                                     </div>
                                                 </td>
