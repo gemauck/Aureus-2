@@ -1590,25 +1590,24 @@ const TaskDetailModal = ({
             setChecklist(updatedChecklist);
             setNewChecklistItem('');
             
-            // CRITICAL: Auto-save checklist item immediately
-            const taskToAutoSave = {
-                ...editedTask,
-                comments: Array.isArray(comments) ? comments : [],
-                checklist: updatedChecklist,
-                attachments: Array.isArray(attachments) ? attachments : [],
-                tags: Array.isArray(tags) ? tags : [],
-                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
-                subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
-                id: editedTask.id || task?.id || Date.now()
-            };
-
-            console.log('💾 TaskDetailModal: Auto-saving checklist item immediately', {
-                taskId: taskToAutoSave.id,
-                checklistCount: taskToAutoSave.checklist.length
-            });
-
-            // Save without closing modal
-            onUpdate(taskToAutoSave, { closeModal: false });
+            // Auto-save only when task already exists (not when creating)
+            if (task?.id) {
+                const taskToAutoSave = {
+                    ...editedTask,
+                    comments: Array.isArray(comments) ? comments : [],
+                    checklist: updatedChecklist,
+                    attachments: Array.isArray(attachments) ? attachments : [],
+                    tags: Array.isArray(tags) ? tags : [],
+                    subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                    subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+                    id: editedTask.id || task?.id || Date.now()
+                };
+                console.log('💾 TaskDetailModal: Auto-saving checklist item immediately', {
+                    taskId: taskToAutoSave.id,
+                    checklistCount: taskToAutoSave.checklist.length
+                });
+                onUpdate(taskToAutoSave, { closeModal: false });
+            }
         }
     };
 
@@ -1620,25 +1619,22 @@ const TaskDetailModal = ({
         );
         setChecklist(updatedChecklist);
         
-        // CRITICAL: Auto-save checklist toggle immediately
-        const taskToAutoSave = {
-            ...editedTask,
-            comments: Array.isArray(comments) ? comments : [],
-            checklist: updatedChecklist,
-            attachments: Array.isArray(attachments) ? attachments : [],
-            tags: Array.isArray(tags) ? tags : [],
-            subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
-            subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
-            id: editedTask.id || task?.id || Date.now()
-        };
-
-        console.log('💾 TaskDetailModal: Auto-saving checklist toggle immediately', {
-            taskId: taskToAutoSave.id,
-            itemId
-        });
-
-        // Save without closing modal
-        if (typeof onUpdate === 'function') {
+        // Auto-save only when task already exists (not when creating)
+        if (task?.id && typeof onUpdate === 'function') {
+            const taskToAutoSave = {
+                ...editedTask,
+                comments: Array.isArray(comments) ? comments : [],
+                checklist: updatedChecklist,
+                attachments: Array.isArray(attachments) ? attachments : [],
+                tags: Array.isArray(tags) ? tags : [],
+                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+                id: editedTask.id || task?.id || Date.now()
+            };
+            console.log('💾 TaskDetailModal: Auto-saving checklist toggle immediately', {
+                taskId: taskToAutoSave.id,
+                itemId
+            });
             if (onUpdate.length > 1) {
                 onUpdate(taskToAutoSave, { closeModal: false });
             } else {
@@ -1653,25 +1649,22 @@ const TaskDetailModal = ({
         const updatedChecklist = checklistArray.filter(item => item.id !== itemId);
         setChecklist(updatedChecklist);
         
-        // CRITICAL: Auto-save checklist deletion immediately
-        const taskToAutoSave = {
-            ...editedTask,
-            comments: Array.isArray(comments) ? comments : [],
-            checklist: updatedChecklist,
-            attachments: Array.isArray(attachments) ? attachments : [],
-            tags: Array.isArray(tags) ? tags : [],
-            subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
-            subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
-            id: editedTask.id || task?.id || Date.now()
-        };
-
-        console.log('💾 TaskDetailModal: Auto-saving checklist deletion immediately', {
-            taskId: taskToAutoSave.id,
-            checklistCount: taskToAutoSave.checklist.length
-        });
-
-        // Save without closing modal
-        if (typeof onUpdate === 'function') {
+        // Auto-save only when task already exists (not when creating)
+        if (task?.id && typeof onUpdate === 'function') {
+            const taskToAutoSave = {
+                ...editedTask,
+                comments: Array.isArray(comments) ? comments : [],
+                checklist: updatedChecklist,
+                attachments: Array.isArray(attachments) ? attachments : [],
+                tags: Array.isArray(tags) ? tags : [],
+                subtasks: Array.isArray(editedTask.subtasks) ? editedTask.subtasks : [],
+                subscribers: Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [],
+                id: editedTask.id || task?.id || Date.now()
+            };
+            console.log('💾 TaskDetailModal: Auto-saving checklist deletion immediately', {
+                taskId: taskToAutoSave.id,
+                checklistCount: taskToAutoSave.checklist.length
+            });
             if (onUpdate.length > 1) {
                 onUpdate(taskToAutoSave, { closeModal: false });
             } else {
@@ -2001,6 +1994,59 @@ const TaskDetailModal = ({
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Checklist (inline on Details - add sub-tasks when creating or editing) */}
+                                <div>
+                                    <h3 className="text-xs font-medium text-gray-700 mb-2">
+                                        <i className="fas fa-check-square mr-1.5 text-gray-400"></i>
+                                        Checklist ({Array.isArray(checklist) ? checklist.filter(i => i.completed).length : 0}/{Array.isArray(checklist) ? checklist.length : 0})
+                                    </h3>
+                                    <div className="flex gap-2 mb-2">
+                                        <input
+                                            type="text"
+                                            value={newChecklistItem}
+                                            onChange={(e) => setNewChecklistItem(e.target.value)}
+                                            onKeyPress={(e) => e.key === 'Enter' && handleAddChecklistItem()}
+                                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            placeholder="Add checklist item..."
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleAddChecklistItem}
+                                            className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                        >
+                                            <i className="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        {!Array.isArray(checklist) || checklist.length === 0 ? (
+                                            <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg border border-gray-200">
+                                                <p className="text-sm">No checklist items yet</p>
+                                            </div>
+                                        ) : (
+                                            checklist.map(item => (
+                                                <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5 border border-gray-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={item.completed}
+                                                        onChange={() => handleToggleChecklistItem(item.id)}
+                                                        className="w-4 h-4 text-primary-600 rounded focus:ring-2 focus:ring-primary-500"
+                                                    />
+                                                    <span className={`flex-1 text-sm ${item.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                                                        {item.text}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteChecklistItem(item.id)}
+                                                        className="text-gray-400 hover:text-red-600 p-1"
+                                                    >
+                                                        <i className="fas fa-trash text-xs"></i>
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
 
                                 {/* Subtasks Section */}
                                 {!isCreating && !isSubtask && (
