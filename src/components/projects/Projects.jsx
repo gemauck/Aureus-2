@@ -220,6 +220,8 @@ const Projects = () => {
     const [allTasksSearch, setAllTasksSearch] = useState('');
     const [allTasksSortColumn, setAllTasksSortColumn] = useState('task');
     const [allTasksSortDir, setAllTasksSortDir] = useState('asc');
+    const [allTasksSelectedTask, setAllTasksSelectedTask] = useState(null);
+    const [allTasksModalLoading, setAllTasksModalLoading] = useState(false);
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -364,6 +366,17 @@ const Projects = () => {
         };
         load();
         return () => { cancelled = true; };
+    }, [showAllTasksView]);
+
+    // Load TaskDetailModal script when All Tasks view is open (so task can open in modal)
+    useEffect(() => {
+        if (!showAllTasksView || typeof window.TaskDetailModal === 'function') return;
+        const script = document.createElement('script');
+        script.src = `/dist/src/components/projects/TaskDetailModal.js?v=all-tasks-${Date.now()}`;
+        script.async = true;
+        script.onload = () => { if (window.TaskDetailModal) window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'TaskDetailModal' } })); };
+        document.body.appendChild(script);
+        return () => { script.remove(); };
     }, [showAllTasksView]);
     
     // Helper function to update project URL with tab/section/comment info
@@ -3731,6 +3744,37 @@ const Projects = () => {
             setShowAllTasksView(false);
             window.location.hash = `#/projects/${projectId}?tab=tasks&task=${encodeURIComponent(task.id)}`;
         };
+        const openTaskModal = async (task) => {
+            if (!task?.id || !window.DatabaseAPI?.makeRequest) return;
+            if (typeof window.TaskDetailModal !== 'function') {
+                openTaskInProject(task);
+                return;
+            }
+            setAllTasksModalLoading(true);
+            setAllTasksSelectedTask(null);
+            try {
+                const res = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(task.id)}`, { method: 'GET' });
+                const data = res?.data ?? res;
+                const fullTask = data?.task || data;
+                if (fullTask) setAllTasksSelectedTask(fullTask);
+                else openTaskInProject(task);
+            } catch (err) {
+                console.warn('All Tasks: failed to fetch task for modal', err);
+                openTaskInProject(task);
+            } finally {
+                setAllTasksModalLoading(false);
+            }
+        };
+        const closeAllTasksModal = () => setAllTasksSelectedTask(null);
+        const refetchAllTasksList = async () => {
+            if (!window.DatabaseAPI?.makeRequest) return;
+            try {
+                const res = await window.DatabaseAPI.makeRequest('/tasks?all=true', { method: 'GET' });
+                const data = res?.data ?? res;
+                const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+                setAllTasksList(tasks);
+            } catch (_) {}
+        };
         const handleAllTasksSort = (col) => {
             setAllTasksSortColumn(col);
             setAllTasksSortDir(prev => (allTasksSortColumn === col ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
@@ -3856,8 +3900,8 @@ const Projects = () => {
                                                 key={task.id}
                                                 role="button"
                                                 tabIndex={0}
-                                                onClick={() => openTaskInProject(task)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskInProject(task); } }}
+                                                onClick={() => openTaskModal(task)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskModal(task); } }}
                                                 className={`border-b cursor-pointer ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
                                             >
                                                 <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
@@ -3888,6 +3932,42 @@ const Projects = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Task detail modal: open task without leaving All Tasks */}
+                {allTasksModalLoading && (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]" aria-busy="true">
+                        <div className={`rounded-xl p-6 shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                            <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-500 border-t-transparent mx-auto mb-3"></div>
+                            <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Loading task...</p>
+                        </div>
+                    </div>
+                )}
+                {allTasksSelectedTask && typeof window.TaskDetailModal === 'function' && (
+                    React.createElement(window.TaskDetailModal, {
+                        task: allTasksSelectedTask,
+                        parentTask: null,
+                        customFieldDefinitions: [],
+                        taskLists: [{ id: 1, name: 'Tasks' }],
+                        project: {
+                            id: allTasksSelectedTask.projectId || allTasksSelectedTask.project?.id,
+                            name: allTasksSelectedTask.project?.name || '',
+                            clientName: allTasksSelectedTask.project?.clientName || ''
+                        },
+                        users: [],
+                        onClose: closeAllTasksModal,
+                        onUpdate: (updated) => {
+                            setAllTasksList(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
+                            setAllTasksSelectedTask(updated);
+                        },
+                        onDeleteTask: () => {
+                            closeAllTasksModal();
+                            refetchAllTasksList();
+                        },
+                        onAddSubtask: () => {},
+                        onViewSubtask: () => {},
+                        onDeleteSubtask: () => {}
+                    })
+                )}
             </div>
         );
     }
