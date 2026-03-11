@@ -5,15 +5,6 @@ import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson } from '../projects.js'
-import path from 'path'
-import fs from 'fs'
-import { fileURLToPath } from 'url'
-
-const __dirnameFile = path.dirname(fileURLToPath(import.meta.url))
-const DEBUG_LOG = path.join(__dirnameFile, '..', '..', '.cursor', 'debug-12ea86.log')
-function debugLog(payload) {
-  try { fs.appendFileSync(DEBUG_LOG, JSON.stringify({ ...payload, timestamp: Date.now() }) + '\n'); } catch (_) {}
-}
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
 let projectColumnsMigrated = false;
@@ -714,12 +705,6 @@ async function handler(req, res) {
           if (!weeklyFMSReviewSectionsJson) {
             weeklyFMSReviewSectionsJson = {};
           }
-          // #region agent log
-          const _years = weeklyFMSReviewSectionsJson ? Object.keys(weeklyFMSReviewSectionsJson) : [];
-          const _counts = {};
-          _years.forEach(y => { _counts[y] = Array.isArray(weeklyFMSReviewSectionsJson[y]) ? weeklyFMSReviewSectionsJson[y].length : 0; });
-          debugLog({ event: 'GET_weeklyFMS', projectId: id, years: _years, sectionCountByYear: _counts });
-          // #endregion
         } catch (e) {
           console.error('❌ Failed to convert weeklyFMSReviewSections from table:', e);
           // Fallback to JSON field
@@ -895,13 +880,6 @@ async function handler(req, res) {
       }
 
       body = body || {}
-
-      // #region agent log (file)
-      if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
-        const len = typeof body.weeklyFMSReviewSections === 'string' ? body.weeklyFMSReviewSections.length : 0;
-        debugLog({ event: 'PUT_body_weeklyFMS', projectId: id, payloadLength: len, method: req.method });
-      }
-      // #endregion
 
       // Validate project type - only allow General, Monthly Review, or Audit
       const allowedTypes = ['General', 'Monthly Review', 'Audit'];
@@ -1281,14 +1259,11 @@ async function handler(req, res) {
             ? body.weeklyFMSReviewSections.trim() || '{}'
             : JSON.stringify(body.weeklyFMSReviewSections);
           try {
-            await prisma.project.update({
-              where: { id },
-              data: { weeklyFMSReviewSections: payload }
-            });
-            debugLog({ event: 'PUT_followup_weeklyFMS_done', projectId: id });
+            await prisma.$executeRaw`
+              UPDATE "Project" SET "weeklyFMSReviewSections" = ${payload} WHERE id = ${id}
+            `;
           } catch (e) {
             console.error('⚠️ Follow-up weeklyFMSReviewSections update failed (main update may have succeeded):', e.message);
-            debugLog({ event: 'PUT_followup_weeklyFMS_error', projectId: id, error: e.message });
           }
         }
         
