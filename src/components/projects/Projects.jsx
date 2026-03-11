@@ -222,6 +222,8 @@ const Projects = () => {
     const [allTasksSortDir, setAllTasksSortDir] = useState('asc');
     const [allTasksSelectedTask, setAllTasksSelectedTask] = useState(null);
     const [allTasksModalLoading, setAllTasksModalLoading] = useState(false);
+    const [allTasksUsers, setAllTasksUsers] = useState([]);
+    const allTasksPrefetchedRef = React.useRef(false);
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -346,18 +348,39 @@ const Projects = () => {
         return () => window.removeEventListener('hashchange', handleHashChangeForTracker);
     }, []);
 
+    // Prefetch all tasks when on main projects list so All Tasks view opens with data immediately
+    useEffect(() => {
+        if (showAllTasksView || viewingProject || showProgressTracker) return;
+        if (allTasksPrefetchedRef.current || !window.DatabaseAPI?.makeRequest) return;
+        allTasksPrefetchedRef.current = true;
+        window.DatabaseAPI.makeRequest('/tasks?all=true', { method: 'GET' }).then(res => {
+            const data = res?.data ?? res;
+            const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+            setAllTasksList(tasks);
+        }).catch(() => {});
+    }, [showAllTasksView, viewingProject, showProgressTracker]);
+
     // Load all tasks when All Tasks view is opened
     useEffect(() => {
-        if (!showAllTasksView || !window.DatabaseAPI?.makeRequest) return;
+        if (!showAllTasksView) return;
+        if (!window.DatabaseAPI?.makeRequest) {
+            setAllTasksLoading(false);
+            setAllTasksError('Unable to load tasks. Please try again.');
+            return;
+        }
         let cancelled = false;
+        const hasCached = allTasksList.length > 0;
         const load = async () => {
-            setAllTasksLoading(true);
-            setAllTasksError(null);
+            if (!hasCached) {
+                setAllTasksLoading(true);
+                setAllTasksError(null);
+            }
             try {
                 const response = await window.DatabaseAPI.makeRequest('/tasks?all=true', { method: 'GET' });
+                if (cancelled) return;
                 const data = response?.data ?? response;
                 const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
-                if (!cancelled) setAllTasksList(tasks);
+                setAllTasksList(tasks);
             } catch (err) {
                 if (!cancelled) setAllTasksError(err?.message || 'Failed to load tasks');
             } finally {
@@ -377,6 +400,19 @@ const Projects = () => {
         script.onload = () => { if (window.TaskDetailModal) window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'TaskDetailModal' } })); };
         document.body.appendChild(script);
         return () => { script.remove(); };
+    }, [showAllTasksView]);
+
+    // Fetch users for All Tasks assignee dropdown
+    useEffect(() => {
+        if (!showAllTasksView || !window.DatabaseAPI?.getUsers) return;
+        let cancelled = false;
+        window.DatabaseAPI.getUsers().then(res => {
+            if (cancelled) return;
+            const data = res?.data ?? res;
+            const list = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+            setAllTasksUsers(list);
+        }).catch(() => {});
+        return () => { cancelled = true; };
     }, [showAllTasksView]);
     
     // Helper function to update project URL with tab/section/comment info
@@ -3775,6 +3811,33 @@ const Projects = () => {
                 setAllTasksList(tasks);
             } catch (_) {}
         };
+        const handleDeleteTaskInAllTasks = async (task) => {
+            if (!task?.id || !window.DatabaseAPI?.makeRequest) return;
+            if (!window.confirm(`Delete task "${(task.title || '').slice(0, 50)}${(task.title || '').length > 50 ? '…' : ''}"?`)) return;
+            try {
+                await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(task.id)}`, { method: 'DELETE' });
+                if (allTasksSelectedTask?.id === task.id) closeAllTasksModal();
+                await refetchAllTasksList();
+            } catch (err) {
+                console.warn('All Tasks: delete failed', err);
+                window.alert('Failed to delete task.');
+            }
+        };
+        const patchTaskInAllTasks = async (taskId, patch) => {
+            if (!taskId || !window.DatabaseAPI?.makeRequest) return;
+            try {
+                const res = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(patch)
+                });
+                const data = res?.data ?? res;
+                const updated = data?.task || data;
+                setAllTasksList(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t));
+                if (allTasksSelectedTask?.id === taskId) setAllTasksSelectedTask(prev => prev ? { ...prev, ...updated } : null);
+            } catch (err) {
+                console.warn('All Tasks: patch failed', err);
+            }
+        };
         const handleAllTasksSort = (col) => {
             setAllTasksSortColumn(col);
             setAllTasksSortDir(prev => (allTasksSortColumn === col ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
@@ -3907,22 +3970,79 @@ const Projects = () => {
                                                 <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
                                                 <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
                                                 <td className="py-2.5 px-2">{task.project?.clientName || '—'}</td>
-                                                <td className="py-2.5 px-2">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getTaskStatusColor(task.status)}`}>
-                                                        {task.status || '—'}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2.5 px-2">{task.priority || '—'}</td>
-                                                <td className="py-2.5 px-2">{task.assignee || '—'}</td>
-                                                <td className="py-2.5 px-2">{formatDueDate(task.dueDate)}</td>
                                                 <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openTaskInProject(task)}
-                                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                                                    <select
+                                                        value={task.status || ''}
+                                                        onChange={(e) => patchTaskInAllTasks(task.id, { status: e.target.value })}
+                                                        className={`w-full max-w-[140px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        aria-label="Status"
                                                     >
-                                                        Open in project
-                                                    </button>
+                                                        <option value="todo">To Do</option>
+                                                        <option value="in-progress">In Progress</option>
+                                                        <option value="in_progress">In Progress (alt)</option>
+                                                        <option value="completed">Completed</option>
+                                                        <option value="done">Done</option>
+                                                    </select>
+                                                </td>
+                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                    <select
+                                                        value={task.priority || 'Medium'}
+                                                        onChange={(e) => patchTaskInAllTasks(task.id, { priority: e.target.value })}
+                                                        className={`w-full max-w-[120px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        aria-label="Priority"
+                                                    >
+                                                        <option value="Low">Low</option>
+                                                        <option value="Medium">Medium</option>
+                                                        <option value="High">High</option>
+                                                    </select>
+                                                </td>
+                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                    <select
+                                                        value={task.assigneeId || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            const user = allTasksUsers.find(u => u.id === val);
+                                                            patchTaskInAllTasks(task.id, { assigneeId: val || null, assignee: user ? (user.name || '') : '' });
+                                                        }}
+                                                        className={`w-full max-w-[160px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        aria-label="Assignee"
+                                                    >
+                                                        <option value="">Unassigned</option>
+                                                        {allTasksUsers.map(u => (
+                                                            <option key={u.id} value={u.id}>{u.name || u.email || u.id}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                    <input
+                                                        type="date"
+                                                        value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
+                                                        onChange={(e) => patchTaskInAllTasks(task.id, { dueDate: e.target.value || null })}
+                                                        className={`w-full max-w-[140px] py-1.5 px-2 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-900'}`}
+                                                        aria-label="Due date"
+                                                    />
+                                                </td>
+                                                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openTaskInProject(task)}
+                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-blue-400 hover:bg-gray-700' : 'text-blue-600 hover:bg-gray-100'}`}
+                                                            title="Open in project"
+                                                            aria-label="Open in project"
+                                                        >
+                                                            <i className="fas fa-external-link-alt" aria-hidden="true"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteTaskInAllTasks(task)}
+                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-100'}`}
+                                                            title="Delete task"
+                                                            aria-label="Delete task"
+                                                        >
+                                                            <i className="fas fa-trash" aria-hidden="true"></i>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))
@@ -4296,7 +4416,11 @@ const Projects = () => {
                         </button>
                     </div>
                     <button 
-                        onClick={() => setShowAllTasksView(true)}
+                        onClick={() => {
+                            setAllTasksError(null);
+                            setShowAllTasksView(true);
+                            if (allTasksList.length === 0) setAllTasksLoading(true);
+                        }}
                         className={`px-4 py-2.5 rounded-lg transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 ${
                             isDark 
                                 ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' 
