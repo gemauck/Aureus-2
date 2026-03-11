@@ -1867,10 +1867,13 @@ function initializeProjectDetail() {
         return tasksList || tasks || [];
     };
     // Preserve comments when merging new tasks with previous state (avoids COMMENTS column disappearing after refresh)
+    // CRITICAL: Preserve tasks that exist only in prev (e.g. just-created tasks not yet in API/project response) so they never disappear when we merge with stale data.
     const mergeTaskComments = useCallback((prevTasks, nextTasks) => {
-        if (!Array.isArray(prevTasks) || !Array.isArray(nextTasks)) return nextTasks || [];
+        if (!Array.isArray(prevTasks)) return Array.isArray(nextTasks) ? nextTasks : [];
+        if (!Array.isArray(nextTasks)) return prevTasks;
+        const nextIds = new Set((nextTasks || []).map(t => String(t?.id)).filter(Boolean));
         const prevById = new Map(prevTasks.map(t => [String(t?.id), t]));
-        return nextTasks.map(task => {
+        const mergedFromNext = nextTasks.map(task => {
             const prev = prevById.get(String(task?.id));
             const hasComments = Array.isArray(task?.comments) && task.comments.length > 0;
             const prevHasComments = prev && Array.isArray(prev.comments) && prev.comments.length > 0;
@@ -1893,6 +1896,8 @@ function initializeProjectDetail() {
             }
             return merged;
         });
+        const prevOnly = prevTasks.filter(t => t?.id != null && !nextIds.has(String(t.id)));
+        return prevOnly.length ? [...mergedFromNext, ...prevOnly] : mergedFromNext;
     }, []);
     const initialTasks = getTasksFromProject(project);
     // Safety check: ensure initialTasks is always an array
@@ -1901,6 +1906,8 @@ function initializeProjectDetail() {
     const [viewingTaskParent, setViewingTaskParent] = useState(null);
     // Use a ref to store current tasks value to avoid TDZ issues in closures
     const tasksRef = useRef(initialTasks);
+    // Unique temp id for new tasks (avoids collision when adding two tasks in same millisecond — second API response would replace both and first task would disappear)
+    const nextTempTaskIdRef = useRef(0);
     // Drag-and-drop reorder: source (listId, taskIndex)
     const taskDragRef = useRef(null);
     const taskJustDroppedRef = useRef(false);
@@ -1920,11 +1927,24 @@ function initializeProjectDetail() {
     const [pendingModuleFromUrl, setPendingModuleFromUrl] = useState(null); // 'monthlyFMSReview' when URL asked for Monthly FMS before monthly state existed
     useEffect(() => {
         if (project?.id !== previousProjectIdRef.current) {
-            previousProjectIdRef.current = project?.id;
             const newTasks = getTasksFromProject(project);
             const safeNewTasks = Array.isArray(newTasks) ? newTasks : [];
-            setTasks(safeNewTasks);
-            tasksRef.current = safeNewTasks;
+            // #region agent log
+            fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:projectSyncEffect',message:'H1: project id changed, setting tasks from prop',data:{count:safeNewTasks.length},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            const isSwitchingProject = previousProjectIdRef.current != null && previousProjectIdRef.current !== project?.id;
+            previousProjectIdRef.current = project?.id;
+            setTasks(prev => {
+                const merged = mergeTaskComments(prev, safeNewTasks);
+                if (isSwitchingProject) {
+                    return merged.filter(t => t.projectId == null || Number(t.projectId) === Number(project?.id));
+                }
+                return merged;
+            });
+            tasksRef.current = mergeTaskComments(tasksRef.current || [], safeNewTasks);
+            if (isSwitchingProject) {
+                tasksRef.current = tasksRef.current.filter(t => t.projectId == null || Number(t.projectId) === Number(project?.id));
+            }
             console.log('✅ ProjectDetail: Tasks updated from project prop (instant):', safeNewTasks.length);
         } else {
             const newTasks = getTasksFromProject(project);
@@ -1932,6 +1952,9 @@ function initializeProjectDetail() {
             const currentTaskIds = (tasks || []).map(t => t?.id).filter(Boolean).sort().join(',');
             const newTaskIds = safeNewTasks.map(t => t?.id).filter(Boolean).sort().join(',');
             if (currentTaskIds !== newTaskIds || safeNewTasks.length !== (tasks || []).length) {
+                // #region agent log
+                fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:projectSyncEffect',message:'H1: overwriting tasks from project prop',data:{prevCount:(tasks||[]).length,newCount:safeNewTasks.length,currentIds:currentTaskIds,newIds:newTaskIds},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
                 setTasks(prev => mergeTaskComments(prev, safeNewTasks));
                 tasksRef.current = mergeTaskComments(tasksRef.current || [], safeNewTasks);
             }
@@ -1961,6 +1984,9 @@ function initializeProjectDetail() {
             const taskArray = Array.isArray(data?.tasks) ? data.tasks : Array.isArray(data?.data?.tasks) ? data.data.tasks : Array.isArray(response?.tasks) ? response.tasks : null;
 
             if (taskArray && taskArray.length > 0) {
+                // #region agent log
+                fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:loadTasksFromAPI',message:'H2: API returning tasks (caller will merge)',data:{projectId,taskCount:taskArray.length},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
                 console.log('✅ ProjectDetail: Loaded tasks from Task API:', {
                     projectId,
                     taskCount: taskArray.length
@@ -1986,11 +2012,17 @@ function initializeProjectDetail() {
         const projectTasks = getTasksFromProject(project);
         if (Array.isArray(projectTasks) && projectTasks.length > 0) {
             console.log('⚡ ProjectDetail: Using tasks from project prop (no API call needed):', projectTasks.length);
+            // #region agent log
+            fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:projectTasksMerge',message:'H2: setTasks(merge) from projectTasks on load',data:{projectTaskCount:projectTasks.length},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             setTasks(prev => mergeTaskComments(prev, projectTasks));
             tasksRef.current = mergeTaskComments(tasksRef.current || [], projectTasks);
             const refreshInterval = setInterval(() => {
                 loadTasksFromAPI(projectId).then(apiTasks => {
                     if (apiTasks && Array.isArray(apiTasks)) {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:intervalMerge',message:'H2: setTasks(mergeTaskComments(prev,apiTasks))',data:{apiTaskCount:apiTasks.length},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
                         setTasks(prev => mergeTaskComments(prev, apiTasks));
                         tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
                     }
@@ -2001,6 +2033,9 @@ function initializeProjectDetail() {
             const loadTasks = async () => {
                 const apiTasks = await loadTasksFromAPI(projectId);
                 if (apiTasks != null && Array.isArray(apiTasks)) {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:loadTasksMerge',message:'H2: setTasks(mergeTaskComments(prev,apiTasks)) initial/30s',data:{apiTaskCount:apiTasks.length},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
                     setTasks(prev => mergeTaskComments(prev, apiTasks));
                     tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
                     console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
@@ -5326,6 +5361,10 @@ function initializeProjectDetail() {
         );
         const isNewTask = !updatedTaskData.id || (!existingTask && !existingSubtask);
         
+        // #region agent log
+        if (isNewTask) fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:handleUpdateTaskFromDetail',message:'H4: new task - safeTasks count',data:{safeTasksCount:safeTasks.length},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        
         console.log('🔍 Task update check:', {
             taskId: updatedTaskData.id,
             hasId: !!updatedTaskData.id,
@@ -5525,9 +5564,11 @@ function initializeProjectDetail() {
         let updatedTasks;
         
         if (isNewTask) {
-            // Use the ID from updatedTaskData if it exists (set by handleSave), otherwise generate one
-            const tempTaskId = updatedTaskData.id || Date.now();
-            
+            // Use the ID from updatedTaskData if it exists (set by handleSave), otherwise generate a unique temp id (ref counter avoids same-millisecond collision)
+            const tempTaskId = updatedTaskData.id || `temp-${Date.now()}-${++nextTempTaskIdRef.current}`;
+            // #region agent log
+            fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:tempTaskId',message:'H5: new task tempTaskId',data:{tempTaskId,safeTasksLength:(Array.isArray(tasks)?tasks:[]).length},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             // CRITICAL: Ensure tasks is always an array
             const safeTasks = Array.isArray(tasks) ? tasks : [];
             if (viewingTaskParent) {
@@ -5551,7 +5592,7 @@ function initializeProjectDetail() {
                 const newTask = {
                     ...updatedTaskData,
                     id: tempTaskId,
-                    subtasks: [],
+                    subtasks: Array.isArray(updatedTaskData.subtasks) ? updatedTaskData.subtasks : [],
                     status: updatedTaskData.status || 'To Do'
                 };
                 console.log('➕ Creating new task:', {
@@ -5665,8 +5706,20 @@ function initializeProjectDetail() {
         
         // Update state with the new tasks array
         console.log('🔄 Updating tasks state. New tasks count:', updatedTasks.length);
-        setTasks(updatedTasks);
-        tasksRef.current = updatedTasks; // Also update ref immediately
+        // #region agent log
+        if (isNewTask) fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:setTasksBeforeSave',message:'H4: setTasks(updatedTasks) before API',data:{updatedTasksCount:updatedTasks.length},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (isNewTask && !viewingTaskParent) {
+            const newTask = updatedTasks[updatedTasks.length - 1];
+            setTasks(prev => {
+                const next = [...(Array.isArray(prev) ? prev : []), newTask];
+                tasksRef.current = next;
+                return next;
+            });
+        } else {
+            setTasks(updatedTasks);
+            tasksRef.current = updatedTasks;
+        }
         
         // Set flag to skip the useEffect save to prevent race condition
         // This prevents the debounced save from overwriting our immediate save
@@ -5788,8 +5841,44 @@ function initializeProjectDetail() {
                                 subscribers: savedTask.subscribers || [],
                                 customFields: savedTask.customFields || {}
                             };
-                            
                             const tempTaskId = taskToSave.id; // This is the temporary ID from updatedTaskData
+                            // If this was a new top-level task created with draft subtasks, create each subtask via API
+                            if (!isSubtask && Array.isArray(taskToSave.subtasks) && taskToSave.subtasks.length > 0) {
+                                const savedSubtasks = [];
+                                for (const draft of taskToSave.subtasks) {
+                                    const subtaskPayload = {
+                                        projectId: project.id,
+                                        title: (draft.title && String(draft.title).trim()) ? String(draft.title).trim() : 'Untitled subtask',
+                                        description: draft.description || '',
+                                        status: draft.status || 'To Do',
+                                        priority: draft.priority || 'Medium',
+                                        assignee: draft.assignee || '',
+                                        assigneeId: draft.assigneeId || null,
+                                        dueDate: draft.dueDate || null,
+                                        listId: draft.listId || savedTask.listId || null,
+                                        parentTaskId: savedTask.id
+                                    };
+                                    try {
+                                        const subRes = await window.DatabaseAPI.makeRequest('/tasks', {
+                                            method: 'POST',
+                                            body: JSON.stringify(subtaskPayload)
+                                        });
+                                        const savedSub = subRes?.data?.task || subRes?.task || subRes?.data;
+                                        if (savedSub?.id) {
+                                            savedSubtasks.push({
+                                                ...savedSub,
+                                                comments: savedSub.comments || [],
+                                                tags: savedSub.tags || [],
+                                                attachments: savedSub.attachments || [],
+                                                checklist: savedSub.checklist || []
+                                            });
+                                        }
+                                    } catch (subErr) {
+                                        console.warn('⚠️ Failed to create subtask:', draft.title || draft.id, subErr);
+                                    }
+                                }
+                                savedTaskFormatted.subtasks = savedSubtasks;
+                            }
                             
                             if (isSubtask && viewingTaskParent) {
                                 // Handle subtask: update within parent task's subtasks array
@@ -5832,6 +5921,10 @@ function initializeProjectDetail() {
                                     const updated = prev.map(t => 
                                         t.id === tempTaskId ? savedTaskFormatted : t
                                     );
+                                    const found = prev.some(t => t.id === tempTaskId);
+                                    // #region agent log
+                                    fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:postCreateSetTasks',message:'H3: replacing temp with saved task',data:{prevCount:prev.length,tempTaskId,found,updatedCount:updated.length},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
+                                    // #endregion
                                     // If task wasn't found (shouldn't happen), add it anyway
                                     if (!prev.find(t => t.id === tempTaskId)) {
                                         console.warn('⚠️ Temporary task not found in state, adding saved task');
@@ -6109,6 +6202,9 @@ function initializeProjectDetail() {
                     const fetchedTasks = tasksResponse?.data?.tasks || tasksResponse?.tasks || [];
                     if (Array.isArray(fetchedTasks) && fetchedTasks.length >= 0) {
                         console.log('✅ Refreshed tasks from server after subtask deletion. Task count:', fetchedTasks.length);
+                        // #region agent log
+                        fetch('http://127.0.0.1:7848/ingest/f55aa601-475c-401b-82fb-df5e098c2b9e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'40abce'},body:JSON.stringify({sessionId:'40abce',location:'ProjectDetail.jsx:afterSubtaskDelete',message:'H2: setTasks(merge) after subtask delete',data:{fetchedCount:fetchedTasks.length},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
                         setTasks(prev => mergeTaskComments(prev, fetchedTasks));
                         tasksRef.current = mergeTaskComments(tasksRef.current || [], fetchedTasks);
                     }

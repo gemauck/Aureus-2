@@ -1995,60 +1995,84 @@ const TaskDetailModal = ({
                                     </div>
                                 )}
 
-                                {/* Checklist (inline on Details - add sub-tasks when creating or editing) */}
-                                <div>
-                                    <h3 className="text-xs font-medium text-gray-700 mb-2">
-                                        <i className="fas fa-check-square mr-1.5 text-gray-400"></i>
-                                        Checklist ({Array.isArray(checklist) ? checklist.filter(i => i.completed).length : 0}/{Array.isArray(checklist) ? checklist.length : 0})
-                                    </h3>
-                                    <div className="flex gap-2 mb-2">
-                                        <input
-                                            type="text"
-                                            value={newChecklistItem}
-                                            onChange={(e) => setNewChecklistItem(e.target.value)}
-                                            onKeyPress={(e) => e.key === 'Enter' && handleAddChecklistItem()}
-                                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            placeholder="Add checklist item..."
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleAddChecklistItem}
-                                            className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                        >
-                                            <i className="fas fa-plus"></i>
-                                        </button>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        {!Array.isArray(checklist) || checklist.length === 0 ? (
-                                            <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg border border-gray-200">
-                                                <p className="text-sm">No checklist items yet</p>
-                                            </div>
-                                        ) : (
-                                            checklist.map(item => (
-                                                <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5 border border-gray-200">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={item.completed}
-                                                        onChange={() => handleToggleChecklistItem(item.id)}
-                                                        className="w-4 h-4 text-primary-600 rounded focus:ring-2 focus:ring-primary-500"
-                                                    />
-                                                    <span className={`flex-1 text-sm ${item.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
-                                                        {item.text}
-                                                    </span>
+                                {/* Subtasks when creating: add child tasks at the same time as the parent */}
+                                {isCreating && !isSubtask && (
+                                    <div>
+                                        <h3 className="text-xs font-medium text-gray-700 mb-2">
+                                            <i className="fas fa-tasks mr-1.5 text-gray-400"></i>
+                                            Subtasks ({subtasks.length})
+                                        </h3>
+                                        <p className="text-[11px] text-gray-500 mb-2">Add child tasks that will be created with this task.</p>
+                                        <div className="space-y-2 mb-2">
+                                            {subtasks.map(draft => (
+                                                <div key={draft.id} className="flex items-start gap-2 bg-gray-50 rounded-lg p-2.5 border border-gray-200">
+                                                    <div className="flex-1 min-w-0 space-y-1.5">
+                                                        <input
+                                                            type="text"
+                                                            value={draft.title || ''}
+                                                            onChange={(e) => setEditedTask(prev => ({
+                                                                ...prev,
+                                                                subtasks: (prev.subtasks || []).map(st =>
+                                                                    st.id === draft.id ? { ...st, title: e.target.value } : st
+                                                                )
+                                                            }))}
+                                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                                            placeholder="Subtask title..."
+                                                        />
+                                                        <textarea
+                                                            value={draft.description || ''}
+                                                            onChange={(e) => setEditedTask(prev => ({
+                                                                ...prev,
+                                                                subtasks: (prev.subtasks || []).map(st =>
+                                                                    st.id === draft.id ? { ...st, description: e.target.value } : st
+                                                                )
+                                                            }))}
+                                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                                            rows={2}
+                                                            placeholder="Description (optional)"
+                                                        />
+                                                    </div>
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteChecklistItem(item.id)}
-                                                        className="text-gray-400 hover:text-red-600 p-1"
+                                                        onClick={() => setEditedTask(prev => ({
+                                                            ...prev,
+                                                            subtasks: (prev.subtasks || []).filter(st => st.id !== draft.id)
+                                                        }))}
+                                                        className="text-gray-400 hover:text-red-600 p-1.5 shrink-0"
+                                                        title="Remove subtask"
                                                     >
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
                                                 </div>
-                                            ))
-                                        )}
+                                            ))}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditedTask(prev => ({
+                                                ...prev,
+                                                subtasks: [
+                                                    ...(prev.subtasks || []),
+                                                    {
+                                                        id: 'draft-' + Date.now(),
+                                                        title: '',
+                                                        description: '',
+                                                        listId: prev.listId,
+                                                        status: 'To Do',
+                                                        priority: 'Medium',
+                                                        assignee: '',
+                                                        dueDate: ''
+                                                    }
+                                                ]
+                                            }))}
+                                            className="px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 font-medium"
+                                        >
+                                            <i className="fas fa-plus mr-1"></i>
+                                            Add subtask
+                                        </button>
                                     </div>
-                                </div>
+                                )}
 
-                                {/* Subtasks Section */}
+                                {/* Subtasks Section (existing task - open modal to add/view) */}
                                 {!isCreating && !isSubtask && (
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
