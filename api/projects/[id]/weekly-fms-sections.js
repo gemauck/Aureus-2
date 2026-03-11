@@ -39,12 +39,23 @@ async function handler(req, res) {
       ? (raw.trim() || '{}')
       : JSON.stringify(raw != null && typeof raw === 'object' ? raw : {})
 
+  let sectionCount = 0
+  try {
+    const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const year of Object.keys(parsed)) {
+        const arr = parsed[year]
+        sectionCount += Array.isArray(arr) ? arr.length : 0
+      }
+    }
+  } catch (_) {}
+  console.log('[weekly-fms-sections] PUT', id, 'payload length', payload.length, 'section count', sectionCount)
+
   try {
     const project = await prisma.project.update({
       where: { id },
       data: { weeklyFMSReviewSections: payload }
     })
-    console.log('[weekly-fms-sections] Updated project', id, 'sections length', payload.length)
     return ok(res, { project: { id: project.id, weeklyFMSReviewSections: payload } })
   } catch (e) {
     if (e.code === 'P2025') {

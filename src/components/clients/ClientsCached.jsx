@@ -496,7 +496,7 @@ const Clients = React.memo(() => {
             followUps: lead.followUps || [],
             projectIds: lead.projectIds || [],
             comments: lead.comments || [],
-            sites: [],
+            sites: lead.sites || lead.clientSites || [],
             opportunities: [],
             activityLog: [{
                 id: Date.now(),
@@ -1040,11 +1040,12 @@ const Clients = React.memo(() => {
 
             <div className="p-6">
                 {(() => {
-                    const Modal = window.LeadDetailModal;
+                    const Modal = window.ClientDetailModal;
                     return Modal ? (
                         <Modal
                             key={selectedLead?.id || 'new-lead'}
-                            lead={selectedLead}
+                            client={selectedLead}
+                            entityType="lead"
                             onSave={handleSaveLead}
                             onClose={() => {
                                 setViewMode('leads');
@@ -1063,7 +1064,7 @@ const Clients = React.memo(() => {
                     ) : (
                         <div className="text-center py-8 text-gray-500">
                             <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                            <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
+                            <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
                         </div>
                     );
                 })()}

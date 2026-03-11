@@ -2088,7 +2088,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             isLoadingClientRef.current = true;
             
             try {
-                const response = await window.api.getClient(clientId);
+                const getOne = isLead
+                    ? (window.DatabaseAPI?.getLead || window.api?.getLead)
+                    : (window.DatabaseAPI?.getClient || window.api?.getClient);
+                const response = typeof getOne === 'function'
+                    ? await getOne(clientId, isLead ? undefined : { forceRefresh: true })
+                    : null;
+                const dbClient = isLead
+                    ? (response?.data?.lead ?? response?.lead ?? response?.data)
+                    : (response?.data?.client ?? response?.client ?? response?.data);
                 
                 // Check if response indicates an error
                 if (response?.error || response?.status === 'error') {

@@ -6615,7 +6615,7 @@ const Clients = React.memo(() => {
                 followUps: [],
                 projectIds: lead.projectIds || [],
                 comments: lead.comments || [],
-                sites: [],
+                sites: lead.sites || lead.clientSites || [],
                 services: lead.services || [],
                 activityLog: [{
                     id: Date.now(),

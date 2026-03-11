@@ -353,7 +353,7 @@ const ClientsDatabaseFirst = () => {
                 followUps: [],
                 projectIds: [],
                 comments: lead.comments || [],
-                sites: [],
+                sites: lead.sites || lead.clientSites || [],
                 opportunities: [],
                 contracts: [],
                 activityLog: [{
@@ -806,10 +806,11 @@ const ClientsDatabaseFirst = () => {
                     
                     <div className="flex-1 overflow-y-auto">
                         {(() => {
-                            const Modal = window.LeadDetailModal;
+                            const Modal = window.ClientDetailModal;
                             return Modal ? (
                                 <Modal
-                                    lead={selectedLead}
+                                    client={selectedLead}
+                                    entityType="lead"
                                     onSave={handleSaveLead}
                                     onClose={() => {
                                         setViewMode('leads');
@@ -827,7 +828,7 @@ const ClientsDatabaseFirst = () => {
                             ) : (
                                 <div className="text-center py-8 text-gray-500">
                                     <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                                    <p>LeadDetailModal not loaded. Please refresh.</p>
+                                    <p>ClientDetailModal not loaded. Please refresh.</p>
                                 </div>
                             );
                         })()}

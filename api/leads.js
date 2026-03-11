@@ -1,5 +1,7 @@
 // Leads API endpoint
 import { Prisma } from '@prisma/client'
+import fs from 'fs'
+import path from 'path'
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
@@ -14,6 +16,10 @@ import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_T
 // See: api/_lib/clientJsonFields.js
 
 async function handler(req, res) {
+  // #region agent log
+  const DEBUG_LOG_PATH = '/Users/gemau/Documents/Project ERP/abcotronics-erp-modular/.cursor/debug-fc1652.log'
+  const debugAppend = (payload) => { try { const dir = path.dirname(DEBUG_LOG_PATH); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({ sessionId: 'fc1652', ...payload, timestamp: payload.timestamp || Date.now() }) + '\n') } catch (_) {} }
+  // #endregion
   try {
     
     // Parse the URL path - strip /api/ prefix if present
@@ -667,8 +673,14 @@ async function handler(req, res) {
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
         
+        // #region agent log
+        debugAppend({ location: 'api/leads.js:GET list', message: 'GET /api/leads success', data: { count: parsedLeads.length }, hypothesisId: 'A', runId: 'crm' })
+        // #endregion
         return ok(res, { leads: parsedLeads })
       } catch (dbError) {
+        // #region agent log
+        debugAppend({ location: 'api/leads.js:GET list catch', message: 'GET /api/leads error', data: { message: dbError.message, code: dbError.code }, hypothesisId: 'A', runId: 'crm' })
+        // #endregion
         // Log the error immediately with full details
         console.error('❌ Database error in GET /api/leads:', {
           message: dbError.message,
@@ -744,6 +756,10 @@ async function handler(req, res) {
         const trimmed = String(body.status).trim()
         return trimmed ? trimmed : 'Potential'
       })()
+
+      // #region agent log
+      debugAppend({ location: 'api/leads.js:POST create', message: 'POST /api/leads body status vs normalized', data: { bodyStatus: body.status, normalizedStatus }, hypothesisId: 'C', runId: 'crm' })
+      // #endregion
 
       const leadData = {
         name: String(body.name).trim(),
@@ -1247,7 +1263,9 @@ async function handler(req, res) {
         const parsedLead = parseClientJsonFields(lead)
         parsedLead.isStarred = false // StarredClient table doesn't exist
         
-        
+        // #region agent log
+        debugAppend({ location: 'api/leads.js:POST create response', message: 'Created lead status', data: { savedStatus: parsedLead.status, leadId: parsedLead.id }, hypothesisId: 'C', runId: 'crm' })
+        // #endregion
         return created(res, { lead: parsedLead })
       } catch (dbError) {
         console.error('❌ Database error creating lead:', dbError)
@@ -1309,8 +1327,14 @@ async function handler(req, res) {
           
           // Phase 3: Parse using shared function which handles normalized tables
           const parsedLead = parseClientJsonFields(lead)
+          // #region agent log
+          debugAppend({ location: 'api/leads.js:GET single lead', message: 'GET /api/leads/[id] success', data: { leadId: parsedLead.id, status: parsedLead.status }, hypothesisId: 'B', runId: 'crm' })
+          // #endregion
           return ok(res, { lead: parsedLead })
         } catch (dbError) {
+          // #region agent log
+          debugAppend({ location: 'api/leads.js:GET single lead catch', message: 'GET /api/leads/[id] error', data: { message: dbError.message, id }, hypothesisId: 'B', runId: 'crm' })
+          // #endregion
           console.error('❌ Database error getting lead:', dbError)
           return serverError(res, 'Failed to get lead', dbError.message)
         }
@@ -1340,6 +1364,9 @@ async function handler(req, res) {
         if (body.industry !== undefined) updateData.industry = body.industry
         if (body.status !== undefined) updateData.status = body.status
         if (body.stage !== undefined) updateData.stage = body.stage
+        // #region agent log
+        debugAppend({ location: 'api/leads.js:PATCH update', message: 'PATCH /api/leads/[id] body vs updateData', data: { leadId: id, bodyStatus: body.status, updateDataStatus: updateData.status }, hypothesisId: 'D', runId: 'crm' })
+        // #endregion
         if (body.revenue !== undefined) updateData.revenue = parseFloat(body.revenue) || 0
         if (body.value !== undefined) updateData.value = parseFloat(body.value) || 0
         if (body.probability !== undefined) updateData.probability = parseInt(body.probability) || 0
@@ -1820,6 +1847,9 @@ async function handler(req, res) {
         // Parse JSON fields before returning using shared utility
         const parsedLead = parseClientJsonFields(lead)
         
+        // #region agent log
+        debugAppend({ location: 'api/leads.js:PATCH response', message: 'PATCH /api/leads/[id] saved status', data: { leadId: id, savedStatus: parsedLead.status }, hypothesisId: 'D', runId: 'crm' })
+        // #endregion
         return ok(res, { lead: parsedLead })
         } catch (dbError) {
           console.error('❌ Database error updating lead:', dbError)

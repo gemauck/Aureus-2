@@ -1,7 +1,6 @@
 // Mobile-optimized Clients component
 const { useState, useEffect } = React;
 const ClientDetailModal = window.ClientDetailModal;
-const LeadDetailModal = window.LeadDetailModal;
 
 const ClientsMobile = () => {
     const [viewMode, setViewMode] = useState('clients');
@@ -581,8 +580,9 @@ const ClientsMobile = () => {
                                 {isEditing ? 'View' : 'Edit'}
                             </button>
                         </div>
-                        <LeadDetailModal
-                            lead={selectedLead}
+                        <ClientDetailModal
+                            client={selectedLead}
+                            entityType="lead"
                             onSave={async (leadData) => {
                                 try {
                                     const token = storage.getToken();

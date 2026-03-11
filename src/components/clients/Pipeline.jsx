@@ -2423,7 +2423,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     const filteredItems = getFilteredItems();
-    const LeadDetailModalComponent = window.LeadDetailModal;
+    const ClientDetailModalComponent = window.ClientDetailModal;
     const OpportunityDetailModalComponent = window.OpportunityDetailModal;
     const availableProjects = storage?.getProjects?.() || [];
 
@@ -3405,10 +3405,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
             )}
 
             {/* Fallback detail modals when integration callbacks are unavailable */}
-            {!onOpenLead && fallbackDeal?.type === 'lead' && LeadDetailModalComponent && (
-                <LeadDetailModalComponent
+            {!onOpenLead && fallbackDeal?.type === 'lead' && ClientDetailModalComponent && (
+                <ClientDetailModalComponent
                     key={`fallback-lead-${fallbackDeal.id}`}
-                    leadId={fallbackDeal.id}
+                    client={fallbackDeal.data ? { ...fallbackDeal.data, id: fallbackDeal.id } : { id: fallbackDeal.id }}
+                    entityType="lead"
                     onClose={() => closeFallbackDetail(true)}
                     allProjects={availableProjects}
                     isFullPage={false}
@@ -3425,7 +3426,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 />
             )}
 
-            {(fallbackDeal?.type === 'lead' && !LeadDetailModalComponent && !onOpenLead) && (
+            {(fallbackDeal?.type === 'lead' && !ClientDetailModalComponent && !onOpenLead) && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
                     <div className="bg-white rounded-xl p-6 shadow-2xl max-w-md text-center space-y-4">
                         <div className="text-primary-600 text-3xl">
