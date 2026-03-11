@@ -778,11 +778,13 @@ const MainLayout = () => {
         };
         
         checkProjects();
-        
+        // Aggressive polling in first 500ms so Projects section appears as soon as script registers
+        const fastChecks = [0, 25, 50, 100, 200, 350, 500].map(t => setTimeout(checkProjects, t));
         const interval = setInterval(checkProjects, 500);
         const timeout = setTimeout(() => clearInterval(interval), 10000);
         
         return () => {
+            fastChecks.forEach(clearTimeout);
             clearInterval(interval);
             clearTimeout(timeout);
         };

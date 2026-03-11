@@ -2150,7 +2150,6 @@ const Projects = () => {
             return;
         }
         
-        // Wait a bit for lazy loader to finish, then check again
         const checkForProjectDetail = () => {
             if (window.ProjectDetail) {
                 setProjectDetailAvailable(true);
@@ -2159,18 +2158,25 @@ const Projects = () => {
             return false;
         };
         
-        // Check immediately
         if (checkForProjectDetail()) return;
         
-        // Wait for lazy loader to complete (max 3 seconds)
+        // Start preloading in background immediately (don't wait for lazy loader)
+        const preloadTimer = setTimeout(() => {
+            if (window.ProjectDetail) {
+                setProjectDetailAvailable(true);
+                return;
+            }
+            loadProjectDetail().catch(() => {});
+        }, 150);
+        
+        // Also poll briefly in case lazy loader registers it quickly (max 1s)
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 10;
         const checkInterval = setInterval(() => {
             attempts++;
             if (checkForProjectDetail() || attempts >= maxAttempts) {
                 clearInterval(checkInterval);
                 if (!window.ProjectDetail && attempts >= maxAttempts) {
-                    // Try to load manually
                     loadProjectDetail().catch(err => {
                         console.warn('⚠️ Projects: Failed to proactively load ProjectDetail (will retry when needed):', err.message);
                     });
@@ -2178,7 +2184,10 @@ const Projects = () => {
             }
         }, 100);
         
-        return () => clearInterval(checkInterval);
+        return () => {
+            clearTimeout(preloadTimer);
+            clearInterval(checkInterval);
+        };
     }, []); // Only run once on mount
 
     // BULLETPROOF ProjectDetail loader with multiple strategies and retries
@@ -2468,10 +2477,10 @@ const Projects = () => {
                 return;
             }
             
-            // Try to get clients with timeout and error handling
+            // Try to get clients with timeout and error handling (short timeout so Projects UI isn't delayed)
             const getClientsPromise = window.dataService.getClients();
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Client sync timeout')), 5000)
+                setTimeout(() => reject(new Error('Client sync timeout')), 2000)
             );
             
             const clients = await Promise.race([getClientsPromise, timeoutPromise]).catch(error => {
@@ -2591,6 +2600,11 @@ const Projects = () => {
     };
 
     const handleViewProject = async (project) => {
+        // Skip redundant work if already viewing this project and detail is ready
+        if (project?.id && viewingProject?.id === project.id && projectDetailAvailable) {
+            return;
+        }
+        
         console.log('🔵 handleViewProject called with project:', project?.id, project?.name);
         
         // Prevent duplicate calls for the same project within 500ms
