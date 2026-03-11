@@ -881,6 +881,22 @@ async function handler(req, res) {
 
       body = body || {}
 
+      // Persist weeklyFMSReviewSections immediately when present (e.g. section delete).
+      // Do this before the main transaction so the column is always saved even if the rest of the PUT fails.
+      if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+        const payload = typeof body.weeklyFMSReviewSections === 'string'
+          ? body.weeklyFMSReviewSections.trim() || '{}'
+          : JSON.stringify(body.weeklyFMSReviewSections);
+        try {
+          await prisma.project.update({
+            where: { id },
+            data: { weeklyFMSReviewSections: payload }
+          });
+        } catch (e) {
+          console.error('⚠️ Early weeklyFMSReviewSections update failed:', e.message);
+        }
+      }
+
       // Validate project type - only allow General, Monthly Review, or Audit
       const allowedTypes = ['General', 'Monthly Review', 'Audit'];
       if (body.type && !allowedTypes.includes(body.type)) {
