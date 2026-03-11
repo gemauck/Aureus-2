@@ -4037,8 +4037,8 @@ const Projects = () => {
                                                         aria-label="Assignee"
                                                     >
                                                         <option value="">Unassigned</option>
-                                                        {task.assigneeId && task.assignee && !allTasksUsers.some(u => String(u.id) === String(task.assigneeId)) && (
-                                                            <option value={String(task.assigneeId)}>{task.assignee}</option>
+                                                        {task.assigneeId && !allTasksUsers.some(u => String(u.id) === String(task.assigneeId)) && (
+                                                            <option value={String(task.assigneeId)}>{task.assignee || 'Assigned'}</option>
                                                         )}
                                                         {allTasksUsers.map(u => (
                                                             <option key={u.id} value={String(u.id)}>{u.name || u.email || u.id}</option>

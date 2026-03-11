@@ -345,10 +345,26 @@ async function handler(req, res) {
             orderBy: [{ updatedAt: 'desc' }],
             take: 500
           });
-          const transformedTasks = tasks.map(task => transformTask(task, {
-            includeComments: false,
-            includeSubtasks: false
-          }));
+          // Ensure every task with assigneeId has assignee name (in case assigneeUser was null)
+          const missingAssigneeIds = [...new Set(tasks.filter(t => t.assigneeId && !(t.assignee || t.assigneeUser?.name)).map(t => t.assigneeId))];
+          let assigneeNames = {};
+          if (missingAssigneeIds.length > 0) {
+            const users = await prisma.user.findMany({
+              where: { id: { in: missingAssigneeIds } },
+              select: { id: true, name: true }
+            });
+            users.forEach(u => { assigneeNames[u.id] = u.name || ''; });
+          }
+          const transformedTasks = tasks.map(task => {
+            const transformed = transformTask(task, {
+              includeComments: false,
+              includeSubtasks: false
+            });
+            if (transformed.assigneeId && !transformed.assignee && assigneeNames[transformed.assigneeId]) {
+              transformed.assignee = assigneeNames[transformed.assigneeId];
+            }
+            return transformed;
+          });
           return ok(res, { tasks: transformedTasks });
         } catch (queryError) {
           console.error('❌ Error fetching all tasks:', queryError.message);
