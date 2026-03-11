@@ -3949,7 +3949,7 @@ const Projects = () => {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm border-collapse">
+                            <table className="w-full text-sm border-collapse [&_th:first-child]:pl-4 [&_td:first-child]:pl-4">
                                 <thead>
                                     <tr className={isDark ? 'bg-gray-800/50 border-b border-gray-700' : 'bg-gray-50 border-b border-gray-200'}>
                                         <SortableTh column="task" label="Task" />
