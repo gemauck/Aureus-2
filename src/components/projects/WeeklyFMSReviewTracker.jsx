@@ -1583,7 +1583,6 @@ const gridColumns = React.useMemo(() => (
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
         // Compute the new state synchronously so we can save it reliably (ref is updated in setState updater which runs async)
-        const currentState = sectionsRef.current || {};
         const yearSections = currentState[selectedYear] || [];
         const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
         const updatedSectionsByYear = { ...currentState, [selectedYear]: filtered };
