@@ -100,6 +100,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     const getSnapshotKey = (projectId) => projectId ? `weeklyFMSReviewSnapshot_${projectId}` : null;
 
+    // Save weekly FMS sections via dedicated endpoint (guarantees persistence; avoids full-project PUT)
+    const saveWeeklyFMSToDedicatedEndpoint = useCallback(async (projectId, serializedPayload) => {
+        const token = (typeof window !== 'undefined' && window.storage?.getToken) ? window.storage.getToken() : null;
+        const url = `${window.location.origin}/api/projects/${projectId}/weekly-fms-sections`;
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ weeklyFMSReviewSections: serializedPayload })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err?.error?.message || `Save failed: ${res.status}`);
+        }
+        const data = await res.json().catch(() => ({}));
+        return data?.data || data;
+    }, []);
+
     // Year selection with persistence
     const YEAR_STORAGE_PREFIX = 'weeklyFMSReviewSelectedYear_';
     const getInitialSelectedYear = () => {
@@ -739,24 +759,31 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         isSavingRef.current = true;
         
         try {
-            // Prefer dedicated endpoint (core bundle) so section changes always persist
+            // Prefer dedicated endpoint (direct fetch) so section changes always persist
             let result;
-            if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
-                result = await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
-                if (!options.skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    const updated = result?.data?.project || result?.project || result?.data;
-                    if (updated) {
-                        window.updateViewingProject({ ...updated, weeklyFMSReviewSections: serialized });
-                    }
+            try {
+                result = await saveWeeklyFMSToDedicatedEndpoint(project.id, serialized);
+            } catch (directErr) {
+                console.warn('Dedicated endpoint save failed, trying fallback:', directErr.message);
+                if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+                    result = await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
+                } else if (apiRef.current?.saveWeeklyFMSReviewSections) {
+                    result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
+                } else if (window.DatabaseAPI?.updateProject) {
+                    result = await window.DatabaseAPI.updateProject(project.id, {
+                        weeklyFMSReviewSections: serialized
+                    });
+                } else {
+                    throw directErr;
                 }
-            } else if (apiRef.current?.saveWeeklyFMSReviewSections) {
-                result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
-            } else if (window.DatabaseAPI?.updateProject) {
-                result = await window.DatabaseAPI.updateProject(project.id, {
-                    weeklyFMSReviewSections: serialized
-                });
-            } else {
-                throw new Error('No available API for saving weekly FMS review sections');
+            }
+            if (!options.skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                const updated = result?.project || result?.data?.project || result?.data;
+                if (updated) {
+                    window.updateViewingProject({ ...updated, weeklyFMSReviewSections: serialized });
+                } else {
+                    window.updateViewingProject({ ...project, weeklyFMSReviewSections: serialized });
+                }
             }
             
             // Mark as saved
@@ -1410,8 +1437,67 @@ const gridColumns = React.useMemo(() => (
         setShowSectionModal(false);
         setEditingSection(null);
     };
-    
-    // Handler to update reviewer for a section
+
+    // Restore sections from browser localStorage backup (e.g. after server was cleared by mistake)
+    const [isRestoringFromBackup, setIsRestoringFromBackup] = useState(false);
+    const restoreFromLocalBackup = useCallback(async () => {
+        if (!project?.id || isRestoringFromBackup) return;
+        const key = getSnapshotKey(project.id);
+        if (!key || !window.localStorage) return;
+        const stored = window.localStorage.getItem(key);
+        if (!stored || !stored.trim() || stored === '{}' || stored === 'null') {
+            alert('No local backup found for this project.');
+            return;
+        }
+        let parsed;
+        try {
+            parsed = JSON.parse(stored);
+        } catch (e) {
+            alert('Local backup is invalid or corrupted.');
+            return;
+        }
+        if (!parsed || typeof parsed !== 'object') {
+            alert('No valid backup data.');
+            return;
+        }
+        if (!confirm('Restore sections from this device\'s backup? This will overwrite the current server data.')) {
+            return;
+        }
+        setIsRestoringFromBackup(true);
+        try {
+            const serialized = JSON.stringify(parsed);
+            try {
+                await saveWeeklyFMSToDedicatedEndpoint(project.id, serialized);
+            } catch (e) {
+                if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+                    await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
+                } else if (apiRef.current?.saveWeeklyFMSReviewSections) {
+                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, parsed, false);
+                } else if (window.DatabaseAPI?.updateProject) {
+                    await window.DatabaseAPI.updateProject(project.id, { weeklyFMSReviewSections: serialized });
+                } else {
+                    throw e;
+                }
+            }
+            const normalized = normalizeSectionsByYear(parsed);
+            sectionsRef.current = normalized;
+            setSectionsByYear(normalized);
+            lastSavedDataRef.current = serialized;
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, weeklyFMSReviewSections: serialized });
+            }
+            if (window.showToast && typeof window.showToast === 'function') {
+                window.showToast('Restored from local backup.');
+            } else {
+                alert('Restored from local backup.');
+            }
+        } catch (err) {
+            console.error('Restore from backup failed:', err);
+            alert(err.message || 'Restore failed. Check console.');
+        } finally {
+            setIsRestoringFromBackup(false);
+        }
+    }, [project?.id, project, isRestoringFromBackup]);
     const handleUpdateReviewer = (sectionId, reviewerId) => {
         const currentState = sectionsRef.current || {};
         const currentSections = currentState[selectedYear] || [];
@@ -1529,18 +1615,24 @@ const gridColumns = React.useMemo(() => (
             (async () => {
             try {
                 const payload = sectionsRef.current || {};
-                
-                if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
-                    await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, JSON.stringify(payload));
-                } else if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
-                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    const updatePayload = {
-                        weeklyFMSReviewSections: JSON.stringify(payload)
-                    };
-                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                } else {
-                    throw new Error('No available API for saving document sections');
+                const serialized = JSON.stringify(payload);
+                // Use dedicated endpoint first (direct fetch) so delete always persists
+                try {
+                    await saveWeeklyFMSToDedicatedEndpoint(project.id, serialized);
+                } catch (directErr) {
+                    console.warn('Dedicated endpoint save failed on delete, trying fallback:', directErr.message);
+                    if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+                        await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
+                    } else if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
+                    } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        const updatePayload = {
+                            weeklyFMSReviewSections: serialized
+                        };
+                        await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    } else {
+                        throw new Error('No available API for saving document sections');
+                    }
                 }
                 
                 // Update saved data ref to match deleted state
@@ -4311,6 +4403,32 @@ const getAssigneeColor = (identifier, users) => {
                         >
                             <i className="fas fa-plus"></i><span>Add Section</span>
                         </button>
+
+                        {project?.id && (() => {
+                            try {
+                                const k = getSnapshotKey(project.id);
+                                if (!k || !window.localStorage) return null;
+                                const s = window.localStorage.getItem(k);
+                                if (!s || !s.trim() || s === '{}' || s === 'null') return null;
+                                return (
+                                    <button
+                                        type="button"
+                                        onClick={restoreFromLocalBackup}
+                                        disabled={isRestoringFromBackup}
+                                        className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                                        title="Restore sections from this device's saved backup"
+                                    >
+                                        {isRestoringFromBackup ? (
+                                            <><i className="fas fa-spinner fa-spin"></i><span>Restoring...</span></>
+                                        ) : (
+                                            <><i className="fas fa-undo"></i><span>Restore from local backup</span></>
+                                        )}
+                                    </button>
+                                );
+                            } catch {
+                                return null;
+                            }
+                        })()}
                         
                         <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
                             <div className="relative" ref={templateDropdownRef}>
@@ -4436,10 +4554,10 @@ const getAssigneeColor = (identifier, users) => {
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}
-                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex items-center justify-between">
-                                <div className="flex items-center gap-3 flex-1">
-                                    <i className="fas fa-grip-vertical text-gray-400 text-sm"></i>
-                                    <div className="flex-1">
+                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <i className="fas fa-grip-vertical text-gray-400 text-sm flex-shrink-0"></i>
+                                    <div className="flex-1 min-w-0">
                                         <div className="font-bold text-base text-gray-900 flex items-center gap-2">
                                             <span>#{sectionIndex + 1}</span>
                                             <span>{section.name}</span>
@@ -4449,7 +4567,7 @@ const getAssigneeColor = (identifier, users) => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                                     <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-gray-200">
                                         <label className="text-xs font-semibold text-gray-700">Reviewer:</label>
                                         <select
@@ -4482,11 +4600,13 @@ const getAssigneeColor = (identifier, users) => {
                                     </button>
                                     <button
                                         onClick={(e) => handleDeleteSection(section.id, e)}
-                                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200 hover:border-red-300 flex items-center gap-1.5"
                                         type="button"
                                         title="Delete section"
+                                        aria-label="Delete section"
                                     >
                                         <i className="fas fa-trash text-sm"></i>
+                                        <span className="text-xs font-medium">Delete section</span>
                                     </button>
                                 </div>
                             </div>
