@@ -3725,7 +3725,7 @@ const Projects = () => {
                         <div className="flex-1 relative">
                             <input
                                 type="text"
-                                placeholder="Search by task, project, client, or assignee..."
+                                placeholder="Filter by task, project, client, or assignee..."
                                 value={allTasksSearch}
                                 onChange={(e) => setAllTasksSearch(e.target.value)}
                                 className={`w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm ${
@@ -3779,9 +3779,9 @@ const Projects = () => {
                             <table className="w-full text-sm border-collapse">
                                 <thead>
                                     <tr className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-200'}>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Task</th>
                                         <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
                                         <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Task</th>
                                         <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
                                         <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Priority</th>
                                         <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assignee</th>
@@ -3804,9 +3804,9 @@ const Projects = () => {
                                                 key={task.id}
                                                 className={`border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
                                             >
+                                                <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
                                                 <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
                                                 <td className="py-2.5 px-2">{task.project?.clientName || '—'}</td>
-                                                <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
                                                 <td className="py-2.5 px-2">
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getTaskStatusColor(task.status)}`}>
                                                         {task.status || '—'}
