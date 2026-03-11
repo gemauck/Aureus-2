@@ -3842,19 +3842,6 @@ const Projects = () => {
             setAllTasksSortColumn(col);
             setAllTasksSortDir(prev => (allTasksSortColumn === col ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
         };
-        // Normalize task status for display (in_progress -> in-progress)
-        const normalizeTaskStatus = (s) => (s === 'in_progress' ? 'in-progress' : (s || 'todo'));
-        const STATUS_BUTTONS = [
-            { value: 'todo', label: 'To Do', light: 'bg-gray-100 text-gray-800 border-gray-200', dark: 'bg-gray-700 text-gray-200 border-gray-600' },
-            { value: 'in-progress', label: 'In Progress', light: 'bg-blue-100 text-blue-800 border-blue-200', dark: 'bg-blue-900/50 text-blue-200 border-blue-700' },
-            { value: 'completed', label: 'Completed', light: 'bg-green-100 text-green-800 border-green-200', dark: 'bg-green-900/50 text-green-200 border-green-700' },
-            { value: 'done', label: 'Done', light: 'bg-emerald-100 text-emerald-800 border-emerald-200', dark: 'bg-emerald-900/50 text-emerald-200 border-emerald-700' }
-        ];
-        const PRIORITY_BUTTONS = [
-            { value: 'Low', label: 'Low', light: 'bg-green-100 text-green-800 border-green-200', dark: 'bg-green-900/50 text-green-200 border-green-700' },
-            { value: 'Medium', label: 'Med', light: 'bg-amber-100 text-amber-800 border-amber-200', dark: 'bg-amber-900/50 text-amber-200 border-amber-700' },
-            { value: 'High', label: 'High', light: 'bg-red-100 text-red-800 border-red-200', dark: 'bg-red-900/50 text-red-200 border-red-700' }
-        ];
         const SortableTh = ({ column, label }) => {
             const active = allTasksSortColumn === column;
             const asc = allTasksSortDir === 'asc';
@@ -3998,61 +3985,48 @@ const Projects = () => {
                                                 <td className="py-3 px-3">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
                                                 <td className="py-3 px-3">{task.project?.clientName || '—'}</td>
                                                 <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                                                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Status">
-                                                        {STATUS_BUTTONS.map(({ value, label, light, dark }) => {
-                                                            const current = normalizeTaskStatus(task.status || 'todo');
-                                                            const isSelected = current === value || (value === 'in-progress' && (task.status === 'in_progress' || task.status === 'in-progress'));
-                                                            return (
-                                                                <button
-                                                                    key={value}
-                                                                    type="button"
-                                                                    onClick={() => patchTaskInAllTasks(task.id, { status: value })}
-                                                                    className={`inline-flex items-center justify-center min-w-[2rem] h-8 px-2.5 rounded-full text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 cursor-pointer ${
-                                                                        isSelected
-                                                                            ? isDark ? `${dark} border-2 ring-1 ring-inset ring-white/20` : `${light} border-2 ring-1 ring-inset ring-black/5`
-                                                                            : isDark ? 'bg-gray-800/50 text-gray-400 border border-gray-600 hover:bg-gray-700 hover:text-gray-300' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100 hover:text-gray-700'
-                                                                    }`}
-                                                                    aria-pressed={isSelected}
-                                                                    aria-label={`Status: ${label}`}
-                                                                >
-                                                                    {label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                                                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Priority">
-                                                        {PRIORITY_BUTTONS.map(({ value, label, light, dark }) => {
-                                                            const current = task.priority || 'Medium';
-                                                            const isSelected = current === value;
-                                                            return (
-                                                                <button
-                                                                    key={value}
-                                                                    type="button"
-                                                                    onClick={() => patchTaskInAllTasks(task.id, { priority: value })}
-                                                                    className={`inline-flex items-center justify-center min-w-[2.25rem] h-8 px-2.5 rounded-full text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 cursor-pointer ${
-                                                                        isSelected
-                                                                            ? isDark ? `${dark} border-2 ring-1 ring-inset ring-white/20` : `${light} border-2 ring-1 ring-inset ring-black/5`
-                                                                            : isDark ? 'bg-gray-800/50 text-gray-400 border border-gray-600 hover:bg-gray-700 hover:text-gray-300' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100 hover:text-gray-700'
-                                                                    }`}
-                                                                    aria-pressed={isSelected}
-                                                                    title={value}
-                                                                    aria-label={`Priority: ${value}`}
-                                                                >
-                                                                    {label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
+                                                    <select
+                                                        value={task.status || ''}
+                                                        onChange={(e) => patchTaskInAllTasks(task.id, { status: e.target.value })}
+                                                        className={`w-full min-w-[130px] py-2 px-3 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                            isDark
+                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                                                : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400'
+                                                        }`}
+                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")` }}
+                                                        aria-label="Status"
+                                                    >
+                                                        <option value="todo">To Do</option>
+                                                        <option value="in-progress">In Progress</option>
+                                                        <option value="in_progress">In Progress (alt)</option>
+                                                        <option value="completed">Completed</option>
+                                                        <option value="done">Done</option>
+                                                    </select>
                                                 </td>
                                                 <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                                                     <select
-                                                        value={task.assigneeId || ''}
+                                                        value={task.priority || 'Medium'}
+                                                        onChange={(e) => patchTaskInAllTasks(task.id, { priority: e.target.value })}
+                                                        className={`w-full min-w-[110px] py-2 px-3 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                            isDark
+                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                                                : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400'
+                                                        }`}
+                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")` }}
+                                                        aria-label="Priority"
+                                                    >
+                                                        <option value="Low">Low</option>
+                                                        <option value="Medium">Medium</option>
+                                                        <option value="High">High</option>
+                                                    </select>
+                                                </td>
+                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                    <select
+                                                        value={task.assigneeId != null ? String(task.assigneeId) : ''}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            const user = allTasksUsers.find(u => u.id === val);
-                                                            patchTaskInAllTasks(task.id, { assigneeId: val || null, assignee: user ? (user.name || '') : '' });
+                                                            const user = allTasksUsers.find(u => String(u.id) === val);
+                                                            patchTaskInAllTasks(task.id, { assigneeId: val || null, assignee: user ? (user.name || user.email || '') : '' });
                                                         }}
                                                         className={`w-full min-w-[140px] py-2 px-3 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
                                                             isDark
@@ -4063,8 +4037,11 @@ const Projects = () => {
                                                         aria-label="Assignee"
                                                     >
                                                         <option value="">Unassigned</option>
+                                                        {task.assigneeId && task.assignee && !allTasksUsers.some(u => String(u.id) === String(task.assigneeId)) && (
+                                                            <option value={String(task.assigneeId)}>{task.assignee}</option>
+                                                        )}
                                                         {allTasksUsers.map(u => (
-                                                            <option key={u.id} value={u.id}>{u.name || u.email || u.id}</option>
+                                                            <option key={u.id} value={String(u.id)}>{u.name || u.email || u.id}</option>
                                                         ))}
                                                     </select>
                                                 </td>
