@@ -345,12 +345,13 @@ async function handler(req, res) {
             orderBy: [{ updatedAt: 'desc' }],
             take: 500
           });
-          // Ensure every task with assigneeId has assignee name (in case assigneeUser was null)
-          const missingAssigneeIds = [...new Set(tasks.filter(t => t.assigneeId && !(t.assignee || t.assigneeUser?.name)).map(t => t.assigneeId))];
+          // Always resolve assignee names from User table for every task with assigneeId
+          // (avoids relying on assigneeUser relation which can be null in some edge cases)
+          const allAssigneeIds = [...new Set(tasks.map(t => t.assigneeId).filter(Boolean))];
           let assigneeNames = {};
-          if (missingAssigneeIds.length > 0) {
+          if (allAssigneeIds.length > 0) {
             const users = await prisma.user.findMany({
-              where: { id: { in: missingAssigneeIds } },
+              where: { id: { in: allAssigneeIds } },
               select: { id: true, name: true }
             });
             users.forEach(u => { assigneeNames[u.id] = u.name || ''; });
@@ -360,8 +361,8 @@ async function handler(req, res) {
               includeComments: false,
               includeSubtasks: false
             });
-            if (transformed.assigneeId && !transformed.assignee && assigneeNames[transformed.assigneeId]) {
-              transformed.assignee = assigneeNames[transformed.assigneeId];
+            if (transformed.assigneeId && assigneeNames[transformed.assigneeId] !== undefined) {
+              transformed.assignee = assigneeNames[transformed.assigneeId] || '';
             }
             return transformed;
           });
