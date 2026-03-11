@@ -2727,7 +2727,7 @@ const Projects = () => {
                     comments: Array.isArray(updatedProject.comments) ? updatedProject.comments : [],
                     activityLog: Array.isArray(updatedProject.activityLog) ? updatedProject.activityLog : [],
                     team: Array.isArray(updatedProject.team) ? updatedProject.team : [],
-                    documentSections: Array.isArray(updatedProject.documentSections) ? updatedProject.documentSections : [],
+                    documentSections: (updatedProject.documentSections != null && typeof updatedProject.documentSections === 'object') ? updatedProject.documentSections : {},
                     hasDocumentCollectionProcess: (() => {
                         const value = updatedProject.hasDocumentCollectionProcess;
                         if (value === true || value === 'true' || value === 1) return true;
@@ -2762,7 +2762,7 @@ const Projects = () => {
                         return normalized;
                     }
                     // Compare important fields to see if anything actually changed (include module flags so tabs persist on navigation)
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = normalized[field];
