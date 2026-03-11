@@ -27,6 +27,7 @@ const TaskDetailModal = ({
         title: '',
         description: '',
         assignee: '',
+        assigneeId: null,
         dueDate: '',
         priority: 'Medium',
         listId: task?.listId || (taskLists && taskLists[0]?.id) || 1,
@@ -714,6 +715,7 @@ const TaskDetailModal = ({
                 title: task.title !== undefined ? task.title : prev.title,
                 description: task.description !== undefined ? task.description : prev.description,
                 assignee: task.assignee !== undefined ? task.assignee : prev.assignee,
+                assigneeId: task.assigneeId !== undefined ? task.assigneeId : prev.assigneeId,
                 dueDate: task.dueDate !== undefined ? task.dueDate : prev.dueDate,
                 priority: task.priority !== undefined ? task.priority : prev.priority,
                 status: task.status !== undefined ? task.status : prev.status,
@@ -727,7 +729,7 @@ const TaskDetailModal = ({
                 subscribers: Array.isArray(task.subscribers) ? task.subscribers : (prev.subscribers || [])
             }));
         }
-    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
+    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
 
     // Update users if prop changes
     useEffect(() => {
@@ -2602,7 +2604,7 @@ const TaskDetailModal = ({
                                                     </select>
                                                 </div>
 
-                                                {/* Assignee */}
+                                                {/* Assignee - use assigneeId as source of truth, assignee for display */}
                                                 <div className="space-y-2">
                                                     <label className="block text-xs font-semibold text-gray-700">
                                                         <span className="flex items-center gap-1.5">
@@ -2611,15 +2613,24 @@ const TaskDetailModal = ({
                                                         </span>
                                                     </label>
                                                     <select
-                                                        value={editedTask.assignee || ''}
-                                                        onChange={(e) => setEditedTask({...editedTask, assignee: e.target.value})}
+                                                        value={editedTask.assigneeId != null ? String(editedTask.assigneeId) : ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            const user = users.find(u => String(u.id) === val);
+                                                            setEditedTask({
+                                                                ...editedTask,
+                                                                assigneeId: val || null,
+                                                                assignee: user ? (user.name || user.email || '') : ''
+                                                            });
+                                                        }}
                                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
                                                     >
                                                         <option value="">Unassigned</option>
+                                                        {editedTask.assigneeId && !users.some(u => String(u.id) === String(editedTask.assigneeId)) && (
+                                                            <option value={String(editedTask.assigneeId)}>{editedTask.assignee || 'Assigned'}</option>
+                                                        )}
                                                         {users.map(user => (
-                                                            <option key={user.id} value={user.name || user.email}>
-                                                                {user.name || user.email}
-                                                            </option>
+                                                            <option key={user.id} value={String(user.id)}>{user.name || user.email}</option>
                                                         ))}
                                                     </select>
                                                 </div>

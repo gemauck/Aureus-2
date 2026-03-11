@@ -3849,7 +3849,7 @@ const Projects = () => {
                 <th
                     role="columnheader"
                     aria-sort={active ? (asc ? 'ascending' : 'descending') : 'none'}
-                    className={`text-left py-3 px-3 font-medium cursor-pointer select-none ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                    className={`text-left py-1.5 px-2 font-medium cursor-pointer select-none ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
                     onClick={() => handleAllTasksSort(column)}
                 >
                     <span className="inline-flex items-center gap-1.5">
@@ -3959,7 +3959,7 @@ const Projects = () => {
                                         <SortableTh column="priority" label="Priority" />
                                         <SortableTh column="assignee" label="Assignee" />
                                         <SortableTh column="dueDate" label="Due date" />
-                                        <th className={`text-left py-3 px-3 font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Actions</th>
+                                        <th className={`text-left py-1.5 px-2 font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -3981,14 +3981,14 @@ const Projects = () => {
                                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskModal(task); } }}
                                                 className={`border-b transition-colors ${isDark ? 'border-gray-800/80 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50/80'}`}
                                             >
-                                                <td className="py-3 px-3 font-medium">{task.title || '—'}</td>
-                                                <td className="py-3 px-3">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
-                                                <td className="py-3 px-3">{task.project?.clientName || '—'}</td>
-                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-1 px-2 font-medium">{task.title || '—'}</td>
+                                                <td className="py-1 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
+                                                <td className="py-1 px-2">{task.project?.clientName || '—'}</td>
+                                                <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         value={task.status || ''}
                                                         onChange={(e) => patchTaskInAllTasks(task.id, { status: e.target.value })}
-                                                        className={`w-full min-w-[130px] py-2 px-3 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                        className={`w-full min-w-[130px] py-1 px-2 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
                                                             isDark
                                                                 ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
                                                                 : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400'
@@ -4003,11 +4003,11 @@ const Projects = () => {
                                                         <option value="done">Done</option>
                                                     </select>
                                                 </td>
-                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         value={task.priority || 'Medium'}
                                                         onChange={(e) => patchTaskInAllTasks(task.id, { priority: e.target.value })}
-                                                        className={`w-full min-w-[110px] py-2 px-3 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                        className={`w-full min-w-[110px] py-1 px-2 rounded-lg text-sm font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
                                                             isDark
                                                                 ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
                                                                 : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400'
@@ -4020,7 +4020,7 @@ const Projects = () => {
                                                         <option value="High">High</option>
                                                     </select>
                                                 </td>
-                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <select
                                                         value={task.assigneeId != null ? String(task.assigneeId) : ''}
                                                         onChange={(e) => {
@@ -4028,7 +4028,7 @@ const Projects = () => {
                                                             const user = allTasksUsers.find(u => String(u.id) === val);
                                                             patchTaskInAllTasks(task.id, { assigneeId: val || null, assignee: user ? (user.name || user.email || '') : '' });
                                                         }}
-                                                        className={`w-full min-w-[140px] py-2 px-3 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
+                                                        className={`w-full min-w-[140px] py-1 px-2 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
                                                             isDark
                                                                 ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
                                                                 : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/50 focus:border-blue-400'
@@ -4045,12 +4045,12 @@ const Projects = () => {
                                                         ))}
                                                     </select>
                                                 </td>
-                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <input
                                                         type="date"
                                                         value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
                                                         onChange={(e) => patchTaskInAllTasks(task.id, { dueDate: e.target.value || null })}
-                                                        className={`w-full min-w-[132px] py-2 px-3 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+                                                        className={`w-full min-w-[132px] py-1 px-2 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 ${
                                                             isDark
                                                                 ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500 [color-scheme:dark]'
                                                                 : 'bg-white border-gray-200 text-gray-800 focus:ring-blue-400/50 focus:border-blue-400 [color-scheme:light]'
@@ -4058,12 +4058,12 @@ const Projects = () => {
                                                         aria-label="Due date"
                                                     />
                                                 </td>
-                                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                                <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <div className="flex items-center gap-1">
                                                         <button
                                                             type="button"
                                                             onClick={() => openTaskInProject(task)}
-                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-blue-400 hover:bg-gray-700 hover:text-blue-300' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-700'}`}
+                                                            className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-blue-400 hover:bg-gray-700 hover:text-blue-300' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-700'}`}
                                                             title="Open in project"
                                                             aria-label="Open in project"
                                                         >
@@ -4072,7 +4072,7 @@ const Projects = () => {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDeleteTaskInAllTasks(task)}
-                                                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-red-400 hover:bg-gray-700 hover:text-red-300' : 'text-red-600 hover:bg-red-50 hover:text-red-700'}`}
+                                                            className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-red-400 hover:bg-gray-700 hover:text-red-300' : 'text-red-600 hover:bg-red-50 hover:text-red-700'}`}
                                                             title="Delete task"
                                                             aria-label="Delete task"
                                                         >

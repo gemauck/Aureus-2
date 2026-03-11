@@ -122,6 +122,27 @@ async function getAssigneeName(assigneeId) {
   }
 }
 
+// Resolve assignee name or email to userId (for PATCH when client sends assignee but not assigneeId)
+async function resolveAssigneeToUserId(assignee) {
+  const s = (assignee && String(assignee).trim()) || '';
+  if (!s) return null;
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { name: { equals: s, mode: 'insensitive' } },
+          { email: { equals: s, mode: 'insensitive' } }
+        ]
+      },
+      select: { id: true, name: true }
+    });
+    return user ? { id: user.id, name: user.name || '' } : null;
+  } catch (e) {
+    console.warn('Failed to resolve assignee to user:', e.message);
+    return null;
+  }
+}
+
 async function handler(req, res) {
   const { method } = req;
   const { id: taskId, projectId, lightweight, includeComments, all: allParam } = req.query;
@@ -195,7 +216,12 @@ async function handler(req, res) {
           }))
         };
 
-        return ok(res, { task: transformTask(taskWithComments) });
+        const transformed = transformTask(taskWithComments);
+        // Single source of truth: always set assignee from User table when assigneeId is set
+        if (transformed.assigneeId) {
+          transformed.assignee = await getAssigneeName(transformed.assigneeId);
+        }
+        return ok(res, { task: transformed });
       }
       
       // Get tasks for a specific project
@@ -293,10 +319,24 @@ async function handler(req, res) {
             }))
           }));
 
-          return ok(res, { 
-            tasks: tasksWithComments.map(task => transformTask(task, { 
-              includeComments: shouldIncludeComments 
-            })) 
+          // Single source of truth: resolve assignee from User table for every task with assigneeId
+          const allAssigneeIds = [...new Set(tasksWithComments.map(t => t.assigneeId).filter(Boolean))];
+          let assigneeNamesMap = {};
+          if (allAssigneeIds.length > 0) {
+            const users = await prisma.user.findMany({
+              where: { id: { in: allAssigneeIds } },
+              select: { id: true, name: true }
+            });
+            users.forEach(u => { assigneeNamesMap[u.id] = u.name || ''; });
+          }
+          return ok(res, {
+            tasks: tasksWithComments.map(task => {
+              const transformed = transformTask(task, { includeComments: shouldIncludeComments });
+              if (transformed.assigneeId && assigneeNamesMap[transformed.assigneeId] !== undefined) {
+                transformed.assignee = assigneeNamesMap[transformed.assigneeId] || '';
+              }
+              return transformed;
+            })
           });
         } catch (queryError) {
           console.error('❌ Database query error getting tasks by projectId:', {
@@ -553,10 +593,19 @@ async function handler(req, res) {
         return badRequest(res, 'Missing required fields: projectId and title are required');
       }
 
-      // Get assignee name if assigneeId provided but assignee name not provided
-      let assigneeName = assignee?.trim() || '';
-      if (assigneeId && !assigneeName) {
-        assigneeName = await getAssigneeName(assigneeId);
+      // Single source of truth: assignee from User table
+      let assigneeIdFinal = assigneeId || null;
+      let assigneeName = '';
+      if (assigneeIdFinal) {
+        assigneeName = await getAssigneeName(assigneeIdFinal);
+      } else if (assignee && String(assignee).trim()) {
+        const resolved = await resolveAssigneeToUserId(assignee);
+        if (resolved) {
+          assigneeIdFinal = resolved.id;
+          assigneeName = resolved.name || await getAssigneeName(resolved.id);
+        } else {
+          assigneeName = String(assignee).trim();
+        }
       }
 
       const task = await prisma.task.create({
@@ -567,7 +616,7 @@ async function handler(req, res) {
           description: String(description || ''),
           status: String(status || 'todo'),
           priority: String(priority || 'Medium'),
-          assigneeId: assigneeId || null,
+          assigneeId: assigneeIdFinal || null,
           assignee: assigneeName,
           dueDate: dueDate ? new Date(dueDate) : null,
           listId: listId ? parseInt(String(listId), 10) : null,
@@ -624,9 +673,30 @@ async function handler(req, res) {
       if (body.priority !== undefined) updateData.priority = String(body.priority);
       if (body.assigneeId !== undefined) {
         updateData.assigneeId = body.assigneeId || null;
+        // Single source of truth: assignee always derived from User table
+        if (updateData.assigneeId) {
+          updateData.assignee = await getAssigneeName(updateData.assigneeId);
+        } else {
+          updateData.assignee = '';
+        }
       }
       if (body.assignee !== undefined) {
-        updateData.assignee = String(body.assignee || '');
+        // When client sends assignee but not assigneeId, resolve to user so we store assigneeId + canonical assignee
+        if (updateData.assigneeId == null) {
+          const assigneeVal = String(body.assignee || '').trim();
+          if (assigneeVal) {
+            const resolved = await resolveAssigneeToUserId(assigneeVal);
+            if (resolved) {
+              updateData.assigneeId = resolved.id;
+              updateData.assignee = resolved.name || await getAssigneeName(resolved.id);
+            } else {
+              updateData.assignee = assigneeVal;
+            }
+          } else {
+            updateData.assigneeId = null;
+            updateData.assignee = '';
+          }
+        }
       }
       if (body.dueDate !== undefined) {
         updateData.dueDate = body.dueDate ? new Date(body.dueDate) : null;
@@ -670,11 +740,6 @@ async function handler(req, res) {
       }
       if (body.parentTaskId !== undefined) {
         updateData.parentTaskId = body.parentTaskId ? String(body.parentTaskId) : null;
-      }
-
-      // Get assignee name if assigneeId changed but assignee not provided
-      if (updateData.assigneeId && !updateData.assignee) {
-        updateData.assignee = await getAssigneeName(updateData.assigneeId);
       }
 
       if (Object.keys(updateData).length === 0) {
