@@ -739,12 +739,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         isSavingRef.current = true;
         
         try {
-            // Use DocumentCollectionAPI if available, fallback to DatabaseAPI
+            // Prefer dedicated endpoint (core bundle) so section changes always persist
             let result;
-            if (apiRef.current?.saveWeeklyFMSReviewSections) {
-                result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
-            } else if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+            if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
                 result = await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
+                if (!options.skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    const updated = result?.data?.project || result?.project || result?.data;
+                    if (updated) {
+                        window.updateViewingProject({ ...updated, weeklyFMSReviewSections: serialized });
+                    }
+                }
+            } else if (apiRef.current?.saveWeeklyFMSReviewSections) {
+                result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
             } else if (window.DatabaseAPI?.updateProject) {
                 result = await window.DatabaseAPI.updateProject(project.id, {
                     weeklyFMSReviewSections: serialized
@@ -1524,10 +1530,10 @@ const gridColumns = React.useMemo(() => (
             try {
                 const payload = sectionsRef.current || {};
                 
-                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
-                } else if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+                if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
                     await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, JSON.stringify(payload));
+                } else if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                     const updatePayload = {
                         weeklyFMSReviewSections: JSON.stringify(payload)

@@ -44,6 +44,7 @@ async function handler(req, res) {
       where: { id },
       data: { weeklyFMSReviewSections: payload }
     })
+    console.log('[weekly-fms-sections] Updated project', id, 'sections length', payload.length)
     return ok(res, { project: { id: project.id, weeklyFMSReviewSections: payload } })
   } catch (e) {
     if (e.code === 'P2025') {
