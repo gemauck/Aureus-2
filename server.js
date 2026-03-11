@@ -1658,6 +1658,22 @@ app.get('/api/projects/:id/document-collection-email-activity', async (req, res)
   }
 })
 
+// Dedicated endpoint for weekly FMS sections (must be before /api/projects/:id so it matches first)
+app.put('/api/projects/:id/weekly-fms-sections', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'weekly-fms-sections.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ weekly-fms-sections handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error', message: e.message })
+    }
+  }
+})
+
 // Explicit mapping for project operations with ID (GET, PUT, DELETE /api/projects/[id])
 app.all('/api/projects/:id', async (req, res, next) => {
   try {

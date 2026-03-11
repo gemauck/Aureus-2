@@ -743,19 +743,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             let result;
             if (apiRef.current?.saveWeeklyFMSReviewSections) {
                 result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, options.skipParentUpdate);
-                console.log('✅ Saved via DocumentCollectionAPI:', result);
+            } else if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+                result = await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
             } else if (window.DatabaseAPI?.updateProject) {
                 result = await window.DatabaseAPI.updateProject(project.id, {
                     weeklyFMSReviewSections: serialized
                 });
-                console.log('✅ Saved via DatabaseAPI:', result);
             } else {
                 throw new Error('No available API for saving weekly FMS review sections');
             }
             
             // Mark as saved
             lastSavedDataRef.current = serialized;
-            console.log('✅ Save completed successfully');
             
             // Update localStorage backup
             const snapshotKey = getSnapshotKey(project.id);
@@ -1527,6 +1526,8 @@ const gridColumns = React.useMemo(() => (
                 
                 if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
                     await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
+                } else if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
+                    await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, JSON.stringify(payload));
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                     const updatePayload = {
                         weeklyFMSReviewSections: JSON.stringify(payload)

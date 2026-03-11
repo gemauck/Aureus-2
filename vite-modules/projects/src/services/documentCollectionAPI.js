@@ -125,24 +125,12 @@ class DocumentCollectionAPI {
 
         try {
             const serialized = JSON.stringify(payload);
-            console.log('📤 documentCollectionAPI.saveWeeklyFMSReviewSections:', {
-                projectId,
-                payloadType: typeof payload,
-                serializedLength: serialized.length,
-                serializedPreview: serialized.substring(0, 300)
-            });
-            
-            const result = await window.DatabaseAPI.updateProject(projectId, {
-                weeklyFMSReviewSections: serialized
-            });
-            
-            console.log('✅ documentCollectionAPI.saveWeeklyFMSReviewSections - API call completed:', {
-                hasResult: !!result,
-                resultKeys: result ? Object.keys(result) : []
+            const result = await this.request(`/api/projects/${projectId}/weekly-fms-sections`, {
+                method: 'PUT',
+                body: JSON.stringify({ weeklyFMSReviewSections: serialized })
             });
 
             // Update parent component's project prop if available and not skipping
-            // Skip parent update when modals/forms are open to prevent them from closing
             if (!skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
                 const updatedProject = result?.data?.project || result?.project || result?.data;
                 if (updatedProject) {
@@ -150,7 +138,6 @@ class DocumentCollectionAPI {
                         ...updatedProject,
                         weeklyFMSReviewSections: serialized
                     });
-                    console.log('✅ Updated parent project prop');
                 }
             }
 

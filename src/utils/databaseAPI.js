@@ -1361,6 +1361,22 @@ const DatabaseAPI = {
         return response;
     },
 
+    /**
+     * Update only weekly FMS review sections (dedicated endpoint for reliable persistence).
+     * Use this for add/edit/delete of sections in the Weekly FMS Review tracker.
+     */
+    async updateProjectWeeklyFMSSections(id, weeklyFMSReviewSections) {
+        const payload = typeof weeklyFMSReviewSections === 'string'
+            ? weeklyFMSReviewSections
+            : JSON.stringify(weeklyFMSReviewSections != null ? weeklyFMSReviewSections : []);
+        const response = await this.makeRequest(`/projects/${id}/weekly-fms-sections`, {
+            method: 'PUT',
+            body: JSON.stringify({ weeklyFMSReviewSections: payload })
+        });
+        this._responseCache.delete(`GET:/projects/${id}`);
+        return response;
+    },
+
     async updateProjectMonthlyProgress(id, monthlyProgress) {
         const response = await this.makeRequest(`/projects-monthly-progress/${id}`, {
             method: 'PUT',
