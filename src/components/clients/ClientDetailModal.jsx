@@ -2107,8 +2107,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
                 
-                const dbClient = response?.data?.client;
-                
                 if (dbClient) {
                     
                     // CRITICAL: API already parsed contacts/sites via parseClientJsonFields
