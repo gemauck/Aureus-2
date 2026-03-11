@@ -124,10 +124,11 @@ async function getAssigneeName(assigneeId) {
 
 async function handler(req, res) {
   const { method } = req;
-  const { id: taskId, projectId, lightweight, includeComments } = req.query;
+  const { id: taskId, projectId, lightweight, includeComments, all: allParam } = req.query;
   const userId = req.user?.sub;
   const isLightweight = lightweight === 'true' || lightweight === true;
   const shouldIncludeComments = includeComments === 'true' || includeComments === true;
+  const isAllTasks = allParam === 'true' || allParam === true;
 
   try {
     if (method === 'GET') {
@@ -313,6 +314,44 @@ async function handler(req, res) {
           }
           
           // Re-throw to be caught by outer try-catch
+          throw queryError;
+        }
+      }
+      
+      // All tasks mode: return all tasks across all projects (for Projects "All Tasks" view)
+      if (isAllTasks) {
+        if (!userId) {
+          return badRequest(res, 'User not authenticated');
+        }
+        try {
+          const tasks = await prisma.task.findMany({
+            where: { parentTaskId: null },
+            include: {
+              assigneeUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              },
+              project: {
+                select: {
+                  id: true,
+                  name: true,
+                  clientName: true
+                }
+              }
+            },
+            orderBy: [{ updatedAt: 'desc' }],
+            take: 500
+          });
+          const transformedTasks = tasks.map(task => transformTask(task, {
+            includeComments: false,
+            includeSubtasks: false
+          }));
+          return ok(res, { tasks: transformedTasks });
+        } catch (queryError) {
+          console.error('❌ Error fetching all tasks:', queryError.message);
           throw queryError;
         }
       }

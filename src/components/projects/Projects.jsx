@@ -177,6 +177,7 @@ const Projects = () => {
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewingProject, setViewingProject] = useState(null);
     const [showProgressTracker, setShowProgressTracker] = useState(false);
+    const [showAllTasksView, setShowAllTasksView] = useState(false);
     const [trackerFocus, setTrackerFocus] = useState(null);
     const [draggedProject, setDraggedProject] = useState(null);
     const mouseDownRef = useRef(null);
@@ -209,6 +210,14 @@ const Projects = () => {
     const [waitingForTracker, setWaitingForTracker] = useState(false);
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
     const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, projectId: null });
+    
+    // All Tasks view state (when showAllTasksView is true)
+    const [allTasksList, setAllTasksList] = useState([]);
+    const [allTasksLoading, setAllTasksLoading] = useState(false);
+    const [allTasksError, setAllTasksError] = useState(null);
+    const [allTasksFilterStatus, setAllTasksFilterStatus] = useState('all');
+    const [allTasksFilterProject, setAllTasksFilterProject] = useState('all');
+    const [allTasksSearch, setAllTasksSearch] = useState('');
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -332,6 +341,28 @@ const Projects = () => {
         window.addEventListener('hashchange', handleHashChangeForTracker);
         return () => window.removeEventListener('hashchange', handleHashChangeForTracker);
     }, []);
+
+    // Load all tasks when All Tasks view is opened
+    useEffect(() => {
+        if (!showAllTasksView || !window.DatabaseAPI?.makeRequest) return;
+        let cancelled = false;
+        const load = async () => {
+            setAllTasksLoading(true);
+            setAllTasksError(null);
+            try {
+                const response = await window.DatabaseAPI.makeRequest('/tasks?all=true', { method: 'GET' });
+                const data = response?.data ?? response;
+                const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+                if (!cancelled) setAllTasksList(tasks);
+            } catch (err) {
+                if (!cancelled) setAllTasksError(err?.message || 'Failed to load tasks');
+            } finally {
+                if (!cancelled) setAllTasksLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, [showAllTasksView]);
     
     // Helper function to update project URL with tab/section/comment info
     const updateProjectUrl = useCallback((projectId, options = {}) => {
@@ -3328,6 +3359,188 @@ const Projects = () => {
             }));
     }, [filteredProjects]);
 
+    // All Tasks view: memoized data (hooks must be at top level)
+    const allTasksUniqueProjectNames = useMemo(() => {
+        const names = new Set();
+        allTasksList.forEach(t => {
+            const name = t.project?.name || (t.projectId ? `Project ${t.projectId}` : '—');
+            names.add(name);
+        });
+        return Array.from(names).sort();
+    }, [allTasksList]);
+    const filteredAllTasks = useMemo(() => {
+        let list = allTasksList;
+        if (allTasksSearch.trim()) {
+            const q = allTasksSearch.trim().toLowerCase();
+            list = list.filter(t =>
+                (t.title || '').toLowerCase().includes(q) ||
+                (t.project?.name || '').toLowerCase().includes(q) ||
+                (t.project?.clientName || '').toLowerCase().includes(q) ||
+                (t.assignee || '').toLowerCase().includes(q)
+            );
+        }
+        if (allTasksFilterStatus !== 'all') {
+            list = list.filter(t => (t.status || '').toLowerCase() === allTasksFilterStatus.toLowerCase());
+        }
+        if (allTasksFilterProject !== 'all') {
+            const projName = allTasksFilterProject;
+            list = list.filter(t => (t.project?.name || (t.projectId ? `Project ${t.projectId}` : '')) === projName);
+        }
+        return list;
+    }, [allTasksList, allTasksSearch, allTasksFilterStatus, allTasksFilterProject]);
+
+    // All Tasks view (early return when active)
+    if (showAllTasksView) {
+        const getTaskStatusColor = (status) => {
+            const s = (status || '').toLowerCase();
+            if (s === 'completed' || s === 'done') return isDark ? 'bg-green-900/40 text-green-200' : 'bg-green-100 text-green-800';
+            if (s === 'in-progress' || s === 'in_progress') return isDark ? 'bg-blue-900/40 text-blue-200' : 'bg-blue-100 text-blue-800';
+            return isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800';
+        };
+        const formatDueDate = (dateString) => {
+            if (!dateString) return '—';
+            const d = new Date(dateString);
+            if (Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        };
+        const openTaskInProject = (task) => {
+            const projectId = task.projectId || task.project?.id;
+            if (!projectId) return;
+            setShowAllTasksView(false);
+            window.location.hash = `#/projects/${projectId}?tab=tasks&task=${encodeURIComponent(task.id)}`;
+        };
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <button
+                        type="button"
+                        onClick={() => setShowAllTasksView(false)}
+                        className={`p-2 rounded-lg transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
+                        aria-label="Back to projects"
+                    >
+                        <i className="fas fa-arrow-left" aria-hidden="true"></i>
+                    </button>
+                    <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        All Tasks
+                    </h1>
+                    <div className="w-8" aria-hidden="true"></div>
+                </div>
+                <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+                    <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                        <div className="flex-1 relative">
+                            <input
+                                type="text"
+                                placeholder="Search by task, project, client, or assignee..."
+                                value={allTasksSearch}
+                                onChange={(e) => setAllTasksSearch(e.target.value)}
+                                className={`w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm ${
+                                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
+                                }`}
+                                aria-label="Search tasks"
+                            />
+                            <i className={`fas fa-search absolute left-3 top-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                        </div>
+                        <select
+                            value={allTasksFilterStatus}
+                            onChange={(e) => setAllTasksFilterStatus(e.target.value)}
+                            className={`px-4 py-2.5 border rounded-lg text-sm ${
+                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                            }`}
+                            aria-label="Filter by status"
+                        >
+                            <option value="all">All statuses</option>
+                            <option value="todo">To Do</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="in_progress">In Progress (alt)</option>
+                            <option value="completed">Completed</option>
+                            <option value="done">Done</option>
+                        </select>
+                        <select
+                            value={allTasksFilterProject}
+                            onChange={(e) => setAllTasksFilterProject(e.target.value)}
+                            className={`px-4 py-2.5 border rounded-lg text-sm min-w-[180px] ${
+                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                            }`}
+                            aria-label="Filter by project"
+                        >
+                            <option value="all">All projects</option>
+                            {allTasksUniqueProjectNames.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {allTasksError && (
+                        <div className={`mb-4 p-3 rounded-lg text-sm ${isDark ? 'bg-red-900/30 text-red-200' : 'bg-red-50 text-red-800'}`}>
+                            <i className="fas fa-exclamation-circle mr-2"></i>{allTasksError}
+                        </div>
+                    )}
+                    {allTasksLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+                            <span className={`ml-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-200'}>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Task</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Priority</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assignee</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Due date</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredAllTasks.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={8} className={`py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {allTasksList.length === 0 && !allTasksLoading
+                                                    ? 'No tasks found. Tasks are created inside each project.'
+                                                    : 'No tasks match your filters.'}
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredAllTasks.map(task => (
+                                            <tr
+                                                key={task.id}
+                                                className={`border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
+                                            >
+                                                <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
+                                                <td className="py-2.5 px-2">{task.project?.clientName || '—'}</td>
+                                                <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
+                                                <td className="py-2.5 px-2">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getTaskStatusColor(task.status)}`}>
+                                                        {task.status || '—'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2.5 px-2">{task.priority || '—'}</td>
+                                                <td className="py-2.5 px-2">{task.assignee || '—'}</td>
+                                                <td className="py-2.5 px-2">{formatDueDate(task.dueDate)}</td>
+                                                <td className="py-2.5 px-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openTaskInProject(task)}
+                                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                                                    >
+                                                        Open in project
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
         
@@ -3950,6 +4163,18 @@ const Projects = () => {
                             <i className="fas fa-user-tag" aria-hidden="true"></i>
                         </button>
                     </div>
+                    <button 
+                        onClick={() => setShowAllTasksView(true)}
+                        className={`px-4 py-2.5 rounded-lg transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 ${
+                            isDark 
+                                ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' 
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                        aria-label="View all tasks"
+                    >
+                        <i className="fas fa-tasks mr-2 text-xs" aria-hidden="true"></i>
+                        All Tasks
+                    </button>
                     <button 
                         onClick={() => {
                             openProgressTrackerHash();
