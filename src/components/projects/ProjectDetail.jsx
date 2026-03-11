@@ -4283,7 +4283,6 @@ function initializeProjectDetail() {
         }
 
         skipNextSaveRef.current = true;
-        setTasks(updatedTasks);
 
         // tasksList JSON write removed - comments are now stored in TaskComment table
         // Comment persistence is handled by TaskComment API in TaskDetailModal
@@ -4927,10 +4926,8 @@ function initializeProjectDetail() {
                     await Promise.all(savePromises);
                 }
                 
-                // Update local state after successful save
-                // CRITICAL: Ensure tasks is always an array
-                const safeTasks = Array.isArray(tasks) ? tasks : [];
-                setTasks(safeTasks.map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
+                // Update local state after successful save — use functional update to avoid stale closure
+                setTasks(prev => (Array.isArray(prev) ? prev : []).map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
                 setTaskLists(taskLists.filter(l => l.id !== listId));
             } catch (error) {
                 console.error('❌ Error deleting list:', error);
@@ -5694,8 +5691,13 @@ function initializeProjectDetail() {
                 return next;
             });
         } else {
-            setTasks(updatedTasks);
-            tasksRef.current = updatedTasks;
+            setTasks(prev => {
+                const nextIds = new Set((updatedTasks || []).map(t => String(t?.id)).filter(Boolean));
+                const prevOnly = (Array.isArray(prev) ? prev : []).filter(t => t?.id != null && !nextIds.has(String(t.id)));
+                const next = prevOnly.length ? [...updatedTasks, ...prevOnly] : updatedTasks;
+                tasksRef.current = next;
+                return next;
+            });
         }
         
         // Set flag to skip the useEffect save to prevent race condition
