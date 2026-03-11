@@ -72,6 +72,9 @@ const TicketDetailModal = ({
         }
         return '';
     });
+    const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+    const [assigneeSearch, setAssigneeSearch] = useState('');
+    const assigneeDropdownRef = useRef(null);
     
     // Track current customFields to preserve other fields when saving notes
     const [currentCustomFields, setCurrentCustomFields] = useState(() => {
@@ -354,6 +357,18 @@ const TicketDetailModal = ({
         }
     };
 
+    useEffect(() => {
+        if (!assigneeDropdownOpen) return;
+        const handle = (e) => {
+            if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(e.target)) {
+                setAssigneeDropdownOpen(false);
+                setAssigneeSearch('');
+            }
+        };
+        document.addEventListener('mousedown', handle);
+        return () => document.removeEventListener('mousedown', handle);
+    }, [assigneeDropdownOpen]);
+
     const loadProjectsForClient = async (clientId) => {
         try {
             if (!clientId) return;
@@ -616,18 +631,62 @@ const TicketDetailModal = ({
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                             Assign To
                                         </label>
-                                        <select
-                                            value={formData.assignedToId || ''}
-                                            onChange={(e) => handleChange('assignedToId', e.target.value || null)}
-                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="">Unassigned</option>
-                                            {users.map(user => (
-                                                <option key={user.id} value={user.id}>
-                                                    {user.name || user.email}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="relative" ref={assigneeDropdownRef}>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setAssigneeDropdownOpen(prev => !prev); setAssigneeSearch(''); }}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between"
+                                                aria-expanded={assigneeDropdownOpen}
+                                                aria-haspopup="listbox"
+                                            >
+                                                <span className="truncate">
+                                                    {formData.assignedToId ? (users.find(u => u.id === formData.assignedToId)?.name || users.find(u => u.id === formData.assignedToId)?.email || 'Assigned') : 'Unassigned'}
+                                                </span>
+                                                <i className="fas fa-chevron-down text-xs text-gray-400 flex-shrink-0 ml-1"></i>
+                                            </button>
+                                            {assigneeDropdownOpen && (
+                                                <div className="absolute left-0 right-0 top-full mt-1 z-50 min-w-[200px] max-h-[280px] flex flex-col rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 shadow-lg overflow-hidden">
+                                                    <div className="p-1.5 border-b border-gray-200 dark:border-gray-600">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search people..."
+                                                            value={assigneeSearch}
+                                                            onChange={(e) => setAssigneeSearch(e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="w-full py-1.5 px-2 rounded text-sm border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                    <div className="overflow-y-auto max-h-[220px] py-1">
+                                                        <button
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={!formData.assignedToId}
+                                                            onClick={() => { handleChange('assignedToId', null); setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
+                                                            className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 ${!formData.assignedToId ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}
+                                                        >
+                                                            Unassigned
+                                                        </button>
+                                                        {(() => {
+                                                            const q = (assigneeSearch || '').toLowerCase().trim();
+                                                            const filtered = q ? users.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.id || '').toLowerCase().includes(q)) : users;
+                                                            return filtered.map(user => (
+                                                                <button
+                                                                    key={user.id}
+                                                                    type="button"
+                                                                    role="option"
+                                                                    aria-selected={formData.assignedToId === user.id}
+                                                                    onClick={() => { handleChange('assignedToId', user.id); setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
+                                                                    className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 truncate ${formData.assignedToId === user.id ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}
+                                                                >
+                                                                    {user.name || user.email}
+                                                                </button>
+                                                            ));
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 

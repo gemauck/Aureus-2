@@ -23,6 +23,9 @@ const TaskDetailModal = ({
     const isSubtask = !!parentTask;
     
     const [activeTab, setActiveTab] = useState('details'); // details, comments, attachments, checklist
+    const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+    const [assigneeSearch, setAssigneeSearch] = useState('');
+    const assigneeDropdownRef = useRef(null);
     const [editedTask, setEditedTask] = useState(task || {
         title: '',
         description: '',
@@ -737,6 +740,19 @@ const TaskDetailModal = ({
             setUsers(usersProp);
         }
     }, [usersProp]);
+
+    // Close assignee dropdown when clicking outside
+    useEffect(() => {
+        if (!assigneeDropdownOpen) return;
+        const handle = (e) => {
+            if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(e.target)) {
+                setAssigneeDropdownOpen(false);
+                setAssigneeSearch('');
+            }
+        };
+        document.addEventListener('mousedown', handle);
+        return () => document.removeEventListener('mousedown', handle);
+    }, [assigneeDropdownOpen]);
 
     // Fetch users on component mount
     useEffect(() => {
@@ -2612,27 +2628,75 @@ const TaskDetailModal = ({
                                                             Assignee
                                                         </span>
                                                     </label>
-                                                    <select
-                                                        value={editedTask.assigneeId != null ? String(editedTask.assigneeId) : ''}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            const user = users.find(u => String(u.id) === val);
-                                                            setEditedTask({
-                                                                ...editedTask,
-                                                                assigneeId: val || null,
-                                                                assignee: user ? (user.name || user.email || '') : ''
-                                                            });
-                                                        }}
-                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
-                                                    >
-                                                        <option value="">Unassigned</option>
-                                                        {editedTask.assigneeId && !users.some(u => String(u.id) === String(editedTask.assigneeId)) && (
-                                                            <option value={String(editedTask.assigneeId)}>{editedTask.assignee || 'Assigned'}</option>
+                                                    <div className="relative" ref={assigneeDropdownRef}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setAssigneeDropdownOpen(prev => !prev); setAssigneeSearch(''); }}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition text-left flex items-center justify-between"
+                                                            aria-expanded={assigneeDropdownOpen}
+                                                            aria-haspopup="listbox"
+                                                        >
+                                                            <span className="truncate">{editedTask.assigneeId != null ? (editedTask.assignee || (users.find(u => String(u.id) === String(editedTask.assigneeId))?.name || users.find(u => String(u.id) === String(editedTask.assigneeId))?.email || 'Assigned')) : 'Unassigned'}</span>
+                                                            <i className="fas fa-chevron-down text-xs text-gray-400 flex-shrink-0 ml-1"></i>
+                                                        </button>
+                                                        {assigneeDropdownOpen && (
+                                                            <div className="absolute left-0 right-0 top-full mt-1 z-50 min-w-[200px] max-h-[280px] flex flex-col rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden">
+                                                                <div className="p-1.5 border-b border-gray-200">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Search people..."
+                                                                        value={assigneeSearch}
+                                                                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="w-full py-1.5 px-2 rounded text-sm border border-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500 bg-gray-50 text-gray-900 placeholder-gray-500"
+                                                                        autoFocus
+                                                                    />
+                                                                </div>
+                                                                <div className="overflow-y-auto max-h-[220px] py-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        role="option"
+                                                                        aria-selected={editedTask.assigneeId == null}
+                                                                        onClick={() => { setEditedTask({ ...editedTask, assigneeId: null, assignee: '' }); setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
+                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 ${editedTask.assigneeId == null ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                                                                    >
+                                                                        Unassigned
+                                                                    </button>
+                                                                    {(() => {
+                                                                        const q = (assigneeSearch || '').toLowerCase().trim();
+                                                                        const filtered = q ? users.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.id || '').toLowerCase().includes(q)) : users;
+                                                                        const showCurrent = editedTask.assigneeId && !users.some(u => String(u.id) === String(editedTask.assigneeId)) && (!q || (editedTask.assignee || '').toLowerCase().includes(q));
+                                                                        return (
+                                                                            <>
+                                                                                {showCurrent && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        role="option"
+                                                                                        className="w-full text-left py-2 px-3 text-sm hover:bg-gray-100 bg-blue-50 text-blue-700 truncate"
+                                                                                        onClick={() => { setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
+                                                                                    >
+                                                                                        {editedTask.assignee || 'Assigned'}
+                                                                                    </button>
+                                                                                )}
+                                                                                {filtered.map(user => (
+                                                                                    <button
+                                                                                        key={user.id}
+                                                                                        type="button"
+                                                                                        role="option"
+                                                                                        aria-selected={String(editedTask.assigneeId) === String(user.id)}
+                                                                                        onClick={() => { setEditedTask({ ...editedTask, assigneeId: user.id, assignee: user.name || user.email || '' }); setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
+                                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 truncate ${String(editedTask.assigneeId) === String(user.id) ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                                                                                    >
+                                                                                        {user.name || user.email}
+                                                                                    </button>
+                                                                                ))}
+                                                                            </>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            </div>
                                                         )}
-                                                        {users.map(user => (
-                                                            <option key={user.id} value={String(user.id)}>{user.name || user.email}</option>
-                                                        ))}
-                                                    </select>
+                                                    </div>
                                                 </div>
 
                                                 {/* Due Date */}

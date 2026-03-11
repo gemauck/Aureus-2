@@ -698,8 +698,9 @@ async function handler(req, res) {
           }
         }
       }
-      if (body.dueDate !== undefined) {
-        updateData.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+      if (body.dueDate !== undefined || body.due_date !== undefined) {
+        const raw = body.dueDate !== undefined ? body.dueDate : body.due_date;
+        updateData.dueDate = (raw !== null && raw !== undefined && raw !== '') ? new Date(raw) : null;
       }
       if (body.listId !== undefined) {
         updateData.listId = body.listId ? parseInt(String(body.listId), 10) : null;

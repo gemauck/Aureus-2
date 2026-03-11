@@ -224,6 +224,9 @@ const Projects = () => {
     const [allTasksModalLoading, setAllTasksModalLoading] = useState(false);
     const [allTasksUsers, setAllTasksUsers] = useState([]);
     const allTasksPrefetchedRef = React.useRef(false);
+    const [allTasksAssigneeOpenTaskId, setAllTasksAssigneeOpenTaskId] = useState(null);
+    const [allTasksAssigneeSearch, setAllTasksAssigneeSearch] = useState('');
+    const allTasksAssigneeDropdownRef = React.useRef(null);
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -414,6 +417,19 @@ const Projects = () => {
         }).catch(() => {});
         return () => { cancelled = true; };
     }, [showAllTasksView]);
+
+    // Close assignee dropdown when clicking outside
+    useEffect(() => {
+        if (!allTasksAssigneeOpenTaskId) return;
+        const handle = (e) => {
+            if (allTasksAssigneeDropdownRef.current && !allTasksAssigneeDropdownRef.current.contains(e.target)) {
+                setAllTasksAssigneeOpenTaskId(null);
+                setAllTasksAssigneeSearch('');
+            }
+        };
+        document.addEventListener('mousedown', handle);
+        return () => document.removeEventListener('mousedown', handle);
+    }, [allTasksAssigneeOpenTaskId]);
     
     // Helper function to update project URL with tab/section/comment info
     const updateProjectUrl = useCallback((projectId, options = {}) => {
@@ -4041,29 +4057,92 @@ const Projects = () => {
                                                     </select>
                                                 </td>
                                                 <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
-                                                    <select
-                                                        value={task.assigneeId != null ? String(task.assigneeId) : ''}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            const user = allTasksUsers.find(u => String(u.id) === val);
-                                                            patchTaskInAllTasks(task.id, { assigneeId: val || null, assignee: user ? (user.name || user.email || '') : '' });
-                                                        }}
-                                                        className={`w-full min-w-[140px] py-1 px-2 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer appearance-none bg-no-repeat bg-[length:1.25rem] bg-[right_0.5rem_center] pr-9 ${
-                                                            isDark
-                                                                ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
-                                                                : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/50 focus:border-blue-400'
-                                                        }`}
-                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")` }}
-                                                        aria-label="Assignee"
-                                                    >
-                                                        <option value="">Unassigned</option>
-                                                        {task.assigneeId && !allTasksUsers.some(u => String(u.id) === String(task.assigneeId)) && (
-                                                            <option value={String(task.assigneeId)}>{task.assignee || 'Assigned'}</option>
+                                                    <div className="relative w-full min-w-[140px]" ref={allTasksAssigneeOpenTaskId === task.id ? allTasksAssigneeDropdownRef : null}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setAllTasksAssigneeOpenTaskId(prev => prev === task.id ? null : task.id);
+                                                                setAllTasksAssigneeSearch('');
+                                                            }}
+                                                            className={`w-full py-1 px-2 rounded-lg text-sm border text-left transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 flex items-center justify-between gap-1 ${
+                                                                isDark
+                                                                    ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                                                    : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/50 focus:border-blue-400'
+                                                            }`}
+                                                            aria-label="Assignee"
+                                                            aria-expanded={allTasksAssigneeOpenTaskId === task.id}
+                                                            aria-haspopup="listbox"
+                                                        >
+                                                            <span className="truncate">{task.assigneeId != null ? (task.assignee || (allTasksUsers.find(u => String(u.id) === String(task.assigneeId))?.name || allTasksUsers.find(u => String(u.id) === String(task.assigneeId))?.email || 'Assigned') : 'Unassigned'}</span>
+                                                            <i className="fas fa-chevron-down text-xs opacity-70 flex-shrink-0" aria-hidden="true"></i>
+                                                        </button>
+                                                        {allTasksAssigneeOpenTaskId === task.id && (
+                                                            <div
+                                                                className={`absolute left-0 top-full mt-1 z-50 min-w-[200px] max-h-[280px] flex flex-col rounded-lg border shadow-lg overflow-hidden ${
+                                                                    isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                                                                }`}
+                                                                role="listbox"
+                                                            >
+                                                                <div className="p-1.5 border-b border-gray-200 dark:border-gray-600">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Search people..."
+                                                                        value={allTasksAssigneeSearch}
+                                                                        onChange={(e) => setAllTasksAssigneeSearch(e.target.value)}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className={`w-full py-1.5 px-2 rounded text-sm border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                                                            isDark ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
+                                                                        }`}
+                                                                        autoFocus
+                                                                    />
+                                                                </div>
+                                                                <div className="overflow-y-auto max-h-[220px] py-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        role="option"
+                                                                        aria-selected={task.assigneeId == null}
+                                                                        onClick={(e) => { e.stopPropagation(); patchTaskInAllTasks(task.id, { assigneeId: null, assignee: '' }); setAllTasksAssigneeOpenTaskId(null); setAllTasksAssigneeSearch(''); }}
+                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${task.assigneeId == null ? (isDark ? 'bg-gray-700 text-blue-300' : 'bg-blue-50 text-blue-700') : (isDark ? 'text-gray-200' : 'text-gray-700')}`}
+                                                                    >
+                                                                        Unassigned
+                                                                    </button>
+                                                                    {(() => {
+                                                                        const q = (allTasksAssigneeSearch || '').toLowerCase().trim();
+                                                                        const filtered = q ? allTasksUsers.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.id || '').toLowerCase().includes(q)) : allTasksUsers;
+                                                                        const showCurrentAssignee = task.assigneeId && !allTasksUsers.some(u => String(u.id) === String(task.assigneeId)) && (!q || (task.assignee || '').toLowerCase().includes(q));
+                                                                        return (
+                                                                            <>
+                                                                                {showCurrentAssignee && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        role="option"
+                                                                                        aria-selected={true}
+                                                                                        onClick={(e) => { e.stopPropagation(); setAllTasksAssigneeOpenTaskId(null); setAllTasksAssigneeSearch(''); }}
+                                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'bg-gray-700 text-blue-300' : 'bg-blue-50 text-blue-700'} truncate`}
+                                                                                    >
+                                                                                        {task.assignee || 'Assigned'}
+                                                                                    </button>
+                                                                                )}
+                                                                                {filtered.map(u => (
+                                                                            <button
+                                                                                key={u.id}
+                                                                                type="button"
+                                                                                role="option"
+                                                                                aria-selected={String(task.assigneeId) === String(u.id)}
+                                                                                onClick={(e) => { e.stopPropagation(); patchTaskInAllTasks(task.id, { assigneeId: u.id, assignee: u.name || u.email || '' }); setAllTasksAssigneeOpenTaskId(null); setAllTasksAssigneeSearch(''); }}
+                                                                                className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 truncate ${String(task.assigneeId) === String(u.id) ? (isDark ? 'bg-gray-700 text-blue-300' : 'bg-blue-50 text-blue-700') : (isDark ? 'text-gray-200' : 'text-gray-700')}`}
+                                                                            >
+                                                                                {u.name || u.email || u.id}
+                                                                            </button>
+                                                                                ))}
+                                                                            </>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            </div>
                                                         )}
-                                                        {allTasksUsers.map(u => (
-                                                            <option key={u.id} value={String(u.id)}>{u.name || u.email || u.id}</option>
-                                                        ))}
-                                                    </select>
+                                                    </div>
                                                 </td>
                                                 <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>
                                                     <input
