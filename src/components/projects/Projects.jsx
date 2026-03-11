@@ -3389,158 +3389,6 @@ const Projects = () => {
         return list;
     }, [allTasksList, allTasksSearch, allTasksFilterStatus, allTasksFilterProject]);
 
-    // All Tasks view (early return when active)
-    if (showAllTasksView) {
-        const getTaskStatusColor = (status) => {
-            const s = (status || '').toLowerCase();
-            if (s === 'completed' || s === 'done') return isDark ? 'bg-green-900/40 text-green-200' : 'bg-green-100 text-green-800';
-            if (s === 'in-progress' || s === 'in_progress') return isDark ? 'bg-blue-900/40 text-blue-200' : 'bg-blue-100 text-blue-800';
-            return isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800';
-        };
-        const formatDueDate = (dateString) => {
-            if (!dateString) return '—';
-            const d = new Date(dateString);
-            if (Number.isNaN(d.getTime())) return '—';
-            return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-        };
-        const openTaskInProject = (task) => {
-            const projectId = task.projectId || task.project?.id;
-            if (!projectId) return;
-            setShowAllTasksView(false);
-            window.location.hash = `#/projects/${projectId}?tab=tasks&task=${encodeURIComponent(task.id)}`;
-        };
-        return (
-            <div className="space-y-4">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                    <button
-                        type="button"
-                        onClick={() => setShowAllTasksView(false)}
-                        className={`p-2 rounded-lg transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
-                        aria-label="Back to projects"
-                    >
-                        <i className="fas fa-arrow-left" aria-hidden="true"></i>
-                    </button>
-                    <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                        All Tasks
-                    </h1>
-                    <div className="w-8" aria-hidden="true"></div>
-                </div>
-                <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                    <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                        <div className="flex-1 relative">
-                            <input
-                                type="text"
-                                placeholder="Search by task, project, client, or assignee..."
-                                value={allTasksSearch}
-                                onChange={(e) => setAllTasksSearch(e.target.value)}
-                                className={`w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm ${
-                                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
-                                }`}
-                                aria-label="Search tasks"
-                            />
-                            <i className={`fas fa-search absolute left-3 top-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
-                        </div>
-                        <select
-                            value={allTasksFilterStatus}
-                            onChange={(e) => setAllTasksFilterStatus(e.target.value)}
-                            className={`px-4 py-2.5 border rounded-lg text-sm ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                            }`}
-                            aria-label="Filter by status"
-                        >
-                            <option value="all">All statuses</option>
-                            <option value="todo">To Do</option>
-                            <option value="in-progress">In Progress</option>
-                            <option value="in_progress">In Progress (alt)</option>
-                            <option value="completed">Completed</option>
-                            <option value="done">Done</option>
-                        </select>
-                        <select
-                            value={allTasksFilterProject}
-                            onChange={(e) => setAllTasksFilterProject(e.target.value)}
-                            className={`px-4 py-2.5 border rounded-lg text-sm min-w-[180px] ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                            }`}
-                            aria-label="Filter by project"
-                        >
-                            <option value="all">All projects</option>
-                            {allTasksUniqueProjectNames.map(name => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    {allTasksError && (
-                        <div className={`mb-4 p-3 rounded-lg text-sm ${isDark ? 'bg-red-900/30 text-red-200' : 'bg-red-50 text-red-800'}`}>
-                            <i className="fas fa-exclamation-circle mr-2"></i>{allTasksError}
-                        </div>
-                    )}
-                    {allTasksLoading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-                            <span className={`ml-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm border-collapse">
-                                <thead>
-                                    <tr className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-200'}>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Task</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Priority</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assignee</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Due date</th>
-                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredAllTasks.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={8} className={`py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                {allTasksList.length === 0 && !allTasksLoading
-                                                    ? 'No tasks found. Tasks are created inside each project.'
-                                                    : 'No tasks match your filters.'}
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredAllTasks.map(task => (
-                                            <tr
-                                                key={task.id}
-                                                className={`border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
-                                            >
-                                                <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
-                                                <td className="py-2.5 px-2">{task.project?.clientName || '—'}</td>
-                                                <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
-                                                <td className="py-2.5 px-2">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getTaskStatusColor(task.status)}`}>
-                                                        {task.status || '—'}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2.5 px-2">{task.priority || '—'}</td>
-                                                <td className="py-2.5 px-2">{task.assignee || '—'}</td>
-                                                <td className="py-2.5 px-2">{formatDueDate(task.dueDate)}</td>
-                                                <td className="py-2.5 px-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openTaskInProject(task)}
-                                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                                                    >
-                                                        Open in project
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    }
-
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
         
@@ -3710,64 +3558,6 @@ const Projects = () => {
         }
     };
 
-    // Render Progress Tracker with comprehensive error handling
-    if (showProgressTracker) {
-        // Early return with loading message if component not available
-        if (!window.ProjectProgressTracker) {
-            console.warn('⚠️ Projects: ProjectProgressTracker not available yet');
-            return React.createElement('div', { className: 'space-y-3' },
-                React.createElement('div', { className: 'flex items-center justify-between' },
-                    React.createElement('button', {
-                        onClick: () => clearProgressTrackerHash(),
-                        className: 'p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
-                    }, React.createElement('i', { className: 'fas fa-arrow-left' })),
-                    React.createElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Project Progress Tracker')
-                ),
-                React.createElement('div', { className: 'bg-yellow-50 border border-yellow-200 rounded-lg p-4' },
-                    React.createElement('div', { className: 'flex items-start' },
-                        React.createElement('i', { className: 'fas fa-spinner fa-spin text-yellow-600 mt-0.5 mr-3' }),
-                        React.createElement('div', { className: 'flex-1' },
-                            React.createElement('h3', { className: 'text-sm font-semibold text-yellow-800 mb-1' }, 'Loading Progress Tracker...'),
-                            React.createElement('p', { className: 'text-sm text-yellow-700' }, 
-                                'The Progress Tracker component is still loading. Please wait a moment...')
-                        )
-                    )
-                )
-            );
-        }
-        
-        // Wrap entire section in try-catch at render level
-        try {
-            return renderProgressTracker();
-        } catch (error) {
-            console.error('❌ Fatal error rendering Progress Tracker:', error);
-            return (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                    <button 
-                        onClick={() => clearProgressTrackerHash()} 
-                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                        <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
-                    </div>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-start">
-                            <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-3"></i>
-                            <div className="flex-1">
-                                <h3 className="text-sm font-semibold text-red-800 mb-1">Fatal Error</h3>
-                                <p className="text-sm text-red-700">
-                                    {error.message || 'An unexpected error occurred'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-    }
-
     // BULLETPROOF: Aggressive monitoring when viewing a project
     useEffect(() => {
         if (!viewingProject) return;
@@ -3893,6 +3683,212 @@ const Projects = () => {
         
         return () => clearInterval(checkInterval);
     }, [viewingProject?.id, forceRender]);
+
+    // Early returns ONLY after all hooks (fixes React #300 - fewer hooks than expected)
+    if (showAllTasksView) {
+        const getTaskStatusColor = (status) => {
+            const s = (status || '').toLowerCase();
+            if (s === 'completed' || s === 'done') return isDark ? 'bg-green-900/40 text-green-200' : 'bg-green-100 text-green-800';
+            if (s === 'in-progress' || s === 'in_progress') return isDark ? 'bg-blue-900/40 text-blue-200' : 'bg-blue-100 text-blue-800';
+            return isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800';
+        };
+        const formatDueDate = (dateString) => {
+            if (!dateString) return '—';
+            const d = new Date(dateString);
+            if (Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        };
+        const openTaskInProject = (task) => {
+            const projectId = task.projectId || task.project?.id;
+            if (!projectId) return;
+            setShowAllTasksView(false);
+            window.location.hash = `#/projects/${projectId}?tab=tasks&task=${encodeURIComponent(task.id)}`;
+        };
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <button
+                        type="button"
+                        onClick={() => setShowAllTasksView(false)}
+                        className={`p-2 rounded-lg transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
+                        aria-label="Back to projects"
+                    >
+                        <i className="fas fa-arrow-left" aria-hidden="true"></i>
+                    </button>
+                    <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        All Tasks
+                    </h1>
+                    <div className="w-8" aria-hidden="true"></div>
+                </div>
+                <div className={`rounded-xl border p-5 shadow-sm ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+                    <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                        <div className="flex-1 relative">
+                            <input
+                                type="text"
+                                placeholder="Search by task, project, client, or assignee..."
+                                value={allTasksSearch}
+                                onChange={(e) => setAllTasksSearch(e.target.value)}
+                                className={`w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm ${
+                                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
+                                }`}
+                                aria-label="Search tasks"
+                            />
+                            <i className={`fas fa-search absolute left-3 top-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                        </div>
+                        <select
+                            value={allTasksFilterStatus}
+                            onChange={(e) => setAllTasksFilterStatus(e.target.value)}
+                            className={`px-4 py-2.5 border rounded-lg text-sm ${
+                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                            }`}
+                            aria-label="Filter by status"
+                        >
+                            <option value="all">All statuses</option>
+                            <option value="todo">To Do</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="in_progress">In Progress (alt)</option>
+                            <option value="completed">Completed</option>
+                            <option value="done">Done</option>
+                        </select>
+                        <select
+                            value={allTasksFilterProject}
+                            onChange={(e) => setAllTasksFilterProject(e.target.value)}
+                            className={`px-4 py-2.5 border rounded-lg text-sm min-w-[180px] ${
+                                isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                            }`}
+                            aria-label="Filter by project"
+                        >
+                            <option value="all">All projects</option>
+                            {allTasksUniqueProjectNames.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {allTasksError && (
+                        <div className={`mb-4 p-3 rounded-lg text-sm ${isDark ? 'bg-red-900/30 text-red-200' : 'bg-red-50 text-red-800'}`}>
+                            <i className="fas fa-exclamation-circle mr-2"></i>{allTasksError}
+                        </div>
+                    )}
+                    {allTasksLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+                            <span className={`ml-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-200'}>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Task</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Priority</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assignee</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Due date</th>
+                                        <th className={`text-left py-3 px-2 font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredAllTasks.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={8} className={`py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {allTasksList.length === 0 && !allTasksLoading
+                                                    ? 'No tasks found. Tasks are created inside each project.'
+                                                    : 'No tasks match your filters.'}
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredAllTasks.map(task => (
+                                            <tr
+                                                key={task.id}
+                                                className={`border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'}`}
+                                            >
+                                                <td className="py-2.5 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
+                                                <td className="py-2.5 px-2">{task.project?.clientName || '—'}</td>
+                                                <td className="py-2.5 px-2 font-medium">{task.title || '—'}</td>
+                                                <td className="py-2.5 px-2">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getTaskStatusColor(task.status)}`}>
+                                                        {task.status || '—'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2.5 px-2">{task.priority || '—'}</td>
+                                                <td className="py-2.5 px-2">{task.assignee || '—'}</td>
+                                                <td className="py-2.5 px-2">{formatDueDate(task.dueDate)}</td>
+                                                <td className="py-2.5 px-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openTaskInProject(task)}
+                                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                                                    >
+                                                        Open in project
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    if (showProgressTracker) {
+        if (!window.ProjectProgressTracker) {
+            console.warn('⚠️ Projects: ProjectProgressTracker not available yet');
+            return React.createElement('div', { className: 'space-y-3' },
+                React.createElement('div', { className: 'flex items-center justify-between' },
+                    React.createElement('button', {
+                        onClick: () => clearProgressTrackerHash(),
+                        className: 'p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
+                    }, React.createElement('i', { className: 'fas fa-arrow-left' })),
+                    React.createElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Project Progress Tracker')
+                ),
+                React.createElement('div', { className: 'bg-yellow-50 border border-yellow-200 rounded-lg p-4' },
+                    React.createElement('div', { className: 'flex items-start' },
+                        React.createElement('i', { className: 'fas fa-spinner fa-spin text-yellow-600 mt-0.5 mr-3' }),
+                        React.createElement('div', { className: 'flex-1' },
+                            React.createElement('h3', { className: 'text-sm font-semibold text-yellow-800 mb-1' }, 'Loading Progress Tracker...'),
+                            React.createElement('p', { className: 'text-sm text-yellow-700' },
+                                'The Progress Tracker component is still loading. Please wait a moment...')
+                        )
+                    )
+                )
+            );
+        }
+        try {
+            return renderProgressTracker();
+        } catch (error) {
+            console.error('❌ Fatal error rendering Progress Tracker:', error);
+            return (
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <button
+                            onClick={() => clearProgressTrackerHash()}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-start">
+                            <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-3"></i>
+                            <div className="flex-1">
+                                <h3 className="text-sm font-semibold text-red-800 mb-1">Fatal Error</h3>
+                                <p className="text-sm text-red-700">
+                                    {error.message || 'An unexpected error occurred'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+    }
 
     if (viewingProject) {
         // CRITICAL: Don't render ProjectDetail if we're navigating back
