@@ -117,6 +117,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             throw new Error(err?.error?.message || `Save failed: ${res.status}`);
         }
         const data = await res.json().catch(() => ({}));
+        // Invalidate project cache so next getProject() returns fresh data (e.g. after refresh)
+        if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+            window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
+        }
         return data?.data || data;
     }, []);
 

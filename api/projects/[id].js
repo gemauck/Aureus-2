@@ -820,6 +820,9 @@ async function handler(req, res) {
         if (transformedProject.monthlyDataReviewChecklist === undefined) transformedProject.monthlyDataReviewChecklist = '[]';
         if (transformedProject.monthlyDataReviewSections === undefined) transformedProject.monthlyDataReviewSections = '{}';
 
+        // Prevent caching so section deletes and edits always show after refresh
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+        res.setHeader('Pragma', 'no-cache')
         return ok(res, { project: transformedProject })
       } catch (dbError) {
         console.error('❌ Database error getting project:', {
