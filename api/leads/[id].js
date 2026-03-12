@@ -109,6 +109,11 @@ async function handler(req, res) {
                 clientFollowUps: true,
                 clientServices: true,
                 projects: { select: { id: true, name: true, status: true } },
+                groupMemberships: {
+                  include: {
+                    group: { select: { id: true, name: true, type: true, industry: true } }
+                  }
+                },
                 ...(includeObj.externalAgent ? { externalAgent: true } : {}),
                 ...(includeObj.starredBy ? { starredBy: includeObj.starredBy } : {})
               }
@@ -143,6 +148,7 @@ async function handler(req, res) {
               lead.clientFollowUps = []
               lead.clientServices = []
               lead.projects = []
+              lead.groupMemberships = []
               
               // Try to fetch normalized data separately
               try {
@@ -211,6 +217,25 @@ async function handler(req, res) {
                   ORDER BY "createdAt" DESC
                 `
                 lead.projects = projectsResult || []
+                // Hydrate groupMemberships from ClientCompanyGroup
+                try {
+                  const groupRows = await prisma.$queryRaw`
+                    SELECT m.id, m."clientId", m."groupId", m.role,
+                           g.id as "g_id", g.name as "g_name", g.type as "g_type", g.industry as "g_industry"
+                    FROM "ClientCompanyGroup" m
+                    INNER JOIN "Client" g ON g.id = m."groupId"
+                    WHERE m."clientId" = ${id}
+                  `
+                  lead.groupMemberships = (groupRows || []).map(r => ({
+                    id: r.id,
+                    clientId: r.clientId,
+                    groupId: r.groupId,
+                    role: r.role,
+                    group: r.g_id ? { id: r.g_id, name: r.g_name || '', type: r.g_type || null, industry: r.g_industry || null } : null
+                  }))
+                } catch (groupErr) {
+                  lead.groupMemberships = []
+                }
               } catch (normError) {
                 console.warn(`⚠️ Could not fetch normalized data:`, normError.message)
               }
@@ -252,6 +277,10 @@ async function handler(req, res) {
           if (lead.externalAgent) {
             parsedLead.externalAgent = lead.externalAgent
           }
+          // Preserve groupMemberships so Company Group shows in detail and after save refresh
+          parsedLead.groupMemberships = (lead.groupMemberships && Array.isArray(lead.groupMemberships))
+            ? lead.groupMemberships
+            : []
           
           console.log(`✅ [LEADS ID] Successfully retrieved lead ${id}`)
           return ok(res, { lead: parsedLead })

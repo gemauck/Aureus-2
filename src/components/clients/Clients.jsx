@@ -4779,8 +4779,19 @@ const Clients = React.memo(() => {
                         // Always prefer the latest form data for fields the user just edited,
                         // especially comments, notes, and sites (Stage/AIDA per site). This makes
                         // leads behave like clients: the UI is the source of truth immediately after a save.
+                        // CRITICAL: Explicitly set summary-table fields so the leads list row cross-updates immediately.
                         const finalSavedLead = {
                             ...parsedApiLead,
+                            // Summary table fields - ensure table row matches what was just saved
+                            engagementStage: parsedApiLead.engagementStage ?? updatedLead.engagementStage ?? 'Potential',
+                            aidaStatus: parsedApiLead.aidaStatus ?? updatedLead.aidaStatus ?? 'Awareness',
+                            groupMemberships: Array.isArray(parsedApiLead.groupMemberships) && parsedApiLead.groupMemberships.length > 0
+                                ? parsedApiLead.groupMemberships
+                                : (Array.isArray(updatedLead.groupMemberships) ? updatedLead.groupMemberships : []),
+                            externalAgentId: parsedApiLead.externalAgentId ?? updatedLead.externalAgentId ?? null,
+                            externalAgent: parsedApiLead.externalAgent ?? updatedLead.externalAgent ?? null,
+                            industry: parsedApiLead.industry ?? updatedLead.industry ?? 'Other',
+                            name: parsedApiLead.name ?? updatedLead.name ?? '',
                             // Prefer comments from the form data if present; fall back to parsed API comments.
                             comments: Array.isArray(leadFormData.comments)
                                 ? leadFormData.comments
@@ -4794,7 +4805,7 @@ const Clients = React.memo(() => {
                         };
                         
                         // CRITICAL: Use the merged lead (API + form data) to update state.
-                        // This ensures comments/notes never disappear after a save.
+                        // This ensures the summary table row updates immediately with saved values.
                         const savedLeads = leads.map(l => l.id === finalSavedLead.id ? finalSavedLead : l);
                         setLeads(savedLeads);
                         selectedLeadRef.current = finalSavedLead; // Update selected lead ref with persisted data
@@ -4863,7 +4874,11 @@ const Clients = React.memo(() => {
                                                 proposals: parseField(freshLead.proposals, []),
                                                 services: parseField(freshLead.services, []),
                                                 // Preserve sites (including per-site stage/aidaStatus) from refreshed lead
-                                                sites: parseField(freshLead.sites, [])
+                                                sites: parseField(freshLead.sites, []),
+                                                // Preserve groupMemberships so Company Group and list stay in sync after save
+                                                groupMemberships: (freshLead.groupMemberships && Array.isArray(freshLead.groupMemberships))
+                                                    ? freshLead.groupMemberships
+                                                    : (updatedLead.groupMemberships && Array.isArray(updatedLead.groupMemberships) ? updatedLead.groupMemberships : [])
                                             };
                                             
                                             console.log('🔄 Refreshed lead after save:', {

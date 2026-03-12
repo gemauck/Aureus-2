@@ -243,6 +243,12 @@ const LeadDetailModal = ({
         
         const engagementStageChanged = currentEngagementStage !== normalizeLifecycleStage(formDataEngagementStage);
         const aidaStatusChanged = currentAidaStatus !== formDataAidaStatus;
+        // When same lead but stage/status changed, treat as server update (e.g. after save refresh) and allow form to sync
+        const serverUpdate = !isDifferentLead && (engagementStageChanged || aidaStatusChanged);
+        if (serverUpdate) {
+            userEditedFieldsRef.current.delete('engagementStage');
+            userEditedFieldsRef.current.delete('aidaStatus');
+        }
         const shouldUpdate = isDifferentLead || (engagementStageChanged && !userEditedFieldsRef.current.has('engagementStage')) || (aidaStatusChanged && !userEditedFieldsRef.current.has('aidaStatus'));
 
         if (shouldUpdate) {
