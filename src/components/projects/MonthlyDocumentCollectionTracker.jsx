@@ -3766,7 +3766,7 @@ const getAssigneeColor = (identifier, users) => {
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
                 role="gridcell"
             >
-                <div className={`relative ${isMonthlyDataReview ? 'min-w-[120px] w-[120px]' : 'min-w-[180px]'}`}>
+                <div className={`relative ${isMonthlyDataReview ? 'min-w-[180px] w-[180px]' : 'min-w-[180px]'}`}>
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -4008,7 +4008,7 @@ const getAssigneeColor = (identifier, users) => {
             <td
                 className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
-                style={{ minWidth: '120px', width: '120px' }}
+                style={{ minWidth: '180px', width: '180px' }}
             >
                 <textarea
                     value={notes}
@@ -6945,7 +6945,7 @@ Abcotronics`;
                                                                         ? 'bg-primary-50 text-primary-800 border-primary-200'
                                                                         : 'text-gray-600'
                                                                 }`}
-                                                                style={{ minWidth: '120px', width: '120px' }}
+                                                                style={{ minWidth: '180px', width: '180px' }}
                                                             >
                                                                 Status
                                                             </th>
@@ -6955,7 +6955,7 @@ Abcotronics`;
                                                                         ? 'bg-primary-50 text-primary-800 border-primary-200'
                                                                         : 'text-gray-600'
                                                                 }`}
-                                                                style={{ minWidth: '120px', width: '120px' }}
+                                                                style={{ minWidth: '180px', width: '180px' }}
                                                             >
                                                                 Notes
                                                             </th>
