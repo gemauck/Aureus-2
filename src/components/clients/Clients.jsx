@@ -8990,7 +8990,10 @@ const Clients = React.memo(() => {
                                             </div>
                                         </td>
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
-                                        <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                        <td className={`px-6 py-2 whitespace-nowrap ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => hasSiteInPipeline && e.stopPropagation()}>
+                                            {hasSiteInPipeline ? (
+                                                <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
+                                            ) : (
                                             <select
                                                 value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.aidaStatus ?? (lead.stage || 'awareness')).toLowerCase())) || 'Awareness'}
                                                 onChange={e => handleUpdateLeadAidaStatus(lead.id, e.target.value)}
@@ -9008,8 +9011,12 @@ const Clients = React.memo(() => {
                                                 <option value="Desire">Desire</option>
                                                 <option value="Action">Action</option>
                                             </select>
+                                            )}
                                         </td>
-                                        <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                        <td className={`px-6 py-2 whitespace-nowrap ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => hasSiteInPipeline && e.stopPropagation()}>
+                                            {hasSiteInPipeline ? (
+                                                <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
+                                            ) : (
                                             <select
                                                 value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
                                                 onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
@@ -9031,6 +9038,7 @@ const Clients = React.memo(() => {
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
                                             </select>
+                                            )}
                                         </td>
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`} onClick={e => e.stopPropagation()}>
                                             <select
@@ -9710,7 +9718,7 @@ className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                                             : 'bg-gray-100 border-gray-300 text-gray-900 focus:bg-white'
                                     }`}
                                 >
-                                    <option value="All Aida Status">All Aida Status</option>
+                                    <option value="All AIDA Status">All AIDA Status</option>
                                     {allAidaStatuses.map((stage) => (
                                         <option key={stage} value={stage}>
                                             {stage}
