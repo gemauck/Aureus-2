@@ -4690,6 +4690,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             >
                                                 <option value="">Select External Agent</option>
+                                                {/* Show current agent name immediately before options load (avoids ~1s blank while loadExternalAgents runs) */}
+                                                {(() => {
+                                                    const currentId = formData.externalAgentId ?? formData.externalAgent?.id;
+                                                    const currentName = formData.externalAgent?.name;
+                                                    const hasOptionForCurrent = currentId != null && externalAgents.some(a => String(a.id) === String(currentId));
+                                                    if (currentId && !hasOptionForCurrent && currentName) {
+                                                        return <option value={String(currentId)}>{currentName}</option>;
+                                                    }
+                                                    if (currentId && !hasOptionForCurrent) {
+                                                        return <option value={String(currentId)}>Loading...</option>;
+                                                    }
+                                                    return null;
+                                                })()}
                                                 {externalAgents.map((agent) => (
                                                     <option key={agent.id} value={String(agent.id)}>
                                                         {agent.name}
