@@ -1,5 +1,8 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
+
+// If the newest article is older than this, auto-trigger a feed refresh once per mount
+const STALE_FEED_DAYS = 3;
 
 /**
  * CLIENT NEWS FEED COMPONENT
@@ -20,7 +23,8 @@ const ClientNewsFeed = () => {
     const [clients, setClients] = useState([]);
     const [filterDate, setFilterDate] = useState('all'); // all, today, week, month
     const [activeTab, setActiveTab] = useState('activities'); // activities, news
-    
+    const hasAutoRefreshedStaleRef = useRef(false);
+
     // Get theme
     const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
 
@@ -337,6 +341,19 @@ const ClientNewsFeed = () => {
             setIsRefreshingNews(false);
         }
     };
+
+    // Auto-refresh feed once when the newest article is older than STALE_FEED_DAYS (e.g. Dec 2023)
+    useEffect(() => {
+        if (newsArticles.length === 0 || hasAutoRefreshedStaleRef.current) return;
+        const newest = newsArticles[0]; // already sorted newest first
+        const newestDate = new Date(newest.publishedAt || newest.createdAt);
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - STALE_FEED_DAYS);
+        if (newestDate < cutoff) {
+            hasAutoRefreshedStaleRef.current = true;
+            triggerNewsSearchAndRefresh();
+        }
+    }, [newsArticles]);
 
     return (
         <div className="space-y-4">
