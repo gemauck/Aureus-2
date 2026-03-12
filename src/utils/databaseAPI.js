@@ -1561,9 +1561,9 @@ const DatabaseAPI = {
         return response;
     },
 
-    // OPPORTUNITIES OPERATIONS
+    // OPPORTUNITIES OPERATIONS - use ?all=true so Pipeline/Clients get full list (no 100-cap)
     async getOpportunities() {
-        const response = await this.makeRequest('/opportunities');
+        const response = await this.makeRequest('/opportunities?all=true');
         return response;
     },
 

@@ -35,14 +35,15 @@ async function handler(req, res) {
     }
 
     // List Opportunities (GET /api/opportunities)
+    // Default limit 1000 so Pipeline/Clients get full list. Use ?page=&limit= for pagination, ?all=true for no limit.
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'opportunities') {
       try {
-        // Add pagination support to prevent loading all opportunities
+        const wantAll = req.query?.all === 'true' || req.query?.all === '1'
         const page = parseInt(req.query?.page) || 1
-        const limit = parseInt(req.query?.limit) || 100 // Default limit of 100
-        const skip = (page - 1) * limit
-        
-        const opportunities = await prisma.opportunity.findMany({ 
+        const limit = wantAll ? undefined : (parseInt(req.query?.limit) || 1000) // Default 1000 for Pipeline; use ?all=true for no limit
+        const skip = limit === undefined ? 0 : (page - 1) * limit
+
+        const opportunities = await prisma.opportunity.findMany({
           include: {
             client: {
               select: {
@@ -59,8 +60,7 @@ async function handler(req, res) {
             } : {})
           },
           orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: skip
+          ...(limit !== undefined && { take: limit, skip })
         })
         const normalized = opportunities.map(opportunity => {
           const { starredBy, ...rest } = opportunity

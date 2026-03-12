@@ -250,6 +250,7 @@ async function handler(req, res) {
               code: relationError.code,
               meta: relationError.meta
             })
+            // Include client + group + null + ''; exclude lead
             console.warn('⚠️ Trying with minimal relations...')
             try {
               rawClients = await prisma.client.findMany({
@@ -257,7 +258,8 @@ async function handler(req, res) {
                   OR: [
                     { type: 'client' },
                     { type: 'group' },
-                    { type: null }
+                    { type: null },
+                    { type: '' }
                   ]
                 },
                 include: {
@@ -340,10 +342,16 @@ async function handler(req, res) {
                 stack: minimalRelationError.stack?.substring(0, 500)
               })
               
+              // Include client + group + null + ''; exclude lead
               try {
                 rawClients = await prisma.client.findMany({
                   where: {
-                    type: 'client'
+                    OR: [
+                      { type: 'client' },
+                      { type: 'group' },
+                      { type: null },
+                      { type: '' }
+                    ]
                   },
                   orderBy: {
                     createdAt: 'desc'
@@ -415,8 +423,8 @@ async function handler(req, res) {
               }
               // No WHERE clause filtering by ownerId - all users see all clients
             })
-            // Filter manually in case type column doesn't exist in DB but we want to exclude leads
-            rawClients = rawClients.filter(c => !c.type || c.type === 'client' || c.type === null)
+            // Include client + group + null + ''; exclude lead
+            rawClients = rawClients.filter(c => !c.type || c.type === 'client' || c.type === 'group' || c.type === null || c.type === '')
           } catch (fallbackError) {
             // Last resort: query without any relations
             console.error('❌ Fallback query with relations failed, trying minimal query:', fallbackError.message)
@@ -435,7 +443,7 @@ async function handler(req, res) {
                          "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
                          proposals, thumbnail, services, "rssSubscribed", kyc, "kycJsonb"
                   FROM "Client"
-                  WHERE (type = 'client' OR type = 'group' OR type IS NULL)
+                  WHERE (type = 'client' OR type = 'group' OR type IS NULL OR type = '')
                   AND (type IS NULL OR type != 'lead')
                   ORDER BY "createdAt" DESC
                 `
@@ -470,9 +478,9 @@ async function handler(req, res) {
                   createdAt: 'desc'
                 }
               })
-              // Filter manually and add empty tags
+              // Include client + group + null + ''; exclude lead
               rawClients = rawClients
-                .filter(c => !c.type || c.type === 'client' || c.type === 'group' || c.type === null)
+                .filter(c => !c.type || c.type === 'client' || c.type === 'group' || c.type === null || c.type === '')
             }
           }
         }
@@ -684,8 +692,17 @@ async function handler(req, res) {
         }
         
         // Last-resort: try minimal query with no relations to avoid 500
+        // Include client + group + null + ''; exclude lead
         try {
           const minimal = await prisma.client.findMany({
+            where: {
+              OR: [
+                { type: 'client' },
+                { type: 'group' },
+                { type: null },
+                { type: '' }
+              ]
+            },
             orderBy: { createdAt: 'desc' },
             take: 5000
           })

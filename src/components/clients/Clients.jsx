@@ -471,6 +471,25 @@ function normalizeLeadStages(leadsArray = []) {
         });
 }
 
+function safeParseJson(value, fallback) {
+    if (value == null || value === '') return fallback;
+    if (typeof value !== 'string') return fallback;
+    try {
+        return JSON.parse(value);
+    } catch (_) {
+        return fallback;
+    }
+}
+
+const DEFAULT_BILLING_TERMS_OBJ = {
+    paymentTerms: 'Net 30',
+    billingFrequency: 'Monthly',
+    currency: 'ZAR',
+    retainerAmount: 0,
+    taxExempt: false,
+    notes: ''
+};
+
 function processClientData(rawClients, cacheKey) {
     // Use cached processed data if available and recent
     const now = Date.now();
@@ -483,9 +502,10 @@ function processClientData(rawClients, cacheKey) {
         return [];
     }
     
-    // Process the data
+    // Process the data - safe JSON parsing so one bad record doesn't break the whole list
     const startTime = performance.now();
     const processed = rawClients.map(c => {
+        try {
         // Preserve type as-is, don't default null/undefined to 'client'
         // This ensures leads aren't accidentally converted to clients
         const clientType = c.type; // Keep null/undefined as-is, don't default
@@ -501,6 +521,17 @@ function processClientData(rawClients, cacheKey) {
             else engagementStage = c.engagementStage ?? c.status ?? 'Inactive';
         }
         
+        const contacts = Array.isArray(c.contacts) ? c.contacts : (typeof c.contacts === 'string' ? safeParseJson(c.contacts, []) : []);
+        const followUps = Array.isArray(c.followUps) ? c.followUps : (typeof c.followUps === 'string' ? safeParseJson(c.followUps, []) : []);
+        const comments = Array.isArray(c.comments) ? c.comments : (typeof c.comments === 'string' ? safeParseJson(c.comments, []) : []);
+        const sites = Array.isArray(c.sites) ? c.sites : (Array.isArray(c.clientSites) ? c.clientSites : (typeof c.sites === 'string' ? safeParseJson(c.sites, []) : []));
+        const contracts = Array.isArray(c.contracts) ? c.contracts : (typeof c.contracts === 'string' ? safeParseJson(c.contracts, []) : []);
+        const activityLog = Array.isArray(c.activityLog) ? c.activityLog : (typeof c.activityLog === 'string' ? safeParseJson(c.activityLog, []) : []);
+        const billingTermsRaw = typeof c.billingTerms === 'object' ? c.billingTerms : (typeof c.billingTerms === 'string' ? safeParseJson(c.billingTerms, {}) : null);
+        const billingTerms = billingTermsRaw && typeof billingTermsRaw === 'object' ? billingTermsRaw : DEFAULT_BILLING_TERMS_OBJ;
+        const services = Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? safeParseJson(c.services, []) : []);
+        const kycParsed = (c.kyc != null && typeof c.kyc === 'object') ? c.kyc : (typeof c.kyc === 'string' && c.kyc.trim() ? safeParseJson(c.kyc, {}) : (c.kycJsonb != null && typeof c.kycJsonb === 'object' ? c.kycJsonb : {}));
+
         return {
         id: c.id,
         name: c.name,
@@ -513,23 +544,16 @@ function processClientData(rawClients, cacheKey) {
         address: c.address || '',
         website: c.website || '',
         notes: c.notes || '',
-        contacts: Array.isArray(c.contacts) ? c.contacts : (typeof c.contacts === 'string' ? JSON.parse(c.contacts || '[]') : []),
-        followUps: Array.isArray(c.followUps) ? c.followUps : (typeof c.followUps === 'string' ? JSON.parse(c.followUps || '[]') : []),
+        contacts,
+        followUps,
         projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
-        comments: Array.isArray(c.comments) ? c.comments : (typeof c.comments === 'string' ? JSON.parse(c.comments || '[]') : []),
-        sites: Array.isArray(c.sites) ? c.sites : (Array.isArray(c.clientSites) ? c.clientSites : (typeof c.sites === 'string' ? JSON.parse(c.sites || '[]') : [])),
+        comments,
+        sites,
         opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
-        contracts: Array.isArray(c.contracts) ? c.contracts : (typeof c.contracts === 'string' ? JSON.parse(c.contracts || '[]') : []),
-        activityLog: Array.isArray(c.activityLog) ? c.activityLog : (typeof c.activityLog === 'string' ? JSON.parse(c.activityLog || '[]') : []),
-        billingTerms: typeof c.billingTerms === 'object' ? c.billingTerms : (typeof c.billingTerms === 'string' ? JSON.parse(c.billingTerms || '{}') : {
-            paymentTerms: 'Net 30',
-            billingFrequency: 'Monthly',
-            currency: 'ZAR',
-            retainerAmount: 0,
-            taxExempt: false,
-            notes: ''
-        }),
-        services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
+        contracts,
+        activityLog,
+        billingTerms,
+        services,
         ownerId: c.ownerId || null,
         isStarred,
         createdAt: c.createdAt,
@@ -543,8 +567,42 @@ function processClientData(rawClients, cacheKey) {
             c.companyGroup || c.company_group || c.groups || c.group
         ),
         // Preserve KYC so it survives list load and hard refresh
-        kyc: (c.kyc != null && typeof c.kyc === 'object') ? c.kyc : (typeof c.kyc === 'string' && c.kyc.trim() ? (() => { try { return JSON.parse(c.kyc); } catch (_) { return {}; } })() : (c.kycJsonb != null && typeof c.kycJsonb === 'object' ? c.kycJsonb : {}))
+        kyc: kycParsed
         };
+        } catch (itemErr) {
+            logClientsDebug('processClientData: safe fallback for record', c?.id, itemErr?.message);
+            return {
+                id: c?.id,
+                name: c?.name ?? 'Unknown',
+                type: c?.type ?? null,
+                engagementStage: 'Inactive',
+                aidaStatus: 'Awareness',
+                industry: c?.industry || 'Other',
+                revenue: 0,
+                lastContact: '',
+                address: '',
+                website: '',
+                notes: '',
+                contacts: [],
+                followUps: [],
+                projectIds: [],
+                comments: [],
+                sites: [],
+                opportunities: [],
+                contracts: [],
+                activityLog: [],
+                billingTerms: DEFAULT_BILLING_TERMS_OBJ,
+                services: [],
+                ownerId: c?.ownerId || null,
+                isStarred: false,
+                createdAt: c?.createdAt,
+                updatedAt: c?.updatedAt,
+                externalAgentId: null,
+                externalAgent: null,
+                groupMemberships: [],
+                kyc: {}
+            };
+        }
     });
     
     // Cache the result
@@ -5475,13 +5533,13 @@ const Clients = React.memo(() => {
             if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
                 return false; // Exclude leads or any other type value
             }
-            
-                // Additional safeguard: exclude records with status='Potential' (always a lead)
-                // This catches leads that might have been incorrectly saved with type='client'
-                if ((client.engagementStage ?? client.status) === 'Potential') {
-                    return false;
-                }
-            
+            // Only exclude by engagementStage when type is ambiguous (legacy records). After migration,
+            // engagementStage defaults to "Potential" for Client, so do NOT hide type === 'client' by stage.
+            const stage = client.engagementStage ?? client.status;
+            if ((client.type !== 'client') && stage === 'Potential') {
+                return false; // Legacy record that looks like a lead
+            }
+
             // Enhanced search across multiple fields
             const searchLower = searchTerm.toLowerCase();
             const services = Array.isArray(client.services)
