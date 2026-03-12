@@ -352,16 +352,20 @@ const Projects = () => {
         return () => window.removeEventListener('hashchange', handleHashChangeForTracker);
     }, []);
 
-    // Prefetch all tasks when on main projects list so All Tasks view opens with data immediately
+    // Prefetch all tasks when on main projects list so All Tasks view opens with data immediately.
+    // Defer by 2.5s so the projects list and task-count request get network priority.
     useEffect(() => {
         if (showAllTasksView || viewingProject || showProgressTracker) return;
         if (allTasksPrefetchedRef.current || !window.DatabaseAPI?.makeRequest) return;
         allTasksPrefetchedRef.current = true;
-        window.DatabaseAPI.makeRequest('/tasks?all=true', { method: 'GET' }).then(res => {
-            const data = res?.data ?? res;
-            const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
-            setAllTasksList(tasks);
-        }).catch(() => {});
+        const t = setTimeout(() => {
+            window.DatabaseAPI.makeRequest('/tasks?all=true', { method: 'GET' }).then(res => {
+                const data = res?.data ?? res;
+                const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+                setAllTasksList(tasks);
+            }).catch(() => {});
+        }, 2500);
+        return () => clearTimeout(t);
     }, [showAllTasksView, viewingProject, showProgressTracker]);
 
     // Load all tasks when All Tasks view is opened
@@ -1197,20 +1201,19 @@ const Projects = () => {
                 }
 
                 
-                // Wait for DatabaseAPI to be available (with timeout - max ~1s)
+                // Wait for DatabaseAPI to be available (short timeout so projects load quickly)
                 if (!window.DatabaseAPI) {
                     let waitAttempts = 0;
-                    const maxWaitAttempts = 15;
-                    let delay = 30;
+                    const maxWaitAttempts = 10;
+                    const baseDelay = 25;
                     while (!window.DatabaseAPI && waitAttempts < maxWaitAttempts) {
-                        await new Promise(resolve => setTimeout(resolve, delay));
+                        await new Promise(resolve => setTimeout(resolve, baseDelay));
                         waitAttempts++;
-                        delay = Math.min(30 + (waitAttempts * 40), 400);
                     }
                 }
                 
                 if (!window.DatabaseAPI) {
-                    console.error('❌ Projects: DatabaseAPI not available on window object after waiting 5 seconds');
+                    console.error('❌ Projects: DatabaseAPI not available on window object after waiting');
                     console.error('🔍 Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('database') || k.toLowerCase().includes('api')));
                     console.error('🔍 Checking if databaseAPI.js script is loaded:', document.querySelector('script[src*="databaseAPI"]'));
                     
@@ -4700,11 +4703,84 @@ const Projects = () => {
                 </div>
             </div>
 
-            {/* Loading State */}
+            {/* Loading State - Skeleton matching list/grid layout */}
             {isLoading && (
-                <div className="col-span-full text-center py-12">
-                    <div className={`inline-block animate-spin rounded-full h-8 w-8 border-b-2 mb-3 ${isDark ? 'border-blue-400' : 'border-blue-600'}`}></div>
-                    <p className={isDark ? 'text-gray-400 text-sm' : 'text-gray-500 text-sm'}>Loading projects...</p>
+                <div className="col-span-full">
+                    {viewMode === 'grid' ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+                            {[1, 2, 3, 4, 5, 6].map((i) => (
+                                <div key={i} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 animate-pulse`}>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex-1 space-y-2">
+                                            <div className={`h-4 rounded w-3/4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                                            <div className={`h-3 rounded w-1/2 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                                        </div>
+                                        <div className={`h-6 rounded-lg w-16 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                                    </div>
+                                    <div className="space-y-2.5">
+                                        {[1, 2, 3, 4].map((j) => (
+                                            <div key={j} className={`h-3 rounded w-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} style={{ width: j === 2 ? '80%' : '100%' }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : viewMode === 'client' ? (
+                        <div className="space-y-6">
+                            {[1, 2, 3].map((g) => (
+                                <div key={g} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden animate-pulse`}>
+                                    <div className={`flex items-center gap-2 px-5 py-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                                        <div className={`h-4 w-4 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                                        <div className={`h-4 rounded w-32 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                                    </div>
+                                    <div className="p-4 space-y-3">
+                                        {[1, 2, 3].map((r) => (
+                                            <div key={r} className={`h-10 rounded ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`} />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
+                                    <colgroup>
+                                        <col style={{ width: '30%' }} />
+                                        <col style={{ width: '18%' }} />
+                                        <col style={{ width: '12%' }} />
+                                        <col style={{ width: '16%' }} />
+                                        <col style={{ width: '16%' }} />
+                                        <col style={{ width: '8%' }} />
+                                    </colgroup>
+                                    <thead className={isDark ? 'bg-gray-800 border-b border-gray-800' : 'bg-gray-50 border-b border-gray-100'}>
+                                        <tr>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
+                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
+                                        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                                            <tr key={i}>
+                                                <td className="px-6 py-3"><div className={`h-4 rounded w-full max-w-[180px] animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                                <td className="px-6 py-3"><div className={`h-4 rounded w-20 animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                                <td className="px-6 py-3"><div className={`h-4 rounded w-16 animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                                <td className="px-6 py-3"><div className={`h-6 rounded-lg w-14 animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                                <td className="px-6 py-3"><div className={`h-4 rounded w-24 animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                                <td className="px-6 py-3"><div className={`h-4 rounded w-16 animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                                <td className="px-6 py-3"><div className={`h-4 rounded w-8 animate-pulse ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} /></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

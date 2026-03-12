@@ -2570,6 +2570,26 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`📁 Serving from: ${rootDir}`)
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'production'}`)
   console.log(`📂 API directory: ${apiDir}`)
+
+  // Run Project list migration at startup so first GET /api/projects is not blocked by ALTER TABLE
+  if (!process.env.DEV_LOCAL_NO_DB) {
+    try {
+      const { prisma } = await import('./api/_lib/prisma.js')
+      await prisma.$executeRaw`
+        ALTER TABLE "Project"
+        ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
+        ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
+      `
+      globalThis.projectListColumnsMigrated = true
+      console.log('✅ Project list migration run at startup')
+    } catch (e) {
+      if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+        console.warn('⚠️ Project list migration at startup (non-critical):', e.message?.substring(0, 80))
+      }
+    }
+  }
+
   if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.startsWith('re_')) {
     console.log('📧 Email: Resend configured (notification emails will be sent)')
   } else if (process.env.SENDGRID_API_KEY || (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.'))) {

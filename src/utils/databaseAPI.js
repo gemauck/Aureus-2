@@ -61,7 +61,10 @@ const DatabaseAPI = {
         for (const [key, { timestamp }] of this._responseCache.entries()) {
             // Extract endpoint from cache key (format: "METHOD:/endpoint")
             const endpoint = key.split(':').slice(1).join(':');
-            const ttl = this._endpointCacheTTL[endpoint] || this._cacheTTL;
+            let ttl = this._endpointCacheTTL[endpoint];
+            if (ttl == null && /^\/projects\?/.test(endpoint)) ttl = 60000;
+            if (ttl == null && /^\/projects\/[^/]+$/.test(endpoint)) ttl = 45000;
+            if (ttl == null) ttl = this._cacheTTL;
             if (now - timestamp > ttl) {
                 this._responseCache.delete(key);
             }
@@ -264,8 +267,9 @@ const DatabaseAPI = {
         if (method === 'GET' && !options.forceRefresh) {
             const cached = this._responseCache.get(cacheKey);
             if (cached) {
-                // Use endpoint-specific TTL; project detail GET /projects/:id gets 45s for faster tab switching
+                // Use endpoint-specific TTL; project list GET /projects? gets 60s; project detail GET /projects/:id gets 45s
                 let ttl = this._endpointCacheTTL[endpoint];
+                if (ttl == null && /^\/projects\?/.test(endpoint)) ttl = 60000;
                 if (ttl == null && /^\/projects\/[^/]+$/.test(endpoint)) ttl = 45000;
                 if (ttl == null) ttl = this._cacheTTL;
                 const age = Date.now() - cached.timestamp;

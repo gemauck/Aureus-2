@@ -1335,8 +1335,9 @@ async function handler(req, res) {
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       try {
-        // One-time migration: add missing columns once per process (not on every request)
-        if (!projectListColumnsMigrated) {
+        // One-time migration: skip if already done at server startup (globalThis) or in this process
+        const migrationDone = projectListColumnsMigrated || globalThis.projectListColumnsMigrated;
+        if (!migrationDone) {
           try {
             await prisma.$executeRaw`
               ALTER TABLE "Project" 
@@ -1345,11 +1346,14 @@ async function handler(req, res) {
               ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
             `;
             projectListColumnsMigrated = true;
+            globalThis.projectListColumnsMigrated = true;
           } catch (migrationError) {
             if (!migrationError.message?.includes('already exists') && !migrationError.message?.includes('duplicate column')) {
               console.log('⚠️ Migration note (non-critical):', migrationError.message?.substring(0, 100));
             }
           }
+        } else {
+          projectListColumnsMigrated = true;
         }
 
         const userRole = req.user?.role?.toLowerCase();
