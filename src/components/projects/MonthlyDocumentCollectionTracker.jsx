@@ -6901,6 +6901,67 @@ Abcotronics`;
                             <div data-scroll-sync className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
+                                        {isMonthlyDataReview ? (
+                                            <>
+                                                <tr>
+                                                    <th
+                                                        rowSpan={2}
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
+                                                    >
+                                                        Document / Data
+                                                    </th>
+                                                    {months.map((month, idx) => (
+                                                        <th
+                                                            key={month}
+                                                            colSpan={2}
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                                isOneMonthArrears(selectedYear, idx)
+                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                    : 'text-gray-700'
+                                                            }`}
+                                                        >
+                                                            <div className="flex flex-col items-center gap-0.5">
+                                                                <span>{month.slice(0, 3)}</span>
+                                                                <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                            </div>
+                                                        </th>
+                                                    ))}
+                                                    <th
+                                                        rowSpan={2}
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-50"
+                                                    >
+                                                        Actions
+                                                    </th>
+                                                </tr>
+                                                <tr>
+                                                    {months.map((month, idx) => (
+                                                        <React.Fragment key={month}>
+                                                            <th
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                                    isOneMonthArrears(selectedYear, idx)
+                                                                        ? 'bg-primary-50 text-primary-800 border-primary-200'
+                                                                        : 'text-gray-600'
+                                                                }`}
+                                                                style={{ minWidth: '100px' }}
+                                                            >
+                                                                Status
+                                                            </th>
+                                                            <th
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l border-gray-200 ${
+                                                                    isOneMonthArrears(selectedYear, idx)
+                                                                        ? 'bg-primary-50 text-primary-800 border-primary-200'
+                                                                        : 'text-gray-600'
+                                                                }`}
+                                                                style={{ minWidth: '140px' }}
+                                                            >
+                                                                Notes
+                                                            </th>
+                                                        </React.Fragment>
+                                                    ))}
+                                                </tr>
+                                            </>
+                                        ) : (
                                         <tr>
                                             <th
                                                 className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
@@ -6908,59 +6969,27 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 >
                                                 Document / Data
                                             </th>
-                                            {isMonthlyDataReview ? (
-                                                months.map((month, idx) => (
-                                                    <React.Fragment key={month}>
-                                                        <th
-                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
-                                                                isOneMonthArrears(selectedYear, idx)
-                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
-                                                                    : 'text-gray-700'
-                                                            }`}
-                                                            style={{ minWidth: '100px' }}
-                                                        >
-                                                            <div className="flex flex-col items-center gap-0.5">
-                                                                <span>Status</span>
-                                                                <span className="text-[10px] font-normal">{month.slice(0, 3)} {String(selectedYear).slice(-2)}</span>
-                                                            </div>
-                                                        </th>
-                                                        <th
-                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l border-gray-200 ${
-                                                                isOneMonthArrears(selectedYear, idx)
-                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
-                                                                    : 'text-gray-700'
-                                                            }`}
-                                                            style={{ minWidth: '140px' }}
-                                                        >
-                                                            <div className="flex flex-col items-center gap-0.5">
-                                                                <span>Notes</span>
-                                                                <span className="text-[10px] font-normal">{month.slice(0, 3)} {String(selectedYear).slice(-2)}</span>
-                                                            </div>
-                                                        </th>
-                                                    </React.Fragment>
-                                                ))
-                                            ) : (
-                                                months.map((month, idx) => (
-                                                    <th
-                                                        key={month}
-                                                        className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
-                                                            isOneMonthArrears(selectedYear, idx)
-                                                                ? 'bg-primary-100 text-primary-800 border-primary-300'
-                                                                : 'text-gray-700'
-                                                        }`}
-                                                        style={{ minWidth: '180px' }}
-                                                    >
-                                                        <div className="flex flex-col items-center gap-0.5">
-                                                            <span>{month.slice(0, 3)}</span>
-                                                            <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
-                                                        </div>
-                                                    </th>
-                                                ))
-                                            )}
+                                            {months.map((month, idx) => (
+                                                <th
+                                                    key={month}
+                                                    className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                        isOneMonthArrears(selectedYear, idx)
+                                                            ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                            : 'text-gray-700'
+                                                    }`}
+                                                    style={{ minWidth: '180px' }}
+                                                >
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span>{month.slice(0, 3)}</span>
+                                                        <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                    </div>
+                                                </th>
+                                            ))}
                                             <th className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
                                                 Actions
                                             </th>
                                         </tr>
+                                        )}
                                     </thead>
                                     <tbody
                                         className="bg-white divide-y divide-gray-200"
