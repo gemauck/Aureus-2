@@ -6892,7 +6892,7 @@ const Clients = React.memo(() => {
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
                     <div className="overflow-x-auto">
                         <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                            <thead className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
+                            <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                                 <tr>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Name</th>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Type</th>
@@ -6925,7 +6925,7 @@ const Clients = React.memo(() => {
                                                     });
                                                 }
                                             }}
-                                            className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                            className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} cursor-pointer transition`}
                                         >
                                             <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                                 {item.name || item.title || 'Untitled'}
@@ -7040,7 +7040,7 @@ const Clients = React.memo(() => {
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full`}>
             <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
-                    <thead className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
+                    <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
                             <th 
                                 className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
@@ -7115,7 +7115,7 @@ const Clients = React.memo(() => {
                                     <tr 
                                         key={client.id} 
                                         onClick={() => handleOpenClient(client)}
-                                        className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                        className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} cursor-pointer transition`}
                                     >
                                         <td className="px-6 py-2 whitespace-nowrap">
                                             <div className="flex items-center gap-3">
@@ -7512,7 +7512,7 @@ const Clients = React.memo(() => {
                         </div>
                     ) : (
                         <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
-                            <thead className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
+                            <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                                 <tr>
                                     <th 
                                         className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer`}
@@ -7602,7 +7602,7 @@ const Clients = React.memo(() => {
                                                     setSelectedGroup(group);
                                                     loadGroupMembers(group.id);
                                                 }}
-                                                className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} transition cursor-pointer`}
+                                                className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition cursor-pointer`}
                                             >
                                                 <td className="px-6 py-2 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
@@ -8361,7 +8361,7 @@ const Clients = React.memo(() => {
                                                         className={`p-4 cursor-pointer transition ${
                                                             isSelected
                                                                 ? isDark ? 'bg-blue-900' : 'bg-blue-50'
-                                                                : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                                                                : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
                                                         }`}
                                                     >
                                                         <div className="flex items-center gap-3">
@@ -8634,7 +8634,7 @@ const Clients = React.memo(() => {
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm`}>
                 <div className="overflow-x-auto">
                     <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                        <thead className={isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-500'}>
+                        <thead className={isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-500'}>
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Type</th>
@@ -8660,7 +8660,7 @@ const Clients = React.memo(() => {
                                     <tr
                                         key={item.key}
                                         onClick={() => handleItemOpen(item)}
-                                        className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                        className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} cursor-pointer transition`}
                                     >
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
@@ -8822,7 +8822,7 @@ const Clients = React.memo(() => {
             </div>
             <div className="flex-1 overflow-auto w-full">
                 <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ width: '100%' }}>
-                    <thead className={isDark ? 'bg-gray-800' : 'bg-gray-50'}>
+                    <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
@@ -8903,7 +8903,7 @@ const Clients = React.memo(() => {
                                     <tr 
                                         key={`lead-${lead.id}-${lead.name}`}
                                         onClick={() => handleOpenLead(lead)}
-                                        className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                        className={`${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} cursor-pointer transition`}
                                     >
                                         <td className="px-6 py-2 whitespace-nowrap">
                                             <div className="flex items-center gap-3">
@@ -9422,10 +9422,10 @@ const Clients = React.memo(() => {
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'groups' 
-                            ? 'bg-gray-100 text-gray-900 shadow-sm' 
+                            ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>
@@ -9458,10 +9458,10 @@ const Clients = React.memo(() => {
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'clients' 
-                            ? 'bg-gray-100 text-gray-900 shadow-sm' 
+                            ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
@@ -9494,10 +9494,10 @@ const Clients = React.memo(() => {
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'leads' 
-                            ? 'bg-gray-100 text-gray-900 shadow-sm' 
+                            ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
@@ -9530,10 +9530,10 @@ const Clients = React.memo(() => {
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
-                            ? 'bg-gray-100 text-gray-900 shadow-sm' 
+                            ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
                 >
                     <i className="fas fa-stream mr-2"></i>
@@ -9565,10 +9565,10 @@ const Clients = React.memo(() => {
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'news-feed' 
-                            ? 'bg-gray-100 text-gray-900 shadow-sm' 
+                            ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
                 >
                     <i className="fas fa-newspaper mr-2"></i>
@@ -9578,7 +9578,7 @@ const Clients = React.memo(() => {
 
         {/* Modern Search and Filters */}
         {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && viewMode !== 'pipeline' && (
-                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 sm:p-6 shadow-sm`}>
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'} rounded-xl border p-5 sm:p-6 shadow-sm`}>
                     <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
                         <div className="sm:col-span-2 lg:col-span-1">
                             <div className="relative">
@@ -9590,7 +9590,7 @@ const Clients = React.memo(() => {
                                     className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                                         isDark 
                                             ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400 focus:bg-gray-800' 
-                                            : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'
+                                            : 'bg-gray-100 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'
                                     }`}
                                 />
                                 <i className={`fas fa-search absolute left-3 top-3.5 text-sm ${
@@ -9613,10 +9613,10 @@ const Clients = React.memo(() => {
                             <select
                                 value={filterIndustry}
                                 onChange={(e) => setFilterIndustry(e.target.value)}
-                                className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
-                                    isDark 
-                                        ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
-                                        : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                            : 'bg-gray-100 border-gray-200 text-gray-900 focus:bg-white'
                                 }`}
                             >
                                 <option value="All Industries">All Industries</option>
@@ -9631,10 +9631,10 @@ const Clients = React.memo(() => {
                             <select
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
-                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
-                                    isDark 
-                                        ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
-                                        : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
+className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                            : 'bg-gray-100 border-gray-200 text-gray-900 focus:bg-white'
                                 }`}
                             >
                                 <option value="All Status">All Status</option>
@@ -9653,7 +9653,7 @@ const Clients = React.memo(() => {
                                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                                         isDark 
                                             ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
-                                            : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
+                                            : 'bg-gray-100 border-gray-300 text-gray-900 focus:bg-white'
                                     }`}
                                 >
                                     <option value="All Stages">All Stages</option>
@@ -9721,7 +9721,7 @@ const Clients = React.memo(() => {
                     
                     {/* Modern Search Results Counter */}
                     {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode === 'leads' && filterStage !== 'All Stages') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
-                        <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                        <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>

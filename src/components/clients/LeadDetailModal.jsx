@@ -28,6 +28,10 @@ const LeadDetailModal = ({
     const [isSaving, setIsSaving] = useState(false);
     const [isAutoSaving, setIsAutoSaving] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
+        // If user tries to access proposals tab but is not admin, default to overview
+        if (initialTab === 'proposals' && !isAdmin) {
+            return 'overview';
+        }
         // If user tries to access projects tab (which no longer exists), default to overview
         if (initialTab === 'projects') {
             return 'overview';
@@ -81,10 +85,6 @@ const LeadDetailModal = ({
                 if (fetchedLead) {
                     setLead(fetchedLead);
                     
-                    // API returns clientSites; use it for sites so persistence survives refresh
-                    const sitesFromApi = Array.isArray(fetchedLead.clientSites)
-                        ? fetchedLead.clientSites
-                        : (typeof fetchedLead.sites === 'string' ? JSON.parse(fetchedLead.sites || '[]') : (fetchedLead.sites || []));
                     // Initialize lastSavedDataRef with fetched lead data
                     const parsedLead = {
                         ...fetchedLead,
@@ -93,7 +93,7 @@ const LeadDetailModal = ({
                         comments: typeof fetchedLead.comments === 'string' ? JSON.parse(fetchedLead.comments || '[]') : (fetchedLead.comments || []),
                         proposals: typeof fetchedLead.proposals === 'string' ? JSON.parse(fetchedLead.proposals || '[]') : (fetchedLead.proposals || []),
                         projectIds: typeof fetchedLead.projectIds === 'string' ? JSON.parse(fetchedLead.projectIds || '[]') : (fetchedLead.projectIds || []),
-                        sites: sitesFromApi
+                        sites: typeof fetchedLead.sites === 'string' ? JSON.parse(fetchedLead.sites || '[]') : (fetchedLead.sites || [])
                     };
                     lastSavedDataRef.current = parsedLead;
                 }
@@ -234,12 +234,6 @@ const LeadDetailModal = ({
             return;
         }
 
-        // CRITICAL: Don't overwrite formData if user has edited any field (prevents "still overwriting" while typing)
-        if (userEditedFieldsRef.current.size > 0 && !isDifferentLead) {
-            console.log('⏸️ Skipping formData update - user has edited fields');
-            return;
-        }
-
         // Only update if it's a different lead (new lead loaded) OR if status/stage changed in the lead prop
         // This ensures we update formData when parent refreshes lead data after save
         const currentStatus = normalizeLifecycleStage(lead.status);
@@ -268,7 +262,7 @@ const LeadDetailModal = ({
                 activityLog: Array.isArray(lead.activityLog) ? lead.activityLog : (typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : []),
                 billingTerms: typeof lead.billingTerms === 'object' && lead.billingTerms !== null ? lead.billingTerms : (typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : {}),
                 proposals: Array.isArray(lead.proposals) ? lead.proposals : (typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : []),
-                sites: Array.isArray(lead.sites) ? lead.sites : (Array.isArray(lead.clientSites) ? lead.clientSites : (typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : [])),
+                sites: Array.isArray(lead.sites) ? lead.sites : (typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : []),
                 thumbnail: lead.thumbnail || '',
                 externalAgentId: lead.externalAgentId || (lead.externalAgent?.id || null),
                 firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate),
@@ -319,9 +313,6 @@ const LeadDetailModal = ({
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
-    
-    // CRITICAL: Override ref for Entity Name - display this while user is typing so effects can't overwrite visible value
-    const nameOverrideRef = useRef(null);
     
     // Track when user has started typing - once they start, NEVER update inputs from prop
     const userHasStartedTypingRef = useRef(false);
@@ -1105,6 +1096,10 @@ const LeadDetailModal = ({
         
         let nextTab = initialTab;
         
+        // If user tries to access proposals tab but is not admin, default to overview
+        if (initialTab === 'proposals' && !isAdmin) {
+            nextTab = 'overview';
+        }
         // If user tries to access projects tab (which no longer exists), default to overview
         if (initialTab === 'projects') {
             nextTab = 'overview';
@@ -1115,7 +1110,7 @@ const LeadDetailModal = ({
             setActiveTab(nextTab);
             lastInitialTabRef.current = nextTab;
         }
-    }, [initialTab]);
+    }, [initialTab, isAdmin]);
     
     // MANUFACTURING PATTERN: Only sync formData when lead ID changes (switching to different lead)
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
@@ -1285,11 +1280,6 @@ const LeadDetailModal = ({
         previousLeadIdRef.current = currentLeadId;
     }, [lead?.id]);
     
-    // Clear name override when switching to a different lead so we show the new lead's name
-    useEffect(() => {
-        nameOverrideRef.current = null;
-    }, [lead?.id]);
-    
     // DISABLED: This was causing status/stage to be overwritten from stale parent data
     // When auto-saving changes, the parent's lead prop wasn't updated fast enough,
     // causing this effect to revert changes back to old values
@@ -1362,10 +1352,10 @@ const LeadDetailModal = ({
             return false;
         }
 
-        // Rate limiting: Don't auto-save if we just saved recently (within 1.2s)
+        // Rate limiting: Don't auto-save if we just saved recently (within 3 seconds - increased from 2)
         const now = Date.now();
         const timeSinceLastSave = now - lastAutoSaveAttemptRef.current;
-        if (timeSinceLastSave < 1200 && !skipChangeCheck) {
+        if (timeSinceLastSave < 3000 && !skipChangeCheck) {
             return false; // Skip if we just attempted a save recently
         }
 
@@ -1404,7 +1394,6 @@ const LeadDetailModal = ({
             
             const leadData = {
                 ...currentFormData,
-                name: nameOverrideRef.current != null ? nameOverrideRef.current : (currentFormData.name ?? ''),
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 // Explicitly include externalAgentId to ensure it's saved (even if null)
@@ -1477,6 +1466,11 @@ const LeadDetailModal = ({
         if (tab === 'projects') {
             return;
         }
+        // Prevent non-admins from accessing proposals tab
+        if (tab === 'proposals' && !isAdmin) {
+            return;
+        }
+        
         // Switch tab immediately for better UX
         setActiveTab(tab);
         if (onTabChange) {
@@ -1497,6 +1491,7 @@ const LeadDetailModal = ({
         }
         
         // Debounce auto-save to prevent rapid API calls when switching tabs quickly
+        // Increased debounce time to 1000ms to give more time between requests
         autoSaveDebounceTimeoutRef.current = setTimeout(async () => {
             // Check rate limit again before executing (in case it changed during debounce)
             if (window.RateLimitManager?.isRateLimited()) {
@@ -1520,9 +1515,6 @@ const LeadDetailModal = ({
                 // Update formDataRef immediately so it's in sync
                 formDataRef.current = currentFormData;
             }
-            if (nameOverrideRef.current != null) {
-                currentFormData = { ...currentFormData, name: nameOverrideRef.current };
-            }
             
             // Auto-save logic:
             // 1. For existing leads (leadId exists): Save when switching tabs (only if changed)
@@ -1538,61 +1530,8 @@ const LeadDetailModal = ({
             }
             
             autoSaveDebounceTimeoutRef.current = null;
-        }, 500);
+        }, 1000); // Increased to 1000ms debounce - wait for user to finish switching tabs and prevent rapid requests
     };
-    
-    // Flush pending auto-save before close (ensures changes persist on hard refresh)
-    const flushPendingSave = useCallback(async () => {
-        if (autoSaveDebounceTimeoutRef.current) {
-            clearTimeout(autoSaveDebounceTimeoutRef.current);
-            autoSaveDebounceTimeoutRef.current = null;
-        }
-        let currentFormData = formDataRef.current || formData;
-        if (notesTextareaRef.current) {
-            const latestNotes = notesTextareaRef.current.value ?? '';
-            currentFormData = { ...currentFormData, notes: latestNotes };
-            formDataRef.current = currentFormData;
-        }
-        if (nameOverrideRef.current != null) {
-            currentFormData = { ...currentFormData, name: nameOverrideRef.current };
-        }
-        const nameToUse = currentFormData.name;
-        if (!nameToUse || !String(nameToUse).trim()) return;
-        await handleAutoSave(currentFormData, false, false);
-    }, [formData]);
-    
-    // Close handler: flush pending save then close
-    const handleClose = useCallback(async () => {
-        await flushPendingSave();
-        if (onClose) onClose();
-    }, [flushPendingSave, onClose]);
-    
-    // Flush pending save on unmount (e.g. navigation via global nav or route change) so changes persist
-    useEffect(() => {
-        return () => {
-            flushPendingSave().catch(() => {});
-        };
-    }, [flushPendingSave]);
-    
-    // Warn on refresh/close tab when there are unsaved changes
-    useEffect(() => {
-        const onBeforeUnload = (e) => {
-            if (!userHasStartedTypingRef.current && userEditedFieldsRef.current.size === 0) return;
-            try {
-                const last = lastSavedDataRef.current;
-                let cur = formDataRef.current;
-                if (nameOverrideRef.current != null) {
-                    cur = { ...cur, name: nameOverrideRef.current };
-                }
-                if (!cur?.name?.trim()) return;
-                if (last && JSON.stringify(cur) === JSON.stringify(last)) return;
-            } catch (_) { /* ignore */ }
-            e.preventDefault();
-            e.returnValue = '';
-        };
-        window.addEventListener('beforeunload', onBeforeUnload);
-        return () => window.removeEventListener('beforeunload', onBeforeUnload);
-    }, []);
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
@@ -1643,13 +1582,6 @@ const LeadDetailModal = ({
         }
     }, [activeTab, commentsLength]); // Use state value instead of formData directly
     
-    useEffect(() => {
-        if (activeTab !== 'notes' || !formData?.id || !window.DatabaseAPI?.makeRequest) return;
-        window.DatabaseAPI.makeRequest(`/comment-subscriptions?threadType=lead&threadId=${encodeURIComponent(formData.id)}`)
-            .then((r) => { if (r && r.isSubscribed) setIsCommentSubscribed(true); })
-            .catch(() => {});
-    }, [activeTab, formData?.id]);
-    
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
     
@@ -1658,7 +1590,6 @@ const LeadDetailModal = ({
     const isLoadingSitesRef = useRef(false);
     const [showSiteForm, setShowSiteForm] = useState(false);
     const [editingSite, setEditingSite] = useState(null);
-    const [isAddingSite, setIsAddingSite] = useState(false);
     const [newSite, setNewSite] = useState({
         name: '',
         address: '',
@@ -1668,9 +1599,7 @@ const LeadDetailModal = ({
         notes: '',
         latitude: '',
         longitude: '',
-        gpsCoordinates: '',
-        stage: 'Potential',
-        aidaStatus: 'Awareness'
+        gpsCoordinates: ''
     });
     
     
@@ -1693,7 +1622,6 @@ const LeadDetailModal = ({
     });
     
     const [newComment, setNewComment] = useState('');
-    const [isCommentSubscribed, setIsCommentSubscribed] = useState(false);
     // Notes helpers for tags and attachments
     const [newNoteTagsInput, setNewNoteTagsInput] = useState('');
     const [newNoteTags, setNewNoteTags] = useState([]);
@@ -1827,9 +1755,10 @@ const LeadDetailModal = ({
             if (onSave && finalFormData) {
                 try {
                     await onSave(finalFormData, true);
+                    // Keep the flag set longer to prevent immediate reset when API response comes back
                     setTimeout(() => {
                         isSavingProposalsRef.current = false;
-                    }, 1000);
+                    }, 3000); // Increased to 3 seconds to ensure API response is processed
                 } catch (error) {
                     console.error('❌ Error saving proposals:', error);
                     isSavingProposalsRef.current = false;
@@ -1838,7 +1767,7 @@ const LeadDetailModal = ({
                 console.warn('⚠️ onSave not available or finalFormData missing');
                 isSavingProposalsRef.current = false;
             }
-        }, 300);
+        }, 500); // Increased debounce to 500ms
     };
     
     // Helper function to send notifications
@@ -2239,76 +2168,31 @@ const LeadDetailModal = ({
         }
     };
     
-    // Resolve lead sites persistence another way: when user opens Sites tab, always load from GET /api/sites/client/:id
-    // so we show sites even if the lead was loaded from cache/list without clientSites
-    useEffect(() => {
-        if (activeTab === 'sites' && formData?.id && window.api?.getSites) {
-            loadSitesFromDatabase(formData.id);
-        }
-    }, [activeTab, formData?.id]);
+    // REMOVED: Automatic sites loading useEffect
+    // Sites are already included in the lead object from the API (via parseClientJsonFields)
+    // The loadSitesFromDatabase function is kept for manual refresh when needed (e.g., after adding a site)
 
     const handleAddSite = async () => {
-        if (isAddingSite) return;
-        let siteName = (newSite.name ?? '').trim();
-        if (!siteName) {
-            const el = document.querySelector('[data-testid="site-name-input"]');
-            if (el && typeof el.value === 'string') siteName = el.value.trim();
-        }
-        if (!siteName) {
+        if (!newSite.name) {
             alert('Site name is required');
             return;
         }
-        const leadId = formData?.id;
-        if (!leadId) {
-            alert('Save the lead first before adding sites.');
-            return;
-        }
-        setIsAddingSite(true);
+        
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
                 alert('❌ Please log in to save sites to the database');
                 return;
             }
-            const sitePayload = {
-                name: siteName,
-                address: newSite.address ?? '',
-                contactPerson: newSite.contactPerson ?? '',
-                contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
-                contactEmail: newSite.contactEmail ?? newSite.email ?? '',
-                notes: newSite.notes ?? '',
-                siteLead: newSite.siteLead ?? '',
-                stage: newSite.stage ?? 'Potential',
-                aidaStatus: newSite.aidaStatus ?? 'Awareness',
-                siteType: 'lead' // Lead sites pull through to Pipeline; stage and Aida status control column
-            };
-            const existingSites = Array.isArray(formData.sites) ? formData.sites : [];
-            const sitesWithNew = [...existingSites, sitePayload];
-            const updateLeadForSites = window.api?.updateLead || window.DatabaseAPI?.updateLead;
-            let savedSite = null;
-
-            if (typeof updateLeadForSites === 'function') {
-                const patchResponse = await updateLeadForSites(leadId, { id: leadId, name: (formData?.name ?? '').trim() || 'Lead', sites: sitesWithNew });
-                const updatedLead = patchResponse?.data?.lead || patchResponse?.lead;
-                const sitesFromApi = Array.isArray(updatedLead?.clientSites) ? updatedLead.clientSites : (Array.isArray(updatedLead?.sites) ? updatedLead.sites : []);
-                const newSiteFromApi = sitesFromApi.length > 0
-                    ? sitesFromApi.find(s => (s.name || '').trim() === (siteName || '').trim()) || sitesFromApi[sitesFromApi.length - 1]
-                    : null;
-                savedSite = newSiteFromApi ? { ...sitePayload, ...newSiteFromApi, id: newSiteFromApi.id } : { id: 'temp-' + Date.now(), ...sitePayload };
-                if (typeof loadSitesFromDatabase === 'function') await loadSitesFromDatabase(leadId);
-            } else {
-                let response;
-                if (window.api?.createSite) {
-                    response = await window.api.createSite(leadId, sitePayload);
-                } else if (window.DatabaseAPI?.makeRequest) {
-                    response = await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}`, { method: 'POST', body: JSON.stringify(sitePayload) });
-                } else {
-                    alert('❌ Site API not available. Please refresh the page.');
-                    return;
-                }
-                savedSite = response?.data?.site || response?.site || response;
+            
+            if (!window.api?.createSite) {
+                alert('❌ Site API not available. Please refresh the page.');
+                return;
             }
-
+            
+            const response = await window.api.createSite(formData.id, newSite);
+            const savedSite = response?.data?.site || response?.site || response;
+            
             if (savedSite && savedSite.id) {
                 // Add to optimistic sites state
                 setOptimisticSites(prev => {
@@ -2353,7 +2237,7 @@ const LeadDetailModal = ({
                 const activity = {
                     id: Date.now(),
                     type: 'Site Added',
-                    description: `Added site: ${siteName}`,
+                    description: `Added site: ${newSite.name}`,
                     timestamp: new Date().toISOString(),
                     user: currentUser.name,
                     userId: currentUser.id,
@@ -2367,15 +2251,18 @@ const LeadDetailModal = ({
                     sites: [...(formData.sites || []), savedSite],
                     activityLog: updatedActivityLog
                 };
-                try {
-                    await onSave(updatedFormData, true);
-                } catch (error) {
-                    console.error('❌ Error saving site:', error);
-                    const errMsg = (error?.message || '').toLowerCase();
-                    const isConnectionFailure = errMsg.includes('database connection failed') || errMsg.includes('failed to fetch') || errMsg.includes('network error') || errMsg.includes('connection reset') || errMsg.includes('connection refused') || errMsg.includes('econnrefused') || errMsg.includes('unreachable') || error?.isNetworkError;
-                    const refusedMsg = (errMsg.includes('connection refused') || errMsg.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : (isConnectionFailure ? 'Site connection has failed. Please check your connection and try again.' : 'Failed to save site. Please try again.');
-                    alert('❌ ' + refusedMsg);
-                }
+                
+                // Save site changes immediately
+                (async () => {
+                    try {
+                        await onSave(updatedFormData, true);
+                    } catch (error) {
+                        console.error('❌ Error saving site:', error);
+                        alert('Failed to save site. Please try again.');
+                    }
+                })();
+                
+                // Switch to sites tab
                 handleTabChange('sites');
                 
                 // Close form and reset
@@ -2388,9 +2275,7 @@ const LeadDetailModal = ({
                     notes: '',
                     latitude: '',
                     longitude: '',
-                    gpsCoordinates: '',
-                    stage: 'Potential',
-                    aidaStatus: 'Awareness'
+                    gpsCoordinates: ''
                 });
                 setShowSiteForm(false);
             } else {
@@ -2398,165 +2283,153 @@ const LeadDetailModal = ({
             }
         } catch (error) {
             console.error('❌ Error creating site:', error);
-            const updateLeadForSites = window.api?.updateLead || window.DatabaseAPI?.updateLead;
-            if (typeof updateLeadForSites === 'function' && leadId) {
-                const sitesWithNew = [...(Array.isArray(formData.sites) ? formData.sites : []), sitePayload];
-                try {
-                    await updateLeadForSites(leadId, { id: leadId, name: (formData?.name ?? '').trim() || 'Lead', sites: sitesWithNew });
-                    if (typeof loadSitesFromDatabase === 'function') await loadSitesFromDatabase(leadId);
-                    setFormData(prev => ({ ...prev, sites: sitesWithNew }));
-                    setShowSiteForm(false);
-                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', stage: 'Potential', aidaStatus: 'Awareness' });
-                    handleTabChange('sites');
-                    return;
-                } catch (e) { console.warn('Fallback PATCH lead for sites failed:', e); }
-            }
-            const errorMessage = (error?.message || 'Unknown error').toLowerCase();
-            const details = (error && typeof error.details === 'string') ? error.details : '';
-            const fullMessage = details ? ((error?.message || 'Unknown error') + ' — ' + details) : (error?.message || 'Unknown error');
-            const isConnectionFailure = errorMessage.includes('database connection failed') || errorMessage.includes('failed to fetch') || errorMessage.includes('network error') || errorMessage.includes('connection reset') || errorMessage.includes('connection refused') || errorMessage.includes('econnrefused') || errorMessage.includes('unreachable') || errorMessage.includes('timeout') || (error?.isNetworkError);
-            const isServerError = errorMessage.includes('500') || errorMessage.includes('internal server error') || errorMessage.includes('failed to add site') || errorMessage.includes('sites table not initialized');
-            if (isConnectionFailure) {
-                const refusedMsg = (errorMessage.includes('connection refused') || errorMessage.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : 'Site connection has failed. Please check your connection and try again.';
-                alert('❌ ' + refusedMsg);
-            } else if (isServerError) {
-                alert('❌ ' + (fullMessage || 'Unable to save site. This may be due to a database issue. Please contact support if this persists.'));
-            } else {
-                alert('❌ Error saving site to database: ' + fullMessage);
-            }
-        } finally {
-            setIsAddingSite(false);
+            alert('❌ Error saving site to database: ' + error.message);
         }
     };
 
     const handleEditSite = (site) => {
         setEditingSite(site);
-        setNewSite({
-            ...site,
-            phone: site.phone ?? site.contactPhone ?? '',
-            email: site.email ?? site.contactEmail ?? '',
-            siteLead: site.siteLead ?? '',
-            stage: site.stage ?? 'Potential',
-            aidaStatus: site.aidaStatus ?? 'Awareness'
-        });
+        setNewSite(site);
         setShowSiteForm(true);
     };
 
-    const handleUpdateSite = async () => {
-        const siteId = editingSite?.id;
-        const leadId = formData?.id;
-        const sitePayload = {
-            ...newSite,
-            id: siteId,
-            contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
-            contactEmail: newSite.contactEmail ?? newSite.email ?? '',
-            stage: newSite.stage ?? 'Potential',
-            aidaStatus: newSite.aidaStatus ?? 'Awareness',
-            siteType: 'lead' // Keep as lead so site continues to pull through to Pipeline
-        };
-        const sites = Array.isArray(formData.sites) ? formData.sites : [];
-        const updatedSites = sites.map(s => (s.id === siteId ? sitePayload : s));
-        const updatedFormData = {
-            ...formData,
-            sites: updatedSites,
-            activityLog: [
-                ...(Array.isArray(formData.activityLog) ? formData.activityLog : []),
-                {
-                    id: Date.now(),
-                    type: 'Site Updated',
-                    description: `Updated site: ${newSite.name}`,
-                    timestamp: new Date().toISOString(),
-                    user: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).name || 'System',
-                    userId: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).id || 'system',
-                    userEmail: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).email || 'system',
-                    relatedId: siteId
-                }
-            ]
-        };
-        setFormData(updatedFormData);
-        isAutoSavingRef.current = true;
-        setEditingSite(null);
-        setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', stage: 'Potential', aidaStatus: 'Awareness' });
-        setShowSiteForm(false);
-        setTimeout(() => handleTabChange('sites'), 100);
-
+    const handleUpdateSite = () => {
         try {
-            if (leadId && siteId && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
-                const payload = {
-                    name: sitePayload.name ?? '',
-                    address: sitePayload.address ?? '',
-                    contactPerson: sitePayload.contactPerson ?? '',
-                    contactPhone: sitePayload.contactPhone ?? '',
-                    contactEmail: sitePayload.contactEmail ?? '',
-                    notes: sitePayload.notes ?? '',
-                    siteLead: sitePayload.siteLead ?? '',
-                    stage: (sitePayload.stage != null && String(sitePayload.stage).trim() !== '') ? String(sitePayload.stage) : 'Potential',
-                    aidaStatus: (sitePayload.aidaStatus != null && String(sitePayload.aidaStatus).trim() !== '') ? String(sitePayload.aidaStatus) : 'Awareness',
-                    siteType: 'lead'
-                };
-                if (window.api?.updateSite) {
-                    await window.api.updateSite(leadId, siteId, payload);
-                } else {
-                    await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}/${siteId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+            // Get current user info for activity log
+            let currentUser = { name: 'System', email: 'system', id: 'system' };
+            if (window.storage) {
+                if (typeof window.storage.getUserInfo === 'function') {
+                    currentUser = window.storage.getUserInfo() || currentUser;
+                } else if (typeof window.storage.getUser === 'function') {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        currentUser = {
+                            name: user.name || 'System',
+                            email: user.email || 'system',
+                            id: user.id || 'system'
+                        };
+                    }
                 }
             }
-            await onSave(updatedFormData, true);
+            
+            const sites = Array.isArray(formData.sites) ? formData.sites : [];
+            const updatedSites = sites.map(s => 
+                s.id === editingSite.id ? {...newSite, id: s.id} : s
+            );
+            
+            // Create activity log entry
+            const activity = {
+                id: Date.now(),
+                type: 'Site Updated',
+                description: `Updated site: ${newSite.name}`,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId: editingSite.id
+            };
+            
+            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+            const updatedFormData = {
+                ...formData,
+                sites: updatedSites,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            // Save site changes immediately
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                } catch (error) {
+                    console.error('❌ Error saving site update:', error);
+                    alert('Failed to save site update. Please try again.');
+                }
+            })();
+            
+            setEditingSite(null);
+            setNewSite({
+                name: '',
+                address: '',
+                contactPerson: '',
+                phone: '',
+                email: '',
+                notes: '',
+                latitude: '',
+                longitude: '',
+                gpsCoordinates: ''
+            });
+            setShowSiteForm(false);
+            // Stay in sites tab
+            setTimeout(() => {
+                handleTabChange('sites');
+            }, 100);
         } catch (error) {
-            console.error('❌ Error saving site update:', error);
-            const errMsg = (error?.message || '').toLowerCase();
-            const isConnectionFailure = errMsg.includes('database connection failed') || errMsg.includes('failed to fetch') || errMsg.includes('network error') || errMsg.includes('connection reset') || errMsg.includes('connection refused') || errMsg.includes('econnrefused') || errMsg.includes('unreachable') || error?.isNetworkError;
-            const refusedMsg = (errMsg.includes('connection refused') || errMsg.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : (isConnectionFailure ? 'Site connection has failed. Please check your connection and try again.' : 'Failed to save site update. Please try again.');
-            alert('❌ ' + refusedMsg);
-        } finally {
-            setTimeout(() => { isAutoSavingRef.current = false; }, 800);
+            console.error('❌ Error updating site:', error);
+            alert('Failed to update site: ' + error.message);
         }
     };
 
-    const handleDeleteSite = async (siteId) => {
+    const handleDeleteSite = (siteId) => {
         const site = formData.sites?.find(s => s.id === siteId);
-        if (!confirm('Delete this site?')) return;
-        const leadId = formData?.id;
-        const prevFormData = formData;
-        const updatedSites = (formData.sites || []).filter(s => s.id !== siteId);
-        const updatedFormData = {
-            ...formData,
-            sites: updatedSites,
-            activityLog: [
-                ...(Array.isArray(formData.activityLog) ? formData.activityLog : []),
-                {
+        if (confirm('Delete this site?')) {
+            try {
+                // Get current user info for activity log
+                let currentUser = { name: 'System', email: 'system', id: 'system' };
+                if (window.storage) {
+                    if (typeof window.storage.getUserInfo === 'function') {
+                        currentUser = window.storage.getUserInfo() || currentUser;
+                    } else if (typeof window.storage.getUser === 'function') {
+                        const user = window.storage.getUser();
+                        if (user) {
+                            currentUser = {
+                                name: user.name || 'System',
+                                email: user.email || 'system',
+                                id: user.id || 'system'
+                            };
+                        }
+                    }
+                }
+                
+                const sites = Array.isArray(formData.sites) ? formData.sites : [];
+                const updatedSites = sites.filter(s => s.id !== siteId);
+                
+                // Create activity log entry
+                const activity = {
                     id: Date.now(),
                     type: 'Site Deleted',
                     description: `Deleted site: ${site?.name || 'Unknown'}`,
                     timestamp: new Date().toISOString(),
-                    user: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).name || 'System',
-                    userId: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).id || 'system',
-                    userEmail: (window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {}).email || 'system',
+                    user: currentUser.name,
+                    userId: currentUser.id,
+                    userEmail: currentUser.email,
                     relatedId: siteId
-                }
-            ]
-        };
-        setFormData(updatedFormData);
-        isAutoSavingRef.current = true;
-        handleTabChange('sites');
-
-        try {
-            if (leadId && siteId && (window.api?.deleteSite || window.DatabaseAPI?.makeRequest)) {
-                if (window.api?.deleteSite) {
-                    await window.api.deleteSite(leadId, siteId);
-                } else {
-                    await window.DatabaseAPI.makeRequest(`/sites/client/${leadId}/${siteId}`, { method: 'DELETE' });
-                }
+                };
+                
+                const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+                const updatedFormData = {
+                    ...formData,
+                    sites: updatedSites,
+                    activityLog: updatedActivityLog
+                };
+                
+                setFormData(updatedFormData);
+                
+                // Save site deletion immediately
+                (async () => {
+                    try {
+                        await onSave(updatedFormData, true);
+                    } catch (error) {
+                        console.error('❌ Error saving site deletion:', error);
+                    }
+                })();
+                
+                handleTabChange('sites');
+            } catch (error) {
+                console.error('❌ Error deleting site:', error);
+                alert('Failed to delete site: ' + error.message);
             }
-            await onSave(updatedFormData, true);
-        } catch (error) {
-            console.error('❌ Error saving site deletion:', error);
-            const errMsg = (error?.message || '').toLowerCase();
-            const isConnectionFailure = errMsg.includes('database connection failed') || errMsg.includes('failed to fetch') || errMsg.includes('network error') || errMsg.includes('connection reset') || errMsg.includes('connection refused') || errMsg.includes('econnrefused') || errMsg.includes('unreachable') || error?.isNetworkError;
-            const refusedMsg = (errMsg.includes('connection refused') || errMsg.includes('econnrefused')) ? 'Connection refused. Is the server running? Run: npm run dev:backend — then open http://localhost:3000 (or the port shown in the terminal).' : (isConnectionFailure ? 'Site connection has failed. Please check your connection and try again.' : 'Failed to delete site. Please try again.');
-            alert('❌ ' + refusedMsg);
-            setFormData(prevFormData);
-        } finally {
-            setTimeout(() => { isAutoSavingRef.current = false; }, 800);
         }
     };
 
@@ -2653,6 +2526,7 @@ const LeadDetailModal = ({
     const handleAddComment = async () => {
         if (!newComment.trim()) return;
         
+        // Get current user info
         const user = window.storage?.getUser?.() || {};
         const currentUser = {
             name: user?.name || 'System',
@@ -2660,76 +2534,30 @@ const LeadDetailModal = ({
             id: user?.id || 'system'
         };
         
-        let allUsers = [];
-        try {
-            if (window.DatabaseAPI?.getUsers) {
-                const usersResponse = await window.DatabaseAPI.getUsers();
-                allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
-            }
-        } catch (_) {}
-        
-        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment) && allUsers.length) {
+        // Process @mentions if MentionHelper is available
+        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
             try {
-                const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
-                const contextLink = `#/leads/${formData.id}?tab=notes`;
-                await window.MentionHelper.processMentions(
-                    newComment,
-                    contextTitle,
-                    contextLink,
-                    currentUser.name || currentUser.email || 'Unknown',
-                    allUsers,
-                    { leadId: formData.id }
-                );
+                // Fetch all users for mention matching
+                const token = window.storage?.getToken?.();
+                if (token && window.DatabaseAPI?.getUsers) {
+                    const usersResponse = await window.DatabaseAPI.getUsers();
+                    const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
+                    
+                    const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
+                    const contextLink = `#/leads/${formData.id}`;
+                    
+                    // Process mentions
+                    await window.MentionHelper.processMentions(
+                        newComment,
+                        contextTitle,
+                        contextLink,
+                        currentUser.name || currentUser.email || 'Unknown',
+                        allUsers
+                    );
+                }
             } catch (error) {
                 console.error('❌ Error processing @mentions:', error);
-            }
-        }
-        
-        const threadType = 'lead';
-        const threadId = formData.id;
-        if (threadId && window.DatabaseAPI?.makeRequest) {
-            try {
-                const mentionedEntries = (window.MentionHelper && window.MentionHelper.getMentionedUsernames(newComment)) || [];
-                const mentionedIds = mentionedEntries
-                    .map(({ normalized }) => {
-                        const u = allUsers.find(a =>
-                            (window.MentionHelper.normalizeIdentifier(a.name || '') === normalized) ||
-                            (window.MentionHelper.normalizeIdentifier((a.email || '').split('@')[0]) === normalized)
-                        );
-                        return u?.id;
-                    })
-                    .filter(Boolean);
-                const priorIds = (formData.comments || []).map(c => c.createdById || c.userId).filter(Boolean);
-                const subscriberIds = [...new Set([currentUser.id, ...mentionedIds, ...priorIds])].filter(Boolean);
-                await window.DatabaseAPI.makeRequest('/comment-subscriptions', {
-                    method: 'POST',
-                    body: JSON.stringify({ threadType, threadId, userIds: subscriberIds })
-                });
-                setIsCommentSubscribed(true);
-                const contextLink = `#/leads/${formData.id}?tab=notes`;
-                const toNotify = subscriberIds.filter(id => id !== currentUser.id && !mentionedIds.includes(id));
-                for (const uid of toNotify) {
-                    try {
-                        await window.DatabaseAPI.makeRequest('/notifications', {
-                            method: 'POST',
-                            body: JSON.stringify({
-                                userId: uid,
-                                type: 'comment',
-                                title: `New comment on lead: ${formData.name || formData.companyName || 'Unknown'}`,
-                                message: `${currentUser.name} commented: "${newComment.substring(0, 80)}${newComment.length > 80 ? '...' : ''}"`,
-                                link: contextLink,
-                                metadata: {
-                                    leadId: formData.id,
-                                    commentAuthor: currentUser.name,
-                                    commentText: newComment,
-                                    tab: 'notes'
-                                }
-                            })
-                        });
-                    } catch (_) {}
-                }
-            } catch (err) {
-                console.warn('Comment subscription/notify failed:', err?.message);
+                // Don't fail the comment if mention processing fails
             }
         }
         
@@ -2800,17 +2628,6 @@ const LeadDetailModal = ({
         
     };
 
-    const handleUnsubscribeFromComments = async () => {
-        const threadId = formData?.id;
-        if (!threadId || !window.DatabaseAPI?.makeRequest) return;
-        try {
-            await window.DatabaseAPI.makeRequest(`/comment-subscriptions?threadType=lead&threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' });
-            setIsCommentSubscribed(false);
-        } catch (e) {
-            console.warn('Unsubscribe failed:', e?.message);
-        }
-    };
-
     const logActivity = (type, description, relatedId = null, autoSave = true, formDataToUpdate = null) => {
         // Get current user info
         const user = window.storage?.getUser?.() || {};
@@ -2877,10 +2694,10 @@ const LeadDetailModal = ({
                     handleTabChange('notes');
                 }, 0);
             }).finally(() => {
-                // Clear the flag after a short delay to allow API response to propagate
+                // Clear the flag after a delay to allow API response to propagate
                 setTimeout(() => {
                     isAutoSavingRef.current = false;
-                }, 800);
+                }, 3000);
             });
             
         }
@@ -2890,8 +2707,7 @@ const LeadDetailModal = ({
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        const nameToSubmit = nameOverrideRef.current != null ? nameOverrideRef.current : (formData.name ?? '');
-        if (!nameToSubmit || String(nameToSubmit).trim() === '') {
+        if (!formData.name || formData.name.trim() === '') {
             alert('Please enter an Entity Name');
             return;
         }
@@ -2904,7 +2720,6 @@ const LeadDetailModal = ({
             
             const leadData = {
                 ...formData,
-                name: nameToSubmit,
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 // CRITICAL: Explicitly include followUps and comments to ensure they're saved
@@ -2953,7 +2768,6 @@ const LeadDetailModal = ({
 
     const getStageColor = (stage) => {
         switch(stage) {
-            case 'No Engagement': return 'bg-slate-100 text-slate-800';
             case 'Awareness': return 'bg-blue-100 text-blue-800';
             case 'Interest': return 'bg-purple-100 text-purple-800';
             case 'Desire': return 'bg-yellow-100 text-yellow-800';
@@ -2992,16 +2806,19 @@ const LeadDetailModal = ({
         );
     }
 
-    // Navigation helper function: flush and close FIRST so changes persist, then navigate
-    const navigateToPage = async (page) => {
-        await handleClose();
+    // Navigation helper function
+    const navigateToPage = (page) => {
+        // If navigating to clients page, reset the Clients component view first
         if (page === 'clients') {
+            // Dispatch event to reset Clients component view
             if (window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('resetClientsView', { 
                     detail: { viewMode: 'clients' } 
                 }));
             }
         }
+        
+        // Navigate using RouteState
         if (window.RouteState && window.RouteState.navigate) {
             window.RouteState.navigate({
                 page: page,
@@ -3017,6 +2834,11 @@ const LeadDetailModal = ({
                 detail: { page: page } 
             }));
         }
+        
+        // Close modal when navigating away
+        if (onClose) {
+            onClose();
+        }
     };
 
     if (isFullPage) {
@@ -3031,7 +2853,9 @@ const LeadDetailModal = ({
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleClose();
+                                if (onClose) {
+                                    onClose();
+                                }
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 mr-2`}
                             title="Go back"
@@ -3054,7 +2878,9 @@ const LeadDetailModal = ({
                                         detail: { viewMode: 'leads' } 
                                     }));
                                 }
-                                handleClose();
+                                if (onClose) {
+                                    onClose();
+                                }
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                         >
@@ -3136,7 +2962,7 @@ const LeadDetailModal = ({
                             </div>
                         </div>
                         <button 
-                            onClick={handleClose} 
+                            onClick={onClose} 
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} p-2 rounded transition-colors`}
                         >
                             <i className="fas fa-times text-lg"></i>
@@ -3147,7 +2973,7 @@ const LeadDetailModal = ({
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -3163,6 +2989,7 @@ const LeadDetailModal = ({
                                     tab === 'contacts' ? 'users' :
                                     tab === 'sites' ? 'map-marker-alt' :
                                     tab === 'calendar' ? 'calendar-alt' :
+                                    tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
                                     tab === 'notes' ? 'sticky-note' :
                                     'info-circle'
@@ -3178,6 +3005,11 @@ const LeadDetailModal = ({
                                         {formData.sites.length}
                                     </span>
                                 )}
+                                {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
+                                        {formData.proposals.length}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -3185,18 +3017,7 @@ const LeadDetailModal = ({
 
                 {/* Content */}
                 <div ref={contentScrollableRef} className="flex-1 overflow-y-auto p-6">
-                    <form
-                        onSubmit={handleSubmit}
-                        onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            const el = e.target;
-                            if (el.tagName === 'TEXTAREA') return;
-                            if ((el.tagName === 'INPUT' && el.type !== 'submit' && el.type !== 'button') || el.tagName === 'SELECT') {
-                                e.preventDefault();
-                            }
-                        }}
-                        className="space-y-6"
-                    >
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <div className="space-y-4">
@@ -3208,18 +3029,14 @@ const LeadDetailModal = ({
                                         <input 
                                             type="text" 
                                             ref={nameInputRef}
-                                            value={nameOverrideRef.current != null ? nameOverrideRef.current : (formData.name || '')}
+                                            value={formData.name || ''}
                                             onFocus={() => {
-                                                nameOverrideRef.current = formData.name ?? '';
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('name'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true, isAutoSavingRef.current);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
-                                                const v = e.target.value;
-                                                nameOverrideRef.current = v;
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name'); // Track that user has edited this field
@@ -3230,23 +3047,14 @@ const LeadDetailModal = ({
                                                     notifyEditingChange(false); // Only notify if state changed
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
-                                                    const updated = {...prev, name: v};
+                                                    const updated = {...prev, name: e.target.value};
                                                     // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
                                             }}
                                             onBlur={() => {
-                                                const sync = nameOverrideRef.current;
-                                                if (sync != null) {
-                                                    setFormData(prev => {
-                                                        const next = {...prev, name: sync};
-                                                        formDataRef.current = next;
-                                                        return next;
-                                                    });
-                                                    nameOverrideRef.current = null;
-                                                    flushPendingSave().catch(() => {});
-                                                }
+                                                // Clear editing flag after a delay to allow for final keystrokes
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
                                                     notifyEditingChange(false, isAutoSavingRef.current);
@@ -3265,7 +3073,6 @@ const LeadDetailModal = ({
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('industry'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
@@ -3344,7 +3151,6 @@ const LeadDetailModal = ({
                                             value={formData.firstContactDate || new Date().toISOString().split('T')[0]}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
-                                                userEditedFieldsRef.current.add('firstContactDate'); // Prevent overwrite as soon as user focuses
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
@@ -3373,7 +3179,6 @@ const LeadDetailModal = ({
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('website'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
@@ -3415,7 +3220,6 @@ const LeadDetailModal = ({
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('source'); // Prevent overwrite as soon as user focuses
                                                 notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
@@ -3522,7 +3326,6 @@ const LeadDetailModal = ({
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
-                                            <option value="No Engagement">No Engagement - No response yet</option>
                                             <option value="Awareness">Awareness - Lead knows about us</option>
                                             <option value="Interest">Interest - Lead shows engagement</option>
                                             <option value="Desire">Desire - Lead wants our solution</option>
@@ -3747,7 +3550,9 @@ const LeadDetailModal = ({
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            handleClose();
+                                            if (onClose) {
+                                                onClose();
+                                            }
                                         }}
                                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
                                             isDark 
@@ -4056,30 +3861,14 @@ const LeadDetailModal = ({
 
                                 {showSiteForm && (
                                     <div className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} rounded-lg p-4 border`}>
-                                        <div className="flex items-center justify-between mb-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setShowSiteForm(false);
-                                                    setEditingSite(null);
-                                                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', stage: 'Potential', aidaStatus: 'Awareness' });
-                                                }}
-                                                className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
-                                            >
-                                                <i className="fas fa-arrow-left"></i>
-                                                Back to list
-                                            </button>
-                                            <h4 className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                {editingSite ? 'Edit Site' : 'New Site'}
-                                            </h4>
-                                            <span className="w-20" aria-hidden="true" />
-                                        </div>
+                                        <h4 className={`font-medium mb-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                            {editingSite ? 'Edit Site' : 'New Site'}
+                                        </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Name *</label>
                                                 <input
                                                     type="text"
-                                                    data-testid="site-name-input"
                                                     value={newSite.name}
                                                     onChange={(e) => setNewSite({...newSite, name: e.target.value})}
                                                     onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
@@ -4227,36 +4016,6 @@ const LeadDetailModal = ({
                                                     placeholder="Equipment deployed, special instructions, etc."
                                                 ></textarea>
                                             </div>
-                                            <div>
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Stage</label>
-                                                <select
-                                                    value={newSite.stage ?? 'Potential'}
-                                                    onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                >
-                                                    <option value="Potential">Potential</option>
-                                                    <option value="Active">Active</option>
-                                                    <option value="Inactive">Inactive</option>
-                                                    <option value="On Hold">On Hold</option>
-                                                    <option value="Disinterested">Disinterested</option>
-                                                    <option value="Proposal">Proposal</option>
-                                                    <option value="Tender">Tender</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>AIDA Status</label>
-                                                <select
-                                                    value={newSite.aidaStatus ?? 'Awareness'}
-                                                    onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                >
-                                                    <option value="No Engagement">No Engagement</option>
-                                                    <option value="Awareness">Awareness</option>
-                                                    <option value="Interest">Interest</option>
-                                                    <option value="Desire">Desire</option>
-                                                    <option value="Action">Action</option>
-                                                </select>
-                                            </div>
                                         </div>
                                         <div className="flex justify-end gap-2 mt-3">
                                             <button
@@ -4273,9 +4032,7 @@ const LeadDetailModal = ({
                                                         notes: '',
                                                         latitude: '',
                                                         longitude: '',
-                                                        gpsCoordinates: '',
-                                                        stage: 'Potential',
-                                                        aidaStatus: 'Awareness'
+                                                        gpsCoordinates: ''
                                                     });
                                                 }}
                                                 className={`px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'border-gray-500 hover:bg-gray-600 text-gray-100' : 'border-gray-300 hover:bg-gray-50'}`}
@@ -4285,82 +4042,179 @@ const LeadDetailModal = ({
                                             <button
                                                 type="button"
                                                 onClick={editingSite ? handleUpdateSite : handleAddSite}
-                                                disabled={!editingSite && isAddingSite}
-                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                                             >
-                                                {!editingSite && isAddingSite ? (
-                                                    <><i className="fas fa-spinner fa-spin mr-1.5"></i>Adding…</>
-                                                ) : editingSite ? 'Update' : 'Add'} Site
+                                                {editingSite ? 'Update' : 'Add'} Site
                                             </button>
                                         </div>
                                     </div>
                                 )}
 
-                                {!showSiteForm && (
-                                <div className={`overflow-x-auto rounded-lg border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                <div className="space-y-2">
                                     {(() => {
+                                        // Merge formData sites with optimistic sites
                                         const formSites = formData.sites || [];
                                         const optimistic = optimisticSites || [];
+                                        
+                                        // Merge and deduplicate by ID
                                         const siteMap = new Map();
-                                        formSites.forEach(site => { if (site?.id) siteMap.set(site.id, site); });
-                                        optimistic.forEach(site => { if (site?.id) siteMap.set(site.id, site); });
+                                        
+                                        // Add formData sites first
+                                        formSites.forEach(site => {
+                                            if (site?.id) siteMap.set(site.id, site);
+                                        });
+                                        
+                                        // Add optimistic sites (will overwrite if duplicate ID)
+                                        optimistic.forEach(site => {
+                                            if (site?.id) siteMap.set(site.id, site);
+                                        });
+                                        
                                         const allSites = Array.from(siteMap.values());
-                                        if (allSites.length === 0) {
-                                            return (
-                                                <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
-                                                    <p>No sites added yet</p>
-                                                </div>
-                                            );
-                                        }
-                                        return (
-                                            <table className="min-w-full divide-y divide-gray-200">
-                                                <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-                                                    <tr>
-                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Name</th>
-                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Address</th>
-                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
-                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>AIDA Status</th>
-                                                        <th scope="col" className={`px-4 py-2.5 text-right text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className={`divide-y ${isDark ? 'divide-gray-600' : 'divide-gray-200'}`}>
-                                                    {allSites.map(site => (
-                                                        <tr
-                                                            key={site.id}
-                                                            onClick={() => handleEditSite(site)}
-                                                            className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-600/50' : 'hover:bg-primary-50/50'}`}
-                                                        >
-                                                            <td className={`px-4 py-3 text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name || '—'}</td>
-                                                            <td className={`px-4 py-3 text-sm max-w-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={site.address}>{site.address || '—'}</td>
-                                                            <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
-                                                            <td className="px-4 py-3">
-                                                                {site.aidaStatus ? (
-                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                                        site.aidaStatus === 'Action' ? 'bg-green-100 text-green-800' :
-                                                                        site.aidaStatus === 'Desire' ? 'bg-amber-100 text-amber-800' :
-                                                                        site.aidaStatus === 'Interest' ? 'bg-yellow-100 text-yellow-800' :
-                                                                        site.aidaStatus === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
-                                                                        'bg-blue-100 text-blue-800'
-                                                                    }`}>{site.aidaStatus}</span>
-                                                                ) : (
-                                                                    <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                                                                <div className="flex justify-end gap-1">
-                                                                    <button type="button" onClick={() => handleEditSite(site)} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>
-                                                                    <button type="button" onClick={() => handleDeleteSite(site.id)} className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors" title="Delete Site"><i className="fas fa-trash"></i></button>
+                                        
+                                        return allSites.length === 0 ? (
+                                            <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
+                                                <p>No sites added yet</p>
+                                            </div>
+                                        ) : (
+                                            allSites.map(site => (
+                                                <div key={site.id} className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md`}>
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <i className="fas fa-map-marker-alt text-primary-600 text-lg"></i>
+                                                            <h4 className={`font-semibold text-base ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name}</h4>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditSite(site)}
+                                                                className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                title="Edit Site"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteSite(site.id)}
+                                                                className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                                                title="Delete Site"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Enhanced Site Information Grid */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {/* Left Column - Contact & Location Info */}
+                                                        <div className="space-y-3">
+                                                            {site.address && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-map-marker-alt text-primary-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
+                                                                        <div className="text-sm">{site.address}</div>
+                                                                    </div>
                                                                 </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                                            )}
+                                                            
+                                                            {site.contactPerson && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Person</div>
+                                                                        <div className="text-sm">{site.contactPerson}</div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {(site.latitude && site.longitude) && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-crosshairs text-green-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">GPS Coordinates</div>
+                                                                        <div className="text-sm font-mono">{site.latitude}, {site.longitude}</div>
+                                                                        <a 
+                                                                            href={`https://www.openstreetmap.org/?mlat=${site.latitude}&mlon=${site.longitude}&zoom=15`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline mt-1"
+                                                                            title="Open in OpenStreetMap"
+                                                                        >
+                                                                            <i className="fas fa-external-link-alt"></i>
+                                                                            View on Map
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Right Column - Contact Details */}
+                                                        <div className="space-y-3">
+                                                            {site.phone && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-phone text-green-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</div>
+                                                                        <a href={`tel:${site.phone}`} className="text-sm text-primary-600 hover:underline">
+                                                                            {site.phone}
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {site.email && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-envelope text-purple-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
+                                                                        <a href={`mailto:${site.email}`} className="text-sm text-primary-600 hover:underline">
+                                                                            {site.email}
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Notes Section */}
+                                                    {site.notes && (
+                                                        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                            <div className="flex items-start gap-2">
+                                                                <i className="fas fa-sticky-note text-yellow-600 mt-0.5 w-4"></i>
+                                                                <div className="flex-1">
+                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Notes</div>
+                                                                    <div className={`text-sm ${isDark ? 'text-gray-300 bg-gray-600' : 'text-gray-700 bg-gray-50'} p-3 rounded-lg`}>
+                                                                        {site.notes}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Mini Map Preview */}
+                                                    {(site.latitude && site.longitude) && (
+                                                        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <i className="fas fa-map text-primary-600 w-4"></i>
+                                                                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location Preview</div>
+                                                            </div>
+                                                            <div className="h-32 rounded-lg overflow-hidden border border-gray-200">
+                                                                <iframe
+                                                                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${site.longitude-0.01},${site.latitude-0.01},${site.longitude+0.01},${site.latitude+0.01}&layer=mapnik&marker=${site.latitude},${site.longitude}`}
+                                                                    width="100%"
+                                                                    height="100%"
+                                                                    style={{ border: 0 }}
+                                                                    title={`Map of ${site.name}`}
+                                                                ></iframe>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))
                                         );
                                     })()}
                                 </div>
-                                )}
                             </div>
                         )}
 
@@ -4521,18 +4375,8 @@ const LeadDetailModal = ({
                         {/* Notes/Comments Tab */}
                         {activeTab === 'notes' && (
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center flex-wrap gap-2">
+                                <div className="flex justify-between items-center">
                                     <h3 className="text-lg font-semibold text-gray-900">Notes & Comments</h3>
-                                    {isCommentSubscribed && (
-                                        <button
-                                            type="button"
-                                            onClick={handleUnsubscribeFromComments}
-                                            className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
-                                            title="Stop receiving notifications for new comments"
-                                        >
-                                            Unsubscribe from notifications
-                                        </button>
-                                    )}
                                 </div>
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -4710,6 +4554,1134 @@ const LeadDetailModal = ({
                             </div>
                         )}
 
+                        {/* Proposals Tab */}
+                        {activeTab === 'proposals' && isAdmin && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>
+                                    <button
+                                        type="button"
+                                        disabled={isCreatingProposal || isCreatingProposalRef.current}
+                                        onClick={async () => {
+                                            // Use ref check for immediate guard (before state updates)
+                                            if (isCreatingProposalRef.current || isCreatingProposal) {
+                                                console.warn('⚠️ Proposal creation already in progress, ignoring click');
+                                                return;
+                                            }
+                                            
+                                            // Set both ref (immediate) and state (for UI)
+                                            isCreatingProposalRef.current = true;
+                                            setIsCreatingProposal(true);
+                                            
+                                            
+                                            // Generate a stable ID that won't change on re-renders
+                                            const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                                            
+                                            const newProposal = {
+                                                id: proposalId,
+                                                title: `Proposal for ${formData.name}`,
+                                                name: `Proposal for ${formData.name}`,
+                                                createdDate: new Date().toISOString().split('T')[0],
+                                                workflowStage: 'create-site-inspection',
+                                                workingDocumentLink: '',
+                                                stages: [
+                                                    { 
+                                                        name: 'Create Site Inspection Document', 
+                                                        department: 'Business Development',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Conduct site visit input data to Site Inspection Document', 
+                                                        department: 'Technical',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Comments on work loading requirements', 
+                                                        department: 'Data',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Comments on time allocations', 
+                                                        department: 'Support',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Relevant comments time allocations', 
+                                                        department: 'Compliance',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Creates proposal from template add client information', 
+                                                        department: 'Business Development',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Reviews proposal against Site Inspection comments', 
+                                                        department: 'Operations Manager',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Price proposal', 
+                                                        department: 'Commercial',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    },
+                                                    { 
+                                                        name: 'Final Approval', 
+                                                        department: 'CEO',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
+                                                        status: 'pending',
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
+                                                    }
+                                                ],
+                                                proposalContent: '',
+                                                siteInspectionData: '',
+                                                pricing: {
+                                                    subtotal: 0,
+                                                    tax: 0,
+                                                    total: 0
+                                                }
+                                            };
+                                            
+                                            // Check if proposal already exists (prevent duplicates)
+                                            // Use functional update pattern to get latest proposals
+                                            const checkProposals = () => {
+                                                // Use formDataRef for most up-to-date data
+                                                const refData = formDataRef.current;
+                                                const stateData = formData;
+                                                const lastSavedData = lastSavedDataRef.current;
+                                                
+                                                // Get proposals from all sources (including last saved)
+                                                const refProposals = refData?.proposals || [];
+                                                const stateProposals = stateData?.proposals || [];
+                                                const lastSavedProposals = lastSavedData?.proposals || [];
+                                                
+                                                // Merge them by ID (ref takes precedence, then lastSaved, then state)
+                                                const allProposalsMap = new Map();
+                                                
+                                                // Add state proposals first
+                                                stateProposals.forEach(p => {
+                                                    if (p.id) allProposalsMap.set(p.id, p);
+                                                });
+                                                
+                                                // Add lastSaved proposals (overwrites state if same ID)
+                                                lastSavedProposals.forEach(p => {
+                                                    if (p.id) allProposalsMap.set(p.id, p);
+                                                });
+                                                
+                                                // Add ref proposals last (highest priority - overwrites all)
+                                                refProposals.forEach(p => {
+                                                    if (p.id) allProposalsMap.set(p.id, p);
+                                                });
+                                                
+                                                return Array.from(allProposalsMap.values());
+                                            };
+                                            
+                                            const existingProposals = checkProposals();
+                                            
+                                            
+                                            // Check by ID first (most reliable) - this should always be unique
+                                            const proposalExistsById = existingProposals.some(p => p.id === proposalId);
+                                            
+                                            // Only check by title if we're creating within the same second (very rare but possible)
+                                            // Removed the date check since proposals created on the same day should be allowed
+                                            const recentProposals = existingProposals.filter(p => {
+                                                if (!p.id) return false;
+                                                // Check if proposal ID was created in the last 2 seconds
+                                                const pTimestamp = parseInt(p.id.split('-')[1]);
+                                                const currentTimestamp = Date.now();
+                                                return Math.abs(currentTimestamp - pTimestamp) < 2000;
+                                            });
+                                            
+                                            const proposalExistsByTitle = recentProposals.some(p => 
+                                                p.title === newProposal.title
+                                            );
+                                            
+                                            if (proposalExistsById) {
+                                                console.warn('⚠️ Proposal with same ID already exists, skipping creation', {
+                                                    proposalId,
+                                                    existingProposal: existingProposals.find(p => p.id === proposalId)
+                                                });
+                                                isCreatingProposalRef.current = false;
+                                                setIsCreatingProposal(false);
+                                                return;
+                                            }
+                                            
+                                            // Only block if we have a very recent proposal with the same title (within 2 seconds)
+                                            if (proposalExistsByTitle && recentProposals.length > 0) {
+                                                console.warn('⚠️ Very recent proposal with same title exists, skipping creation', {
+                                                    recentProposals: recentProposals.map(p => ({ id: p.id, title: p.title }))
+                                                });
+                                                isCreatingProposalRef.current = false;
+                                                setIsCreatingProposal(false);
+                                                return;
+                                            }
+                                            
+                                            
+                                            // Use functional update to merge with existing proposals properly
+                                            const updatedProposals = [...existingProposals, newProposal];
+                                            await saveProposals(updatedProposals);
+                                            
+                                            // Notify all assigned parties of the new proposal
+                                            await notifyAllAssignedParties(
+                                                newProposal,
+                                                `New Proposal Created: ${newProposal.title || newProposal.name}`,
+                                                `A new proposal "${newProposal.title || newProposal.name}" has been created for ${formData.name || 'this lead'}.`,
+                                                `#/clients?lead=${lead.id}&tab=proposals`,
+                                                {
+                                                    proposalId: newProposal.id,
+                                                    leadId: lead.id
+                                                }
+                                            );
+                                            
+                                            // Reset flags after a delay (longer to ensure save completes)
+                                            setTimeout(() => {
+                                                isCreatingProposalRef.current = false;
+                                                setIsCreatingProposal(false);
+                                            }, 2000);
+                                        }}
+                                        className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                                            (isCreatingProposal || isCreatingProposalRef.current)
+                                                ? 'bg-gray-400 text-white cursor-not-allowed' 
+                                                : 'bg-primary-600 text-white hover:bg-primary-700'
+                                        }`}
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>
+                                        {(isCreatingProposal || isCreatingProposalRef.current) ? 'Creating...' : 'Create New Proposal'}
+                                    </button>
+                                </div>
+
+                                {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
+                                    <div className="text-center py-12 text-gray-500">
+                                        <i className="fas fa-file-contract text-4xl mb-3"></i>
+                                        <p className="text-sm">No proposals created yet</p>
+                                        <p className="text-xs mt-1">Click "Create New Proposal" to start the approval workflow</p>
+                                        {/* Debug info */}
+                                        {process.env.NODE_ENV === 'development' && (
+                                            <div className="mt-4 text-xs text-gray-400">
+                                                <p>Debug: proposals = {JSON.stringify(formData.proposals)}</p>
+                                                <p>formDataRef proposals count: {formDataRef.current?.proposals?.length || 0}</p>
+                                                <button 
+                                                    onClick={() => {
+                                                    }}
+                                                    className="mt-2 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs"
+                                                >
+                                                    Debug Proposals
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {formData.proposals.map((proposal, proposalIndex) => {
+                                            const currentUser = window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {};
+                                            const currentUserId = currentUser.id || currentUser.sub;
+                                            
+                                            return (
+                                            <div key={proposal.id} className="bg-white border border-gray-200 rounded-lg p-5">
+                                                <div className="flex justify-between items-start mb-4">
+                                                        <div className="flex-1">
+                                                            {editingProposalName === proposal.id ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={proposalNameInput}
+                                                                        onChange={(e) => setProposalNameInput(e.target.value)}
+                                                                        onBlur={async () => {
+                                                                            if (proposalNameInput.trim() && proposalNameInput.trim() !== (proposal.title || proposal.name)) {
+                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                    idx === proposalIndex ? { ...p, title: proposalNameInput.trim(), name: proposalNameInput.trim() } : p
+                                                                                );
+                                                                                const updatedProposal = updatedProposals[proposalIndex];
+                                                                                await saveProposals(updatedProposals);
+                                                                                
+                                                                                // Notify all assigned parties of the name change
+                                                                                await notifyAllAssignedParties(
+                                                                                    updatedProposal,
+                                                                                    `Proposal Updated: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                    `Proposal name has been changed to "${updatedProposal.title || updatedProposal.name}" by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                    {
+                                                                                        proposalId: updatedProposal.id,
+                                                                                        leadId: lead.id
+                                                                                    }
+                                                                                );
+                                                                            }
+                                                                            setEditingProposalName(null);
+                                                                        }}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.target.blur();
+                                                                            }
+                                                                            if (e.key === 'Escape') {
+                                                                                setEditingProposalName(null);
+                                                                                setProposalNameInput(proposal.title || proposal.name || '');
+                                                                            }
+                                                                        }}
+                                                                        autoFocus
+                                                                        className="text-lg font-semibold text-gray-900 border-b-2 border-primary-500 px-2 py-1"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                    <div>
+                                                                    <h4 
+                                                                        className="font-semibold text-gray-900 cursor-pointer hover:text-primary-600"
+                                                                        onClick={() => {
+                                                                            setEditingProposalName(proposal.id);
+                                                                            setProposalNameInput(proposal.title || proposal.name || '');
+                                                                        }}
+                                                                        title="Click to edit name"
+                                                                    >
+                                                                        {proposal.title || proposal.name || 'Untitled Proposal'}
+                                                                        <i className="fas fa-edit ml-2 text-xs text-gray-400"></i>
+                                                                    </h4>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            <i className="fas fa-calendar mr-1"></i>
+                                                            Created: {new Date(proposal.createdDate).toLocaleDateString()}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {/* Working Document Link */}
+                                                            <div className="mt-3">
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Working Document Link</label>
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={formData.proposals[proposalIndex]?.workingDocumentLink || ''}
+                                                                        onChange={(e) => {
+                                                                            const newLink = e.target.value;
+                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
+                                                                            );
+                                                                            setFormData(prev => ({ ...prev, proposals: updatedProposals }));
+                                                                        }}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                const saveButton = e.target.nextElementSibling;
+                                                                                if (saveButton) saveButton.click();
+                                                                            }
+                                                                        }}
+                                                                        placeholder="https://..."
+                                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={async () => {
+                                                                            const currentProposal = formData.proposals[proposalIndex];
+                                                                            const oldLink = (proposal.workingDocumentLink || '').trim();
+                                                                            const newLink = (currentProposal?.workingDocumentLink || '').trim();
+                                                                            
+                                                                            if (oldLink !== newLink) {
+                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                    idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
+                                                                                );
+                                                                                const updatedProposal = updatedProposals[proposalIndex];
+                                                                                
+                                                                                await saveProposals(updatedProposals);
+                                                                                
+                                                                                // Notify all assigned parties of the document link change
+                                                                                await notifyAllAssignedParties(
+                                                                                    updatedProposal,
+                                                                                    `Proposal Updated: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                    `Working document link has been ${newLink ? `updated to: ${newLink}` : 'removed'} by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                    {
+                                                                                        proposalId: updatedProposal.id,
+                                                                                        leadId: lead.id
+                                                                                    }
+                                                                                );
+                                                                            }
+                                                                        }}
+                                                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+                                                                        title="Save working document link"
+                                                                    >
+                                                                        <i className="fas fa-save mr-1"></i>
+                                                                        Save
+                                                                    </button>
+                                                                    {formData.proposals[proposalIndex]?.workingDocumentLink && (
+                                                                        <a 
+                                                                            href={formData.proposals[proposalIndex].workingDocumentLink} 
+                                                                            target="_blank" 
+                                                                            rel="noopener noreferrer"
+                                                                            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                                                        >
+                                                                            <i className="fas fa-external-link-alt mr-1"></i>
+                                                                            Open
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            if (confirm(`Are you sure you want to delete "${proposal.title || proposal.name}"? This action cannot be undone.`)) {
+                                                                // Notify all assigned parties before deletion
+                                                                await notifyAllAssignedParties(
+                                                                    proposal,
+                                                                    `Proposal Deleted: ${proposal.title || proposal.name}`,
+                                                                    `Proposal "${proposal.title || proposal.name}" has been deleted by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                    {
+                                                                        proposalId: proposal.id,
+                                                                        leadId: lead.id
+                                                                    }
+                                                                );
+                                                                
+                                                                setFormData(prev => {
+                                                                    const updatedProposals = (prev.proposals || []).filter(p => p.id !== proposal.id);
+                                                                    saveProposals(updatedProposals);
+                                                                    return { ...prev, proposals: updatedProposals };
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Delete Proposal"
+                                                    >
+                                                        <i className="fas fa-trash mr-1"></i>Delete
+                                                    </button>
+                                                </div>
+
+                                                {/* Workflow Stages */}
+                                                <div className="space-y-3">
+                                                    <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
+                                                    {proposal.stages.map((stage, stageIndex) => {
+                                                            const previousStage = stageIndex > 0 ? proposal.stages[stageIndex - 1] : null;
+                                                        // Allow approval/rejection at any stage by any user
+                                                        // Also allow commenting at any stage
+                                                        const canApprove = true; // Any user can approve at any stage
+                                                        // Allow commenting at any stage - any user can comment
+                                                        const canComment = true; // Always allow commenting
+                                                            const isAssigned = stage.assigneeId === currentUserId;
+                                                        const statusColor = 
+                                                            stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
+                                                                stage.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-300' :
+                                                            stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                                            'bg-gray-100 text-gray-600 border-gray-300';
+                                                        const teamKey = (stage.department || '').toLowerCase();
+                                                        const teamMetaMap = {
+                                                            'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
+                                                            'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
+                                                            'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
+                                                            'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
+                                                            'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
+                                                            'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
+                                                            'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
+                                                        };
+                                                        const teamMeta = teamMetaMap[teamKey] || { icon: 'fa-users', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
+                                                            const stageKey = `${proposalIndex}-${stageIndex}`;
+                                                            const showComments = showStageComments[stageKey] || false;
+                                                        
+                                                        return (
+                                                            <>
+                                                                <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
+                                                                    <div className="flex justify-between items-start">
+                                                                        <div className="flex-1">
+                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                <span className="font-medium text-sm">{stageIndex + 1}.</span>
+                                                                                <span className="font-medium text-sm">{(stage.name || '').replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())}</span>
+                                                                            </div>
+                                                                                <div className="text-xs ml-6 mb-2">
+                                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full ${teamMeta.colorClass}`}>
+                                                                                    <i className={`fas ${teamMeta.icon}`}></i>
+                                                                                    {stage.department}
+                                                                                </span>
+                                                                            </div>
+                                                                                
+                                                                                {/* Assignee Selection */}
+                                                                                <div className="mb-2">
+                                                                                    {editingStageAssignee === stageKey ? (
+                                                                                        <select
+                                                                                            value={stage.assigneeId || ''}
+                                                                                            onChange={async (e) => {
+                                                                                                const selectedUser = allUsers.find(u => u.id === e.target.value);
+                                                                                                const oldAssigneeId = stage.assigneeId;
+                                                                                                const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                    idx === stageIndex ? { 
+                                                                                                        ...s, 
+                                                                                                        assigneeId: e.target.value || '',
+                                                                                                        assignee: selectedUser?.name || '',
+                                                                                                        assigneeEmail: selectedUser?.email || ''
+                                                                                                    } : s
+                                                                                                );
+                                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                    idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                );
+                                                                                                setFormData({ ...formData, proposals: updatedProposals });
+                                                                                                setEditingStageAssignee(null);
+                                                                                                await saveProposals(updatedProposals);
+                                                                                                
+                                                                                                // Notify all assigned parties of the assignee change
+                                                                                                const updatedProposal = updatedProposals[proposalIndex];
+                                                                                                const updatedStage = updatedStages[stageIndex];
+                                                                                                await notifyAllAssignedParties(
+                                                                                                    updatedProposal,
+                                                                                                    `Proposal Assignment Updated: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                                    `Stage "${updatedStage.name}" has been ${updatedStage.assigneeId ? `assigned to ${selectedUser?.name || selectedUser?.email || 'a user'}` : 'unassigned'} by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                    {
+                                                                                                        proposalId: updatedProposal.id,
+                                                                                                        stageId: updatedStage.id,
+                                                                                                        stageIndex: stageIndex,
+                                                                                                        leadId: lead.id
+                                                                                                    }
+                                                                                                );
+                                                                                                
+                                                                                                // Also notify the newly assigned user if they were just assigned
+                                                                                                if (updatedStage.assigneeId && updatedStage.assigneeId !== oldAssigneeId) {
+                                                                                                    await sendNotification(
+                                                                                                        updatedStage.assigneeId,
+                                                                                                        `New Assignment: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                                        `You have been assigned to stage "${updatedStage.name}" on proposal "${updatedProposal.title || updatedProposal.name}".`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: updatedProposal.id,
+                                                                                                            stageId: updatedStage.id,
+                                                                                                            stageIndex: stageIndex,
+                                                                                                            leadId: lead.id
+                                                                                                        }
+                                                                                                    );
+                                                                                                }
+                                                                                            }}
+                                                                                            onBlur={() => setEditingStageAssignee(null)}
+                                                                                            className="text-xs px-2 py-1 border border-gray-300 rounded"
+                                                                                            autoFocus
+                                                                                        >
+                                                                                            <option value="">Assign to...</option>
+                                                                                            {allUsers.filter(u => u.status === 'active').map(user => (
+                                                                                                <option key={user.id} value={user.id}>{user.name || user.email}</option>
+                                                                                            ))}
+                                                                                        </select>
+                                                                                    ) : (
+                                                                                        <div className="text-xs">
+                                                                                            <span className="text-gray-600">Assigned to: </span>
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => setEditingStageAssignee(stageKey)}
+                                                                                                className="text-primary-600 hover:text-primary-700 font-medium"
+                                                                                            >
+                                                                                                {stage.assignee || <span className="text-gray-400 italic">Unassigned</span>}
+                                                                                                <i className="fas fa-edit ml-1 text-xs"></i>
+                                                                                            </button>
+                                                                                </div>
+                                                                            )}
+                                                                                </div>
+                                                                                
+                                                                                {/* Comments Section - Always available for commenting */}
+                                                                                {(showComments || canComment) && (
+                                                                                    <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                                                                                        <div className="text-xs font-medium text-gray-700 mb-2">Comments:</div>
+                                                                                        <div className="space-y-2 mb-2 max-h-32 overflow-y-auto">
+                                                                                            {Array.isArray(stage.comments) && stage.comments.length > 0 ? (
+                                                                                                stage.comments.map((comment, commentIdx) => {
+                                                                                                    // Parse @mentions in comment text (handles @username or @email)
+                                                                                                    const renderCommentText = (text) => {
+                                                                                                        if (!text) return '';
+                                                                                                        // Match @ followed by word characters, spaces, dots, or hyphens (for names/emails)
+                                                                                                        const parts = text.split(/(@[\w\s.@-]+)/g);
+                                                                                                        return parts.map((part, idx) => {
+                                                                                                            if (part.startsWith('@')) {
+                                                                                                                // Remove trailing spaces and @ if present
+                                                                                                                const mentionName = part.substring(1).trim().replace(/@+$/, '');
+                                                                                                                if (mentionName) {
+                                                                                                                    const mentionedUser = allUsers.find(u => 
+                                                                                                                        (u.name && u.name.toLowerCase() === mentionName.toLowerCase()) ||
+                                                                                                                        (u.email && u.email.toLowerCase() === mentionName.toLowerCase())
+                                                                                                                    );
+                                                                                                                    return (
+                                                                                                                        <span key={idx} className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium mx-0.5">
+                                                                                                                            <i className="fas fa-at mr-1"></i>{mentionName}
+                                                                                                                        </span>
+                                                                                                                    );
+                                                                                                                }
+                                                                                                            }
+                                                                                                            return <span key={idx}>{part}</span>;
+                                                                                                        });
+                                                                                                    };
+                                                                                                    
+                                                                                                    return (
+                                                                                                        <div key={commentIdx} className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                                                                                            <div className="font-medium text-gray-700">{comment.author || 'Unknown'}</div>
+                                                                                                            <div className="mt-1">{renderCommentText(comment.text)}</div>
+                                                                                                            <div className="text-[10px] text-gray-400 mt-1">
+                                                                                                                {new Date(comment.timestamp).toLocaleString()}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    );
+                                                                                                })
+                                                                                            ) : (
+                                                                                                <div className="text-xs text-gray-400 italic">No comments yet</div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="relative">
+                                                                                            <textarea
+                                                                                                ref={(el) => { if (el) mentionInputRefs.current[stageKey] = el; }}
+                                                                                                value={stageCommentInput[stageKey] || ''}
+                                                                                                onChange={(e) => {
+                                                                                                    const value = e.target.value;
+                                                                                                    const cursorPos = e.target.selectionStart;
+                                                                                                    const textBeforeCursor = value.substring(0, cursorPos);
+                                                                                                    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+                                                                                                    
+                                                                                                    // Check if we're typing an @mention
+                                                                                                    if (lastAtIndex !== -1) {
+                                                                                                        const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+                                                                                                        // Check if there's a space or newline after @ (end of mention)
+                                                                                                        const spaceIndex = textAfterAt.indexOf(' ');
+                                                                                                        const newlineIndex = textAfterAt.indexOf('\n');
+                                                                                                        const endIndex = Math.min(
+                                                                                                            spaceIndex === -1 ? textAfterAt.length : spaceIndex,
+                                                                                                            newlineIndex === -1 ? textAfterAt.length : newlineIndex
+                                                                                                        );
+                                                                                                        
+                                                                                                        if (endIndex > 0) {
+                                                                                                            const query = textAfterAt.substring(0, endIndex).toLowerCase();
+                                                                                                            setMentionState({
+                                                                                                                ...mentionState,
+                                                                                                                [stageKey]: {
+                                                                                                                    show: true,
+                                                                                                                    query: query,
+                                                                                                                    position: lastAtIndex
+                                                                                                                }
+                                                                                                            });
+                                                                                                        } else {
+                                                                                                            setMentionState({
+                                                                                                                ...mentionState,
+                                                                                                                [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                            });
+                                                                                                        }
+                                                                                                    } else {
+                                                                                                        setMentionState({
+                                                                                                            ...mentionState,
+                                                                                                            [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                        });
+                                                                                                    }
+                                                                                                    
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: value });
+                                                                                                }}
+                                                                                                onBlur={() => {
+                                                                                                    // Delay hiding mention dropdown to allow clicking on it
+                                                                                                    setTimeout(() => {
+                                                                                                        setMentionState(prev => ({
+                                                                                                            ...prev,
+                                                                                                            [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                        }));
+                                                                                                    }, 200);
+                                                                                                }}
+                                                                                                placeholder="Add a comment... (use @ to mention users)"
+                                                                                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
+                                                                                                rows="2"
+                                                                                            />
+                                                                                            {/* @mention dropdown */}
+                                                                                            {mentionState[stageKey]?.show && (
+                                                                                                <div className="absolute z-50 mt-1 w-48 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                                                                                    {allUsers.filter(u => {
+                                                                                                        const query = mentionState[stageKey]?.query || '';
+                                                                                                        if (!query) return true;
+                                                                                                        const name = (u.name || '').toLowerCase();
+                                                                                                        const email = (u.email || '').toLowerCase();
+                                                                                                        return name.includes(query) || email.includes(query);
+                                                                                                    }).slice(0, 5).map(user => (
+                                                                                                        <button
+                                                                                                            key={user.id}
+                                                                                                            type="button"
+                                                                                                            onClick={() => {
+                                                                                                                const currentValue = stageCommentInput[stageKey] || '';
+                                                                                                                const mentionPos = mentionState[stageKey]?.position || 0;
+                                                                                                                const textBefore = currentValue.substring(0, mentionPos);
+                                                                                                                const textAfter = currentValue.substring(mentionPos + 1 + (mentionState[stageKey]?.query?.length || 0));
+                                                                                                                const mentionText = `@${user.name || user.email}`;
+                                                                                                                const newValue = textBefore + mentionText + ' ' + textAfter;
+                                                                                                                setStageCommentInput({ ...stageCommentInput, [stageKey]: newValue });
+                                                                                                                setMentionState({
+                                                                                                                    ...mentionState,
+                                                                                                                    [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                                });
+                                                                                                                // Focus back on textarea
+                                                                                                                setTimeout(() => {
+                                                                                                                    const textarea = mentionInputRefs.current[stageKey];
+                                                                                                                    if (textarea) {
+                                                                                                                        textarea.focus();
+                                                                                                                        const newPos = textBefore.length + mentionText.length + 1;
+                                                                                                                        textarea.setSelectionRange(newPos, newPos);
+                                                                                                                    }
+                                                                                                                }, 0);
+                                                                                                            }}
+                                                                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                                                                                                        >
+                                                                                                            <i className="fas fa-user text-gray-400"></i>
+                                                                                                            <span>{user.name || user.email}</span>
+                                                                                                        </button>
+                                                                                                    ))}
+                                                                                                    {allUsers.filter(u => {
+                                                                                                        const query = mentionState[stageKey]?.query || '';
+                                                                                                        if (!query) return true;
+                                                                                                        const name = (u.name || '').toLowerCase();
+                                                                                                        const email = (u.email || '').toLowerCase();
+                                                                                                        return name.includes(query) || email.includes(query);
+                                                                                                    }).length === 0 && (
+                                                                                                        <div className="px-3 py-2 text-xs text-gray-400">No users found</div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={async () => {
+                                                                                                if (stageCommentInput[stageKey]?.trim()) {
+                                                                                                    const newComment = {
+                                                                                                        id: Date.now(),
+                                                                                                        text: stageCommentInput[stageKey].trim(),
+                                                                                                        author: currentUser.name || currentUser.email || 'Unknown',
+                                                                                                        authorId: currentUserId,
+                                                                                                        timestamp: new Date().toISOString()
+                                                                                                    };
+                                                                                                    const updatedComments = [...(Array.isArray(stage.comments) ? stage.comments : []), newComment];
+                                                                                                    const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                        idx === stageIndex ? { ...s, comments: updatedComments } : s
+                                                                                                    );
+                                                                                                    const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                        idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                    );
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                    await saveProposals(updatedProposals);
+                                                                                                    
+                                                                                                    // Notify all assigned parties of the new comment
+                                                                                                    await notifyAllAssignedParties(
+                                                                                                        updatedProposals[proposalIndex],
+                                                                                                        `New Comment on Proposal: ${proposal.title || proposal.name}`,
+                                                                                                        `${currentUser.name || currentUser.email || 'Unknown'} commented on stage "${stage.name}": ${newComment.text}`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: proposal.id,
+                                                                                                            stageId: stage.id,
+                                                                                                            stageIndex: stageIndex,
+                                                                                                            leadId: lead.id
+                                                                                                        }
+                                                                                                    );
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+                                                                                        >
+                                                                                            Add Comment
+                                                                                        </button>
+                                                                                    </div>
+                                                                                )}
+                                                                                
+                                                                                {/* Status Messages */}
+                                                                            {stage.approvedBy && (
+                                                                                <div className="mt-2 text-[11px] text-gray-600">
+                                                                                    <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
+                                                                                </div>
+                                                                                )}
+                                                                                {stage.rejectedBy && (
+                                                                                    <div className="mt-2 text-[11px] text-red-600">
+                                                                                        <i className="fas fa-times-circle mr-1"></i>Rejected by {stage.rejectedBy} on {new Date(stage.rejectedAt).toLocaleDateString()}
+                                                                                        {stage.rejectedReason && (
+                                                                                            <div className="mt-1 text-gray-600">Reason: {stage.rejectedReason}</div>
+                                                                            )}
+                                                                        </div>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex items-center gap-2 flex-col">
+                                                                            {canApprove && (
+                                                                                    <>
+                                                                                <button
+                                                                                    type="button"
+                                                                                            onClick={async () => {
+                                                                                                const commentText = stageCommentInput[stageKey] || '';
+                                                                                                let approver = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                const approverId = currentUserId;
+                                                                                                
+                                                                                                const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                if (commentText.trim()) {
+                                                                                                    updatedComments.push({
+                                                                                                        id: Date.now(),
+                                                                                                        text: commentText.trim(),
+                                                                                                        author: approver,
+                                                                                                        authorId: approverId,
+                                                                                                        timestamp: new Date().toISOString()
+                                                                                                    });
+                                                                                                }
+                                                                                                
+                                                                                            const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                if (idx === stageIndex) {
+                                                                                                        return { 
+                                                                                                            ...s, 
+                                                                                                            status: 'approved', 
+                                                                                                            comments: updatedComments,
+                                                                                                            approvedBy: approver,
+                                                                                                            approvedAt: new Date().toISOString()
+                                                                                                        };
+                                                                                                } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                    return { ...s, status: 'in-progress' };
+                                                                                                }
+                                                                                                return s;
+                                                                                            });
+                                                                                                
+                                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                            );
+                                                                                                setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                setShowStageComments({ ...showStageComments, [stageKey]: false });
+                                                                                                await saveProposals(updatedProposals);
+                                                                                                
+                                                                                                // Notify all assigned parties of the approval
+                                                                                                await notifyAllAssignedParties(
+                                                                                                    updatedProposals[proposalIndex],
+                                                                                                    `Proposal Stage Approved: ${proposal.title || proposal.name}`,
+                                                                                                    `Stage "${stage.name}" has been approved by ${approver}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                    {
+                                                                                                        proposalId: proposal.id,
+                                                                                                        stageId: stage.id,
+                                                                                                        stageIndex: stageIndex,
+                                                                                                        leadId: lead.id
+                                                                                                    }
+                                                                                                );
+                                                                                                
+                                                                                                // Also notify assigned user of next stage if it exists
+                                                                                                if (stageIndex + 1 < proposal.stages.length) {
+                                                                                                    const nextStage = updatedStages[stageIndex + 1];
+                                                                                                    if (nextStage.assigneeId) {
+                                                                                                        await sendNotification(
+                                                                                                            nextStage.assigneeId,
+                                                                                                            `Proposal Stage Ready: ${proposal.title || proposal.name}`,
+                                                                                                            `Stage "${nextStage.name}" is now ready for your review.`,
+                                                                                                            `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                            {
+                                                                                                                proposalId: proposal.id,
+                                                                                                                stageId: nextStage.id,
+                                                                                                                stageIndex: stageIndex + 1,
+                                                                                                                leadId: lead.id
+                                                                                                            }
+                                                                                                        );
+                                                                                                    }
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                >
+                                                                                            <i className="fas fa-check mr-1"></i>Approve
+                                                                                </button>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={async () => {
+                                                                                                const reason = prompt('Please provide a reason for rejection:');
+                                                                                                if (reason !== null) {
+                                                                                                    let rejector = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                    const rejectorId = currentUserId;
+                                                                                                    
+                                                                                                    const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                    const commentText = stageCommentInput[stageKey] || '';
+                                                                                                    if (commentText.trim()) {
+                                                                                                        updatedComments.push({
+                                                                                                            id: Date.now(),
+                                                                                                            text: commentText.trim(),
+                                                                                                            author: rejector,
+                                                                                                            authorId: rejectorId,
+                                                                                                            timestamp: new Date().toISOString()
+                                                                                                        });
+                                                                                                    }
+                                                                                                    
+                                                                                                    const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                        idx === stageIndex ? { 
+                                                                                                            ...s, 
+                                                                                                            status: 'rejected',
+                                                                                                            comments: updatedComments,
+                                                                                                            rejectedBy: rejector,
+                                                                                                            rejectedAt: new Date().toISOString(),
+                                                                                                            rejectedReason: reason
+                                                                                                        } : s
+                                                                                                    );
+                                                                                                    
+                                                                                                    const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                        idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                    );
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                    setShowStageComments({ ...showStageComments, [stageKey]: false });
+                                                                                                    await saveProposals(updatedProposals);
+                                                                                                    
+                                                                                                    // Notify all assigned parties of the rejection
+                                                                                                    await notifyAllAssignedParties(
+                                                                                                        updatedProposals[proposalIndex],
+                                                                                                        `Proposal Stage Rejected: ${proposal.title || proposal.name}`,
+                                                                                                        `Stage "${stage.name}" has been rejected by ${rejector}. Reason: ${reason}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: proposal.id,
+                                                                                                            stageId: stage.id,
+                                                                                                            stageIndex: stageIndex,
+                                                                                                            leadId: lead.id
+                                                                                                        }
+                                                                                                    );
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                                                                        >
+                                                                                            <i className="fas fa-times mr-1"></i>Reject
+                                                                                        </button>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: !showComments })}
+                                                                                            className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                                                                        >
+                                                                                            <i className="fas fa-comment mr-1"></i>{showComments ? 'Hide' : 'Show'} Comments
+                                                                                        </button>
+                                                                                    </>
+                                                                            )}
+                                                                            {/* Status display and update controls */}
+                                                                            {stage.status === 'approved' && (
+                                                                                <div className="flex flex-col gap-1">
+                                                                                <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                    <i className="fas fa-check mr-1"></i>Approved
+                                                                                </span>
+                                                                                    {/* Allow any user to change status */}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={async () => {
+                                                                                            const reason = prompt('Please provide a reason for changing to rejected:');
+                                                                                            if (reason !== null && reason.trim()) {
+                                                                                                let updater = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                const updaterId = currentUserId;
+                                                                                                
+                                                                                                const commentText = stageCommentInput[stageKey] || '';
+                                                                                                const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                if (commentText.trim()) {
+                                                                                                    updatedComments.push({
+                                                                                                        id: Date.now(),
+                                                                                                        text: commentText.trim(),
+                                                                                                        author: updater,
+                                                                                                        authorId: updaterId,
+                                                                                                        timestamp: new Date().toISOString()
+                                                                                                    });
+                                                                                                }
+                                                                                                
+                                                                                                const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                    idx === stageIndex ? { 
+                                                                                                        ...s, 
+                                                                                                        status: 'rejected',
+                                                                                                        comments: updatedComments,
+                                                                                                        rejectedBy: updater,
+                                                                                                        rejectedAt: new Date().toISOString(),
+                                                                                                        rejectedReason: reason.trim(),
+                                                                                                        approvedBy: null,
+                                                                                                        approvedAt: null
+                                                                                                    } : s
+                                                                                                );
+                                                                                                
+                                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                    idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                );
+                                                                                                setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                await saveProposals(updatedProposals);
+                                                                                                
+                                                                                                // Notify all assigned parties of the status change from approved to rejected
+                                                                                                await notifyAllAssignedParties(
+                                                                                                    updatedProposals[proposalIndex],
+                                                                                                    `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
+                                                                                                    `Stage "${stage.name}" has been changed from approved to rejected by ${updater}. Reason: ${reason.trim()}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                    {
+                                                                                                        proposalId: proposal.id,
+                                                                                                        stageId: stage.id,
+                                                                                                        stageIndex: stageIndex,
+                                                                                                        leadId: lead.id
+                                                                                                    }
+                                                                                                );
+                                                                                            }
+                                                                                        }}
+                                                                                        className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                                                                        title="Change to Rejected"
+                                                                                    >
+                                                                                        <i className="fas fa-times mr-1"></i>Reject
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                            {stage.status === 'rejected' && (
+                                                                                <div className="flex flex-col gap-1">
+                                                                                    <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
+                                                                                        <i className="fas fa-times mr-1"></i>Rejected
+                                                                                    </span>
+                                                                                    {/* Allow any user to change status */}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={async () => {
+                                                                                            const commentText = stageCommentInput[stageKey] || '';
+                                                                                            let updater = currentUser.name || currentUser.email || 'Unknown';
+                                                                                            const updaterId = currentUserId;
+                                                                                            
+                                                                                            const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                            if (commentText.trim()) {
+                                                                                                updatedComments.push({
+                                                                                                    id: Date.now(),
+                                                                                                    text: commentText.trim(),
+                                                                                                    author: updater,
+                                                                                                    authorId: updaterId,
+                                                                                                    timestamp: new Date().toISOString()
+                                                                                                });
+                                                                                            }
+                                                                                            
+                                                                                            const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                if (idx === stageIndex) {
+                                                                                                    return { 
+                                                                                                        ...s, 
+                                                                                                        status: 'approved', 
+                                                                                                        comments: updatedComments,
+                                                                                                        approvedBy: updater,
+                                                                                                        approvedAt: new Date().toISOString(),
+                                                                                                        rejectedBy: null,
+                                                                                                        rejectedAt: null,
+                                                                                                        rejectedReason: ''
+                                                                                                    };
+                                                                                                } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                    return { ...s, status: 'in-progress' };
+                                                                                                }
+                                                                                                return s;
+                                                                                            });
+                                                                                            
+                                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                            );
+                                                                                            setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                            await saveProposals(updatedProposals);
+                                                                                            
+                                                                                            // Notify all assigned parties of the status change from rejected to approved
+                                                                                            await notifyAllAssignedParties(
+                                                                                                updatedProposals[proposalIndex],
+                                                                                                `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
+                                                                                                `Stage "${stage.name}" has been changed from rejected to approved by ${updater}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
+                                                                                                `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                {
+                                                                                                    proposalId: proposal.id,
+                                                                                                    stageId: stage.id,
+                                                                                                    stageIndex: stageIndex,
+                                                                                                    leadId: lead.id
+                                                                                                }
+                                                                                            );
+                                                                                            
+                                                                                            // Notify assigned users of next stage
+                                                                                            if (stageIndex + 1 < proposal.stages.length) {
+                                                                                                const nextStage = updatedStages[stageIndex + 1];
+                                                                                                if (nextStage.assigneeId) {
+                                                                                                    await sendNotification(
+                                                                                                        nextStage.assigneeId,
+                                                                                                        `Proposal Stage Ready: ${proposal.title || proposal.name}`,
+                                                                                                        `Stage "${nextStage.name}" is now ready for your review.`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: proposal.id,
+                                                                                                            stageId: nextStage.id,
+                                                                                                            stageIndex: stageIndex + 1,
+                                                                                                            leadId: lead.id
+                                                                                                        }
+                                                                                                    );
+                                                                                                }
+                                                                                            }
+                                                                                        }}
+                                                                                        className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                        title="Change to Approved"
+                                                                                    >
+                                                                                        <i className="fas fa-check mr-1"></i>Approve
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                            {stage.status === 'in-progress' && (
+                                                                                <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
+                                                                                    <i className="fas fa-clock mr-1"></i>In Progress
+                                                                                </span>
+                                                                            )}
+                                                                            {/* Always show comment button for any stage */}
+                                                                            {!showComments && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: true })}
+                                                                                    className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                                                                >
+                                                                                    <i className="fas fa-comment mr-1"></i>Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                {stageIndex < proposal.stages.length - 1 && (
+                                                                    <div className="flex justify-center -my-1">
+                                                                        <i className="fas fa-arrow-down text-gray-400 text-xs"></i>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Activity Timeline Tab */}
                         {activeTab === 'activity' && (
@@ -4810,7 +5782,7 @@ const LeadDetailModal = ({
                             <div className="flex gap-3">
                                 <button 
                                     type="button" 
-                                    onClick={handleClose} 
+                                    onClick={onClose} 
                                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                                 >
                                     Cancel
@@ -5039,21 +6011,10 @@ const LeadDetailModal = ({
                     )
                 ),
                 React.createElement('div', { className: 'flex-1 overflow-y-auto' },
-                    React.createElement('form', {
-                        onSubmit: handleSubmit,
-                        onKeyDown: (e) => {
-                            if (e.key !== 'Enter') return;
-                            const el = e.target;
-                            if (el.tagName === 'TEXTAREA') return;
-                            if ((el.tagName === 'INPUT' && el.type !== 'submit' && el.type !== 'button') || el.tagName === 'SELECT') {
-                                e.preventDefault();
-                            }
-                        },
-                        className: 'h-full flex flex-col'
-                    },
+                    React.createElement('form', { onSubmit: handleSubmit, className: 'h-full flex flex-col' },
                         React.createElement('div', { className: 'border-b border-gray-200 px-3 sm:px-6' },
                             React.createElement('div', { className: 'flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide', style: { scrollbarWidth: 'none', msOverflowStyle: 'none' } },
-                                ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes'].map(tab =>
+                                ['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab =>
                                     React.createElement('button', {
                                         key: tab,
                                         onClick: () => handleTabChange(tab),
@@ -5074,10 +6035,9 @@ const LeadDetailModal = ({
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Entity Name'),
                                         React.createElement('input', {
                                             type: 'text',
-                                            value: nameOverrideRef.current != null ? nameOverrideRef.current : (formData.name || ''),
+                                            value: formData.name,
                                             onChange: (e) => {
-                                                const v = e.target.value;
-                                                nameOverrideRef.current = v;
+                                                // CRITICAL: Mark that user has started typing and edited this field
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name');
                                                 isEditingRef.current = true;
@@ -5087,29 +6047,18 @@ const LeadDetailModal = ({
                                                     isEditingRef.current = false;
                                                     notifyEditingChange(false);
                                                 }, 5000);
+                                                
+                                                // Use functional update to avoid closure issues
                                                 setFormData(prev => {
-                                                    const updated = {...prev, name: v};
+                                                    const updated = {...prev, name: e.target.value};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
                                             },
                                             onFocus: () => {
-                                                nameOverrideRef.current = formData.name ?? '';
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('name');
                                                 notifyEditingChange(true);
-                                            },
-                                            onBlur: () => {
-                                                const sync = nameOverrideRef.current;
-                                                if (sync != null) {
-                                                    setFormData(prev => {
-                                                        const next = {...prev, name: sync};
-                                                        formDataRef.current = next;
-                                                        return next;
-                                                    });
-                                                    nameOverrideRef.current = null;
-                                                }
                                             },
                                             ref: nameInputRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
@@ -5286,7 +6235,6 @@ const LeadDetailModal = ({
                                             },
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
                                         },
-                                            React.createElement('option', { value: 'No Engagement' }, 'No Engagement - No response yet'),
                                             React.createElement('option', { value: 'Awareness' }, 'Awareness - Lead knows about us'),
                                             React.createElement('option', { value: 'Interest' }, 'Interest - Lead is interested'),
                                             React.createElement('option', { value: 'Desire' }, 'Desire - Lead wants our solution'),

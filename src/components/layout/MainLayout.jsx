@@ -1417,10 +1417,10 @@ const MainLayout = () => {
                 currentPage === item.id 
                     ? isDark
                         ? 'bg-gray-800 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-900 shadow-sm'
+                        : 'bg-gray-200 text-gray-900 shadow-sm'
                     : isDark 
                         ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             } ${extraClasses}`}
             title={!sidebarOpen ? item.label : ''}
         >
@@ -1469,7 +1469,7 @@ const MainLayout = () => {
                 }}
             >
                 {/* Logo */}
-                <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'}`}>
+                <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-200'}`}>
                     {sidebarOpen && (
                         <h1 className={`abcotronics-logo font-semibold text-lg tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             Praxis ERP
@@ -1477,7 +1477,7 @@ const MainLayout = () => {
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
+                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200`}
                         aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                     >
                         <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-lg`}></i>
@@ -1490,7 +1490,7 @@ const MainLayout = () => {
                         {primaryMenuItems.map((item) => renderMenuButton(item))}
                     </div>
                     {(myTasksMenuItem || myNotesMenuItem) && (
-                        <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-100'} pt-2 mt-2`}>
+                        <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-200'} pt-2 mt-2`}>
                             {myTasksMenuItem && renderMenuButton(myTasksMenuItem)}
                             {myNotesMenuItem && renderMenuButton(myNotesMenuItem)}
                         </div>
@@ -1498,9 +1498,9 @@ const MainLayout = () => {
                 </nav>
 
                 {/* User Profile */}
-                <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-100'} p-4`}>
+                <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-200'} p-4`}>
                     <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
-                        <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-100'} flex items-center justify-center ${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium text-base`}>
+                        <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-200'} flex items-center justify-center ${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium text-base`}>
                             {user?.name?.charAt(0) || 'U'}
                         </div>
                         {sidebarOpen && (
@@ -1511,7 +1511,7 @@ const MainLayout = () => {
                                 </div>
                                 <button 
                                     onClick={logout}
-                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
+                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200`}
                                     title="Logout"
                                 >
                                     <i className="fas fa-sign-out-alt text-base"></i>

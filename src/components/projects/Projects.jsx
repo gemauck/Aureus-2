@@ -217,6 +217,7 @@ const Projects = () => {
     const [allTasksError, setAllTasksError] = useState(null);
     const [allTasksFilterStatus, setAllTasksFilterStatus] = useState('all');
     const [allTasksFilterProject, setAllTasksFilterProject] = useState('all');
+    const [allTasksFilterAssignee, setAllTasksFilterAssignee] = useState('all');
     const [allTasksSearch, setAllTasksSearch] = useState('');
     const [allTasksSortColumn, setAllTasksSortColumn] = useState('task');
     const [allTasksSortDir, setAllTasksSortDir] = useState('asc');
@@ -3449,6 +3450,18 @@ const Projects = () => {
         });
         return Array.from(names).sort();
     }, [allTasksList]);
+    const allTasksAssigneeFilterOptions = useMemo(() => {
+        const options = [{ value: 'all', label: 'All assignees' }, { value: 'unassigned', label: 'Unassigned' }];
+        const byId = new Map();
+        allTasksList.forEach(t => {
+            if (t.assigneeId) {
+                byId.set(String(t.assigneeId), t.assignee || (allTasksUsers.find(u => String(u.id) === String(t.assigneeId))?.name) || 'Assigned');
+            }
+        });
+        const sorted = Array.from(byId.entries()).sort((a, b) => (a[1] || '').localeCompare(b[1] || ''));
+        sorted.forEach(([id, label]) => options.push({ value: id, label: label || id }));
+        return options;
+    }, [allTasksList, allTasksUsers]);
     const filteredAllTasks = useMemo(() => {
         let list = allTasksList;
         if (allTasksSearch.trim()) {
@@ -3467,8 +3480,13 @@ const Projects = () => {
             const projName = allTasksFilterProject;
             list = list.filter(t => (t.project?.name || (t.projectId ? `Project ${t.projectId}` : '')) === projName);
         }
+        if (allTasksFilterAssignee === 'unassigned') {
+            list = list.filter(t => !t.assigneeId);
+        } else if (allTasksFilterAssignee !== 'all') {
+            list = list.filter(t => String(t.assigneeId) === allTasksFilterAssignee);
+        }
         return list;
-    }, [allTasksList, allTasksSearch, allTasksFilterStatus, allTasksFilterProject]);
+    }, [allTasksList, allTasksSearch, allTasksFilterStatus, allTasksFilterProject, allTasksFilterAssignee]);
 
     const sortedAllTasks = useMemo(() => {
         const list = [...filteredAllTasks];
@@ -3965,6 +3983,20 @@ const Projects = () => {
                                     <option value="all">All projects</option>
                                     {allTasksUniqueProjectNames.map(name => (
                                         <option key={name} value={name}>{name}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={allTasksFilterAssignee}
+                                    onChange={(e) => setAllTasksFilterAssignee(e.target.value)}
+                                    className={`min-w-[160px] px-3 py-2.5 rounded-lg text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 cursor-pointer ${
+                                        isDark
+                                            ? 'bg-gray-800 border-gray-600 text-gray-200 focus:ring-blue-500/50 focus:border-gray-500'
+                                            : 'bg-white border-gray-200 text-gray-700 focus:ring-blue-400/40 focus:border-blue-400'
+                                    }`}
+                                    aria-label="Filter by assignee"
+                                >
+                                    {allTasksAssigneeFilterOptions.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
                                     ))}
                                 </select>
                             </div>
