@@ -429,14 +429,14 @@ async function handler(req, res) {
               console.warn('⚠️ Column missing error detected, using raw SQL query to bypass Prisma validation')
               try {
                 const allRecordsRaw = await prisma.$queryRaw`
-                  SELECT id, name, type, industry, status, stage, revenue, value, probability, 
-                         "lastContact", address, website, notes, contacts, "followUps", 
-                         "projectIds", comments, sites, contracts, "activityLog", 
+                  SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
+                         "lastContact", address, website, notes, contacts, "followUps",
+                         "projectIds", comments, sites, contracts, "activityLog",
                          "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
                          proposals, thumbnail, services, "rssSubscribed", kyc, "kycJsonb"
                   FROM "Client"
                   WHERE (type = 'client' OR type = 'group' OR type IS NULL)
-                  AND type != 'lead'
+                  AND (type IS NULL OR type != 'lead')
                   ORDER BY "createdAt" DESC
                 `
                 rawClients = allRecordsRaw.map(record => {
@@ -536,7 +536,7 @@ async function handler(req, res) {
           } catch (prismaErr) {
             try {
               const rawSites = await prisma.$queryRaw`
-                SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "siteLead", stage, "aidaStatus", "siteType", "createdAt", "updatedAt"
+                SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "siteLead", "engagementStage", "aidaStatus", "siteType", "createdAt", "updatedAt"
                 FROM "ClientSite"
                 WHERE "clientId" IN (${Prisma.join(allClientIds)})
                 ORDER BY "createdAt" ASC
@@ -702,7 +702,7 @@ async function handler(req, res) {
                 })
               } catch (e) {
                 const rawSites = await prisma.$queryRaw`
-                  SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "siteLead", stage, "aidaStatus", "siteType", "createdAt", "updatedAt"
+                  SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes, "siteLead", "engagementStage", "aidaStatus", "siteType", "createdAt", "updatedAt"
                   FROM "ClientSite"
                   WHERE "clientId" IN (${Prisma.join(clientIds)})
                   ORDER BY "createdAt" ASC
