@@ -404,21 +404,41 @@ async function handler(req, res) {
           // On any primary query failure, try raw SQL first (resilient to schema/Prisma mismatch)
           try {
             console.warn('⚠️ Primary leads query failed, trying raw SQL list...')
-            const allRecordsRaw = await prisma.$queryRaw`
-              SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
-                     "lastContact", address, website, notes, contacts, "followUps",
-                     "projectIds", comments, sites, contracts, "activityLog",
-                     "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
-                     proposals, thumbnail, services, "rssSubscribed"
-              FROM "Client"
-              WHERE type = 'lead'
-              ORDER BY "createdAt" DESC
-            `
-            const allRecords = allRecordsRaw.map(record => {
+            let allRecordsRaw
+            try {
+              allRecordsRaw = await prisma.$queryRaw`
+                SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
+                       "lastContact", address, website, notes, contacts, "followUps",
+                       "projectIds", comments, sites, contracts, "activityLog",
+                       "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
+                       proposals, thumbnail, services, "rssSubscribed"
+                FROM "Client"
+                WHERE type = 'lead'
+                ORDER BY "createdAt" DESC
+              `
+            } catch (colsErr) {
+              console.warn('⚠️ Raw SQL with engagementStage/aidaStatus failed, trying minimal columns:', colsErr.message)
+              allRecordsRaw = await prisma.$queryRaw`
+                SELECT id, name, type, industry, revenue, value, probability, "lastContact", address, website, notes,
+                       contacts, "followUps", "projectIds", comments, sites, contracts, "activityLog",
+                       "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
+                       proposals, thumbnail, services, "rssSubscribed"
+                FROM "Client"
+                WHERE type = 'lead'
+                ORDER BY "createdAt" DESC
+              `
+            }
+            const allRecords = (allRecordsRaw || []).map(record => {
               const parsed = parseClientJsonFields(record)
               return parsed
             })
-            leads = allRecords.map(l => ({ ...l, externalAgent: null, groupMemberships: [] }))
+            leads = allRecords.map(l => ({
+              ...l,
+              engagementStage: l.engagementStage ?? 'Potential',
+              aidaStatus: l.aidaStatus ?? 'Awareness',
+              externalAgent: null,
+              groupMemberships: []
+            }))
             if (leads.length > 0) {
               console.log('✅ Raw SQL fallback succeeded:', leads.length, 'leads')
             }

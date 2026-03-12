@@ -41,8 +41,9 @@ async function handler(req, res) {
           })
         } catch (prismaError) {
           console.warn('⚠️ Groups Prisma query failed, trying raw SQL:', prismaError.message)
+          // Use only columns that exist in both old and new schema (no engagementStage) so fallback works either way
           const rows = await prisma.$queryRaw`
-            SELECT c.id, c.name, c.type, c.industry, c."engagementStage", c."createdAt",
+            SELECT c.id, c.name, c.type, c.industry, c."createdAt",
                    (SELECT COUNT(*)::int FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id) as group_children_count
             FROM "Client" c
             WHERE c.type = 'group'
@@ -54,7 +55,7 @@ async function handler(req, res) {
             name: r.name,
             type: r.type,
             industry: r.industry,
-            engagementStage: r.engagementStage,
+            engagementStage: r.engagementStage ?? 'Active',
             createdAt: r.createdAt,
             _count: { groupChildren: r.group_children_count ?? 0 }
           }))
