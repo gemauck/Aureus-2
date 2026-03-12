@@ -1188,9 +1188,12 @@ app.all('/api/leads', async (req, res, next) => {
       method: req.method
     })
     if (!res.headersSent) {
-      return res.status(500).json({ 
-        error: 'Internal server error',
-        message: e.message,
+      return res.status(500).json({
+        error: {
+          code: 'SERVER_ERROR',
+          message: 'Failed to list leads',
+          details: e.message || 'Failed to process request'
+        },
         timestamp: new Date().toISOString()
       })
     }
@@ -1264,8 +1267,11 @@ app.all('/api/clients/groups', async (req, res, next) => {
                        e.message?.includes("Can't reach database server")
       
       return res.status(isDbError ? 503 : 500).json({ 
-        error: isDbError ? 'Database connection error' : 'Internal server error',
-        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
+        error: {
+          code: isDbError ? 'DATABASE_CONNECTION_ERROR' : 'SERVER_ERROR',
+          message: isDbError ? 'Database connection error' : 'Failed to fetch groups',
+          details: e.message || (isDbError ? undefined : 'Failed to process request')
+        },
         timestamp: new Date().toISOString()
       })
     }

@@ -41,24 +41,46 @@ async function handler(req, res) {
           })
         } catch (prismaError) {
           console.warn('⚠️ Groups Prisma query failed, trying raw SQL:', prismaError.message)
-          // Use only columns that exist in both old and new schema (no engagementStage) so fallback works either way
-          const rows = await prisma.$queryRaw`
-            SELECT c.id, c.name, c.type, c.industry, c."createdAt",
-                   (SELECT COUNT(*)::int FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id) as group_children_count
-            FROM "Client" c
-            WHERE c.type = 'group'
-               OR EXISTS (SELECT 1 FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id)
-            ORDER BY c.name ASC
-          `
-          groups = (rows || []).map(r => ({
-            id: r.id,
-            name: r.name,
-            type: r.type,
-            industry: r.industry,
-            engagementStage: r.engagementStage ?? 'Active',
-            createdAt: r.createdAt,
-            _count: { groupChildren: r.group_children_count ?? 0 }
-          }))
+          try {
+            // Use only columns that exist in both old and new schema (no engagementStage) so fallback works either way
+            const rows = await prisma.$queryRaw`
+              SELECT c.id, c.name, c.type, c.industry, c."createdAt",
+                     (SELECT COUNT(*)::int FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id) as group_children_count
+              FROM "Client" c
+              WHERE c.type = 'group'
+                 OR EXISTS (SELECT 1 FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id)
+              ORDER BY c.name ASC
+            `
+            groups = (rows || []).map(r => ({
+              id: r.id,
+              name: r.name,
+              type: r.type,
+              industry: r.industry,
+              engagementStage: r.engagementStage ?? 'Active',
+              createdAt: r.createdAt,
+              _count: { groupChildren: r.group_children_count ?? 0 }
+            }))
+          } catch (rawErr) {
+            console.error('⚠️ Groups raw SQL also failed:', rawErr.message)
+            // Fallback: minimal query without ClientCompanyGroup (just type='group')
+            try {
+              const minimal = await prisma.$queryRaw`
+                SELECT id, name, type, industry, "createdAt" FROM "Client" WHERE type = 'group' ORDER BY name ASC
+              `
+              groups = (minimal || []).map(r => ({
+                id: r.id,
+                name: r.name,
+                type: r.type,
+                industry: r.industry,
+                engagementStage: 'Active',
+                createdAt: r.createdAt,
+                _count: { groupChildren: 0 }
+              }))
+            } catch (minErr) {
+              console.error('⚠️ Groups minimal raw SQL failed:', minErr.message)
+              throw rawErr
+            }
+          }
         }
         console.log(`✅ Fetched ${groups.length} groups from database`)
         return ok(res, { groups })
