@@ -9425,7 +9425,7 @@ const Clients = React.memo(() => {
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>
@@ -9461,7 +9461,7 @@ const Clients = React.memo(() => {
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
@@ -9497,7 +9497,7 @@ const Clients = React.memo(() => {
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
@@ -9533,7 +9533,7 @@ const Clients = React.memo(() => {
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
                     }`}
                 >
                     <i className="fas fa-stream mr-2"></i>
@@ -9568,7 +9568,7 @@ const Clients = React.memo(() => {
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
                                 ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
                     }`}
                 >
                     <i className="fas fa-newspaper mr-2"></i>

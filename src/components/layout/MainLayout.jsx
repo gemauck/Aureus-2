@@ -1420,7 +1420,7 @@ const MainLayout = () => {
                         : 'bg-gray-200 text-gray-900 shadow-sm'
                     : isDark 
                         ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
             } ${extraClasses}`}
             title={!sidebarOpen ? item.label : ''}
         >
