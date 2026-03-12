@@ -93,7 +93,7 @@ const Teams = () => {
                 setTeamsLoading(true);
                 setTeamsError(null);
                 
-                const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+                const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
                 if (!token) {
                     console.warn('Teams: No auth token available');
                     setTeamsLoading(false);
@@ -567,7 +567,7 @@ const Teams = () => {
     useEffect(() => {
         if (!isAdminUser || activeTab !== 'members' || !selectedTeam) return;
         let cancelled = false;
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) return;
         fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } })
             .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load users')))
@@ -586,7 +586,7 @@ const Teams = () => {
     const refreshTeams = useCallback(async () => {
         const teamIdToKeep = selectedTeam?.id;
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) return;
             const response = await fetch('/api/teams', {
                 method: 'GET',
@@ -626,7 +626,7 @@ const Teams = () => {
         if (!selectedTeam?.id || !userId) return;
         setMembersLoading(true);
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) throw new Error('Not authenticated');
             const res = await fetch(`/api/teams/${selectedTeam.id}/members`, {
                 method: 'POST',
@@ -652,7 +652,7 @@ const Teams = () => {
         if (!window.confirm('Remove this member from the team?')) return;
         setMembersLoading(true);
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) throw new Error('Not authenticated');
             const res = await fetch(`/api/teams/${selectedTeam.id}/members/${encodeURIComponent(userId)}`, {
                 method: 'DELETE',

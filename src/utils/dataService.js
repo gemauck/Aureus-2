@@ -333,7 +333,7 @@
 
     async getTeamNotices(teamId = null) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) {
                 console.warn('getTeamNotices: No auth token available');
                 return [];
@@ -371,7 +371,7 @@
         }
 
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) {
                 throw new Error('No auth token available');
             }
@@ -413,7 +413,7 @@
 
     async deleteTeamNotice(noticeId) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) {
                 throw new Error('No auth token available');
             }
@@ -440,7 +440,7 @@
     // Discussions (API-only)
     async getTeamDiscussions(teamId, params = {}) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) return [];
             const q = new URLSearchParams({ teamId: teamId || '' });
             if (params.type) q.set('type', params.type);
@@ -460,7 +460,7 @@
 
     async getDiscussion(discussionId) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) return null;
             const response = await fetch(`/api/teams/discussions/${discussionId}`, {
                 method: 'GET',
@@ -479,7 +479,7 @@
     },
 
     async createDiscussion(payload) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch('/api/teams/discussions', {
             method: 'POST',
@@ -495,7 +495,7 @@
     },
 
     async updateDiscussion(id, payload) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${id}`, {
             method: 'PUT',
@@ -511,7 +511,7 @@
     },
 
     async deleteDiscussion(id) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${id}`, {
             method: 'DELETE',
@@ -523,7 +523,7 @@
 
     async getDiscussionReplies(discussionId) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) return [];
             const response = await fetch(`/api/teams/discussions/${discussionId}/replies`, {
                 method: 'GET',
@@ -539,7 +539,7 @@
     },
 
     async addDiscussionReply(discussionId, body, authorId, authorName, attachments = []) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${discussionId}/replies`, {
             method: 'POST',
@@ -555,7 +555,7 @@
     },
 
     async updateDiscussionReply(discussionId, replyId, body) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${discussionId}/replies/${replyId}`, {
             method: 'PUT',
@@ -568,7 +568,7 @@
     },
 
     async deleteDiscussionReply(discussionId, replyId) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${discussionId}/replies/${replyId}`, {
             method: 'DELETE',
@@ -580,7 +580,7 @@
 
     async getDiscussionChecklists(discussionId) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) return [];
             const response = await fetch(`/api/teams/discussions/${discussionId}/checklists`, {
                 method: 'GET',
@@ -596,7 +596,7 @@
     },
 
     async addDiscussionChecklist(discussionId, payload) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${discussionId}/checklists`, {
             method: 'POST',
@@ -609,7 +609,7 @@
     },
 
     async updateDiscussionChecklist(discussionId, checklistId, payload) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${discussionId}/checklists/${checklistId}`, {
             method: 'PUT',
@@ -622,7 +622,7 @@
     },
 
     async deleteDiscussionChecklist(discussionId, checklistId) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/discussions/${discussionId}/checklists/${checklistId}`, {
             method: 'DELETE',
@@ -634,7 +634,7 @@
 
     async getTeamTasksForTeam(teamId, discussionId = null) {
         try {
-            const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
             if (!token) return [];
             const q = new URLSearchParams({ teamId: teamId || '' });
             if (discussionId) q.set('discussionId', discussionId);
@@ -652,7 +652,7 @@
     },
 
     async createTeamTask(payload) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch('/api/teams/tasks', {
             method: 'POST',
@@ -668,7 +668,7 @@
     },
 
     async updateTeamTask(taskId, payload) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/tasks/${taskId}`, {
             method: 'PUT',
@@ -681,7 +681,7 @@
     },
 
     async deleteTeamTask(taskId) {
-        const token = window.storage?.getToken?.() || localStorage.getItem('auth_token');
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
         if (!token) throw new Error('No auth token');
         const response = await fetch(`/api/teams/tasks/${taskId}`, {
             method: 'DELETE',
