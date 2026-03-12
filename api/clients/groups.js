@@ -16,40 +16,49 @@ async function handler(req, res) {
     // GET /api/clients/groups - List all company groups
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
       try {
-        // Get only actual groups:
-        // 1. Clients with type='group' (named groups like "Exxaro Group")
-        // 2. Clients that are used as groups (have groupChildren - other clients assigned to them)
-        const groups = await prisma.client.findMany({
-          where: {
-            OR: [
-              {
-                type: 'group' // Named groups
-              },
-              {
-                groupChildren: {
-                  some: {}
-                }
-              }
-            ]
-          },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            industry: true,
-            engagementStage: true,
-            createdAt: true,
-            _count: {
-              select: {
-                groupChildren: true
-              }
-            }
-          },
-          orderBy: {
-            name: 'asc'
-          }
-        })
-        
+        let groups = []
+        try {
+          // Get only actual groups:
+          // 1. Clients with type='group' (named groups like "Exxaro Group")
+          // 2. Clients that are used as groups (have groupChildren - other clients assigned to them)
+          groups = await prisma.client.findMany({
+            where: {
+              OR: [
+                { type: 'group' },
+                { groupChildren: { some: {} } }
+              ]
+            },
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              industry: true,
+              engagementStage: true,
+              createdAt: true,
+              _count: { select: { groupChildren: true } }
+            },
+            orderBy: { name: 'asc' }
+          })
+        } catch (prismaError) {
+          console.warn('⚠️ Groups Prisma query failed, trying raw SQL:', prismaError.message)
+          const rows = await prisma.$queryRaw`
+            SELECT c.id, c.name, c.type, c.industry, c."engagementStage", c."createdAt",
+                   (SELECT COUNT(*)::int FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id) as group_children_count
+            FROM "Client" c
+            WHERE c.type = 'group'
+               OR EXISTS (SELECT 1 FROM "ClientCompanyGroup" m WHERE m."groupId" = c.id)
+            ORDER BY c.name ASC
+          `
+          groups = (rows || []).map(r => ({
+            id: r.id,
+            name: r.name,
+            type: r.type,
+            industry: r.industry,
+            engagementStage: r.engagementStage,
+            createdAt: r.createdAt,
+            _count: { groupChildren: r.group_children_count ?? 0 }
+          }))
+        }
         console.log(`✅ Fetched ${groups.length} groups from database`)
         return ok(res, { groups })
       } catch (error) {
