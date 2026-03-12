@@ -69,7 +69,8 @@ async function handler(req, res) {
           meta: error.meta,
           name: error.name
         })
-        const details = process.env.NODE_ENV === 'development' ? error.message : undefined
+        // Include error details in response for debugging (remove in production once fixed)
+        const details = error.message || (process.env.NODE_ENV === 'development' ? error.stack : undefined)
         return serverError(res, 'Failed to fetch groups', details)
       }
     }

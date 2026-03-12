@@ -741,12 +741,8 @@ async function handler(req, res) {
         
         const isConnError = logDatabaseError(dbError, 'listing leads')
         
-        // Enhanced error details for debugging
-        const errorDetails = process.env.NODE_ENV === 'development'
-          ? `${dbError.message || 'Unknown database error'} (Code: ${dbError.code || 'N/A'}, Name: ${dbError.name || 'N/A'})`
-          : isConnError 
-            ? 'The database server is unreachable. Please check your network connection and ensure the database server is running.'
-            : 'Database operation failed. Please check server logs for details.'
+        // Include actual error in details for debugging (so we can see failure cause from client)
+        const errorDetails = dbError.message || 'Database operation failed. Please check server logs for details.'
         
         if (isConnError) {
           // Return 503 (Service Unavailable) for database connection issues
