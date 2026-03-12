@@ -941,6 +941,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         };
     }, []);
 
+    // Allow Space and Enter in Monthly Data Review notes: block other keydown handlers from running
+    // so they cannot preventDefault. Listener runs in capture phase so it runs before bubble listeners.
+    useEffect(() => {
+        if (!isMonthlyDataReview || typeof document === 'undefined') return;
+        const handler = (e) => {
+            const target = e.target;
+            if (target && target.getAttribute && target.getAttribute('data-monthly-notes-input') === 'true') {
+                e.stopImmediatePropagation();
+            }
+        };
+        document.addEventListener('keydown', handler, true);
+        return () => document.removeEventListener('keydown', handler, true);
+    }, [isMonthlyDataReview]);
+
     // Sync selectedYear from URL (docYear) so deep links open with correct year and popup shows comments
     useEffect(() => {
         const syncYearFromUrl = () => {
@@ -4010,6 +4024,7 @@ const getAssigneeColor = (identifier, users) => {
                 style={{ minWidth: '180px', width: '180px' }}
             >
                 <textarea
+                    data-monthly-notes-input="true"
                     value={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
                     onKeyDownCapture={(e) => e.stopImmediatePropagation()}
