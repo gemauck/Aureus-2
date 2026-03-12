@@ -5552,7 +5552,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with Pipeline.</p>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Stage</label>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
                                                             value={newSite.aidaStatus ?? 'Awareness'}
                                                             onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
@@ -5710,7 +5710,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             {isLead && (
                                                 <>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Stage</label>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
                                                             value={newSite.stage ?? 'Potential'}
                                                             onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
