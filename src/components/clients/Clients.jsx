@@ -8952,7 +8952,9 @@ const Clients = React.memo(() => {
                         ) : (
                             paginatedLeads.flatMap(lead => {
                                 const sites = lead.clientSites || lead.sites || [];
-                                const siteRows = showSitesInLeadsList ? (Array.isArray(sites) ? sites : []) : [];
+                                const siteList = Array.isArray(sites) ? sites : [];
+                                const siteRows = showSitesInLeadsList ? siteList : [];
+                                const hasSiteInPipeline = siteList.some(s => s && typeof s === 'object' && s.siteType !== 'client');
                                 return [
                                     <tr 
                                         key={`lead-${lead.id}-${lead.name}`}
