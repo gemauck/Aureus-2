@@ -3766,7 +3766,7 @@ const getAssigneeColor = (identifier, users) => {
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
                 role="gridcell"
             >
-                <div className="min-w-[180px] relative">
+                <div className={`relative ${isMonthlyDataReview ? 'min-w-[120px] w-[120px]' : 'min-w-[180px]'}`}>
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -4006,12 +4006,14 @@ const getAssigneeColor = (identifier, users) => {
         const cellBg = isWorkingMonth ? 'bg-primary-50' : '';
         return (
             <td
-                className={`px-2 py-1.5 text-xs border-l border-gray-200 ${cellBg} align-top`}
+                className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
+                style={{ minWidth: '120px', width: '120px' }}
             >
                 <textarea
                     value={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
                     onBlur={() => {
                         lastSavedDataRef.current = null;
                         if (saveTimeoutRef.current) {
@@ -4021,8 +4023,8 @@ const getAssigneeColor = (identifier, users) => {
                         saveToDatabase();
                     }}
                     placeholder="Notes..."
-                    rows={2}
-                    className="w-full min-w-[120px] px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400"
+                    rows={3}
+                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400"
                     aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                 />
             </td>
@@ -6915,7 +6917,7 @@ Abcotronics`;
                                                         <th
                                                             key={month}
                                                             colSpan={2}
-                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
                                                                 isOneMonthArrears(selectedYear, idx)
                                                                     ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                                     : 'text-gray-700'
@@ -6938,22 +6940,22 @@ Abcotronics`;
                                                     {months.map((month, idx) => (
                                                         <React.Fragment key={month}>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
                                                                     isOneMonthArrears(selectedYear, idx)
                                                                         ? 'bg-primary-50 text-primary-800 border-primary-200'
                                                                         : 'text-gray-600'
                                                                 }`}
-                                                                style={{ minWidth: '100px' }}
+                                                                style={{ minWidth: '120px', width: '120px' }}
                                                             >
                                                                 Status
                                                             </th>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l border-gray-200 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
                                                                     isOneMonthArrears(selectedYear, idx)
                                                                         ? 'bg-primary-50 text-primary-800 border-primary-200'
                                                                         : 'text-gray-600'
                                                                 }`}
-                                                                style={{ minWidth: '140px' }}
+                                                                style={{ minWidth: '120px', width: '120px' }}
                                                             >
                                                                 Notes
                                                             </th>
