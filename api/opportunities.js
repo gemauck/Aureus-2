@@ -136,8 +136,8 @@ async function handler(req, res) {
       const opportunityData = {
         title: body.title,
         clientId: body.clientId,
-        aidaStatus: body.aidaStatus ?? body.stage || 'Awareness',
-        engagementStage: body.engagementStage ?? body.status || 'Potential',
+        aidaStatus: body.aidaStatus ?? (body.stage || 'Awareness'),
+        engagementStage: body.engagementStage ?? (body.status || 'Potential'),
         value: parseFloat(body.value) || 0,
         ownerId: req.user?.sub || null
       }

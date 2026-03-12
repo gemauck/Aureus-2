@@ -37,7 +37,7 @@ async function handler(req, res) {
             name: true,
             type: true,
             industry: true,
-            status: true,
+            engagementStage: true,
             createdAt: true,
             _count: {
               select: {
@@ -102,8 +102,8 @@ async function handler(req, res) {
             name: name.trim(),
             type: 'group',
             industry: industry || 'Other',
-            status: 'active',
-            stage: 'Awareness',
+            engagementStage: 'Active',
+            aidaStatus: 'Awareness',
             revenue: 0,
             value: 0,
             probability: 0,
@@ -134,7 +134,7 @@ async function handler(req, res) {
             name: true,
             type: true,
             industry: true,
-            status: true,
+            engagementStage: true,
             createdAt: true,
             _count: {
               select: {
@@ -460,8 +460,8 @@ async function handler(req, res) {
                 name: groupName.trim(),
                 type: 'group', // Mark as a group entity
                 industry: body.groupIndustry || 'Other',
-                status: 'active',
-                stage: 'Awareness', // Required field with default
+                engagementStage: 'Active',
+                aidaStatus: 'Awareness',
                 revenue: 0, // Required field with default
                 value: 0, // Required field with default
                 probability: 0, // Required field with default
@@ -652,7 +652,7 @@ async function handler(req, res) {
                 name: true,
                 type: true,
                 industry: true,
-                status: true,
+                engagementStage: true,
                 revenue: true,
                 value: true,
                 website: true,
