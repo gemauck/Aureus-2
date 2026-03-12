@@ -4436,74 +4436,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     )}
                                     {isLead && (
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Engagement Stage</label>
-                                            <select 
-                                                value={formData.engagementStage ?? formData.status ?? 'Potential'}
-                                                onFocus={() => {
-                                                    isEditingRef.current = true;
-                                                    userHasStartedTypingRef.current = true;
-                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                }}
-                                                onChange={async (e) => {
-                                                    const newStage = e.target.value;
-                                                    isEditingRef.current = true;
-                                                    hasUserEditedForm.current = true;
-                                                    userEditedFieldsRef.current.add('engagementStage');
-                                                    userEditedFieldsRef.current.add('status');
-                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                    editingTimeoutRef.current = setTimeout(() => {
-                                                        isEditingRef.current = false;
-                                                    }, 5000);
-                                                    
-                                                    isAutoSavingRef.current = true;
-                                                    if (onEditingChange) onEditingChange(false, true);
-                                                    
-                                                    setFormData(prev => {
-                                                        const updated = { ...prev, engagementStage: newStage, status: newStage };
-                                                        formDataRef.current = updated;
-                                                        if (client && client.id && onSave) {
-                                                            setTimeout(async () => {
-                                                                try {
-                                                                    const latest = { ...formDataRef.current, engagementStage: newStage, status: newStage };
-                                                                    if (isLead && latest.aidaStatus && !latest.stage) {
-                                                                        latest.stage = latest.aidaStatus;
-                                                                    }
-                                                                    lastSavedDataRef.current = latest;
-                                                                    await onSave(latest, true);
-                                                                    setTimeout(() => {
-                                                                        isAutoSavingRef.current = false;
-                                                                        if (onEditingChange) onEditingChange(false, false);
-                                                                    }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
-                                                                } catch (error) {
-                                                                    console.error('❌ Error saving lead stage:', error);
-                                                                    isAutoSavingRef.current = false;
-                                                                    if (onEditingChange) onEditingChange(false, false);
-                                                                    alert('Failed to save stage change. Please try again.');
-                                                                }
-                                                            }, 100);
-                                                        }
-                                                        return updated;
-                                                    });
-                                                }}
-                                                onBlur={() => {
-                                                    setTimeout(() => {
-                                                        isEditingRef.current = false;
-                                                    }, 500);
-                                                }}
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            >
-                                                <option value="Potential">Potential</option>
-                                                <option value="Active">Active</option>
-                                                <option value="Inactive">Inactive</option>
-                                                <option value="On Hold">On Hold</option>
-                                                <option value="Disinterested">Disinterested</option>
-                                                <option value="Proposal">Proposal</option>
-                                                <option value="Tender">Tender</option>
-                                            </select>
-                                        </div>
-                                    )}
-                                    {isLead && (
-                                        <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1.5">AIDA Status</label>
                                             <select 
                                                 value={formData.aidaStatus || 'Awareness'}
@@ -4599,6 +4531,74 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <option value="Interest">Interest</option>
                                                 <option value="Desire">Desire</option>
                                                 <option value="Action">Action</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                    {isLead && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Engagement Stage</label>
+                                            <select 
+                                                value={formData.engagementStage ?? formData.status ?? 'Potential'}
+                                                onFocus={() => {
+                                                    isEditingRef.current = true;
+                                                    userHasStartedTypingRef.current = true;
+                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                }}
+                                                onChange={async (e) => {
+                                                    const newStage = e.target.value;
+                                                    isEditingRef.current = true;
+                                                    hasUserEditedForm.current = true;
+                                                    userEditedFieldsRef.current.add('engagementStage');
+                                                    userEditedFieldsRef.current.add('status');
+                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                    editingTimeoutRef.current = setTimeout(() => {
+                                                        isEditingRef.current = false;
+                                                    }, 5000);
+                                                    
+                                                    isAutoSavingRef.current = true;
+                                                    if (onEditingChange) onEditingChange(false, true);
+                                                    
+                                                    setFormData(prev => {
+                                                        const updated = { ...prev, engagementStage: newStage, status: newStage };
+                                                        formDataRef.current = updated;
+                                                        if (client && client.id && onSave) {
+                                                            setTimeout(async () => {
+                                                                try {
+                                                                    const latest = { ...formDataRef.current, engagementStage: newStage, status: newStage };
+                                                                    if (isLead && latest.aidaStatus && !latest.stage) {
+                                                                        latest.stage = latest.aidaStatus;
+                                                                    }
+                                                                    lastSavedDataRef.current = latest;
+                                                                    await onSave(latest, true);
+                                                                    setTimeout(() => {
+                                                                        isAutoSavingRef.current = false;
+                                                                        if (onEditingChange) onEditingChange(false, false);
+                                                                    }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+                                                                } catch (error) {
+                                                                    console.error('❌ Error saving lead stage:', error);
+                                                                    isAutoSavingRef.current = false;
+                                                                    if (onEditingChange) onEditingChange(false, false);
+                                                                    alert('Failed to save stage change. Please try again.');
+                                                                }
+                                                            }, 100);
+                                                        }
+                                                        return updated;
+                                                    });
+                                                }}
+                                                onBlur={() => {
+                                                    setTimeout(() => {
+                                                        isEditingRef.current = false;
+                                                    }, 500);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            >
+                                                <option value="Potential">Potential</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
+                                                <option value="On Hold">On Hold</option>
+                                                <option value="Disinterested">Disinterested</option>
+                                                <option value="Proposal">Proposal</option>
+                                                <option value="Tender">Tender</option>
                                             </select>
                                         </div>
                                     )}

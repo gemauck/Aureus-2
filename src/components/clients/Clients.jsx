@@ -1036,7 +1036,7 @@ const Clients = React.memo(() => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterEngagementStage, setFilterEngagementStage] = useState('All Engagement Stages');
-    const [filterAidaStatus, setFilterAidaStatus] = useState('All Aida Status');
+    const [filterAidaStatus, setFilterAidaStatus] = useState('All AIDA Status');
     const [filterServices, setFilterServices] = useState(() => {
         try {
             const saved = localStorage.getItem('clients_filterServices');
@@ -5626,7 +5626,7 @@ const Clients = React.memo(() => {
             
             // Aida Status filter - normalize for comparison
             const leadAidaStatus = lead.aidaStatus ? (lead.aidaStatus.charAt(0).toUpperCase() + lead.aidaStatus.slice(1).toLowerCase()) : '';
-            const matchesAidaStatus = filterAidaStatus === 'All Aida Status' || leadAidaStatus === filterAidaStatus;
+            const matchesAidaStatus = filterAidaStatus === 'All AIDA Status' || leadAidaStatus === filterAidaStatus;
             
             // Check if starred filter is applied
             const matchesStarred = !showStarredOnly || resolveStarredState(lead);
@@ -9774,7 +9774,7 @@ className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterEngagementStage !== 'All Engagement Stages' || (viewMode === 'leads' && filterAidaStatus !== 'All Aida Status') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterEngagementStage !== 'All Engagement Stages' || (viewMode === 'leads' && filterAidaStatus !== 'All AIDA Status') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
                         <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">

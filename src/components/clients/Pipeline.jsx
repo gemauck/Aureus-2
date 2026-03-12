@@ -3013,7 +3013,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 <tr>
                                     {renderSortableHeader('Name', 'name')}
                                     {renderSortableHeader('Type', 'type')}
-                                    {renderSortableHeader('Aida Status', 'aidaStatus')}
+                                    {renderSortableHeader('AIDA Status', 'aidaStatus')}
                                     {renderSortableHeader('Engagement Stage', 'engagementStage')}
                                 </tr>
                             </thead>
@@ -3280,7 +3280,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             onChange={(e) => setFilters({ ...filters, aidaStatus: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
                         >
-                            <option value="All">All Aida Status</option>
+                            <option value="All">All AIDA Status</option>
                             <option value="No Engagement">No Engagement</option>
                             <option value="Awareness">Awareness</option>
                             <option value="Interest">Interest</option>
@@ -3342,7 +3342,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     onChange={(e) => setKanbanGroupBy(e.target.value)}
                                     className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
                                 >
-                                    <option value="aidaStatus">Aida Status</option>
+                                    <option value="aidaStatus">AIDA Status</option>
                                     <option value="engagementStage">Engagement Stage</option>
                                 </select>
                             </div>
