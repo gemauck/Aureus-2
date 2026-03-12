@@ -340,7 +340,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             (section.documents || []).forEach(doc => {
                 const keys = [
                     ...Object.keys(doc.collectionStatus || {}),
-                    ...Object.keys(doc.comments || {})
+                    ...Object.keys(doc.comments || {}),
+                    ...Object.keys(doc.notesByMonth || {})
                 ];
                 keys.forEach(key => {
                     if (!key) return;
@@ -1425,6 +1426,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 description: doc.description || '',
                 collectionStatus: {},
                 comments: {},
+                notesByMonth: {},
                 emailRequestByMonth: {}
             })) : []
         }));
@@ -1526,6 +1528,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 ...doc,
                 collectionStatus: remapYearKeys(doc.collectionStatus, sourceYear, targetYear),
                 comments: remapYearKeys(doc.comments, sourceYear, targetYear),
+                notesByMonth: remapYearKeys(doc.notesByMonth, sourceYear, targetYear),
                 emailRequestByMonth: remapYearKeys(doc.emailRequestByMonth, sourceYear, targetYear)
             }))
         }));
@@ -1621,6 +1624,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             ...comments,
             [monthKey]: newComments
         };
+    };
+
+    // Get notes (free text) for a specific month in the selected year only
+    const getNotesForYear = (notesByMonth, month, year = selectedYear) => {
+        if (!notesByMonth || typeof notesByMonth !== 'object') return '';
+        const monthKey = getMonthKey(month, year);
+        const v = notesByMonth[monthKey];
+        return typeof v === 'string' ? v : (v != null ? String(v) : '');
+    };
+
+    // Set notes for a specific month in the selected year only
+    const setNotesForYear = (notesByMonth, month, text, year = selectedYear) => {
+        const monthKey = getMonthKey(month, year);
+        const next = { ...(notesByMonth && typeof notesByMonth === 'object' ? notesByMonth : {}) };
+        if (text == null || String(text).trim() === '') {
+            delete next[monthKey];
+        } else {
+            next[monthKey] = String(text).trim();
+        }
+        return next;
     };
 
     // Email request per document/month: saved recipients, subject, body, recipientName, schedule (for "Request documents via email")
@@ -2030,6 +2053,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             description: '',
             collectionStatus: {},
             comments: {},
+            notesByMonth: {},
             assignedTo: [],
             parentId: parentDoc.id
         };
@@ -2067,6 +2091,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         ...documentData,
                         collectionStatus: documentData.collectionStatus || {},
                         comments: documentData.comments || {},
+                        notesByMonth: documentData.notesByMonth || {},
                         assignedTo: documentData.assignedTo ?? []
                     };
                     return {
@@ -2353,7 +2378,34 @@ const getAssigneeColor = (identifier, users) => {
             }, 100);
         }
     }, [selectedYear]);
-    
+
+    const handleUpdateNotes = useCallback((sectionId, documentId, month, text) => {
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
+            ? sectionsByYear
+            : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const nextNotes = setNotesForYear(doc.notesByMonth, month, text, selectedYear);
+                    return { ...doc, notesByMonth: nextNotes };
+                })
+            };
+        });
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+        lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase();
+    }, [selectedYear]);
+
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
         const folder = 'doc-collection-comments';
@@ -2658,7 +2710,11 @@ const getAssigneeColor = (identifier, users) => {
         const comments = getCommentsForYear(doc.comments, month, selectedYear);
         return Array.isArray(comments) ? comments.filter((c) => !isEmailActivityComment(c)) : [];
     };
-    
+
+    const getDocumentNotes = (doc, month) => {
+        return getNotesForYear(doc.notesByMonth, month, selectedYear);
+    };
+
     // ============================================================
     // DRAG AND DROP
     // ============================================================
@@ -3940,6 +3996,35 @@ const getAssigneeColor = (identifier, users) => {
                         })()}
                     </div>
                 </div>
+            </td>
+        );
+    };
+
+    const renderNotesCell = (section, doc, month) => {
+        const notes = getDocumentNotes(doc, month);
+        const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
+        const cellBg = isWorkingMonth ? 'bg-primary-50' : '';
+        return (
+            <td
+                className={`px-2 py-1.5 text-xs border-l border-gray-200 ${cellBg} align-top`}
+                role="gridcell"
+            >
+                <textarea
+                    value={notes}
+                    onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
+                    onBlur={() => {
+                        lastSavedDataRef.current = null;
+                        if (saveTimeoutRef.current) {
+                            clearTimeout(saveTimeoutRef.current);
+                            saveTimeoutRef.current = null;
+                        }
+                        saveToDatabase();
+                    }}
+                    placeholder="Notes..."
+                    rows={2}
+                    className="w-full min-w-[120px] px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400"
+                    aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
+                />
             </td>
         );
     };
@@ -6823,22 +6908,55 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 >
                                                 Document / Data
                                             </th>
-                                            {months.map((month, idx) => (
-                                                <th
-                                                    key={month}
-                                                    className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
-                                                        isOneMonthArrears(selectedYear, idx)
-                                                            ? 'bg-primary-100 text-primary-800 border-primary-300'
-                                                            : 'text-gray-700'
-                                                    }`}
-                                                    style={{ minWidth: '180px' }}
-                                                >
-                                                    <div className="flex flex-col items-center gap-0.5">
-                                                        <span>{month.slice(0, 3)}</span>
-                                                        <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
-                                                    </div>
-                                                </th>
-                                            ))}
+                                            {isMonthlyDataReview ? (
+                                                months.map((month, idx) => (
+                                                    <React.Fragment key={month}>
+                                                        <th
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                                isOneMonthArrears(selectedYear, idx)
+                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                    : 'text-gray-700'
+                                                            }`}
+                                                            style={{ minWidth: '100px' }}
+                                                        >
+                                                            <div className="flex flex-col items-center gap-0.5">
+                                                                <span>Status</span>
+                                                                <span className="text-[10px] font-normal">{month.slice(0, 3)} {String(selectedYear).slice(-2)}</span>
+                                                            </div>
+                                                        </th>
+                                                        <th
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l border-gray-200 ${
+                                                                isOneMonthArrears(selectedYear, idx)
+                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                    : 'text-gray-700'
+                                                            }`}
+                                                            style={{ minWidth: '140px' }}
+                                                        >
+                                                            <div className="flex flex-col items-center gap-0.5">
+                                                                <span>Notes</span>
+                                                                <span className="text-[10px] font-normal">{month.slice(0, 3)} {String(selectedYear).slice(-2)}</span>
+                                                            </div>
+                                                        </th>
+                                                    </React.Fragment>
+                                                ))
+                                            ) : (
+                                                months.map((month, idx) => (
+                                                    <th
+                                                        key={month}
+                                                        className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                            isOneMonthArrears(selectedYear, idx)
+                                                                ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                : 'text-gray-700'
+                                                        }`}
+                                                        style={{ minWidth: '180px' }}
+                                                    >
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <span>{month.slice(0, 3)}</span>
+                                                            <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                        </div>
+                                                    </th>
+                                                ))
+                                            )}
                                             <th className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
                                                 Actions
                                             </th>
@@ -6850,7 +6968,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                     >
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={14} className="px-8 py-12 text-center">
+                                                <td colSpan={isMonthlyDataReview ? 1 + months.length * 2 + 1 : 14} className="px-8 py-12 text-center">
                                                     <div className="flex flex-col items-center gap-3">
                                                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
                                                             <i className="fas fa-file-alt text-2xl text-gray-400"></i>
@@ -7078,19 +7196,37 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             </div>
                                                     </td>
                                                     {isMasterGreyedOut ? (
-                                                        months.map((month) => (
-                                                            <td
-                                                                key={`${doc.id}-${month}`}
-                                                                className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200"
-                                                                role="gridcell"
-                                                            />
-                                                        ))
+                                                        isMonthlyDataReview ? (
+                                                            months.map((month) => (
+                                                                <React.Fragment key={`${doc.id}-${month}`}>
+                                                                    <td className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-2 py-1.5 text-xs border-l border-gray-200 bg-gray-200" role="gridcell" />
+                                                                </React.Fragment>
+                                                            ))
+                                                        ) : (
+                                                            months.map((month) => (
+                                                                <td
+                                                                    key={`${doc.id}-${month}`}
+                                                                    className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200"
+                                                                    role="gridcell"
+                                                                />
+                                                            ))
+                                                        )
                                                     ) : (
-                                                        months.map((month) => (
-                                                            <React.Fragment key={`${doc.id}-${month}`}>
-                                                                {renderStatusCell(section, doc, month)}
-                                                            </React.Fragment>
-                                                        ))
+                                                        isMonthlyDataReview ? (
+                                                            months.map((month) => (
+                                                                <React.Fragment key={`${doc.id}-${month}`}>
+                                                                    {renderStatusCell(section, doc, month)}
+                                                                    {renderNotesCell(section, doc, month)}
+                                                                </React.Fragment>
+                                                            ))
+                                                        ) : (
+                                                            months.map((month) => (
+                                                                <React.Fragment key={`${doc.id}-${month}`}>
+                                                                    {renderStatusCell(section, doc, month)}
+                                                                </React.Fragment>
+                                                            ))
+                                                        )
                                                     )}
                                                     <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
                                                         <div className="flex items-center gap-2 justify-center">
