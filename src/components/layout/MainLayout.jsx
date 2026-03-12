@@ -885,9 +885,9 @@ const MainLayout = () => {
             clearInterval(interval);
             window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
             if (!manufacturingComponentReady) {
-                console.warn('⚠️ MainLayout: Manufacturing component not loaded after 20 seconds');
+                console.warn('⚠️ MainLayout: Manufacturing component not loaded after 30 seconds (lazy load may still succeed)');
             }
-        }, 20000);
+        }, 30000);
         
         return () => {
             clearInterval(interval);
@@ -954,9 +954,9 @@ const MainLayout = () => {
         const timeout = setTimeout(() => {
             clearInterval(interval);
             if (!serviceMaintenanceReady) {
-                console.warn('⚠️ MainLayout: ServiceAndMaintenance component not loaded after 10 seconds');
+                console.warn('⚠️ MainLayout: ServiceAndMaintenance component not loaded after 15 seconds (lazy load may still succeed)');
             }
-        }, 10000);
+        }, 15000);
 
         return () => {
             window.removeEventListener('serviceMaintenanceComponentReady', handleComponentReady);
@@ -1059,9 +1059,9 @@ const MainLayout = () => {
         const timeout = setTimeout(() => {
             clearInterval(interval);
             if (!helpdeskReady) {
-                console.warn('⚠️ MainLayout: Helpdesk component not loaded after 10 seconds');
+                console.warn('⚠️ MainLayout: Helpdesk component not loaded after 15 seconds (lazy load may still succeed)');
             }
-        }, 10000);
+        }, 15000);
 
         return () => {
             clearInterval(interval);

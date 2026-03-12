@@ -800,10 +800,10 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                 return;
             }
             
-            // Try loading ProjectDetail
+            // Try loading ProjectDetail (cache-bust so we get fresh script)
             console.log(`🔄 Fallback loader: Attempt ${attempts}/${maxAttempts} - loading ProjectDetail...`);
             
-            const scriptSrc = '/dist/src/components/projects/ProjectDetail.js';
+            const scriptSrc = '/dist/src/components/projects/ProjectDetail.js?v=' + (window.BUILD_VERSION || Date.now());
             const script = document.createElement('script');
             script.type = 'text/javascript';
             script.async = true;
@@ -833,13 +833,13 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         }, 2000); // Check every 2 seconds (was 5 seconds)
     }
     
-    // BULLETPROOF: Start fallback loader immediately as a safety net
-    // This ensures ProjectDetail loads even if lazy-loader fails completely
+    // BULLETPROOF: Start fallback loader early so it runs in parallel with lazy load
+    // This ensures ProjectDetail loads even if lazy-loader fails or is slow
     setTimeout(() => {
         if (!window.ProjectDetail) {
             console.log('🔄 Starting ProjectDetail fallback loader as safety net...');
             setupProjectDetailFallbackLoader();
         }
-    }, 5000); // Start after 5 seconds if ProjectDetail isn't loaded yet (was 10 seconds)
+    }, 2000); // Start after 2 seconds so it overlaps with lazy load (was 5s)
 })();
 

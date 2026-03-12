@@ -1664,7 +1664,7 @@
         let appCheckAttempts = 0;
         let appCheckStopped = false;
         let appCheckTimeoutId = null;
-        const maxAppCheckAttempts = 20; // 10 seconds total (20 * 500ms)
+        const maxAppCheckAttempts = 50; // 25 seconds total (50 * 500ms) - core-bundle can be slow on first load
         function checkAppLoaded() {
             // Stop if already checked max attempts
             if (appCheckStopped) {
@@ -1682,7 +1682,7 @@
                 return true;
             }
             if (appCheckAttempts >= maxAppCheckAttempts) {
-                console.warn('⚠️ App component not loaded after 10 seconds - checking for network errors');
+                console.warn('⚠️ App component not loaded after 25 seconds - checking for network errors');
                 console.warn('If you see network errors above, the server may be experiencing connectivity issues');
                 console.warn('The fast-loader will continue trying to mount the app...');
                 appCheckStopped = true;

@@ -205,7 +205,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                             warnTaskDebug('⚠️ No cached project tasks available, returning empty array');
                             return { type: 'project', data: [] };
                         }),
-                    10000 // 10 second timeout (increased for database issues)
+                    20000 // 20 second timeout (slow connections / database)
                 )
             );
 
@@ -247,7 +247,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                             // Keep cached data if API fails
                             return { type: 'user', data: cachedUserTasks };
                         }),
-                    5000 // 5 second timeout
+                    12000 // 12 second timeout (increased for slow connections)
                 )
             );
 
