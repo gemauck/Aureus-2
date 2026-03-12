@@ -584,7 +584,6 @@ async function handler(req, res) {
                 }
               }
             }
-          }  // end if (leads.length === 0)
           } catch (fallbackError) {
             console.error('❌ Fallback query also failed:', {
               message: fallbackError.message,
@@ -595,6 +594,7 @@ async function handler(req, res) {
             // Re-throw to be caught by outer catch block
             throw fallbackError
           }
+          }  // end if (leads.length === 0)
         }
         
         // If any leads have externalAgentId but no externalAgent (e.g. from fallback query), look up and attach
