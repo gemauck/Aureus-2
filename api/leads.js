@@ -502,9 +502,9 @@ async function handler(req, res) {
                   // Use raw SQL query to avoid Prisma schema validation issues
                   console.warn('⚠️ Column missing error detected, using raw SQL query')
                   const allRecordsRaw = await prisma.$queryRaw`
-                    SELECT id, name, type, industry, status, stage, revenue, value, probability, 
-                           "lastContact", address, website, notes, contacts, "followUps", 
-                           "projectIds", comments, sites, contracts, "activityLog", 
+                    SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
+                           "lastContact", address, website, notes, contacts, "followUps",
+                           "projectIds", comments, sites, contracts, "activityLog",
                            "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
                            proposals, thumbnail, services, "rssSubscribed"
                     FROM "Client"
@@ -739,7 +739,7 @@ async function handler(req, res) {
       // Build notes with additional fields that don't exist in schema
       let notes = body.notes || '';
       if (body.source) notes += `\nSource: ${body.source}`;
-      if (body.stage) notes += `\nStage: ${body.stage}`;
+      if (body.aidaStatus) notes += `\nAida: ${body.aidaStatus}`;
       if (body.firstContactDate) notes += `\nFirst Contact: ${body.firstContactDate}`;
 
       // Ensure type column exists in database
@@ -751,22 +751,22 @@ async function handler(req, res) {
       // Only include fields that exist in the database schema
       // CRITICAL: Always set type to lowercase 'lead' to ensure consistency
       // Ignore any type value from request body - leads must always be type='lead'
-      const normalizedStatus = (() => {
-        if (body.status === undefined || body.status === null) return 'Potential'
-        const trimmed = String(body.status).trim()
+      const normalizedEngagementStage = (() => {
+        if (body.engagementStage === undefined || body.engagementStage === null) return 'Potential'
+        const trimmed = String(body.engagementStage).trim()
         return trimmed ? trimmed : 'Potential'
       })()
 
       // #region agent log
-      debugAppend({ location: 'api/leads.js:POST create', message: 'POST /api/leads body status vs normalized', data: { bodyStatus: body.status, normalizedStatus }, hypothesisId: 'C', runId: 'crm' })
+      debugAppend({ location: 'api/leads.js:POST create', message: 'POST /api/leads body engagementStage vs normalized', data: { bodyEngagementStage: body.engagementStage, normalizedEngagementStage }, hypothesisId: 'C', runId: 'crm' })
       // #endregion
 
       const leadData = {
         name: String(body.name).trim(),
         type: 'lead', // Always lowercase 'lead' - never allow override (ignores body.type if present)
         industry: String(body.industry || 'Other').trim(),
-        status: normalizedStatus,
-        stage: String(body.stage || 'Awareness').trim(),
+        engagementStage: normalizedEngagementStage,
+        aidaStatus: String(body.aidaStatus || 'Awareness').trim(),
         revenue: (() => {
           const val = parseFloat(body.revenue)
           return isNaN(val) ? 0 : val
@@ -1067,7 +1067,7 @@ async function handler(req, res) {
                 contactEmail: site.contactEmail || '',
                 notes: site.notes || '',
                 siteLead: site.siteLead != null ? String(site.siteLead) : '',
-                stage: (site.stage != null && String(site.stage).trim() !== '') ? String(site.stage).trim() : 'Potential',
+                engagementStage: (site.engagementStage != null && String(site.engagementStage).trim() !== '') ? String(site.engagementStage).trim() : 'Potential',
                 aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus).trim() : 'Awareness',
                 siteType: site.siteType === 'client' ? 'client' : 'lead'
               }
@@ -1264,7 +1264,7 @@ async function handler(req, res) {
         parsedLead.isStarred = false // StarredClient table doesn't exist
         
         // #region agent log
-        debugAppend({ location: 'api/leads.js:POST create response', message: 'Created lead status', data: { savedStatus: parsedLead.status, leadId: parsedLead.id }, hypothesisId: 'C', runId: 'crm' })
+        debugAppend({ location: 'api/leads.js:POST create response', message: 'Created lead engagementStage', data: { savedEngagementStage: parsedLead.engagementStage, leadId: parsedLead.id }, hypothesisId: 'C', runId: 'crm' })
         // #endregion
         return created(res, { lead: parsedLead })
       } catch (dbError) {
@@ -1328,7 +1328,7 @@ async function handler(req, res) {
           // Phase 3: Parse using shared function which handles normalized tables
           const parsedLead = parseClientJsonFields(lead)
           // #region agent log
-          debugAppend({ location: 'api/leads.js:GET single lead', message: 'GET /api/leads/[id] success', data: { leadId: parsedLead.id, status: parsedLead.status }, hypothesisId: 'B', runId: 'crm' })
+          debugAppend({ location: 'api/leads.js:GET single lead', message: 'GET /api/leads/[id] success', data: { leadId: parsedLead.id, engagementStage: parsedLead.engagementStage }, hypothesisId: 'B', runId: 'crm' })
           // #endregion
           return ok(res, { lead: parsedLead })
         } catch (dbError) {
@@ -1362,10 +1362,10 @@ async function handler(req, res) {
         // Only include fields if they're explicitly provided in the body
         if (body.name !== undefined) updateData.name = body.name
         if (body.industry !== undefined) updateData.industry = body.industry
-        if (body.status !== undefined) updateData.status = body.status
-        if (body.stage !== undefined) updateData.stage = body.stage
+        if (body.engagementStage !== undefined) updateData.engagementStage = body.engagementStage
+        if (body.aidaStatus !== undefined) updateData.aidaStatus = body.aidaStatus
         // #region agent log
-        debugAppend({ location: 'api/leads.js:PATCH update', message: 'PATCH /api/leads/[id] body vs updateData', data: { leadId: id, bodyStatus: body.status, updateDataStatus: updateData.status }, hypothesisId: 'D', runId: 'crm' })
+        debugAppend({ location: 'api/leads.js:PATCH update', message: 'PATCH /api/leads/[id] body vs updateData', data: { leadId: id, bodyEngagementStage: body.engagementStage, updateDataEngagementStage: updateData.engagementStage }, hypothesisId: 'D', runId: 'crm' })
         // #endregion
         if (body.revenue !== undefined) updateData.revenue = parseFloat(body.revenue) || 0
         if (body.value !== undefined) updateData.value = parseFloat(body.value) || 0
@@ -1827,9 +1827,9 @@ async function handler(req, res) {
           
         // CRITICAL DEBUG: Immediately re-query database to verify persistence
         const verifyLead = await prisma.client.findUnique({ where: { id } })
-        if (updateData.status !== undefined && verifyLead.status !== updateData.status) {
-          console.error('❌ CRITICAL: Database did not persist status change!')
-          console.error('   Expected:', updateData.status, 'Got:', verifyLead.status)
+        if (updateData.engagementStage !== undefined && verifyLead.engagementStage !== updateData.engagementStage) {
+          console.error('❌ CRITICAL: Database did not persist engagementStage change!')
+          console.error('   Expected:', updateData.engagementStage, 'Got:', verifyLead.engagementStage)
         }
         
         // Verify externalAgentId was persisted correctly
@@ -1848,7 +1848,7 @@ async function handler(req, res) {
         const parsedLead = parseClientJsonFields(lead)
         
         // #region agent log
-        debugAppend({ location: 'api/leads.js:PATCH response', message: 'PATCH /api/leads/[id] saved status', data: { leadId: id, savedStatus: parsedLead.status }, hypothesisId: 'D', runId: 'crm' })
+        debugAppend({ location: 'api/leads.js:PATCH response', message: 'PATCH /api/leads/[id] saved engagementStage', data: { leadId: id, savedEngagementStage: parsedLead.engagementStage }, hypothesisId: 'D', runId: 'crm' })
         // #endregion
         return ok(res, { lead: parsedLead })
         } catch (dbError) {

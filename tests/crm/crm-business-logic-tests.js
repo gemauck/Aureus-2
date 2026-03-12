@@ -120,11 +120,11 @@ async function testStatusNormalization() {
     const createResponse = await apiRequest('/api/leads', 'POST', {
       name: `Status Normalization Test ${Date.now()}-${testCase.input}`,
       industry: 'Technology',
-      status: testCase.input
+      engagementStage: testCase.input
     })
     
     if (createResponse.status === 201) {
-      const actualStatus = createResponse.data?.lead?.status
+      const actualStatus = createResponse.data?.lead?.engagementStage ?? createResponse.data?.lead?.status
       actualResults.push({ input: testCase.input, expected: testCase.expected, actual: actualStatus })
       
       // NOTE: Current API bug - status is hardcoded to 'active', so this will reveal the bug
@@ -163,7 +163,7 @@ async function testStageDefaultValue() {
   const leadId = createResponse.data?.lead?.id
   testResults.createdLeads.push(leadId)
   
-  const defaultStage = createResponse.data?.lead?.stage
+  const defaultStage = createResponse.data?.lead?.aidaStatus ?? createResponse.data?.lead?.stage
   
   recordResult(
     'Stage Default Value',
@@ -215,11 +215,11 @@ async function testStatusFieldHardcodingBug() {
     const createResponse = await apiRequest('/api/leads', 'POST', {
       name: `Status Bug Test ${status} ${Date.now()}`,
       industry: 'Technology',
-      status
+      engagementStage: status
     })
     
     if (createResponse.status === 201) {
-      const actualStatus = createResponse.data?.lead?.status
+      const actualStatus = createResponse.data?.lead?.engagementStage ?? createResponse.data?.lead?.status
       results.push({ requested: status, actual: actualStatus })
       testResults.createdLeads.push(createResponse.data?.lead?.id)
     }
@@ -450,7 +450,7 @@ async function testNotesConcatenation() {
     industry: 'Technology',
     notes: 'Base notes',
     source: 'Website',
-    stage: 'Awareness',
+    aidaStatus: 'Awareness',
     firstContactDate: '2025-01-15'
   })
   
@@ -584,7 +584,7 @@ async function testStageValidation() {
   const validResponse = await apiRequest('/api/leads', 'POST', {
     name: `Valid Stage Test ${Date.now()}`,
     industry: 'Technology',
-    stage: validStages[0]
+    aidaStatus: validStages[0]
   })
   
   if (validResponse.status === 201) {
@@ -595,11 +595,11 @@ async function testStageValidation() {
   const invalidResponse = await apiRequest('/api/leads', 'POST', {
     name: `Invalid Stage Test ${Date.now()}`,
     industry: 'Technology',
-    stage: invalidStage
+    aidaStatus: invalidStage
   })
   
   if (invalidResponse.status === 201) {
-    const actualStage = invalidResponse.data?.lead?.stage
+    const actualStage = invalidResponse.data?.lead?.aidaStatus ?? invalidResponse.data?.lead?.stage
     testResults.createdLeads.push(invalidResponse.data?.lead?.id)
     
     // Should either reject invalid stage or default to 'Awareness'

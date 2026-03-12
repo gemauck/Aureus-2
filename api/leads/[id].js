@@ -121,10 +121,10 @@ async function handler(req, res) {
             console.warn(`⚠️ [LEADS ID] Prisma query with relations failed, trying raw SQL:`, prismaError.message)
             // Fallback to raw SQL
             const rawResult = await prisma.$queryRaw`
-              SELECT id, name, type, industry, status, stage, revenue, value, probability, 
-                     "lastContact", address, website, notes, contacts, "followUps", 
-                     "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
-                     proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
+              SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
+                     "lastContact", address, website, notes, contacts, "followUps",
+                     "projectIds", comments, sites, contracts, "activityLog", "billingTerms",
+                     proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt",
                      thumbnail, "rssSubscribed", kyc
               FROM "Client"
               WHERE id = ${id} AND type = 'lead'
@@ -162,10 +162,10 @@ async function handler(req, res) {
                 `
                 lead.clientComments = commentsResult || []
                 
-                // Phase 6: Fetch normalized tables (include siteLead, stage, aidaStatus, siteType for per-site lead tracking)
+                // Phase 6: Fetch normalized tables (include siteLead, engagementStage, aidaStatus, siteType for per-site lead tracking)
                 const sitesResult = await prisma.$queryRaw`
                   SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
-                         "siteLead", "stage", "aidaStatus", "siteType", "createdAt", "updatedAt"
+                         "siteLead", "engagementStage", "aidaStatus", "siteType", "createdAt", "updatedAt"
                   FROM "ClientSite"
                   WHERE "clientId" = ${id}
                   ORDER BY "createdAt" ASC
@@ -307,8 +307,8 @@ async function handler(req, res) {
       // Basic fields - only include if provided in body
       if (body.name !== undefined) updateData.name = body.name
       if (body.industry !== undefined) updateData.industry = body.industry
-      if (body.status !== undefined) updateData.status = body.status
-      if (body.stage !== undefined) updateData.stage = body.stage
+      if (body.engagementStage !== undefined) updateData.engagementStage = body.engagementStage
+      if (body.aidaStatus !== undefined) updateData.aidaStatus = body.aidaStatus
       if (body.revenue !== undefined) updateData.revenue = parseFloat(body.revenue) || 0
       if (body.value !== undefined) updateData.value = parseFloat(body.value) || 0
       if (body.probability !== undefined) updateData.probability = parseInt(body.probability) || 0
@@ -665,8 +665,8 @@ async function handler(req, res) {
             
             for (let idx = 0; idx < sitesArray.length; idx++) {
               const site = sitesArray[idx]
-              // Use defaults for stage/aidaStatus so we never overwrite with empty (persistence after refresh)
-              const stageVal = site.stage != null && String(site.stage).trim() !== '' ? String(site.stage).trim() : 'Potential'
+              // Use defaults for engagementStage/aidaStatus so we never overwrite with empty (persistence after refresh)
+              const engagementStageVal = site.engagementStage != null && String(site.engagementStage).trim() !== '' ? String(site.engagementStage).trim() : 'Potential'
               const aidaVal = site.aidaStatus != null && String(site.aidaStatus).trim() !== '' ? String(site.aidaStatus).trim() : 'Awareness'
               const siteData = {
                 clientId: id,
@@ -677,7 +677,7 @@ async function handler(req, res) {
                 contactEmail: site.contactEmail ?? site.email ?? '',
                 notes: site.notes || '',
                 siteLead: site.siteLead ?? '',
-                stage: stageVal,
+                engagementStage: engagementStageVal,
                 aidaStatus: aidaVal,
                 siteType: site.siteType ?? 'lead'
               }

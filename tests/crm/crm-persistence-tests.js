@@ -105,8 +105,8 @@ async function testCreateLeadPersistence() {
   const leadData = {
     name: `Persistence Test Lead ${Date.now()}`,
     industry: 'Technology',
-    status: 'Potential',
-    stage: 'Awareness',
+    engagementStage: 'Potential',
+    aidaStatus: 'Awareness',
     value: 50000,
     probability: 75,
     source: 'Website'
@@ -141,7 +141,8 @@ async function testCreateLeadPersistence() {
   const fieldsMatch = 
     fetchedLead.name === leadData.name &&
     fetchedLead.industry === leadData.industry &&
-    fetchedLead.stage === leadData.stage &&
+    (fetchedLead.engagementStage === leadData.engagementStage || fetchedLead.status === leadData.engagementStage) &&
+    fetchedLead.aidaStatus === leadData.aidaStatus &&
     fetchedLead.value === leadData.value &&
     fetchedLead.probability === leadData.probability
   
@@ -163,7 +164,7 @@ async function testStatusPersistence() {
   const createResponse = await apiRequest('/api/leads', 'POST', {
     name: testLeadName,
     industry: 'Technology',
-    status: 'Potential'
+    engagementStage: 'Potential'
   })
   
   if (createResponse.status !== 201) {
@@ -178,12 +179,12 @@ async function testStatusPersistence() {
   let previousStatus = 'Potential'
   
   for (const status of statuses) {
-    // Update status
-    const updateResponse = await apiRequest(`/api/leads/${leadId}`, 'PUT', { status })
+    // Update engagement stage
+    const updateResponse = await apiRequest(`/api/leads/${leadId}`, 'PUT', { engagementStage: status })
     
     if (updateResponse.status !== 200) {
       allPassed = false
-      log(`   Failed to update status to ${status}`, 'error')
+      log(`   Failed to update engagement stage to ${status}`, 'error')
       break
     }
     
@@ -192,13 +193,13 @@ async function testStatusPersistence() {
     
     // Verify persistence
     const verifyResponse = await apiRequest(`/api/leads/${leadId}`, 'GET')
-    const verifiedStatus = verifyResponse.data?.lead?.status
+    const verifiedStatus = verifyResponse.data?.lead?.engagementStage ?? verifyResponse.data?.lead?.status
     
     // NOTE: Current bug - status is hardcoded to 'active' in API
     // This test will reveal the bug
     if (verifiedStatus !== status && verifiedStatus !== 'active') {
       allPassed = false
-      log(`   Status ${status} did not persist, got ${verifiedStatus}`, 'error')
+      log(`   Engagement stage ${status} did not persist, got ${verifiedStatus}`, 'error')
       break
     }
     
@@ -223,7 +224,7 @@ async function testStagePersistence() {
   const createResponse = await apiRequest('/api/leads', 'POST', {
     name: testLeadName,
     industry: 'Technology',
-    stage: 'Awareness'
+    aidaStatus: 'Awareness'
   })
   
   if (createResponse.status !== 201) {
@@ -237,12 +238,12 @@ async function testStagePersistence() {
   let allPassed = true
   
   for (const stage of stages) {
-    // Update stage
-    const updateResponse = await apiRequest(`/api/leads/${leadId}`, 'PUT', { stage })
+    // Update aida status
+    const updateResponse = await apiRequest(`/api/leads/${leadId}`, 'PUT', { aidaStatus: stage })
     
     if (updateResponse.status !== 200) {
       allPassed = false
-      log(`   Failed to update stage to ${stage}`, 'error')
+      log(`   Failed to update aida status to ${stage}`, 'error')
       break
     }
     
@@ -251,11 +252,11 @@ async function testStagePersistence() {
     
     // Verify persistence
     const verifyResponse = await apiRequest(`/api/leads/${leadId}`, 'GET')
-    const verifiedStage = verifyResponse.data?.lead?.stage
+    const verifiedStage = verifyResponse.data?.lead?.aidaStatus ?? verifyResponse.data?.lead?.stage
     
     if (verifiedStage !== stage) {
       allPassed = false
-      log(`   Stage ${stage} did not persist, got ${verifiedStage}`, 'error')
+      log(`   Aida status ${stage} did not persist, got ${verifiedStage}`, 'error')
       break
     }
   }
@@ -277,8 +278,8 @@ async function testCombinedStatusStagePersistence() {
   const createResponse = await apiRequest('/api/leads', 'POST', {
     name: testLeadName,
     industry: 'Technology',
-    status: 'Potential',
-    stage: 'Awareness'
+    engagementStage: 'Potential',
+    aidaStatus: 'Awareness'
   })
   
   if (createResponse.status !== 201) {
@@ -291,8 +292,8 @@ async function testCombinedStatusStagePersistence() {
   
   // Update both simultaneously
   const updateResponse = await apiRequest(`/api/leads/${leadId}`, 'PUT', {
-    status: 'Active',
-    stage: 'Interest'
+    engagementStage: 'Active',
+    aidaStatus: 'Interest'
   })
   
   if (updateResponse.status !== 200) {
@@ -307,13 +308,13 @@ async function testCombinedStatusStagePersistence() {
   const lead = verifyResponse.data?.lead
   
   // NOTE: Status may be 'active' due to API bug
-  const statusOk = lead.status === 'Active' || lead.status === 'active'
-  const stageOk = lead.stage === 'Interest'
+  const statusOk = (lead.engagementStage ?? lead.status) === 'Active' || (lead.engagementStage ?? lead.status) === 'active'
+  const stageOk = (lead.aidaStatus ?? lead.stage) === 'Interest'
   
   recordResult(
     'Combined Status/Stage Persistence',
     statusOk && stageOk,
-    statusOk && stageOk ? 'Both fields persisted' : `Status: ${lead.status}, Stage: ${lead.stage}`
+    statusOk && stageOk ? 'Both fields persisted' : `EngagementStage: ${lead.engagementStage ?? lead.status}, AidaStatus: ${lead.aidaStatus ?? lead.stage}`
   )
 }
 
@@ -657,8 +658,8 @@ async function testDatabaseDirectVerification() {
   const createResponse = await apiRequest('/api/leads', 'POST', {
     name: testLeadName,
     industry: 'Technology',
-    status: 'Potential',
-    stage: 'Awareness'
+    engagementStage: 'Potential',
+    aidaStatus: 'Awareness'
   })
   
   if (createResponse.status !== 201) {

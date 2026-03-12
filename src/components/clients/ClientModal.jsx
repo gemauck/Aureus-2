@@ -5,7 +5,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
     const [formData, setFormData] = useState({
         name: '',
         industry: 'Other',
-        status: 'Active',
+        engagementStage: 'Active',
         address: '',
         website: '',
         notes: '',
@@ -20,7 +20,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
             setFormData({
                 name: client.name || '',
                 industry: client.industry || 'Other',
-                status: client.status || 'Active',
+                engagementStage: client.engagementStage ?? (client.status || 'Active'),
                 address: client.address || '',
                 website: client.website || '',
                 notes: client.notes || '',
@@ -100,10 +100,10 @@ const ClientModal = ({ client, onSave, onClose }) => {
                             />
                         </div>
                         <div>
-                            <label className={`block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1.5`}>Status</label>
+                            <label className={`block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1.5`}>Engagement Stage</label>
                             <select 
-                                value={formData.status}
-                                onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                value={formData.engagementStage}
+                                onChange={(e) => setFormData({...formData, engagementStage: e.target.value})}
                                 className={`w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                                     isDark 
                                         ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400' 

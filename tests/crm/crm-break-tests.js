@@ -396,7 +396,9 @@ async function testConcurrentUpdates() {
   const createResponse = await apiRequest('/api/leads', 'POST', {
     name: `Concurrent Test Lead ${Date.now()}`,
     industry: 'Technology',
-    status: 'Potential'
+    status: 'Potential',
+    engagementStage: 'Potential',
+    aidaStatus: 'Awareness'
   })
   
   if (createResponse.status !== 201) {
@@ -411,9 +413,9 @@ async function testConcurrentUpdates() {
   }
   
   // Attempt concurrent updates
-  const update1 = apiRequest(`/api/leads/${leadId}`, 'PUT', { stage: 'Awareness' })
-  const update2 = apiRequest(`/api/leads/${leadId}`, 'PUT', { stage: 'Interest' })
-  const update3 = apiRequest(`/api/leads/${leadId}`, 'PUT', { stage: 'Desire' })
+  const update1 = apiRequest(`/api/leads/${leadId}`, 'PUT', { aidaStatus: 'Awareness' })
+  const update2 = apiRequest(`/api/leads/${leadId}`, 'PUT', { aidaStatus: 'Interest' })
+  const update3 = apiRequest(`/api/leads/${leadId}`, 'PUT', { aidaStatus: 'Desire' })
   
   const results = await Promise.all([update1, update2, update3])
   
@@ -480,14 +482,14 @@ async function testInvalidStatus() {
   const response = await apiRequest('/api/leads', 'POST', {
     name: 'Test Lead',
     industry: 'Technology',
-    status: 'INVALID_STATUS_XYZ123'
+    engagementStage: 'INVALID_STATUS_XYZ123'
   })
   
-  // Should either reject or normalize to valid status
+  // Should either reject or normalize to valid engagementStage
   const validStatuses = ['Potential', 'Active', 'Disinterested', 'active', 'potential']
   const passed = response.status === 400 || 
                  (response.status === 201 && 
-                  validStatuses.includes(response.data?.lead?.status))
+                  validStatuses.includes(response.data?.lead?.engagementStage))
   
   assert(
     passed,
@@ -503,19 +505,19 @@ async function testInvalidStage() {
   const response = await apiRequest('/api/leads', 'POST', {
     name: 'Test Lead',
     industry: 'Technology',
-    stage: 'INVALID_STAGE_XYZ123'
+    aidaStatus: 'INVALID_STAGE_XYZ123'
   })
   
   // Should either reject or default to 'Awareness'
   const passed = response.status === 400 || 
                  (response.status === 201 && 
-                  (response.data?.lead?.stage === 'Awareness' || 
-                   response.data?.lead?.stage === 'INVALID_STAGE_XYZ123'))
+                  (response.data?.lead?.aidaStatus === 'Awareness' || 
+                   response.data?.lead?.aidaStatus === 'INVALID_STAGE_XYZ123'))
   
   assert(
     passed,
     'Invalid Stage Handled',
-    `Expected rejection or default, got stage: ${response.data?.lead?.stage}`
+    `Expected rejection or default, got stage: ${response.data?.lead?.aidaStatus}`
   )
 }
 

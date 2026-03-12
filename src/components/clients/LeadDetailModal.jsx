@@ -143,9 +143,9 @@ const LeadDetailModal = ({
     const defaultFormData = {
         name: '',
         industry: '',
-        status: 'Potential',
+        engagementStage: 'Potential',
         source: 'Website',
-        stage: 'Awareness',
+        aidaStatus: 'Awareness',
         value: 0,
         notes: '',
         website: '',
@@ -166,9 +166,9 @@ const LeadDetailModal = ({
         // Parse JSON strings to arrays/objects if needed
         const parsedLead = lead ? {
             ...lead,
-            // Ensure stage and status are ALWAYS present with defaults
-            stage: lead.stage || 'Awareness',
-            status: normalizeLifecycleStage(lead.status),
+            // Ensure engagementStage and aidaStatus are ALWAYS present with defaults
+            engagementStage: normalizeLifecycleStage(lead.engagementStage ?? lead.status),
+            aidaStatus: lead.aidaStatus ?? lead.stage ?? 'Awareness',
             contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
             followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
             projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -236,14 +236,14 @@ const LeadDetailModal = ({
 
         // Only update if it's a different lead (new lead loaded) OR if status/stage changed in the lead prop
         // This ensures we update formData when parent refreshes lead data after save
-        const currentStatus = normalizeLifecycleStage(lead.status);
-        const currentStage = lead.stage || 'Awareness';
-        const formDataStatus = formDataRef.current?.status || formData?.status;
-        const formDataStage = formDataRef.current?.stage || formData?.stage;
+        const currentEngagementStage = normalizeLifecycleStage(lead.engagementStage ?? lead.status);
+        const currentAidaStatus = lead.aidaStatus ?? lead.stage ?? 'Awareness';
+        const formDataEngagementStage = formDataRef.current?.engagementStage ?? formData?.engagementStage;
+        const formDataAidaStatus = formDataRef.current?.aidaStatus ?? formData?.aidaStatus;
         
-        const statusChanged = currentStatus !== normalizeLifecycleStage(formDataStatus);
-        const stageChanged = currentStage !== formDataStage;
-        const shouldUpdate = isDifferentLead || (statusChanged && !userEditedFieldsRef.current.has('status')) || (stageChanged && !userEditedFieldsRef.current.has('stage'));
+        const engagementStageChanged = currentEngagementStage !== normalizeLifecycleStage(formDataEngagementStage);
+        const aidaStatusChanged = currentAidaStatus !== formDataAidaStatus;
+        const shouldUpdate = isDifferentLead || (engagementStageChanged && !userEditedFieldsRef.current.has('engagementStage')) || (aidaStatusChanged && !userEditedFieldsRef.current.has('aidaStatus'));
 
         if (shouldUpdate) {
             if (isDifferentLead) {
@@ -253,8 +253,8 @@ const LeadDetailModal = ({
             // Parse the lead data - API already includes contacts, sites, proposals via parseClientJsonFields
             const parsedLead = {
                 ...lead,
-                stage: currentStage,
-                status: currentStatus,
+                engagementStage: currentEngagementStage,
+                aidaStatus: currentAidaStatus,
                 contacts: Array.isArray(lead.contacts) ? lead.contacts : (typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : []),
                 followUps: Array.isArray(lead.followUps) ? lead.followUps : (typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : []),
                 projectIds: Array.isArray(lead.projectIds) ? lead.projectIds : (typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : []),
@@ -274,8 +274,8 @@ const LeadDetailModal = ({
                 contacts: parsedLead.contacts.length,
                 sites: parsedLead.sites.length,
                 proposals: parsedLead.proposals.length,
-                status: parsedLead.status,
-                stage: parsedLead.stage
+                engagementStage: parsedLead.engagementStage,
+                aidaStatus: parsedLead.aidaStatus
             });
 
             // Update formData ONCE with all loaded data
@@ -288,7 +288,7 @@ const LeadDetailModal = ({
                 projectIds: parsedLead.projectIds || []
             };
         }
-    }, [lead?.id, lead?.status, lead?.stage]); // Also depend on status and stage to detect updates
+    }, [lead?.id, lead?.engagementStage, lead?.aidaStatus]); // Also depend on engagementStage and aidaStatus to detect updates
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
@@ -1302,7 +1302,7 @@ const LeadDetailModal = ({
         
         // Compare critical fields that matter for auto-save
         const fieldsToCompare = [
-            'name', 'industry', 'source', 'status', 'stage', 'notes',
+            'name', 'industry', 'source', 'engagementStage', 'aidaStatus', 'notes',
             'contacts', 'followUps', 'comments', 'proposals'
         ];
         
@@ -2913,8 +2913,8 @@ const LeadDetailModal = ({
                         {lead && (
                             <div className="flex items-center gap-2 mt-0.5">
                                 <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{formData.industry}</span>
-                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${getStageColor(formData.stage)}`}>
-                                    {formData.stage}
+                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${getStageColor(formData.aidaStatus ?? formData.stage)}`}>
+                                    {formData.aidaStatus ?? formData.stage}
                                 </span>
                             </div>
                         )}
@@ -3258,12 +3258,12 @@ const LeadDetailModal = ({
                                     </div>
                                     <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    AIDA STAGE
+                    Aida Status
                 </label>
                                         <select 
-                                            value={formData.stage}
+                                            value={formData.aidaStatus ?? formData.stage}
                                             onChange={async (e) => {
-                                                const newStage = e.target.value;
+                                                const newAidaStatus = e.target.value;
                                             
                                             // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
                                             // This prevents LiveDataSync from overwriting during the delay
@@ -3273,30 +3273,30 @@ const LeadDetailModal = ({
                                                 
                                                 // Update state and get the updated formData
                                                 setFormData(prev => {
-                                                    const updated = {...prev, stage: newStage};
+                                                    const updated = {...prev, aidaStatus: newAidaStatus};
                                                     
                                                     // Auto-save immediately with the updated data
                                                     // CRITICAL: Only auto-save for existing leads, NOT for new leads that haven't been saved yet
                                                     if (lead && !isNewLeadNotSavedRef.current && onSave) {
-                                                        console.log('💾 Auto-saving stage change:', {
+                                                        console.log('💾 Auto-saving aidaStatus change:', {
                                                             leadId: lead.id,
-                                                            oldStage: formDataRef.current?.stage,
-                                                            newStage: newStage
+                                                            oldAidaStatus: formDataRef.current?.aidaStatus,
+                                                            newAidaStatus: newAidaStatus
                                                         });
                                                         
                                                         // Use setTimeout to ensure state is updated
                                                         setTimeout(async () => {
                                                             try {
                                                                 // Get the latest formData from ref (updated by useEffect)
-                                                        const latest = {...formDataRef.current, stage: newStage};
+                                                        const latest = {...formDataRef.current, aidaStatus: newAidaStatus};
                                                                 
-                                                                // Explicitly ensure stage is included
-                                                                latest.stage = newStage;
+                                                                // Explicitly ensure aidaStatus is included
+                                                                latest.aidaStatus = newAidaStatus;
                                                         
-                                                                console.log('💾 Sending stage to onSave:', {
+                                                                console.log('💾 Sending aidaStatus to onSave:', {
                                                                     leadId: latest.id,
-                                                                    status: latest.status,
-                                                                    stage: latest.stage
+                                                                    engagementStage: latest.engagementStage,
+                                                                    aidaStatus: latest.aidaStatus
                                                                 });
                                                         
                                                         // Save this as the last saved state
@@ -3305,7 +3305,7 @@ const LeadDetailModal = ({
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
                                                                 
-                                                                console.log('✅ Stage auto-save completed');
+                                                                console.log('✅ Aida Status auto-save completed');
                                                         
                                             // Clear the flag and notify parent after save completes
                                                         setTimeout(() => {
@@ -6177,26 +6177,22 @@ const LeadDetailModal = ({
                                         })
                                     ),
                                     React.createElement('div', null,
-                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'AIDA STAGE'),
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Aida Status'),
                                         React.createElement('select', {
-                                            value: formData.stage,
+                                            value: formData.aidaStatus ?? formData.stage,
                                             onChange: async (e) => {
-                                                const newStage = e.target.value;
+                                                const newAidaStatus = e.target.value;
                                                 
-                                                // CRITICAL: Mark that user has started typing and edited this field
                                                 userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('stage');
+                                                userEditedFieldsRef.current.add('aidaStatus');
                                                 isEditingRef.current = true;
                                                 
-                                                // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
-                                                // This prevents LiveDataSync from overwriting during the delay
                                                 isAutoSavingRef.current = true;
                                                 notifyEditingChange(false, true);
                                                 
                                                 
-                                                // Update state and get the updated formData
                                                 setFormData(prev => {
-                                                    const updated = {...prev, stage: newStage};
+                                                    const updated = {...prev, aidaStatus: newAidaStatus};
                                                     
                                                     // Auto-save immediately with the updated data
                                                     if (lead && onSave) {
@@ -6204,10 +6200,10 @@ const LeadDetailModal = ({
                                                         setTimeout(async () => {
                                                             try {
                                                                 // Get the latest formData from ref (updated by useEffect)
-                                                                const latest = {...formDataRef.current, stage: newStage};
+                                                                const latest = {...formDataRef.current, aidaStatus: newAidaStatus};
                                                                 
                                                                 // Explicitly ensure stage is included
-                                                                latest.stage = newStage;
+                                                                latest.aidaStatus = newAidaStatus;
                                                                 
                                                                 // Save this as the last saved state
                                                                 lastSavedDataRef.current = latest;

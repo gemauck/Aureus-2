@@ -70,7 +70,7 @@ const BulkOperations = ({
         if (type === 'clients') {
             return [
                 ...baseActions,
-                { id: 'update_status', label: 'Update Status', icon: 'fas fa-edit' },
+                { id: 'update_status', label: 'Update Engagement Stage', icon: 'fas fa-edit' },
                 { id: 'assign_project', label: 'Assign to Project', icon: 'fas fa-project-diagram' },
                 { id: 'send_email', label: 'Send Email', icon: 'fas fa-envelope' },
                 { id: 'create_invoice', label: 'Create Invoice', icon: 'fas fa-file-invoice' }
@@ -78,7 +78,7 @@ const BulkOperations = ({
         } else if (type === 'leads') {
             return [
                 ...baseActions,
-                { id: 'update_status', label: 'Update Status', icon: 'fas fa-edit' },
+                { id: 'update_status', label: 'Update Engagement Stage', icon: 'fas fa-edit' },
                 { id: 'convert_to_client', label: 'Convert to Client', icon: 'fas fa-user-check' },
                 { id: 'send_email', label: 'Send Email', icon: 'fas fa-envelope' },
                 { id: 'assign_owner', label: 'Assign Owner', icon: 'fas fa-user-tie' }
@@ -95,18 +95,18 @@ const BulkOperations = ({
                 return (
                     <div className="space-y-4">
                         <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            New Status
+                            New Engagement Stage
                         </label>
                         <select
-                            value={bulkActionData.status || ''}
-                            onChange={(e) => setBulkActionData({ ...bulkActionData, status: e.target.value })}
+                            value={bulkActionData.engagementStage || ''}
+                            onChange={(e) => setBulkActionData({ ...bulkActionData, engagementStage: e.target.value })}
                             className={`w-full px-3 py-2 rounded-lg border ${
                                 isDark 
                                     ? 'bg-gray-700 border-gray-600 text-gray-100' 
                                     : 'bg-white border-gray-300 text-gray-900'
                             }`}
                         >
-                            <option value="">Select Status</option>
+                            <option value="">Select Engagement Stage</option>
                             {type === 'clients' ? (
                                 <>
                                     <option value="Active">Active</option>

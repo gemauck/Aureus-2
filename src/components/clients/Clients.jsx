@@ -274,6 +274,7 @@ function resolvePipelineStage(entity) {
     }
 
     const candidateSources = [
+        entity.aidaStatus,
         entity.stage,
         entity.pipelineStage,
         entity.pipelineStageName,
@@ -322,18 +323,18 @@ function ensureLeadStage(lead) {
         return lead;
     }
 
-    const hasValidStage = typeof lead.stage === 'string' && lead.stage.trim().length > 0;
-    if (hasValidStage) {
+    const hasValidAidaStatus = typeof lead.aidaStatus === 'string' && lead.aidaStatus.trim().length > 0;
+    if (hasValidAidaStatus) {
         return {
             ...lead,
-            stage: normalizePipelineStage(lead.stage)
+            aidaStatus: normalizePipelineStage(lead.aidaStatus)
         };
     }
 
     const resolvedStage = resolvePipelineStage(lead) || PIPELINE_STAGES[0];
     return {
         ...lead,
-        stage: resolvedStage
+        aidaStatus: resolvedStage
     };
 }
 
@@ -489,25 +490,22 @@ function processClientData(rawClients, cacheKey) {
         // This ensures leads aren't accidentally converted to clients
         const clientType = c.type; // Keep null/undefined as-is, don't default
         const isLead = clientType === 'lead';
-        let status = c.status;
+        let engagementStage = c.engagementStage ?? c.status;
         const isStarred = resolveStarredState(c);
         
-        // Convert status based on type
         if (isLead) {
-            // For leads: preserve status as-is (Potential, Active, Disinterested)
-            status = c.status || 'Potential';
+            engagementStage = c.engagementStage ?? c.status ?? 'Potential';
         } else {
-            // For clients: convert lowercase to capitalized
-            if (c.status === 'active') status = 'Active';
-            else if (c.status === 'inactive') status = 'Inactive';
-            else status = c.status || 'Inactive';
+            if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
+            else if ((c.engagementStage ?? c.status) === 'inactive') engagementStage = 'Inactive';
+            else engagementStage = c.engagementStage ?? c.status ?? 'Inactive';
         }
         
         return {
         id: c.id,
         name: c.name,
-        status: status,
-        stage: resolvePipelineStage(c),
+        engagementStage,
+        aidaStatus: resolvePipelineStage(c) || (c.aidaStatus ?? c.stage) || 'Awareness',
         industry: c.industry || 'Other',
         type: clientType, // Preserve null/undefined - will be filtered out later
         revenue: c.revenue || 0,
@@ -638,7 +636,7 @@ function buildOpportunitySignature(opp) {
     }
 
     const { id } = normalizeEntityId(opp, 'opportunity');
-    const stage = normalizePipelineStage(opp.stage || '');
+    const stage = normalizePipelineStage(opp.aidaStatus ?? opp.stage ?? '');
     const value = Number(
         opp.value ??
         opp.amount ??
@@ -979,8 +977,8 @@ const Clients = React.memo(() => {
     const [openSiteIdForClient, setOpenSiteIdForClient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
-    const [filterStatus, setFilterStatus] = useState('All Status');
-    const [filterStage, setFilterStage] = useState('All Stages');
+    const [filterEngagementStage, setFilterEngagementStage] = useState('All Engagement Stages');
+    const [filterAidaStatus, setFilterAidaStatus] = useState('All Aida Status');
     const [filterServices, setFilterServices] = useState(() => {
         try {
             const saved = localStorage.getItem('clients_filterServices');
@@ -1056,13 +1054,13 @@ const Clients = React.memo(() => {
         if (viewMode === 'clients' && clientsPage > 1) {
             setClientsPage(1);
         }
-    }, [searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly, viewMode]);
+    }, [searchTerm, filterIndustry, filterEngagementStage, filterServices, showStarredOnly, viewMode]);
     
     useEffect(() => {
         if (viewMode === 'leads' && leadsPage > 1) {
             setLeadsPage(1);
         }
-    }, [searchTerm, filterIndustry, filterStatus, filterStage, showStarredOnly, viewMode]);
+    }, [searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, showStarredOnly, viewMode]);
     
     useEffect(() => {
         if (viewMode === 'groups' && groupsPage > 1) {
@@ -1212,7 +1210,7 @@ const Clients = React.memo(() => {
     }, []);
     const pipelineItems = useMemo(() => {
         const leadItems = Array.isArray(leads) ? leads.map((lead) => {
-            const stage = normalizePipelineStage(lead.stage || lead.lifecycleStage || lead.statusStage || '');
+            const aidaStatus = normalizePipelineStage(lead.aidaStatus || lead.stage || lead.lifecycleStage || lead.statusStage || '');
             const value =
                 Number(
                     lead.estimatedValue ??
@@ -1235,7 +1233,8 @@ const Clients = React.memo(() => {
                 key: `lead-${lead.id ?? lead.leadId ?? lead.uuid ?? lead.name ?? Date.now()}`,
                 type: 'lead',
                 name: lead.name || lead.title || 'Untitled Lead',
-                stage,
+                engagementStage: lead.engagementStage ?? lead.status ?? 'Potential',
+                aidaStatus,
                 value,
                 organization: lead.company || lead.organization || lead.industry || 'Unknown industry',
                 owner: lead.ownerName || lead.owner || '',
@@ -1248,7 +1247,7 @@ const Clients = React.memo(() => {
             ? clients.flatMap((client) => {
                 const opportunities = Array.isArray(client.opportunities) ? client.opportunities : [];
                 return opportunities.map((opp) => {
-                    const stage = normalizePipelineStage(opp.stage);
+                    const aidaStatus = normalizePipelineStage(opp.aidaStatus ?? opp.stage);
                     const value =
                         Number(
                             opp.value ??
@@ -1271,7 +1270,8 @@ const Clients = React.memo(() => {
                         key: `opportunity-${opp.id ?? opp.uuid ?? `${client.id}-${opp.title ?? opp.name ?? Date.now()}`}`,
                         type: 'opportunity',
                         name: opp.title || opp.name || 'Untitled Opportunity',
-                        stage,
+                        engagementStage: opp.engagementStage ?? opp.status ?? 'Potential',
+                        aidaStatus,
                         value,
                         organization: client.name || opp.client?.name || 'Unknown client',
                         owner: opp.ownerName || opp.owner || client.ownerName || '',
@@ -3024,10 +3024,10 @@ const Clients = React.memo(() => {
     useEffect(() => {
         const mapDbClient = (c) => {
             const isLead = c.type === 'lead';
-            let status = c.status;
+            let engagementStage = c.engagementStage ?? c.status;
             const normalizedIdentity = normalizeEntityId(c, isLead ? 'lead' : 'client');
             const normalizedId = String(normalizedIdentity.id);
-            const stage = resolvePipelineStage(c);
+            const aidaStatus = resolvePipelineStage(c);
 
             // Entity ID normalized (generated fallback if needed)
             if (normalizedIdentity.generated && process.env.NODE_ENV === 'development') {
@@ -3071,22 +3071,20 @@ const Clients = React.memo(() => {
                 return fallback;
             };
 
-            // Convert status based on type
+            // Convert engagement stage based on type
             if (isLead) {
-                // For leads: preserve status as-is (Potential, Active, Disinterested)
-                status = c.status || 'Potential';
+                engagementStage = c.engagementStage ?? c.status ?? 'Potential';
             } else {
-                // For clients: convert lowercase to capitalized
-                if (c.status === 'active') status = 'Active';
-                else if (c.status === 'inactive') status = 'Inactive';
-                else status = c.status || 'Inactive';
+                if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
+                else if ((c.engagementStage ?? c.status) === 'inactive') engagementStage = 'Inactive';
+                else engagementStage = c.engagementStage ?? c.status ?? 'Inactive';
             }
 
             return {
                 id: normalizedId,
                 name: c.name,
-                status,
-                stage,
+                engagementStage,
+                aidaStatus,
                 industry: c.industry || 'Other',
                 type: c.type, // Preserve as-is - null types will be filtered out
                 revenue: c.revenue || 0,
@@ -3668,8 +3666,8 @@ const Clients = React.memo(() => {
                     ...(normalized.generated ? { tempId: normalizedId, legacyId: lead.id ?? lead.leadId ?? null } : {}),
                     name: lead.name || '',
                     industry: lead.industry || 'Other',
-                    status: lead.status || 'Potential',
-                    stage: resolvePipelineStage(lead),
+                    engagementStage: lead.engagementStage || 'Potential',
+                    aidaStatus: resolvePipelineStage(lead),
                     source: lead.source || 'Website',
                     value: lead.value || lead.revenue || 0,
                     probability: lead.probability || 0,
@@ -3804,7 +3802,7 @@ const Clients = React.memo(() => {
             if (forceRefresh) {
                 // Count leads by status for accurate reporting
                 const statusCounts = mappedLeads.reduce((acc, lead) => {
-                    acc[lead.status] = (acc[lead.status] || 0) + 1;
+                    acc[lead.engagementStage] = (acc[lead.engagementStage] || 0) + 1;
                     return acc;
                 }, {});
             }
@@ -4608,9 +4606,8 @@ const Clients = React.memo(() => {
                     ...selectedLead, 
                     ...leadFormData,
                     // Ensure critical fields are preserved
-                    status: leadFormData.status,
-                    // CRITICAL: Map aidaStatus to stage if present (ClientDetailModal uses aidaStatus, database uses stage)
-                    stage: leadFormData.stage || leadFormData.aidaStatus || selectedLead.stage,
+                    engagementStage: leadFormData.engagementStage ?? leadFormData.status,
+                    aidaStatus: leadFormData.aidaStatus ?? leadFormData.stage ?? selectedLead.aidaStatus,
                     // Explicitly include these fields to ensure they're saved
                     contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : (selectedLead.contacts || []),
                     followUps: Array.isArray(leadFormData.followUps) ? leadFormData.followUps : (selectedLead.followUps || []),
@@ -4655,7 +4652,7 @@ const Clients = React.memo(() => {
                             commentsCount: Array.isArray(leadDataToSend.comments) ? leadDataToSend.comments.length : 0,
                             followUpsCount: Array.isArray(leadDataToSend.followUps) ? leadDataToSend.followUps.length : 0,
                             sitesCount: sites.length,
-                            sitesSample: sites.slice(0, 3).map(s => ({ id: s.id, name: s.name, stage: s.stage, aidaStatus: s.aidaStatus })),
+                            sitesSample: sites.slice(0, 3).map(s => ({ id: s.id, name: s.name, engagementStage: s.engagementStage ?? s.stage, aidaStatus: s.aidaStatus })),
                             hasComments: leadDataToSend.comments !== undefined,
                             hasFollowUps: leadDataToSend.followUps !== undefined,
                             hasSites: leadDataToSend.sites !== undefined
@@ -4696,8 +4693,8 @@ const Clients = React.memo(() => {
                         // Parse JSON fields from database (they come as strings)
                         const parsedApiLead = {
                             ...savedLead,
-                            stage: savedLead.stage || updatedLead.stage || 'Awareness', // Ensure stage is preserved
-                            status: savedLead.status || updatedLead.status || 'active', // Ensure status is preserved
+                            engagementStage: savedLead.engagementStage ?? updatedLead.engagementStage ?? 'Potential',
+                            aidaStatus: savedLead.aidaStatus ?? updatedLead.aidaStatus ?? 'Awareness',
                             // CRITICAL: Preserve notes from what we just sent (leadDataToSend) or API response
                             // Always ensure notes is a string, never undefined
                             notes: (leadDataToSend.notes !== undefined && leadDataToSend.notes !== null) 
@@ -4792,11 +4789,9 @@ const Clients = React.memo(() => {
                                             };
                                             const parsedLead = {
                                                 ...freshLead,
-                                                // CRITICAL: Explicitly preserve status and stage from database
-                                                status: freshLead.status || updatedLead.status || 'Potential',
-                                                stage: freshLead.stage || updatedLead.stage || 'Awareness',
-                                                // CRITICAL: Map stage to aidaStatus for ClientDetailModal (uses aidaStatus in formData)
-                                                aidaStatus: freshLead.aidaStatus || freshLead.stage || updatedLead.aidaStatus || updatedLead.stage || 'Awareness',
+                                                // CRITICAL: Explicitly preserve engagementStage and aidaStatus from database
+                                                engagementStage: freshLead.engagementStage ?? updatedLead.engagementStage ?? 'Potential',
+                                                aidaStatus: freshLead.aidaStatus ?? updatedLead.aidaStatus ?? (freshLead.stage || updatedLead.stage || 'Awareness'),
                                                 // CRITICAL: Preserve notes from database - always ensure it's a string
                                                 notes: freshLead.notes !== undefined && freshLead.notes !== null 
                                                     ? String(freshLead.notes) 
@@ -4815,10 +4810,10 @@ const Clients = React.memo(() => {
                                             
                                             console.log('🔄 Refreshed lead after save:', {
                                                 id: parsedLead.id,
-                                                status: parsedLead.status,
-                                                stage: parsedLead.stage,
-                                                freshStatus: freshLead.status,
-                                                freshStage: freshLead.stage,
+                                                engagementStage: parsedLead.engagementStage,
+                                                aidaStatus: parsedLead.aidaStatus,
+                                                freshEngagementStage: freshLead.engagementStage,
+                                                freshAidaStatus: freshLead.aidaStatus,
                                                 notesLength: parsedLead.notes?.length || 0,
                                                 followUpsCount: parsedLead.followUps?.length || 0,
                                                 commentsCount: parsedLead.comments?.length || 0
@@ -4951,8 +4946,8 @@ const Clients = React.memo(() => {
                                 // CRITICAL: ALWAYS preserve user input - use savedLead only if it has content, otherwise use newLead
                                 name: (savedLead.name && savedLead.name.trim()) ? savedLead.name : (newLead.name || ''),
                                 industry: (savedLead.industry && savedLead.industry.trim()) ? savedLead.industry : (newLead.industry || 'Other'),
-                                status: savedLead.status || newLead.status || 'Potential',
-                                stage: savedLead.stage || newLead.stage || 'Awareness',
+                                engagementStage: savedLead.engagementStage ?? newLead.engagementStage ?? 'Potential',
+                                aidaStatus: savedLead.aidaStatus ?? newLead.aidaStatus ?? 'Awareness',
                                 // CRITICAL: Preserve notes, source, and all other user-entered fields
                                 notes: (savedLead.notes && savedLead.notes.trim()) ? savedLead.notes : (newLead.notes || ''),
                                 source: (savedLead.source && savedLead.source.trim()) ? savedLead.source : (newLead.source || 'Website'),
@@ -5443,10 +5438,10 @@ const Clients = React.memo(() => {
             }
             
             // Handle stage sorting (No Engagement < Awareness < Interest < Desire < Action)
-            if (leadSortField === 'stage') {
+            if (leadSortField === 'aidaStatus') {
                 const stageOrder = { 'No Engagement': 0, 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
-                aValue = stageOrder[aValue] || 0;
-                bValue = stageOrder[bValue] || 0;
+                aValue = stageOrder[aValue] ?? 0;
+                bValue = stageOrder[bValue] ?? 0;
             }
             
             // Handle Company Group sorting
@@ -5483,7 +5478,7 @@ const Clients = React.memo(() => {
             
                 // Additional safeguard: exclude records with status='Potential' (always a lead)
                 // This catches leads that might have been incorrectly saved with type='client'
-                if (client.status === 'Potential') {
+                if ((client.engagementStage ?? client.status) === 'Potential') {
                     return false;
                 }
             
@@ -5524,8 +5519,8 @@ const Clients = React.memo(() => {
             
             const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
             // Normalize status for comparison
-            const clientStatus = client.status ? (client.status.charAt(0).toUpperCase() + client.status.slice(1).toLowerCase()) : '';
-            const matchesStatus = filterStatus === 'All Status' || clientStatus === filterStatus;
+            const clientEngagementStage = client.engagementStage ? (client.engagementStage.charAt(0).toUpperCase() + client.engagementStage.slice(1).toLowerCase()) : '';
+            const matchesEngagementStage = filterEngagementStage === 'All Engagement Stages' || clientEngagementStage === filterEngagementStage;
             
             // Check if client matches selected services (if any are selected)
             const matchesServices = filterServices.length === 0 || 
@@ -5534,9 +5529,9 @@ const Clients = React.memo(() => {
             // Check if starred filter is applied
             const matchesStarred = !showStarredOnly || resolveStarredState(client);
             
-            return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
+            return matchesSearch && matchesIndustry && matchesEngagementStage && matchesServices && matchesStarred;
         });
-    }, [clients, searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly]);
+    }, [clients, searchTerm, filterIndustry, filterEngagementStage, filterServices, showStarredOnly]);
 
     // PERFORMANCE FIX: Memoize sorted clients
     const sortedClients = useMemo(() => {
@@ -5552,20 +5547,20 @@ const Clients = React.memo(() => {
             
             const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
             
-            // Status filter - normalize for comparison
-            const leadStatus = lead.status ? (lead.status.charAt(0).toUpperCase() + lead.status.slice(1).toLowerCase()) : '';
-            const matchesStatus = filterStatus === 'All Status' || leadStatus === filterStatus;
+            // Engagement Stage filter - normalize for comparison
+            const leadEngagementStage = lead.engagementStage ? (lead.engagementStage.charAt(0).toUpperCase() + lead.engagementStage.slice(1).toLowerCase()) : '';
+            const matchesEngagementStage = filterEngagementStage === 'All Engagement Stages' || leadEngagementStage === filterEngagementStage;
             
-            // Stage filter - normalize for comparison
-            const leadStage = lead.stage ? (lead.stage.charAt(0).toUpperCase() + lead.stage.slice(1).toLowerCase()) : '';
-            const matchesStage = filterStage === 'All Stages' || leadStage === filterStage;
+            // Aida Status filter - normalize for comparison
+            const leadAidaStatus = lead.aidaStatus ? (lead.aidaStatus.charAt(0).toUpperCase() + lead.aidaStatus.slice(1).toLowerCase()) : '';
+            const matchesAidaStatus = filterAidaStatus === 'All Aida Status' || leadAidaStatus === filterAidaStatus;
             
             // Check if starred filter is applied
             const matchesStarred = !showStarredOnly || resolveStarredState(lead);
             
-            return matchesSearch && matchesIndustry && matchesStatus && matchesStage && matchesStarred;
+            return matchesSearch && matchesIndustry && matchesEngagementStage && matchesAidaStatus && matchesStarred;
         });
-    }, [leads, searchTerm, filterIndustry, filterStatus, filterStage, showStarredOnly]);
+    }, [leads, searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, showStarredOnly]);
 
     // PERFORMANCE FIX: Memoize sorted leads
     const sortedLeads = useMemo(() => {
@@ -6039,30 +6034,29 @@ const Clients = React.memo(() => {
         return Array.from(serviceSet).sort();
     }, [clients, leads]);
 
-    // Extract all unique status values from clients and leads dynamically
-    const allStatuses = useMemo(() => {
-        const statusSet = new Set();
-        [...clients, ...leads].forEach(item => {
-            if (item.status && typeof item.status === 'string' && item.status.trim()) {
-                // Normalize status: capitalize first letter, rest lowercase
-                const normalized = item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase();
-                statusSet.add(normalized);
-            }
-        });
-        return Array.from(statusSet).sort();
-    }, [clients, leads]);
-
-    // Extract all unique stage values from leads dynamically
-    const allStages = useMemo(() => {
+    // Extract all unique engagement stage values from clients and leads dynamically
+    const allEngagementStages = useMemo(() => {
         const stageSet = new Set();
-        leads.forEach(lead => {
-            if (lead.stage && typeof lead.stage === 'string' && lead.stage.trim()) {
-                // Normalize stage: capitalize first letter, rest lowercase
-                const normalized = lead.stage.charAt(0).toUpperCase() + lead.stage.slice(1).toLowerCase();
+        [...clients, ...leads].forEach(item => {
+            const val = item.engagementStage ?? item.status;
+            if (val && typeof val === 'string' && val.trim()) {
+                const normalized = val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
                 stageSet.add(normalized);
             }
         });
-        // Ensure all PIPELINE_STAGES are included even if not in data yet
+        return Array.from(stageSet).sort();
+    }, [clients, leads]);
+
+    // Extract all unique Aida Status values from leads dynamically
+    const allAidaStatuses = useMemo(() => {
+        const stageSet = new Set();
+        leads.forEach(lead => {
+            const val = lead.aidaStatus ?? lead.stage;
+            if (val && typeof val === 'string' && val.trim()) {
+                const normalized = val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
+                stageSet.add(normalized);
+            }
+        });
         PIPELINE_STAGES.forEach(stage => stageSet.add(stage));
         return Array.from(stageSet).sort();
     }, [leads]);
@@ -6095,7 +6089,7 @@ const Clients = React.memo(() => {
         setClientsPage(1);
         setLeadsPage(1);
         setGroupsPage(1);
-    }, [searchTerm, filterIndustry, filterStatus, filterStage, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
+    }, [searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
@@ -6474,21 +6468,21 @@ const Clients = React.memo(() => {
         }
     }, []);
 
-    const handleUpdateLeadStatus = useCallback((leadId, status) => {
-        const normalized = status ? (status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()) : 'Potential';
-        updateLeadField(leadId, { status: normalized }, l => ({ ...l, status: normalized }));
+    const handleUpdateLeadEngagementStage = useCallback((leadId, engagementStage) => {
+        const normalized = engagementStage ? (engagementStage.charAt(0).toUpperCase() + engagementStage.slice(1).toLowerCase()) : 'Potential';
+        updateLeadField(leadId, { engagementStage: normalized }, l => ({ ...l, engagementStage: normalized }));
     }, [updateLeadField]);
 
-    const handleUpdateLeadStage = useCallback((leadId, stage) => {
-        const normalized = stage ? (stage.charAt(0).toUpperCase() + stage.slice(1).toLowerCase()) : 'Awareness';
-        updateLeadField(leadId, { stage: normalized }, l => ({ ...l, stage: normalized }));
+    const handleUpdateLeadAidaStatus = useCallback((leadId, aidaStatus) => {
+        const normalized = aidaStatus ? (aidaStatus.charAt(0).toUpperCase() + aidaStatus.slice(1).toLowerCase()) : 'Awareness';
+        updateLeadField(leadId, { aidaStatus: normalized }, l => ({ ...l, aidaStatus: normalized }));
     }, [updateLeadField]);
 
-    const handleUpdateSiteStage = useCallback((lead, site, siteIdx, newStage) => {
+    const handleUpdateSiteEngagementStage = useCallback((lead, site, siteIdx, newStage) => {
         const normalized = newStage ? (newStage.charAt(0).toUpperCase() + newStage.slice(1).toLowerCase()) : 'Potential';
         const currentLead = leadsRef.current?.find(l => l.id === lead.id) || lead;
         const sites = Array.isArray(currentLead.sites) ? currentLead.sites : (Array.isArray(currentLead.clientSites) ? currentLead.clientSites : []);
-        const updatedSites = sites.map((s, i) => i === siteIdx ? { ...s, stage: normalized } : s);
+        const updatedSites = sites.map((s, i) => i === siteIdx ? { ...s, engagementStage: normalized } : s);
         updateLeadField(lead.id, { sites: updatedSites }, l => ({ ...l, sites: updatedSites }));
     }, [updateLeadField]);
 
@@ -6797,7 +6791,7 @@ const Clients = React.memo(() => {
                     const mapped = client.opportunities.map(opp => {
                         // Normalize stage to match pipeline stages exactly
                         let normalizedStage = 'Awareness'; // Default
-                        const originalStage = opp.stage;
+                        const originalStage = opp.aidaStatus ?? opp.stage;
                         
                         if (originalStage && typeof originalStage === 'string') {
                             // Convert to title case and match to pipeline stages
@@ -6820,7 +6814,7 @@ const Clients = React.memo(() => {
                             clientName: client.name,
                             clientId: client.id,
                             type: 'opportunity',
-                            stage: normalizedStage, // Use normalized stage
+                            aidaStatus: normalizedStage,
                             status: opp.status || 'Active', // Default to Active if no status
                             title: opp.title || opp.name || 'Untitled Opportunity',
                             value: Number(opp.value) || 0
@@ -6835,38 +6829,23 @@ const Clients = React.memo(() => {
         // PERFORMANCE FIX: Memoize active leads computation
         const activeLeads = useMemo(() => {
             return leads.map(lead => {
-                // Normalize lead stage to match AIDA pipeline stages (same as Pipeline.jsx)
-                let mappedStage = lead.stage || 'Awareness';
-                const originalStage = mappedStage;
-                
-                // Normalize stage value - trim whitespace and handle variations
-                if (mappedStage) {
-                    mappedStage = mappedStage.trim();
-                }
-                
-                // Convert common stage values to AIDA stages
-                if (mappedStage === 'prospect' || mappedStage === 'new') {
-                    mappedStage = 'Awareness';
-                } else if (!['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
-                    // If stage doesn't match AIDA stages, default to Awareness
-                    mappedStage = 'Awareness';
-                }
-                
-                if (originalStage !== mappedStage) {
-                }
-                
-                return { ...lead, stage: mappedStage };
+                let mappedAida = lead.aidaStatus ?? lead.stage ?? 'Awareness';
+                const original = mappedAida;
+                if (mappedAida) mappedAida = mappedAida.trim();
+                if (mappedAida === 'prospect' || mappedAida === 'new') mappedAida = 'Awareness';
+                else if (!['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'].includes(mappedAida)) mappedAida = 'Awareness';
+                return { ...lead, aidaStatus: mappedAida };
             }).filter(lead => {
-                // Filter out inactive leads
-                return lead.status !== 'Inactive' && lead.status !== 'Disinterested';
+                const eng = lead.engagementStage ?? lead.status;
+                return eng !== 'Inactive' && eng !== 'Disinterested';
             });
         }, [leads]);
         
         // PERFORMANCE FIX: Memoize active opportunities computation
         const activeOpportunities = useMemo(() => {
             return clientOpportunities.filter(opp => {
-                const status = opp.status || 'Active'; // Default to 'Active' if no status
-                return status !== 'Inactive' && status !== 'Closed Lost' && status !== 'Closed Won';
+                const eng = opp.engagementStage ?? opp.status ?? 'Active';
+                return eng !== 'Inactive' && eng !== 'Closed Lost' && eng !== 'Closed Won';
             });
         }, [clientOpportunities]);
 
@@ -6896,8 +6875,8 @@ const Clients = React.memo(() => {
                                 <tr>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Name</th>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Type</th>
-                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
-                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Engagement Stage</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Aida Status</th>
                                 </tr>
                             </thead>
                             <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -6940,10 +6919,10 @@ const Clients = React.memo(() => {
                                                         </span>
                                             </td>
                                             <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                                {item.stage || 'Awareness'}
+                                                {(item.aidaStatus ?? item.stage) || 'Awareness'}
                                             </td>
                                             <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                                {item.status || 'Active'}
+                                                {(item.engagementStage ?? item.status) || 'Active'}
                                             </td>
                                         </tr>
                                     ))
@@ -7088,11 +7067,11 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('status')}
+                                onClick={() => handleSort('engagementStage')}
                             >
                                 <div className="flex items-center">
-                                    Status
-                                    {sortField === 'status' && (
+                                    Engagement Stage
+                                    {sortField === 'engagementStage' && (
                                         <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
@@ -7184,9 +7163,9 @@ const Clients = React.memo(() => {
                                         </td>
                                         <td className="px-6 py-2 whitespace-nowrap">
                                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                                (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                                (client.engagementStage ?? client.status) === 'Active' || (client.engagementStage ?? client.status) === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                                             }`}>
-                                                {client.status === 'active' ? 'Active' : client.status}
+                                                {(client.engagementStage ?? client.status) === 'active' ? 'Active' : (client.engagementStage ?? client.status)}
                                             </span>
                                         </td>
                                     </tr>,
@@ -8222,7 +8201,7 @@ const Clients = React.memo(() => {
                                                                                 const name = typeof site === 'string'
                                                                                     ? site
                                                                                     : (site?.name || site?.location || site?.address || '');
-                                                                                const stage = site && typeof site === 'object' ? (site.stage || '') : '';
+                                                                                const stage = site && typeof site === 'object' ? (site.engagementStage ?? (site.stage || '')) : '';
                                                                                 const aida = site && typeof site === 'object' ? (site.aidaStatus || '') : '';
                                                                                 const label = [stage, aida].filter(Boolean).join(' · ');
                                                                                 return label ? `${name} (${label})` : name;
@@ -8518,7 +8497,7 @@ const Clients = React.memo(() => {
                 const haystack = [
                     item.name,
                     item.organization,
-                    item.stage,
+                    item.aidaStatus ?? item.stage,
                     item.owner
                 ]
                     .filter(Boolean)
@@ -8534,7 +8513,9 @@ const Clients = React.memo(() => {
             }
 
             return [...filteredItems].sort((a, b) => {
-                const stageComparison = (stageOrder[a.stage] ?? 0) - (stageOrder[b.stage] ?? 0);
+                const aStage = a.aidaStatus ?? a.stage;
+                const bStage = b.aidaStatus ?? b.stage;
+                const stageComparison = (stageOrder[aStage] ?? 0) - (stageOrder[bStage] ?? 0);
                 if (stageComparison !== 0) {
                     return stageComparison;
                 }
@@ -8554,7 +8535,7 @@ const Clients = React.memo(() => {
             });
 
             sortedItems.forEach((item) => {
-                const stage = stages.includes(item.stage) ? item.stage : stages[0];
+                const stage = stages.includes(item.aidaStatus ?? item.stage) ? (item.aidaStatus ?? item.stage) : stages[0];
                 groups[stage].push(item);
             });
 
@@ -8848,22 +8829,22 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('status')}
+                                onClick={() => handleLeadSort('engagementStage')}
                             >
                                 <div className="flex items-center">
-                                    Stage
-                                    {leadSortField === 'status' && (
+                                    Engagement Stage
+                                    {leadSortField === 'engagementStage' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('stage')}
+                                onClick={() => handleLeadSort('aidaStatus')}
                             >
                                 <div className="flex items-center">
-                                    AIDA Status
-                                    {leadSortField === 'stage' && (
+                                    Aida Status
+                                    {leadSortField === 'aidaStatus' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
@@ -8938,14 +8919,14 @@ const Clients = React.memo(() => {
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                         <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                             <select
-                                                value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.status || 'potential').toLowerCase())) || 'Potential'}
-                                                onChange={e => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                                value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
+                                                onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
                                                 className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                    (lead.status || '').toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                    (lead.status || '').toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                    (lead.status || '').toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
-                                                    (lead.status || '').toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
-                                                    (lead.status || '').toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
                                                     (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
                                                 }`}
                                             >
@@ -8961,13 +8942,13 @@ const Clients = React.memo(() => {
                                         </td>
                                         <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                             <select
-                                                value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.stage || 'awareness').toLowerCase())) || 'Awareness'}
-                                                onChange={e => handleUpdateLeadStage(lead.id, e.target.value)}
+                                                value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.aidaStatus ?? (lead.stage || 'awareness')).toLowerCase())) || 'Awareness'}
+                                                onChange={e => handleUpdateLeadAidaStatus(lead.id, e.target.value)}
                                                 className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                    (lead.stage || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                                    (lead.stage || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                                    (lead.stage || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                    (lead.stage || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
                                                     (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                                 }`}
                                             >
@@ -9032,14 +9013,14 @@ const Clients = React.memo(() => {
                                             </td>
                                             <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                                 <select
-                                                    value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.stage || 'potential').toLowerCase())) || 'Potential'}
-                                                    onChange={e => handleUpdateSiteStage(lead, site, siteIdx, e.target.value)}
+                                                    value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
+                                                    onChange={e => handleUpdateSiteEngagementStage(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                        (site.stage || '').toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                        (site.stage || '').toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                        (site.stage || '').toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
-                                                        (site.stage || '').toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
-                                                        (site.stage || '').toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
                                                         (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
                                                     }`}
                                                 >
@@ -9629,18 +9610,18 @@ className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                         </div>
                         <div>
                             <select
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value)}
+                                value={filterEngagementStage}
+                                onChange={(e) => setFilterEngagementStage(e.target.value)}
 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                                         isDark 
                                             ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
                                             : 'bg-gray-100 border-gray-200 text-gray-900 focus:bg-white'
                                 }`}
                             >
-                                <option value="All Status">All Status</option>
-                                {allStatuses.map((status) => (
-                                    <option key={status} value={status}>
-                                        {status}
+                                <option value="All Engagement Stages">All Engagement Stages</option>
+                                {allEngagementStages.map((stage) => (
+                                    <option key={stage} value={stage}>
+                                        {stage}
                                     </option>
                                 ))}
                             </select>
@@ -9648,16 +9629,16 @@ className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                         {viewMode === 'leads' && (
                             <div>
                                 <select
-                                    value={filterStage}
-                                    onChange={(e) => setFilterStage(e.target.value)}
+                                    value={filterAidaStatus}
+                                    onChange={(e) => setFilterAidaStatus(e.target.value)}
                                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                                         isDark 
                                             ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
                                             : 'bg-gray-100 border-gray-300 text-gray-900 focus:bg-white'
                                     }`}
                                 >
-                                    <option value="All Stages">All Stages</option>
-                                    {allStages.map((stage) => (
+                                    <option value="All Aida Status">All Aida Status</option>
+                                    {allAidaStatuses.map((stage) => (
                                         <option key={stage} value={stage}>
                                             {stage}
                                         </option>
@@ -9720,7 +9701,7 @@ className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode === 'leads' && filterStage !== 'All Stages') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterEngagementStage !== 'All Engagement Stages' || (viewMode === 'leads' && filterAidaStatus !== 'All Aida Status') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
                         <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">

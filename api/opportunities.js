@@ -136,8 +136,8 @@ async function handler(req, res) {
       const opportunityData = {
         title: body.title,
         clientId: body.clientId,
-        stage: body.stage || 'Awareness', // Use AIDA pipeline stage instead of 'prospect'
-        status: body.status || 'Potential',
+        aidaStatus: body.aidaStatus ?? body.stage || 'Awareness',
+        engagementStage: body.engagementStage ?? body.status || 'Potential',
         value: parseFloat(body.value) || 0,
         ownerId: req.user?.sub || null
       }
@@ -205,8 +205,8 @@ async function handler(req, res) {
         const body = req.body || {}
         const updateData = {
           title: body.title,
-          stage: body.stage,
-          status: body.status,
+          aidaStatus: body.aidaStatus ?? body.stage,
+          engagementStage: body.engagementStage ?? body.status,
           value: body.value ? parseFloat(body.value) : undefined,
           ownerId: body.ownerId
         }

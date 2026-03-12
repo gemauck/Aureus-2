@@ -17,22 +17,24 @@ function processClientData(clientsArray) {
     
     return clientsArray.map(c => {
         const isLead = c.type === 'lead';
-        let status = c.status;
+        let engagementStage = c.engagementStage ?? c.status;
         
         // Convert status based on type
         if (isLead) {
-            status = c.status || 'Potential';
+            engagementStage = c.engagementStage ?? (c.status || 'Potential');
         } else {
-            if (c.status === 'active') status = 'Active';
-            else if (c.status === 'inactive') status = 'Inactive';
-            else status = c.status || 'Inactive';
+            if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
+            else if ((c.engagementStage ?? c.status) === 'inactive') engagementStage = 'Inactive';
+            else engagementStage = c.engagementStage ?? (c.status || 'Inactive');
         }
         
         return {
             id: c.id,
             name: c.name,
-            status: status,
-            stage: c.stage || 'Awareness',
+            status: engagementStage,
+            engagementStage,
+            stage: c.aidaStatus ?? (c.stage || 'Awareness'),
+            aidaStatus: c.aidaStatus ?? (c.stage || 'Awareness'),
             industry: c.industry || 'Other',
             type: c.type || 'client',
             revenue: c.revenue || 0,
@@ -79,7 +81,7 @@ const Clients = React.memo(() => {
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
-    const [filterStatus, setFilterStatus] = useState('All Status');
+    const [filterEngagementStage, setFilterEngagementStage] = useState('All Engagement Stages');
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
     const { isDark } = window.useTheme();
@@ -251,7 +253,9 @@ const Clients = React.memo(() => {
                     ...selectedLead, 
                     ...leadFormData,
                     status: leadFormData.status,
-                    stage: leadFormData.stage
+                    stage: leadFormData.stage,
+                    engagementStage: leadFormData.status,
+                    aidaStatus: leadFormData.stage
                 };
                 
                 // OPTIMISTIC UPDATE
@@ -415,7 +419,7 @@ const Clients = React.memo(() => {
             );
         
         const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-        const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
+        const matchesStatus = filterEngagementStage === 'All Engagement Stages' || client.engagementStage === filterEngagementStage || client.status === filterEngagementStage;
         
         return matchesSearch && matchesIndustry && matchesStatus;
     });
@@ -582,7 +586,7 @@ const Clients = React.memo(() => {
                 const token = window.storage?.getToken?.();
                 if (token && window.DatabaseAPI) {
                     try {
-                        await window.DatabaseAPI.updateLead(draggedItem.id, { stage: targetStage });
+                        await window.DatabaseAPI.updateLead(draggedItem.id, { aidaStatus: targetStage });
                     } catch (err) {
                         console.error('❌ Failed to update lead stage:', err);
                     }
@@ -605,7 +609,7 @@ const Clients = React.memo(() => {
                 const token = window.storage?.getToken?.();
                 if (token && window.DatabaseAPI && draggedItem.id) {
                     try {
-                        await window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: targetStage });
+                        await window.DatabaseAPI.updateOpportunity(draggedItem.id, { aidaStatus: targetStage });
                     } catch (err) {
                         console.error('❌ Failed to update opportunity stage:', err);
                     }
@@ -823,11 +827,11 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('status')}
+                                onClick={() => handleSort('engagementStage')}
                             >
                                 <div className="flex items-center">
-                                    Status
-                                    {sortField === 'status' && (
+                                    Engagement Stage
+                                    {sortField === 'engagementStage' && (
                                         <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
@@ -1197,11 +1201,11 @@ const Clients = React.memo(() => {
                         </div>
                         <div>
                             <select
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value)}
+                                value={filterEngagementStage}
+                                onChange={(e) => setFilterEngagementStage(e.target.value)}
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
                             >
-                                <option value="All Status">All Status</option>
+                                <option value="All Engagement Stages">All Engagement Stages</option>
                                 <option value="Potential">Potential</option>
                                 <option value="Active">Active</option>
                                 <option value="Disinterested">Disinterested</option>
@@ -1209,7 +1213,7 @@ const Clients = React.memo(() => {
                         </div>
                     </div>
                     
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterEngagementStage !== 'All Engagement Stages') && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -1223,7 +1227,7 @@ const Clients = React.memo(() => {
                                     onClick={() => {
                                         setSearchTerm('');
                                         setFilterIndustry('All Industries');
-                                        setFilterStatus('All Status');
+                                        setFilterEngagementStage('All Engagement Stages');
                                     }}
                                     className="inline-flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
                                 >

@@ -133,7 +133,7 @@ export function parseClientJsonFields(client) {
       }
     }
     
-    // Phase 6: Sites - Use normalized table first, fallback to JSON (defaults for stage/aidaStatus so they persist after refresh)
+    // Phase 6: Sites - Use normalized table first, fallback to JSON (defaults for engagementStage/aidaStatus so they persist after refresh)
     if (client.clientSites && Array.isArray(client.clientSites) && client.clientSites.length > 0) {
       parsed.sites = client.clientSites.map(site => ({
         id: site.id,
@@ -144,7 +144,7 @@ export function parseClientJsonFields(client) {
         contactEmail: site.contactEmail || '',
         notes: site.notes || '',
         siteLead: site.siteLead ?? '',
-        stage: (site.stage != null && String(site.stage).trim() !== '') ? String(site.stage) : 'Potential',
+        engagementStage: (site.engagementStage != null && String(site.engagementStage).trim() !== '') ? String(site.engagementStage) : 'Potential',
         aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus) : 'Awareness',
         siteType: site.siteType === 'client' ? 'client' : 'lead'
       }))

@@ -145,8 +145,8 @@ model Client {
   name            String
   type            String
   industry        String   @default("Other")
-  status          String   @default("Potential")
-  stage           String   @default("Awareness")
+  engagementStage String   @default("Potential")
+  aidaStatus      String   @default("Awareness")
   revenue         Float    @default(0)
   value           Float    @default(0)
   probability     Int      @default(0)
@@ -210,7 +210,7 @@ model Client {
 
   @@index([createdAt])
   @@index([type])
-  @@index([status])
+  @@index([engagementStage])
   @@index([ownerId])
   @@index([externalAgentId])
 }
@@ -314,10 +314,10 @@ model ClientSite {
   contactPhone  String?  @default("")
   contactEmail  String?  @default("")
   notes         String   @default("")
-  // Per-site lead tracking (for leads: each site can have its own stage/AIDA)
-  siteLead      String?  @default("")
-  stage         String?  @default("")
-  aidaStatus    String?  @default("")
+  // Per-site lead tracking (for leads: each site can have its own engagementStage/AIDA)
+  siteLead         String?  @default("")
+  engagementStage  String?  @default("Potential")
+  aidaStatus       String?  @default("")
   // Site type: 'client' = do not show in Pipeline; 'lead' = show in Pipeline (clients can have sites that are still leads)
   siteType      String?  @default("lead")
   createdAt     DateTime @default(now())
@@ -608,23 +608,23 @@ model ProjectActivityLog {
 }
 
 model Opportunity {
-  id        String               @id @default(cuid())
-  clientId  String
-  title     String
-  stage     String               @default("Awareness")
-  value     Float                @default(0)
-  ownerId   String?
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
-  proposals String               @default("[]")
-  status    String               @default("Potential")
-  client    Client               @relation(fields: [clientId], references: [id])
-  starredBy StarredOpportunity[]
+  id              String   @id @default(cuid())
+  clientId        String
+  title           String
+  aidaStatus      String   @default("Awareness")
+  value           Float    @default(0)
+  ownerId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  proposals       String   @default("[]")
+  engagementStage String   @default("Potential")
+  client          Client   @relation(fields: [clientId], references: [id])
+  starredBy       StarredOpportunity[]
 
   @@index([clientId])
   @@index([createdAt])
   @@index([ownerId])
-  @@index([status])
+  @@index([engagementStage])
 }
 
 model SalesOrder {

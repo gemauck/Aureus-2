@@ -80,9 +80,11 @@ async function loadProjectWithRelations(projectId) {
         hasMonthlyDataReviewProcess: true,
         ownerId: true,
         createdAt: true,
-        updatedAt: true
+        updatedAt: true,
+        monthlyDataReviewChecklist: true,
+        monthlyDataReviewSections: true
         // Exclude: tasksList, documentSections, weeklyFMSReviewSections, monthlyFMSReviewSections,
-        // monthlyDataReviewChecklist, monthlyDataReviewSections, monthlyProgress (loaded from tables)
+        // monthlyProgress (loaded from tables or above)
       }
     });
   } catch (findErr) {
@@ -352,11 +354,13 @@ async function handler(req, res) {
           const hasMonthlyFMS = onlyFields.includes('monthlyFMSReviewSections');
           const hasWeeklyFMS = onlyFields.includes('weeklyFMSReviewSections');
           const hasDocumentSections = onlyFields.includes('documentSections');
+          const hasMonthlyDataReviewSections = onlyFields.includes('monthlyDataReviewSections');
           
           // If only requesting one of these specific fields, use optimized endpoint
-          if ((hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections) ||
-              (hasWeeklyFMS && !hasMonthlyFMS && !hasDocumentSections) ||
-              (hasDocumentSections && !hasMonthlyFMS && !hasWeeklyFMS)) {
+          if ((hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections) ||
+              (hasWeeklyFMS && !hasMonthlyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections) ||
+              (hasDocumentSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasMonthlyDataReviewSections) ||
+              (hasMonthlyDataReviewSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections)) {
             
             // Load only basic project info + the requested field
             const basicProject = await prisma.project.findUnique({
@@ -366,7 +370,8 @@ async function handler(req, res) {
                 name: true,
                 monthlyFMSReviewSections: hasMonthlyFMS,
                 weeklyFMSReviewSections: hasWeeklyFMS,
-                documentSections: hasDocumentSections
+                documentSections: hasDocumentSections,
+                monthlyDataReviewSections: hasMonthlyDataReviewSections
               }
             });
             
@@ -430,6 +435,20 @@ async function handler(req, res) {
               } catch (e) {
                 console.error('❌ Error loading documentSections:', e);
                 result.documentSections = {};
+              }
+            }
+            
+            if (hasMonthlyDataReviewSections) {
+              try {
+                const raw = basicProject.monthlyDataReviewSections;
+                if (raw != null && raw !== '') {
+                  result.monthlyDataReviewSections = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                } else {
+                  result.monthlyDataReviewSections = {};
+                }
+              } catch (e) {
+                console.error('❌ Error parsing monthlyDataReviewSections:', e);
+                result.monthlyDataReviewSections = {};
               }
             }
             

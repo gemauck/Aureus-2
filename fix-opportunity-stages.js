@@ -13,12 +13,12 @@ async function fixOpportunityStages() {
     // Update opportunities with "prospect" or "new" stages to "Awareness"
     const prospectUpdate = await prisma.opportunity.updateMany({
       where: {
-        stage: {
+        aidaStatus: {
           in: ['prospect', 'new', '']
         }
       },
       data: {
-        stage: 'Awareness'
+        aidaStatus: 'Awareness'
       }
     });
     console.log(`✅ Updated ${prospectUpdate.count} opportunities from "prospect"/"new" to "Awareness"`);
@@ -26,38 +26,38 @@ async function fixOpportunityStages() {
     // Update opportunities with null stages
     const nullUpdate = await prisma.opportunity.updateMany({
       where: {
-        stage: null
+        aidaStatus: null
       },
       data: {
-        stage: 'Awareness'
+        aidaStatus: 'Awareness'
       }
     });
-    console.log(`✅ Updated ${nullUpdate.count} opportunities with null stage to "Awareness"`);
+    console.log(`✅ Updated ${nullUpdate.count} opportunities with null aidaStatus to "Awareness"`);
     
     // Update opportunities with invalid stages
     const invalidUpdate = await prisma.opportunity.updateMany({
       where: {
-        stage: {
+        aidaStatus: {
           notIn: ['Awareness', 'Interest', 'Desire', 'Action']
         }
       },
       data: {
-        stage: 'Awareness'
+        aidaStatus: 'Awareness'
       }
     });
-    console.log(`✅ Updated ${invalidUpdate.count} opportunities with invalid stages to "Awareness"`);
+    console.log(`✅ Updated ${invalidUpdate.count} opportunities with invalid aidaStatus to "Awareness"`);
     
     // Show current stage distribution
     const stageCounts = await prisma.opportunity.groupBy({
-      by: ['stage'],
+      by: ['aidaStatus'],
       _count: {
         id: true
       }
     });
     
-    console.log('\n📊 Current opportunity stage distribution:');
-    stageCounts.forEach(({ stage, _count }) => {
-      console.log(`   ${stage}: ${_count.id} opportunities`);
+    console.log('\n📊 Current opportunity aidaStatus distribution:');
+    stageCounts.forEach(({ aidaStatus, _count }) => {
+      console.log(`   ${aidaStatus}: ${_count.id} opportunities`);
     });
     
     console.log('\n✅ Opportunity stages fixed successfully!');

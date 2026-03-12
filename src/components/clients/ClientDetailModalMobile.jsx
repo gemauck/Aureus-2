@@ -7,6 +7,7 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
         name: '',
         industry: '',
         status: 'Active',
+        engagementStage: 'Active',
         address: '',
         website: '',
         notes: '',
@@ -35,7 +36,7 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
     const [showAddOpportunity, setShowAddOpportunity] = useState(false);
     const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', role: '', department: '' });
     const [newSite, setNewSite] = useState({ name: '', address: '', gpsCoordinates: '', notes: '' });
-    const [newOpportunity, setNewOpportunity] = useState({ name: '', value: '', stage: 'Awareness', expectedCloseDate: '', notes: '' });
+    const [newOpportunity, setNewOpportunity] = useState({ name: '', value: '', aidaStatus: 'Awareness', expectedCloseDate: '', notes: '' });
     
     // Validation state
     const [errors, setErrors] = useState({});
@@ -162,14 +163,16 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
             ...newOpportunity,
             id: Date.now(),
             value: parseFloat(newOpportunity.value) || 0,
-            clientId: formData.id
+            clientId: formData.id,
+            engagementStage: newOpportunity.engagementStage ?? 'Potential',
+            aidaStatus: newOpportunity.aidaStatus ?? 'Awareness'
         };
         const updatedFormData = {
             ...formData,
             opportunities: [...formData.opportunities, opportunity]
         };
         setFormData(updatedFormData);
-        setNewOpportunity({ name: '', value: '', stage: 'Awareness', expectedCloseDate: '', notes: '' });
+        setNewOpportunity({ name: '', value: '', aidaStatus: 'Awareness', expectedCloseDate: '', notes: '' });
         setShowAddOpportunity(false);
         onSave(updatedFormData);
     };
@@ -335,11 +338,11 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                            Status
+                                            Engagement Stage
                                         </label>
                                         <select
-                                            value={formData.status}
-                                            onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                            value={formData.engagementStage ?? formData.status}
+                                            onChange={(e) => setFormData({...formData, engagementStage: e.target.value})}
                                             className="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                                         >
                                             <option value="Active">Active</option>
@@ -730,8 +733,8 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                                                 Stage
                                             </label>
                                             <select
-                                                value={newOpportunity.stage}
-                                                onChange={(e) => setNewOpportunity({...newOpportunity, stage: e.target.value})}
+                                                value={newOpportunity.aidaStatus}
+                                                onChange={(e) => setNewOpportunity({...newOpportunity, aidaStatus: e.target.value})}
                                                 className="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                             >
                                                 <option value="Awareness">Awareness</option>
@@ -793,7 +796,7 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                                                 <h4 className="font-medium text-gray-900 dark:text-gray-100">{opportunity.title || opportunity.name}</h4>
                                                 <div className="flex items-center space-x-4 mt-2">
                                                     <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full">
-                                                        {opportunity.stage}
+                                                        {opportunity.aidaStatus ?? opportunity.stage}
                                                     </span>
                                                     {opportunity.value > 0 && (
                                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">

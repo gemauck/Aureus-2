@@ -33,10 +33,10 @@ async function handler(req, res) {
         let clientBasic
         try {
           const rawResult = await prisma.$queryRaw`
-            SELECT id, name, type, industry, status, stage, revenue, value, probability, 
-                   "lastContact", address, website, notes, contacts, "followUps", 
-                   "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
-                   proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
+            SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
+                   "lastContact", address, website, notes, contacts, "followUps",
+                   "projectIds", comments, sites, contracts, "activityLog", "billingTerms",
+                   proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt",
                    thumbnail, "rssSubscribed", kyc, "kycJsonb"
             FROM "Client"
             WHERE id = ${id}
@@ -53,8 +53,8 @@ async function handler(req, res) {
                 name: true,
                 type: true,
                 industry: true,
-                status: true,
-                stage: true,
+                engagementStage: true,
+                aidaStatus: true,
                 revenue: true,
                 value: true,
                 probability: true,
@@ -120,10 +120,10 @@ async function handler(req, res) {
           `
           normalizedComments = commentsResult || []
           
-          // Phase 6: Fetch sites from normalized table (include siteLead, stage, aidaStatus, siteType for per-site lead tracking)
+          // Phase 6: Fetch sites from normalized table (include siteLead, engagementStage, aidaStatus, siteType for per-site lead tracking)
           const sitesResult = await prisma.$queryRaw`
             SELECT id, "clientId", name, address, "contactPerson", "contactPhone", "contactEmail", notes,
-                   "siteLead", "stage", "aidaStatus", "siteType", "createdAt", "updatedAt"
+                   "siteLead", "engagementStage", "aidaStatus", "siteType", "createdAt", "updatedAt"
             FROM "ClientSite"
             WHERE "clientId" = ${id}
             ORDER BY "createdAt" ASC
@@ -210,7 +210,7 @@ async function handler(req, res) {
           contactEmail: s.contactEmail,
           notes: s.notes,
           siteLead: s.siteLead ?? '',
-          stage: s.stage ?? '',
+          engagementStage: s.engagementStage ?? 'Potential',
           aidaStatus: s.aidaStatus ?? '',
           siteType: s.siteType ?? 'lead',
           createdAt: s.createdAt
@@ -436,7 +436,7 @@ async function handler(req, res) {
         const updateData = {
           ...(body.name !== undefined && { name: body.name }),
           ...(body.industry !== undefined && { industry: body.industry }),
-          ...(body.status !== undefined && { status: body.status }),
+          ...(body.engagementStage !== undefined && { engagementStage: body.engagementStage }),
           ...(body.revenue !== undefined && { revenue: body.revenue }),
           ...(body.value !== undefined && { value: body.value }),
           ...(body.probability !== undefined && { probability: body.probability }),
@@ -726,7 +726,7 @@ async function handler(req, res) {
                 contactEmail: site.contactEmail || '',
                 notes: site.notes || '',
                 siteLead: site.siteLead ?? '',
-                stage: site.stage ?? '',
+                engagementStage: site.engagementStage ?? 'Potential',
                 aidaStatus: site.aidaStatus ?? '',
                 siteType: site.siteType ?? 'lead'
               }

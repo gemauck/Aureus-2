@@ -75,9 +75,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
             services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
-            stage: client.stage || (isLead ? 'Awareness' : undefined),
-            // CRITICAL: Map stage to aidaStatus for leads - database uses 'stage' but formData uses 'aidaStatus'
-            aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
+            engagementStage: client.engagementStage ?? client.status ?? (isLead ? 'Potential' : undefined),
+            aidaStatus: client.aidaStatus ?? client.stage ?? (isLead ? 'Awareness' : undefined),
             externalAgentId: client.externalAgentId || null,
             externalAgent: client.externalAgent || null,
             billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
@@ -100,8 +99,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             name: '',
             type: entityType, // Use entityType ('client' or 'lead')
             industry: '',
-            status: 'active',
-            stage: 'Awareness',
+            engagementStage: 'Potential',
             aidaStatus: 'Awareness',
             revenue: 0,
             value: 0,
@@ -199,7 +197,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
             services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
-            stage: client.stage || (isLead ? 'Awareness' : undefined),
+            engagementStage: client.engagementStage ?? client.status ?? (isLead ? 'Potential' : undefined),
             aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
             billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
                 paymentTerms: 'Net 30',
@@ -221,8 +219,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             name: '',
             type: entityType,
             industry: '',
-            status: 'active',
-            stage: 'Awareness',
+            engagementStage: 'Potential',
             aidaStatus: 'Awareness',
             revenue: 0,
             value: 0,
@@ -909,7 +906,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     contracts: typeof clientToUse.contracts === 'string' ? JSON.parse(clientToUse.contracts || '[]') : (clientToUse.contracts || []),
                     activityLog: typeof clientToUse.activityLog === 'string' ? JSON.parse(clientToUse.activityLog || '[]') : (clientToUse.activityLog || []),
                     services: typeof clientToUse.services === 'string' ? JSON.parse(clientToUse.services || '[]') : (clientToUse.services || []),
-                    // CRITICAL: Map stage to aidaStatus for leads - database uses 'stage' but formData uses 'aidaStatus'
+                    engagementStage: clientToUse.engagementStage ?? clientToUse.status ?? (isLead ? 'Potential' : undefined),
                     aidaStatus: clientToUse.aidaStatus || clientToUse.stage || (isLead ? 'Awareness' : undefined),
                     billingTerms: typeof clientToUse.billingTerms === 'string' ? JSON.parse(clientToUse.billingTerms || '{}') : (clientToUse.billingTerms || {
                         paymentTerms: 'Net 30',
@@ -1736,14 +1733,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         gpsCoordinates: '',
         siteLead: '',
         siteType: isLead ? 'lead' : 'client',
-        stage: 'Potential',
+        engagementStage: 'Potential',
         aidaStatus: 'Awareness'
     });
     const [showOpportunityForm, setShowOpportunityForm] = useState(false);
     const [editingOpportunity, setEditingOpportunity] = useState(null);
     const [newOpportunity, setNewOpportunity] = useState({
         name: '',
-        stage: 'Awareness',
+        aidaStatus: 'Awareness',
+        engagementStage: 'Potential',
         expectedCloseDate: '',
         relatedSiteId: null,
         notes: ''
@@ -2056,7 +2054,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (entityType !== 'lead' || !client?.id) return;
         const sites = client.sites || client.clientSites;
         if (!Array.isArray(sites) || sites.length === 0) return;
-        const key = JSON.stringify(sites.map(s => ({ id: s?.id, stage: s?.stage, aidaStatus: s?.aidaStatus })));
+        const key = JSON.stringify(sites.map(s => ({ id: s?.id, engagementStage: s?.engagementStage ?? s?.stage, aidaStatus: s?.aidaStatus })));
         if (lastSyncedSitesFromClientRef.current === key) return;
         lastSyncedSitesFromClientRef.current = key;
         setFormData(prev => ({ ...prev, sites }));
@@ -3256,7 +3254,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 notes: newSite.notes || '',
                 siteLead: newSite.siteLead ?? '',
                 siteType: newSite.siteType === 'client' ? 'client' : 'lead',
-                stage: newSite.stage ?? 'Potential',
+                engagementStage: newSite.engagementStage ?? newSite.stage ?? 'Potential',
                 aidaStatus: newSite.aidaStatus ?? 'Awareness'
             };
             let response;
@@ -3274,7 +3272,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 ...rawSaved,
                 siteLead: rawSaved.siteLead ?? payload.siteLead ?? '',
                 siteType: rawSaved.siteType ?? payload.siteType ?? 'lead',
-                stage: rawSaved.stage ?? payload.stage ?? 'Potential',
+                engagementStage: rawSaved.engagementStage ?? payload.engagementStage ?? rawSaved.stage ?? payload.stage ?? 'Potential',
                 aidaStatus: rawSaved.aidaStatus ?? payload.aidaStatus ?? 'Awareness'
             } : rawSaved;
             
@@ -3342,7 +3340,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     gpsCoordinates: '',
                     siteLead: '',
                     siteType: isLead ? 'lead' : 'client',
-                    stage: 'Potential',
+                    engagementStage: 'Potential',
                     aidaStatus: 'Awareness'
                 });
                 setShowSiteForm(false);
@@ -3383,7 +3381,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             email: site.email ?? site.contactEmail ?? '',
             siteLead: site.siteLead ?? '',
             siteType: site.siteType === 'client' ? 'client' : 'lead',
-            stage: site.stage ?? 'Potential',
+            engagementStage: site.engagementStage ?? site.stage ?? 'Potential',
             aidaStatus: site.aidaStatus ?? 'Awareness'
         });
         setShowSiteForm(true);
@@ -3427,7 +3425,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             contactPhone: newSite.contactPhone ?? newSite.phone ?? '',
             contactEmail: newSite.contactEmail ?? newSite.email ?? '',
             siteType: newSite.siteType === 'client' ? 'client' : 'lead',
-            stage: newSite.stage ?? 'Potential',
+            engagementStage: newSite.engagementStage ?? newSite.stage ?? 'Potential',
             aidaStatus: newSite.aidaStatus ?? 'Awareness'
         };
         const updatedSites = (formData.sites || []).map(s =>
@@ -3458,7 +3456,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     notes: sitePayload.notes ?? '',
                     siteLead: sitePayload.siteLead ?? '',
                     siteType: sitePayload.siteType === 'client' ? 'client' : 'lead',
-                    stage: sitePayload.stage ?? '',
+                    engagementStage: sitePayload.engagementStage ?? sitePayload.stage ?? '',
                     aidaStatus: sitePayload.aidaStatus ?? ''
                 };
                 try {
@@ -3509,7 +3507,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 gpsCoordinates: '',
                 siteLead: '',
                 siteType: isLead ? 'lead' : 'client',
-                stage: 'Potential',
+                engagementStage: 'Potential',
                 aidaStatus: 'Awareness'
             });
         setShowSiteForm(false);
@@ -3572,7 +3570,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const opportunityData = {
                 title: newOpportunity.name,
                 clientId: formData.id,
-                stage: newOpportunity.stage || 'prospect',
+                aidaStatus: newOpportunity.aidaStatus || 'Awareness',
+                engagementStage: newOpportunity.engagementStage || 'Potential',
                 value: parseFloat(newOpportunity.value) || 0
             };
             
@@ -3635,7 +3634,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Reset form immediately
                 setNewOpportunity({
                     name: '',
-                    stage: 'Awareness',
+                    aidaStatus: 'Awareness',
+                    engagementStage: 'Potential',
                     expectedCloseDate: '',
                     relatedSiteId: null,
                     notes: ''
@@ -3705,7 +3705,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             const opportunityData = {
                 title: newOpportunity.name,
-                stage: newOpportunity.stage || 'prospect',
+                aidaStatus: newOpportunity.aidaStatus ?? newOpportunity.stage ?? 'Awareness',
+                engagementStage: newOpportunity.engagementStage ?? newOpportunity.status ?? 'Potential',
                 value: parseFloat(newOpportunity.value) || 0
             };
             
@@ -3739,7 +3740,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setEditingOpportunity(null);
                 setNewOpportunity({
                     name: '',
-                    stage: 'Awareness',
+                    aidaStatus: 'Awareness',
+                    engagementStage: 'Potential',
                     expectedCloseDate: '',
                     relatedSiteId: null,
                     notes: ''
@@ -5408,7 +5410,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     gpsCoordinates: '',
                                                     siteLead: '',
                                                     siteType: isLead ? 'lead' : 'client',
-                                                    stage: 'Potential',
+                                                    engagementStage: 'Potential',
                                                     aidaStatus: 'Awareness'
                                                 });
                                                 setShowSiteForm(true);
@@ -5429,7 +5431,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 onClick={() => {
                                                     setShowSiteForm(false);
                                                     setEditingSite(null);
-                                                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', siteType: isLead ? 'lead' : 'client', stage: 'Potential', aidaStatus: 'Awareness' });
+                                                    setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '', siteLead: '', siteType: isLead ? 'lead' : 'client', engagementStage: 'Potential', aidaStatus: 'Awareness' });
                                                     if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
                                                 }}
                                                 className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
@@ -5697,7 +5699,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         gpsCoordinates: '',
                                                         siteLead: '',
                                                         siteType: isLead ? 'lead' : 'client',
-                                                        stage: 'Potential',
+                                                        engagementStage: 'Potential',
                                                         aidaStatus: 'Awareness'
                                                     });
                                                     if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
@@ -5822,10 +5824,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Stage</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Aida Status</label>
                                                 <select
-                                                    value={newOpportunity.stage}
-                                                    onChange={(e) => setNewOpportunity({...newOpportunity, stage: e.target.value})}
+                                                    value={newOpportunity.aidaStatus ?? newOpportunity.stage}
+                                                    onChange={(e) => setNewOpportunity({...newOpportunity, aidaStatus: e.target.value})}
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 >
                                                     <option>Awareness</option>
@@ -5875,7 +5877,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     setEditingOpportunity(null);
                                                     setNewOpportunity({
                                                         name: '',
-                                                        stage: 'Awareness',
+                                                        aidaStatus: 'Awareness',
+                    engagementStage: 'Potential',
                                                         expectedCloseDate: '',
                                                         relatedSiteId: null,
                                                         notes: ''
@@ -5907,11 +5910,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     ) : (
                                         formData.opportunities.map(opportunity => {
                                             const relatedSite = formData.sites?.find(s => s.id === opportunity.relatedSiteId);
+                                            const aidaStatus = opportunity.aidaStatus ?? opportunity.stage;
                                             const stageColor = 
-                                                opportunity.stage === 'Awareness' ? 'bg-blue-100 text-blue-700' :
-                                                opportunity.stage === 'Interest' ? 'bg-yellow-100 text-yellow-700' :
-                                                opportunity.stage === 'Desire' ? 'bg-orange-100 text-orange-700' :
-                                                opportunity.stage === 'Action' ? 'bg-green-100 text-green-700' :
+                                                aidaStatus === 'Awareness' ? 'bg-blue-100 text-blue-700' :
+                                                aidaStatus === 'Interest' ? 'bg-yellow-100 text-yellow-700' :
+                                                aidaStatus === 'Desire' ? 'bg-orange-100 text-orange-700' :
+                                                aidaStatus === 'Action' ? 'bg-green-100 text-green-700' :
                                                 'bg-gray-100 text-gray-700';
 
                                             return (
@@ -5932,7 +5936,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 <i className="fas fa-bullseye text-green-600"></i>
                                                                 <h4 className="font-semibold text-gray-900 text-sm">{opportunity.title || opportunity.name}</h4>
                                                                 <span className={`px-2 py-0.5 text-xs rounded font-medium ${stageColor}`}>
-                                                                    {opportunity.stage}
+                                                                    {aidaStatus}
                                                                 </span>
                                                             </div>
                                                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 mb-2">

@@ -80,8 +80,8 @@ async function handler(req, res) {
       
       const updateData = {
         title: body.title,
-        stage: body.stage,
-        status: body.status,
+        aidaStatus: body.aidaStatus,
+        engagementStage: body.engagementStage,
         value: body.value ? parseFloat(body.value) : undefined,
         proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined,
         ownerId: body.ownerId

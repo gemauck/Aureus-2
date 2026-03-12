@@ -107,8 +107,8 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
         minValue: '',
         maxValue: '',
         industry: 'All',
-        status: 'All',
-        stage: 'All',
+        engagementStage: 'All',
+        aidaStatus: 'All',
         source: 'All'
     });
     const [showStarredOnly, setShowStarredOnly] = useState(() => {
@@ -129,7 +129,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             return 'list';
         }
     });
-    const [kanbanGroupBy, setKanbanGroupBy] = useState('stage'); // 'stage' (AIDA) or 'status'
+    const [kanbanGroupBy, setKanbanGroupBy] = useState('aidaStatus'); // 'aidaStatus' (AIDA) or 'engagementStage'
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -195,27 +195,25 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
     // Reset to page 1 when filters or sort change
     useEffect(() => {
         setListPage(1);
-    }, [filters.search, filters.industry, filters.status, filters.stage, filters.source, showStarredOnly, listSortColumn, listSortDirection]);
+    }, [filters.search, filters.industry, filters.engagementStage, filters.aidaStatus, filters.source, showStarredOnly, listSortColumn, listSortDirection]);
 
     const normalizeLifecycleStage = useCallback(normalizeLifecycleStageValue, []);
 
     const statusOptions = useMemo(() => {
-        // Start with all possible statuses to ensure they're always available
+        // Start with all possible engagement stages to ensure they're always available
         const statuses = new Set(['Active', 'Potential', 'Proposal', 'Tender', 'Disinterested']);
 
-        // Also include any statuses found in the data (normalized)
+        // Also include any stages found in the data (normalized)
         leads.forEach((lead) => {
-            if (lead?.status) {
-                statuses.add(normalizeLifecycleStage(lead.status));
-            }
+            const v = lead?.engagementStage ?? lead?.status;
+            if (v) statuses.add(normalizeLifecycleStage(v));
         });
 
         clients.forEach((client) => {
             if (Array.isArray(client?.opportunities)) {
                 client.opportunities.forEach((opp) => {
-                    if (opp?.status) {
-                        statuses.add(normalizeLifecycleStage(opp.status));
-                    }
+                    const v = opp?.engagementStage ?? opp?.status;
+                    if (v) statuses.add(normalizeLifecycleStage(v));
                 });
             }
         });
@@ -443,10 +441,16 @@ function normalizeLeadForState(lead) {
         lead.contactName ||
         'Unnamed Lead';
 
+    const aidaStatus = normalizeStageToAida(lead.aidaStatus ?? lead.stage);
+    const engagementStage = normalizeLifecycleStageValue(lead.engagementStage ?? lead.status);
+
     const baseLead = {
         ...lead,
         name,
-        stage: normalizeStageToAida(lead.stage),
+        stage: aidaStatus,
+        aidaStatus,
+        status: engagementStage,
+        engagementStage,
         createdAt: ensureDateString(lead.createdAt || lead.createdDate || lead.firstContactDate),
         createdDate: ensureDateString(lead.createdDate || lead.createdAt || lead.firstContactDate)
     };
@@ -476,7 +480,10 @@ function normalizeOpportunityForState(opportunity, clientIdFallback = null) {
         ...opportunity,
         title: opportunityName,
         name: opportunityName,
-        stage: normalizeStageToAida(opportunity.stage),
+        stage: normalizeStageToAida(opportunity.aidaStatus ?? opportunity.stage),
+        aidaStatus: normalizeStageToAida(opportunity.aidaStatus ?? opportunity.stage),
+        status: normalizeLifecycleStageValue(opportunity.engagementStage ?? opportunity.status),
+        engagementStage: normalizeLifecycleStageValue(opportunity.engagementStage ?? opportunity.status),
         value: Number(opportunity.value) || 0,
         clientId:
             opportunity.clientId ??
@@ -865,8 +872,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 });
             }
 
-            const originalStage = lead.stage;
+            const originalStage = lead.aidaStatus ?? lead.stage;
             const mappedStage = normalizeStageToAida(originalStage);
+            const engagementStage = normalizeLifecycleStage(lead.engagementStage ?? lead.status);
             
             if (originalStage && originalStage !== mappedStage) {
             }
@@ -878,7 +886,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 type: 'lead',
                 itemType: 'New Lead',
                 stage: mappedStage,
-                status: normalizeLifecycleStage(lead.status),
+                aidaStatus: mappedStage,
+                status: engagementStage,
+                engagementStage,
                 isStarred: Boolean(lead.isStarred),
                 value: lead.value || 0,
                 createdDate: lead.createdDate || new Date().toISOString(),
@@ -895,9 +905,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
             siteList.forEach((site, idx) => {
                 if (!site || typeof site !== 'object') return;
                 if (site.siteType === 'client') return; // Client sites do not show in Pipeline
-                // API: site.stage = lifecycle status, site.aidaStatus = AIDA stage; prefer aidaStatus for Stage column
-                const siteStage = site.aidaStatus || site.stage || lead.stage;
-                const mappedStage = normalizeStageToAida(siteStage);
+                // API: site.engagementStage (lifecycle), site.aidaStatus (AIDA)
+                const siteAida = site.aidaStatus ?? site.stage ?? lead.aidaStatus ?? lead.stage;
+                const mappedStage = normalizeStageToAida(siteAida);
+                const siteEngagement = normalizeLifecycleStage(site.engagementStage ?? site.stage ?? lead.engagementStage ?? lead.status);
                 const siteId = site.id || `site-${lead.id}-${idx}`;
                 const pipelineId = `lead-${lead.id}-site-${siteId}`;
                 const leadName = lead.name || lead.company || 'Lead';
@@ -908,7 +919,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     itemType: 'Site',
                     name: `${leadName} · ${siteName}`,
                     stage: mappedStage,
-                    status: normalizeLifecycleStage(site.stage || lead.status),
+                    aidaStatus: mappedStage,
+                    status: siteEngagement,
+                    engagementStage: siteEngagement,
                     isStarred: Boolean(lead.isStarred),
                     value: 0,
                     createdDate: site.createdAt || lead.createdDate || new Date().toISOString(),
@@ -930,9 +943,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
             siteList.forEach((site, idx) => {
                 if (!site || typeof site !== 'object') return;
                 if (site.siteType === 'client') return; // Only client-type sites are excluded; lead or missing = show in Pipeline
-                // API: site.stage = lifecycle status, site.aidaStatus = AIDA stage; prefer aidaStatus for Stage column
-                const siteStage = site.aidaStatus || site.stage || 'Awareness';
-                const mappedStage = normalizeStageToAida(siteStage);
+                // API: site.engagementStage (lifecycle), site.aidaStatus (AIDA)
+                const siteAida = site.aidaStatus ?? site.stage ?? 'Awareness';
+                const mappedStage = normalizeStageToAida(siteAida);
+                const siteEngagement = normalizeLifecycleStage(site.engagementStage ?? site.stage ?? 'Potential');
                 const siteId = site.id || `site-${client.id}-${idx}`;
                 const pipelineId = `client-${client.id}-site-${siteId}`;
                 const clientName = client.name || 'Client';
@@ -943,7 +957,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     itemType: 'Site',
                     name: `${clientName} · ${siteName}`,
                     stage: mappedStage,
-                    status: normalizeLifecycleStage(site.stage || 'Potential'),
+                    aidaStatus: mappedStage,
+                    status: siteEngagement,
+                    engagementStage: siteEngagement,
                     isStarred: Boolean(client.isStarred),
                     value: 0,
                     createdDate: site.createdAt || client.createdDate || new Date().toISOString(),
@@ -982,8 +998,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         });
                     }
                     
-                    const originalStage = opp.stage;
+                    const originalStage = opp.aidaStatus ?? opp.stage;
                     const mappedStage = normalizeStageToAida(originalStage);
+                    const oppEngagement = normalizeLifecycleStage(opp.engagementStage ?? opp.status);
                     
                     if (originalStage && originalStage !== mappedStage) {
                     }
@@ -998,7 +1015,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         clientId: client.id,
                         clientName: client.name || 'Unknown Client',
                         stage: mappedStage,
-                        status: normalizeLifecycleStage(opp.status),
+                        aidaStatus: mappedStage,
+                        status: oppEngagement,
+                        engagementStage: oppEngagement,
                         isStarred: Boolean(opp.isStarred),
                         value: Number(opp.value) || 0,
                         createdDate: opp.createdAt || opp.createdDate || new Date().toISOString(), // render Opportunity.createdAt as createdDate
@@ -1092,19 +1111,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
             items = items.filter(item => item.source === filters.source);
         }
 
-        // Status filter
-        if (filters.status !== 'All') {
+        // Engagement Stage filter
+        if (filters.engagementStage !== 'All') {
             items = items.filter(item => {
-                const normalizedStatus = normalizeLifecycleStage(item.status || 'Potential');
-                return normalizedStatus === filters.status;
+                const normalizedStatus = normalizeLifecycleStage(item.engagementStage ?? (item.status || 'Potential'));
+                return normalizedStatus === filters.engagementStage;
             });
         }
 
-        // AIDA Stage filter
-        if (filters.stage !== 'All') {
+        // Aida Status filter
+        if (filters.aidaStatus !== 'All') {
             items = items.filter(item => {
-                const normalizedStage = normalizeStageToAida(item.stage);
-                return normalizedStage === filters.stage;
+                const normalizedStage = normalizeStageToAida(item.aidaStatus ?? item.stage);
+                return normalizedStage === filters.aidaStatus;
             });
         }
 
@@ -1123,13 +1142,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     };
                 case 'type':
                     return (a, b) => directionMultiplier * a.type.localeCompare(b.type);
-                case 'status':
-                    return (a, b) => directionMultiplier * normalizeLifecycleStage(a.status).localeCompare(normalizeLifecycleStage(b.status));
-                case 'stage':
+                case 'engagementStage':
+                    return (a, b) => directionMultiplier * normalizeLifecycleStage(a.engagementStage ?? a.status).localeCompare(normalizeLifecycleStage(b.engagementStage ?? b.status));
+                case 'aidaStatus':
                     return (a, b) => {
                         const stageOrder = { 'No Engagement': 0, 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
-                        const stageA = stageOrder[a.stage] || 0;
-                        const stageB = stageOrder[b.stage] || 0;
+                        const stageA = stageOrder[a.aidaStatus ?? a.stage] || 0;
+                        const stageB = stageOrder[b.aidaStatus ?? b.stage] || 0;
                         return directionMultiplier * (stageA - stageB);
                     };
                 default:
@@ -1217,8 +1236,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 type: 'client',
                 id: clientId,
                 name: parentName,
-                stage: client.stage || 'Awareness',
-                status: client.status || 'Potential',
+                stage: client.aidaStatus ?? client.stage ?? 'Awareness',
+                aidaStatus: client.aidaStatus ?? client.stage ?? 'Awareness',
+                status: client.engagementStage ?? client.status ?? 'Potential',
+                engagementStage: client.engagementStage ?? client.status ?? 'Potential',
                 isStarred: Boolean(client.isStarred),
                 client
             };
@@ -1345,7 +1366,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 updateLeadStageOptimistically(item.id, normalized);
                 if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
                     try {
-                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { stage: normalized });
+                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { aidaStatus: normalized });
                     } catch (apiErr) {
                         schedulePipelineRefresh();
                         console.error('❌ Pipeline: Failed to save lead stage:', apiErr);
@@ -1396,8 +1417,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 try {
                     if (hasSiteId && token) {
                         await (window.api?.updateSite
-                            ? window.api.updateSite(clientId, siteId, { aidaStatus: normalized, stage: item.status || 'Potential' })
-                            : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ aidaStatus: normalized, stage: item.status || 'Potential' }) }));
+                            ? window.api.updateSite(clientId, siteId, { aidaStatus: normalized, engagementStage: item.engagementStage ?? (item.status || 'Potential') })
+                            : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ aidaStatus: normalized, engagementStage: item.engagementStage ?? (item.status || 'Potential') }) }));
                     } else if (hasIndexFallback && !hasSiteId && (window.api?.updateLead || window.DatabaseAPI?.makeRequest) && (item.leadId || item.lead?.id)) {
                         const leadId = item.leadId || item.lead?.id;
                         const lead = (storage?.getLeads?.() || []).find(l => String(l.id) === String(leadId)) || leads.find(l => String(l.id) === String(leadId));
@@ -1430,7 +1451,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 updateOpportunityStageOptimistically(item.clientId, item.id, normalized);
                 if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
                     try {
-                        await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { stage: normalized });
+                        await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { aidaStatus: normalized });
                     } catch (apiErr) {
                         schedulePipelineRefresh();
                         console.error('❌ Pipeline: Failed to save opportunity stage:', apiErr);
@@ -1459,7 +1480,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 });
                 if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
                     try {
-                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { status: normalized });
+                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { engagementStage: normalized });
                     } catch (apiErr) {
                         schedulePipelineRefresh();
                         console.error('❌ Pipeline: Failed to save lead status:', apiErr);
@@ -1484,7 +1505,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const updated = prev.map(lead => {
                                 if (getComparableId(lead.id) !== getComparableId(parentLeadId)) return lead;
                                 const sites = lead.clientSites || lead.sites || [];
-                                const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, stage: normalized } : s);
+                const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, engagementStage: normalized } : s);
                                 return { ...lead, clientSites: newSites.length ? newSites : undefined, sites: newSites };
                             });
                             if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
@@ -1496,7 +1517,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const updated = prev.map(client => {
                                 if (getComparableId(client.id) !== getComparableId(parentClientId)) return client;
                                 const sites = client.clientSites || client.sites || [];
-                                const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, stage: normalized } : s);
+                const newSites = sites.map((s, i) => matchSiteForStatus(s, i) ? { ...s, engagementStage: normalized } : s);
                                 return { ...client, clientSites: newSites.length ? newSites : undefined, sites: newSites };
                             });
                             if (typeof storage?.setClients === 'function') storage.setClients(updated);
@@ -1510,8 +1531,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 try {
                     if (hasSiteId && token) {
                         await (window.api?.updateSite
-                            ? window.api.updateSite(clientId, siteId, { stage: normalized, aidaStatus: item.stage || 'Awareness' })
-                            : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ stage: normalized, aidaStatus: item.stage || 'Awareness' }) }));
+                            ? window.api.updateSite(clientId, siteId, { engagementStage: normalized, aidaStatus: item.aidaStatus ?? (item.stage || 'Awareness') })
+                            : window.DatabaseAPI.makeRequest(`/sites/client/${clientId}/${siteId}`, { method: 'PATCH', body: JSON.stringify({ engagementStage: normalized, aidaStatus: item.aidaStatus ?? (item.stage || 'Awareness') }) }));
                     } else if (hasIndexFallback && !hasSiteId && (window.api?.updateLead || window.DatabaseAPI?.makeRequest) && (item.leadId || item.lead?.id)) {
                         const leadId = item.leadId || item.lead?.id;
                         const lead = (storage?.getLeads?.() || []).find(l => String(l.id) === String(leadId)) || leads.find(l => String(l.id) === String(leadId));
@@ -1519,7 +1540,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const sites = lead.clientSites || lead.sites || [];
                             const idx = item.siteIndex;
                             if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
-                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, stage: normalized } : s);
+                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, engagementStage: normalized } : s);
                                 await (window.api?.updateLead || window.DatabaseAPI.updateLead)(leadId, { sites: updatedSites });
                             }
                         }
@@ -1529,7 +1550,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             const sites = client.clientSites || client.sites || [];
                             const idx = item.siteIndex;
                             if (Array.isArray(sites) && idx >= 0 && idx < sites.length) {
-                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, stage: normalized } : s);
+                                const updatedSites = sites.map((s, i) => i === idx ? { ...s, engagementStage: normalized } : s);
                                 await (window.api?.updateClient || window.DatabaseAPI.updateClient)(item.clientId, { sites: updatedSites });
                             }
                         }
@@ -1553,7 +1574,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 });
                 if (token && (window.api?.updateOpportunity || window.DatabaseAPI?.updateOpportunity)) {
                     try {
-                        await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { status: normalized });
+                        await (window.api?.updateOpportunity || window.DatabaseAPI.updateOpportunity)(item.id, { engagementStage: normalized });
                     } catch (apiErr) {
                         schedulePipelineRefresh();
                         console.error('❌ Pipeline: Failed to save opportunity status:', apiErr);
@@ -1689,35 +1710,35 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const finalItemType = itemType || item.type;
         
         try {
-            if (groupBy === 'stage') {
+            if (groupBy === 'aidaStatus') {
                 // Update AIDA stage
                 const newStage = targetColumn;
                 
                 if (finalItemType === 'lead') {
                     if (token && window.DatabaseAPI) {
-                        await window.DatabaseAPI.updateLead(item.id, { stage: newStage });
+                        await window.DatabaseAPI.updateLead(item.id, { aidaStatus: newStage });
                         updateLeadStageOptimistically(item.id, newStage);
                     } else {
                         updateLeadStageOptimistically(item.id, newStage);
                     }
                 } else if (finalItemType === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
-                        await window.api.updateOpportunity(item.id, { stage: newStage });
+                        await window.api.updateOpportunity(item.id, { aidaStatus: newStage });
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        await window.DatabaseAPI.updateOpportunity(item.id, { stage: newStage });
+                        await window.DatabaseAPI.updateOpportunity(item.id, { aidaStatus: newStage });
                     }
                     updateOpportunityStageOptimistically(item.clientId, item.id, newStage);
                 }
-            } else if (groupBy === 'status') {
-                // Update status
+            } else if (groupBy === 'engagementStage') {
+                // Update engagement stage
                 const newStatus = targetColumn;
                 
                 if (finalItemType === 'lead') {
                     if (token && window.DatabaseAPI) {
-                        await window.DatabaseAPI.updateLead(item.id, { status: newStatus });
+                        await window.DatabaseAPI.updateLead(item.id, { engagementStage: newStatus });
                         setLeads(prevLeads => {
                             const updated = prevLeads.map(lead =>
-                                lead.id === item.id ? { ...lead, status: newStatus } : lead
+                                lead.id === item.id ? { ...lead, engagementStage: newStatus, status: newStatus } : lead
                             );
                             storage.setLeads(updated);
                             return updated;
@@ -1725,15 +1746,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     }
                 } else if (finalItemType === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
-                        await window.api.updateOpportunity(item.id, { status: newStatus });
+                        await window.api.updateOpportunity(item.id, { engagementStage: newStatus });
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        await window.DatabaseAPI.updateOpportunity(item.id, { status: newStatus });
+                        await window.DatabaseAPI.updateOpportunity(item.id, { engagementStage: newStatus });
                     }
                     setClients(prevClients => {
                         const updated = prevClients.map(client => {
                             if (client.id === item.clientId) {
                                 const updatedOpportunities = client.opportunities.map(opp =>
-                                    opp.id === item.id ? { ...opp, status: newStatus } : opp
+                                    opp.id === item.id ? { ...opp, engagementStage: newStatus, status: newStatus } : opp
                                 );
                                 return { ...client, opportunities: updatedOpportunities };
                             }
@@ -2080,7 +2101,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 if (type === 'lead') {
                     if (token && window.DatabaseAPI) {
                         try {
-                            await window.DatabaseAPI.updateLead(item.id, { stage: targetStage });
+                            await window.DatabaseAPI.updateLead(item.id, { aidaStatus: targetStage });
                             
                             // Update local state after successful API call
                             const updatedLeads = leads.map(lead => 
@@ -2107,7 +2128,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 } else if (type === 'opportunity') {
                     if (token && window.api?.updateOpportunity) {
                         try {
-                            await window.api.updateOpportunity(item.id, { stage: targetStage });
+                            await window.api.updateOpportunity(item.id, { aidaStatus: targetStage });
                             
                             // Update local state after successful API call
                             const updatedClients = clients.map(client => {
@@ -2132,7 +2153,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         }
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
                         try {
-                            await window.DatabaseAPI.updateOpportunity(item.id, { stage: targetStage });
+                            await window.DatabaseAPI.updateOpportunity(item.id, { aidaStatus: targetStage });
                             
                             // Update local state after successful API call
                             const updatedClients = clients.map(client => {
@@ -2448,7 +2469,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
     }) => {
         // Determine columns based on groupBy
         const columns = useMemo(() => {
-            if (groupBy === 'stage') {
+            if (groupBy === 'aidaStatus') {
                 return pipelineStages.map(stage => ({
                     id: stage.id,
                     name: stage.name,
@@ -2456,7 +2477,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     icon: stage.icon
                 }));
             } else {
-                // Group by status
+                // Group by engagement stage
                 return statusOptions.map(status => ({
                     id: status.toLowerCase().replace(/\s+/g, '-'),
                     name: status,
@@ -2470,11 +2491,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const itemsByColumn = useMemo(() => {
             return columns.map(column => {
                 const columnItems = items.filter(item => {
-                    if (groupBy === 'stage') {
-                        const normalizedStage = normalizeStageToAida(item.stage);
+                    if (groupBy === 'aidaStatus') {
+                        const normalizedStage = normalizeStageToAida(item.aidaStatus ?? item.stage);
                         return normalizedStage === column.name;
                     } else {
-                        const normalizedStatus = normalizeLifecycleStage(item.status || 'Potential');
+                        const normalizedStatus = normalizeLifecycleStage(item.engagementStage ?? (item.status || 'Potential'));
                         return normalizedStatus === column.name;
                     }
                 });
@@ -2782,12 +2803,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             </span>
                                                             
                                                             {/* Show opposite grouping as badge */}
-                                                            {groupBy === 'stage' && (
+                                                            {groupBy === 'aidaStatus' && (
                                                                 <span className={`px-2 py-0.5 text-[10px] rounded-full ${getLifecycleBadgeColor(itemStatus)}`}>
                                                                     {normalizeLifecycleStage(itemStatus)}
                                                                 </span>
                                                             )}
-                                                            {groupBy === 'status' && (
+                                                            {groupBy === 'engagementStage' && (
                                                                 <span className={`px-2 py-0.5 text-[10px] rounded-full ${
                                                                     itemStage === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
                                                                     itemStage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
@@ -2992,8 +3013,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 <tr>
                                     {renderSortableHeader('Name', 'name')}
                                     {renderSortableHeader('Type', 'type')}
-                                    {renderSortableHeader('Stage', 'stage')}
-                                    {renderSortableHeader('Status', 'status')}
+                                    {renderSortableHeader('Aida Status', 'aidaStatus')}
+                                    {renderSortableHeader('Engagement Stage', 'engagementStage')}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -3238,28 +3259,28 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </select>
                     </div>
                     
-                    {/* Status Filter */}
+                    {/* Engagement Stage Filter */}
                     <div>
                         <select
-                            value={filters.status}
-                            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                            value={filters.engagementStage}
+                            onChange={(e) => setFilters({ ...filters, engagementStage: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
                         >
-                            <option value="All">All Status</option>
+                            <option value="All">All Engagement Stages</option>
                             {statusOptions.map(status => (
                                 <option key={status} value={status}>{status}</option>
                             ))}
                         </select>
                     </div>
                     
-                    {/* AIDA Stage Filter */}
+                    {/* Aida Status Filter */}
                     <div>
                         <select
-                            value={filters.stage}
-                            onChange={(e) => setFilters({ ...filters, stage: e.target.value })}
+                            value={filters.aidaStatus}
+                            onChange={(e) => setFilters({ ...filters, aidaStatus: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
                         >
-                            <option value="All">All Stages</option>
+                            <option value="All">All Aida Status</option>
                             <option value="No Engagement">No Engagement</option>
                             <option value="Awareness">Awareness</option>
                             <option value="Interest">Interest</option>
@@ -3321,8 +3342,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     onChange={(e) => setKanbanGroupBy(e.target.value)}
                                     className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
                                 >
-                                    <option value="stage">AIDA Stage</option>
-                                    <option value="status">Status</option>
+                                    <option value="aidaStatus">Aida Status</option>
+                                    <option value="engagementStage">Engagement Stage</option>
                                 </select>
                             </div>
                         )}
@@ -3348,7 +3369,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                 {/* Active Filters Count */}
                 {(filters.search || 
-                  filters.industry !== 'All' || filters.status !== 'All' || filters.stage !== 'All' || showStarredOnly) && (
+                  filters.industry !== 'All' || filters.engagementStage !== 'All' || filters.aidaStatus !== 'All' || showStarredOnly) && (
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -3366,8 +3387,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     minValue: '',
                                     maxValue: '',
                                     industry: 'All',
-                                    status: 'All',
-                                    stage: 'All',
+                                    engagementStage: 'All',
+                                    aidaStatus: 'All',
                                     source: 'All'
                                 });
                                 setShowStarredOnly(false);

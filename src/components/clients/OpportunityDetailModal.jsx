@@ -76,19 +76,18 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
     // Create default object first to ensure it's always defined
     const defaultFormData = {
         title: '',
-        stage: 'Awareness',
-        status: 'Potential',
+        aidaStatus: 'Awareness',
+        engagementStage: 'Potential',
         value: 0,
         proposals: [],
         id: null
     };
     
     const [formData, setFormData] = useState(() => {
-        // Parse JSON strings to arrays/objects if needed
         const parsedOpportunity = opportunity ? {
             ...opportunity,
-            stage: opportunity.stage || 'Awareness',
-            status: normalizeLifecycleStage(opportunity.status),
+            aidaStatus: opportunity.aidaStatus ?? opportunity.stage ?? 'Awareness',
+            engagementStage: normalizeLifecycleStage(opportunity.engagementStage ?? opportunity.status),
             proposals: typeof opportunity.proposals === 'string' ? JSON.parse(opportunity.proposals || '[]') : (opportunity.proposals || []),
         } : defaultFormData;
         
@@ -100,8 +99,8 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
         if (opportunity) {
             const parsedOpportunity = {
                 ...opportunity,
-                stage: opportunity.stage || 'Awareness',
-                status: normalizeLifecycleStage(opportunity.status),
+                aidaStatus: opportunity.aidaStatus ?? opportunity.stage ?? 'Awareness',
+                engagementStage: normalizeLifecycleStage(opportunity.engagementStage ?? opportunity.status),
                 proposals: typeof opportunity.proposals === 'string' ? JSON.parse(opportunity.proposals || '[]') : (opportunity.proposals || []),
             };
             setFormData(parsedOpportunity);
@@ -577,14 +576,14 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                     </div>
                                     
                                     <div>
-                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Stage</label>
+                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Engagement Stage</label>
                                         <select
-                                            value={formData.status || 'Potential'}
+                                            value={formData.engagementStage ?? (formData.status || 'Potential')}
                                             onChange={async (e) => {
                                                 const newStatus = e.target.value;
-                                                setFormData({ ...formData, status: newStatus });
+                                                setFormData({ ...formData, engagementStage: newStatus });
                                                 if (opportunityId) {
-                                                    await window.api.updateOpportunity(opportunityId, { ...formData, status: newStatus });
+                                                    await window.api.updateOpportunity(opportunityId, { ...formData, engagementStage: newStatus });
                                                 }
                                             }}
                                             className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
@@ -597,14 +596,14 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                     </div>
                                     
                                     <div>
-                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA STAGE</label>
+                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Aida Status</label>
                                         <select
-                                            value={formData.stage || 'Awareness'}
+                                            value={formData.aidaStatus ?? (formData.stage || 'Awareness')}
                                             onChange={async (e) => {
                                                 const newStage = e.target.value;
-                                                setFormData({ ...formData, stage: newStage });
+                                                setFormData({ ...formData, aidaStatus: newStage });
                                                 if (opportunityId) {
-                                                    await window.api.updateOpportunity(opportunityId, { ...formData, stage: newStage });
+                                                    await window.api.updateOpportunity(opportunityId, { ...formData, aidaStatus: newStage });
                                                 }
                                             }}
                                             className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
@@ -705,14 +704,14 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                 </div>
                                 
                                 <div>
-                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Stage</label>
+                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Engagement Stage</label>
                                     <select
-                                        value={formData.status || 'Potential'}
+                                        value={formData.engagementStage ?? (formData.status || 'Potential')}
                                         onChange={async (e) => {
                                             const newStatus = e.target.value;
-                                            setFormData({ ...formData, status: newStatus });
+                                            setFormData({ ...formData, engagementStage: newStatus });
                                             if (opportunityId) {
-                                                await window.api.updateOpportunity(opportunityId, { ...formData, status: newStatus });
+                                                await window.api.updateOpportunity(opportunityId, { ...formData, engagementStage: newStatus });
                                             }
                                         }}
                                         className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
@@ -725,14 +724,14 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                 </div>
                                 
                                 <div>
-                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA STAGE</label>
+                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Aida Status</label>
                                     <select
-                                        value={formData.stage || 'Awareness'}
+                                        value={formData.aidaStatus ?? (formData.stage || 'Awareness')}
                                         onChange={async (e) => {
                                             const newStage = e.target.value;
-                                            setFormData({ ...formData, stage: newStage });
+                                            setFormData({ ...formData, aidaStatus: newStage });
                                             if (opportunityId) {
-                                                await window.api.updateOpportunity(opportunityId, { ...formData, stage: newStage });
+                                                await window.api.updateOpportunity(opportunityId, { ...formData, aidaStatus: newStage });
                                             }
                                         }}
                                         className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}

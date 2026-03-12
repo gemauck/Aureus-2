@@ -19,7 +19,7 @@ const ClientsMobileOptimized = () => {
     const [selectedLead, setSelectedLead] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
-    const [filterStatus, setFilterStatus] = useState('All Status');
+    const [filterEngagementStage, setFilterEngagementStage] = useState('All Engagement Stages');
     const [refreshKey, setRefreshKey] = useState(0);
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
@@ -313,20 +313,20 @@ const ClientsMobileOptimized = () => {
             const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 client.industry.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-            const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
+            const matchesStatus = filterEngagementStage === 'All Engagement Stages' || client.engagementStage === filterEngagementStage || client.status === filterEngagementStage;
             return matchesSearch && matchesIndustry && matchesStatus;
         });
-    }, [clients, searchTerm, filterIndustry, filterStatus]);
+    }, [clients, searchTerm, filterIndustry, filterEngagementStage]);
 
     const filteredLeads = useMemo(() => {
         return leads.filter(lead => {
             const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 lead.industry.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
-            const matchesStatus = filterStatus === 'All Status' || lead.status === filterStatus;
+            const matchesStatus = filterEngagementStage === 'All Engagement Stages' || lead.engagementStage === filterEngagementStage || lead.status === filterEngagementStage;
             return matchesSearch && matchesIndustry && matchesStatus;
         });
-    }, [leads, searchTerm, filterIndustry, filterStatus]);
+    }, [leads, searchTerm, filterIndustry, filterEngagementStage]);
 
     // Load data on mount
     useEffect(() => {
@@ -415,20 +415,20 @@ const ClientsMobileOptimized = () => {
                     </select>
                     
                     <select
-                        value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value)}
+                        value={filterEngagementStage}
+                        onChange={(e) => setFilterEngagementStage(e.target.value)}
                         className={`px-3 py-2 ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-200'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500`}
                     >
-                        <option>All Status</option>
-                        <option>Active</option>
-                        <option>Inactive</option>
-                        <option>New</option>
-                        <option>Contacted</option>
-                        <option>Qualified</option>
-                        <option>Proposal</option>
-                        <option>Negotiation</option>
-                        <option>Closed Won</option>
-                        <option>Closed Lost</option>
+                        <option value="All Engagement Stages">All Engagement Stages</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="New">New</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Qualified">Qualified</option>
+                        <option value="Proposal">Proposal</option>
+                        <option value="Negotiation">Negotiation</option>
+                        <option value="Closed Won">Closed Won</option>
+                        <option value="Closed Lost">Closed Lost</option>
                     </select>
                 </div>
             )}

@@ -152,8 +152,8 @@ async function testCreateLeadWithAllFields() {
   const leadData = {
     name: `Full Lead Test ${Date.now()}`,
     industry: 'Healthcare',
-    status: 'Potential',
-    stage: 'Awareness',
+    engagementStage: 'Potential',
+    aidaStatus: 'Awareness',
     revenue: 150000,
     value: 75000,
     probability: 60,
@@ -192,7 +192,7 @@ async function testCreateLeadWithAllFields() {
   const fieldsSaved = 
     lead.name === leadData.name &&
     lead.industry === leadData.industry &&
-    lead.stage === leadData.stage &&
+    lead.aidaStatus === leadData.aidaStatus &&
     lead.value === leadData.value &&
     lead.probability === leadData.probability
   
@@ -598,7 +598,7 @@ async function testFilterLeadsByStatus() {
     const createResponse = await apiRequest('/api/leads', 'POST', {
       name: `Status Filter Test ${status} ${Date.now()}`,
       industry: 'Technology',
-      status
+      engagementStage: status
     })
     
     if (createResponse.status === 201) {
