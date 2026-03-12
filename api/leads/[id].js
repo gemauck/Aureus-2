@@ -298,6 +298,12 @@ async function handler(req, res) {
         body = await parseJsonBody(req)
       }
       if (!body) body = {}
+      // Strip dropped columns so they never reach Prisma (Client table no longer has status/stage after migration)
+      delete body.status
+      delete body.stage
+      if (body.sites && Array.isArray(body.sites)) {
+        body.sites = body.sites.map(s => (typeof s === 'object' && s !== null ? { ...s, status: undefined, stage: undefined } : s))
+      }
       
       console.warn(`⚠️ DEPRECATED: PATCH /api/leads/[id] endpoint used for lead ${id}. Use /api/leads (PATCH) instead.`)
       
@@ -365,6 +371,9 @@ async function handler(req, res) {
       
       // CRITICAL: Preserve lead type - always set type to 'lead' to prevent accidental conversion
       updateData.type = 'lead'
+      // Never send dropped columns (Client uses engagementStage/aidaStatus only)
+      delete updateData.status
+      delete updateData.stage
       
       // Debug logging to verify updateData is constructed correctly
       console.log(`📝 [LEADS ID] Update data for lead ${id}:`, JSON.stringify(updateData, null, 2))
@@ -378,8 +387,8 @@ async function handler(req, res) {
         body.followUps !== undefined || body.services !== undefined
       if (Object.keys(updateData).length === 1 && updateData.type && !hasPhaseOnlyUpdates) {
         console.warn(`⚠️ [LEADS ID] Update data is empty (only type field) - no fields to update for lead ${id}`)
-        // Return the existing lead without updating
-        const existing = await prisma.client.findUnique({ 
+        // Return the existing lead without updating (minimal include to avoid relation errors)
+        let existing = await prisma.client.findUnique({
           where: { id },
           include: {
             clientContacts: true,
@@ -390,24 +399,20 @@ async function handler(req, res) {
             clientFollowUps: true,
             clientServices: true,
             projects: { select: { id: true, name: true, status: true } },
-            externalAgent: true,
-            // CRITICAL: Include groupMemberships to ensure they're returned in response
-            groupMemberships: {
-              include: {
-                group: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true,
-                    industry: true
-                  }
-                }
-              }
-            }
+            externalAgent: true
           }
         })
         if (!existing) {
           return notFound(res)
+        }
+        try {
+          const withGroups = await prisma.client.findUnique({
+            where: { id },
+            select: { groupMemberships: { include: { group: { select: { id: true, name: true, type: true, industry: true } } } } }
+          })
+          existing.groupMemberships = withGroups?.groupMemberships ?? []
+        } catch (_) {
+          existing.groupMemberships = []
         }
         const parsedLead = parseClientJsonFields(existing)
         return ok(res, { lead: parsedLead })
@@ -1071,7 +1076,7 @@ async function handler(req, res) {
           }
         }
         
-        // Now update it
+        // Now update it - use minimal include first to avoid relation errors, then attach groupMemberships separately
         let lead = await prisma.client.update({
           where: { id },
           data: updateData,
@@ -1084,21 +1089,26 @@ async function handler(req, res) {
             clientFollowUps: true,
             clientServices: true,
             projects: { select: { id: true, name: true, status: true } },
-            externalAgent: true,
-            groupMemberships: {
-              include: {
-                group: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true,
-                    industry: true
-                  }
+            externalAgent: true
+          }
+        })
+        try {
+          const withGroups = await prisma.client.findUnique({
+            where: { id },
+            select: {
+              id: true,
+              groupMemberships: {
+                include: {
+                  group: { select: { id: true, name: true, type: true, industry: true } }
                 }
               }
             }
-          }
-        })
+          })
+          lead.groupMemberships = withGroups?.groupMemberships ?? []
+        } catch (groupFetchErr) {
+          console.warn('⚠️ [LEADS ID] Could not fetch groupMemberships:', groupFetchErr.message)
+          lead.groupMemberships = []
+        }
         
         // Apply group membership replacement if provided (Company Group dropdown)
         const groupIdsToSet = body.groupIds === undefined
@@ -1164,7 +1174,10 @@ async function handler(req, res) {
         }
         console.error('❌ Database error updating lead:', dbError)
         console.error('❌ Error code:', dbError.code, 'Meta:', dbError.meta)
-        return serverError(res, 'Failed to update lead', dbError.message)
+        // Include actual error in message so client can show it (e.g. foreign key, constraint)
+        const detailMsg = dbError.message || (dbError.meta ? JSON.stringify(dbError.meta) : 'Unknown error')
+        const userMessage = `Failed to update lead${detailMsg ? `: ${detailMsg}` : ''}`
+        return serverError(res, userMessage, detailMsg)
       }
     }
 
