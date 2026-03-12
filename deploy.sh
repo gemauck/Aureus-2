@@ -70,9 +70,19 @@ if [ -f add-document-request-email-received-migration.sql ]; then
   echo
   echo "-> Applying manual SQL migration (DocumentRequestEmailReceived)..."
   if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
-    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f add-document-request-email-received-migration.sql || echo "  (manual migration failed; check DB access)"
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f add-document-request-email-received-migration.sql 2>/dev/null || echo "  (already applied or skipped)"
   else
     echo "  (psql or DATABASE_URL not available; run the SQL migration manually)"
+  fi
+fi
+
+if [ -f add-engagement-stage-aida-status-migration.sql ]; then
+  echo
+  echo "-> Applying manual SQL migration (engagementStage/aidaStatus on Client, ClientSite, Opportunity)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f add-engagement-stage-aida-status-migration.sql 2>/dev/null || echo "  (already applied or skipped)"
+  else
+    echo "  (psql or DATABASE_URL not available; run add-engagement-stage-aida-status-migration.sql manually)"
   fi
 fi
 
