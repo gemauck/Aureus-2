@@ -5898,7 +5898,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Aida Status</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
                                                 <select
                                                     value={newOpportunity.aidaStatus ?? newOpportunity.stage}
                                                     onChange={(e) => setNewOpportunity({...newOpportunity, aidaStatus: e.target.value})}

@@ -6949,7 +6949,7 @@ const Clients = React.memo(() => {
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Name</th>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Type</th>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Engagement Stage</th>
-                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Aida Status</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>AIDA Status</th>
                                 </tr>
                             </thead>
                             <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -8905,7 +8905,7 @@ const Clients = React.memo(() => {
                                 onClick={() => handleLeadSort('aidaStatus')}
                             >
                                 <div className="flex items-center">
-                                    Aida Status
+                                    AIDA Status
                                     {leadSortField === 'aidaStatus' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}

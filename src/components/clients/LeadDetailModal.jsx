@@ -3264,7 +3264,7 @@ const LeadDetailModal = ({
                                     </div>
                                     <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Aida Status
+                    AIDA Status
                 </label>
                                         <select 
                                             value={formData.aidaStatus ?? formData.stage}
@@ -3311,7 +3311,7 @@ const LeadDetailModal = ({
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
                                                                 
-                                                                console.log('✅ Aida Status auto-save completed');
+                                                                console.log('✅ AIDA Status auto-save completed');
                                                         
                                             // Clear the flag and notify parent after save completes
                                                         setTimeout(() => {
@@ -6183,7 +6183,7 @@ const LeadDetailModal = ({
                                         })
                                     ),
                                     React.createElement('div', null,
-                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Aida Status'),
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'AIDA Status'),
                                         React.createElement('select', {
                                             value: formData.aidaStatus ?? formData.stage,
                                             onChange: async (e) => {

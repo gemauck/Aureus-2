@@ -596,7 +596,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                     </div>
                                     
                                     <div>
-                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Aida Status</label>
+                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA Status</label>
                                         <select
                                             value={formData.aidaStatus ?? (formData.stage || 'Awareness')}
                                             onChange={async (e) => {
@@ -724,7 +724,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                 </div>
                                 
                                 <div>
-                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Aida Status</label>
+                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA Status</label>
                                     <select
                                         value={formData.aidaStatus ?? (formData.stage || 'Awareness')}
                                         onChange={async (e) => {
