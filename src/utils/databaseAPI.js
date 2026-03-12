@@ -2549,6 +2549,8 @@ const DatabaseAPI = {
 
 // Make available globally
 window.DatabaseAPI = DatabaseAPI;
+// Bind getLead so it works when passed as callback (e.g. getLead = window.DatabaseAPI.getLead; getLead(id))
+DatabaseAPI.getLead = DatabaseAPI.getLead.bind(DatabaseAPI);
 
 // Check if we need to clear cache on load (set by early cache clearing script)
 if (window.__CLEAR_DATABASE_CACHE_ON_LOAD__) {
@@ -2567,6 +2569,7 @@ if (window.api) {
     window.api.deleteClient = DatabaseAPI.deleteClient.bind(DatabaseAPI);
     
     window.api.getLeads = DatabaseAPI.getLeads.bind(DatabaseAPI);
+    window.api.getLead = DatabaseAPI.getLead.bind(DatabaseAPI);
     window.api.createLead = DatabaseAPI.createLead.bind(DatabaseAPI);
     window.api.updateLead = DatabaseAPI.updateLead.bind(DatabaseAPI);
     window.api.deleteLead = DatabaseAPI.deleteLead.bind(DatabaseAPI);
