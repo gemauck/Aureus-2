@@ -4375,18 +4375,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     )}
                                     {isLead && (
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Stage</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Engagement Stage</label>
                                             <select 
-                                                value={formData.status || 'Potential'}
+                                                value={formData.engagementStage ?? formData.status ?? 'Potential'}
                                                 onFocus={() => {
                                                     isEditingRef.current = true;
                                                     userHasStartedTypingRef.current = true;
                                                     if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 }}
                                                 onChange={async (e) => {
-                                                    const newStatus = e.target.value;
+                                                    const newStage = e.target.value;
                                                     isEditingRef.current = true;
                                                     hasUserEditedForm.current = true;
+                                                    userEditedFieldsRef.current.add('engagementStage');
                                                     userEditedFieldsRef.current.add('status');
                                                     if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                     editingTimeoutRef.current = setTimeout(() => {
@@ -4397,13 +4398,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     if (onEditingChange) onEditingChange(false, true);
                                                     
                                                     setFormData(prev => {
-                                                        const updated = {...prev, status: newStatus};
+                                                        const updated = { ...prev, engagementStage: newStage, status: newStage };
                                                         formDataRef.current = updated;
                                                         if (client && client.id && onSave) {
                                                             setTimeout(async () => {
                                                                 try {
-                                                                    const latest = {...formDataRef.current, status: newStatus};
-                                                                    latest.status = newStatus;
+                                                                    const latest = { ...formDataRef.current, engagementStage: newStage, status: newStage };
                                                                     if (isLead && latest.aidaStatus && !latest.stage) {
                                                                         latest.stage = latest.aidaStatus;
                                                                     }
