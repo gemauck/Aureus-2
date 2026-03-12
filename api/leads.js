@@ -400,7 +400,42 @@ async function handler(req, res) {
             meta: queryError.meta,
             stack: queryError.stack
           })
-          
+
+          // If error suggests missing column (e.g. after CRM schema migration), try raw SQL first
+          const isColumnOrSchemaError =
+            queryError.code === 'P2022' ||
+            (queryError.message && (
+              queryError.message.includes('does not exist') ||
+              queryError.message.includes('column') && (queryError.message.includes('status') || queryError.message.includes('stage')) ||
+              queryError.message.includes('Unknown column')
+            ))
+          if (isColumnOrSchemaError) {
+            try {
+              console.warn('⚠️ Schema/column error detected, trying raw SQL list...')
+              const allRecordsRaw = await prisma.$queryRaw`
+                SELECT id, name, type, industry, "engagementStage", "aidaStatus", revenue, value, probability,
+                       "lastContact", address, website, notes, contacts, "followUps",
+                       "projectIds", comments, sites, contracts, "activityLog",
+                       "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
+                       proposals, thumbnail, services, "rssSubscribed"
+                FROM "Client"
+                WHERE type = 'lead'
+                ORDER BY "createdAt" DESC
+              `
+              const allRecords = allRecordsRaw.map(record => {
+                const parsed = parseClientJsonFields(record)
+                return parsed
+              })
+              leads = allRecords.map(l => ({ ...l, externalAgent: null, groupMemberships: [] }))
+              if (leads.length > 0) {
+                console.log('✅ Raw SQL fallback succeeded:', leads.length, 'leads')
+              }
+            } catch (rawErr) {
+              console.warn('⚠️ Raw SQL fallback failed:', rawErr.message)
+            }
+          }
+
+          if (leads.length === 0) {
           // Fallback: If query fails, try without type filter and filter in memory
           console.warn('⚠️ Trying fallback query without type filter...')
           try {
@@ -538,6 +573,7 @@ async function handler(req, res) {
                 }
               }
             }
+          }  // end if (leads.length === 0)
           } catch (fallbackError) {
             console.error('❌ Fallback query also failed:', {
               message: fallbackError.message,

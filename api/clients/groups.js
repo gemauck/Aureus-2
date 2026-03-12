@@ -53,8 +53,14 @@ async function handler(req, res) {
         console.log(`✅ Fetched ${groups.length} groups from database`)
         return ok(res, { groups })
       } catch (error) {
-        console.error('❌ Error fetching groups:', error)
-        return serverError(res, 'Failed to fetch groups')
+        console.error('❌ Error fetching groups:', {
+          message: error.message,
+          code: error.code,
+          meta: error.meta,
+          name: error.name
+        })
+        const details = process.env.NODE_ENV === 'development' ? error.message : undefined
+        return serverError(res, 'Failed to fetch groups', details)
       }
     }
     
