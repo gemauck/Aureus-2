@@ -8902,22 +8902,22 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('engagementStage')}
+                                onClick={() => handleLeadSort('aidaStatus')}
                             >
                                 <div className="flex items-center">
-                                    Engagement Stage
-                                    {leadSortField === 'engagementStage' && (
+                                    Aida Status
+                                    {leadSortField === 'aidaStatus' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('aidaStatus')}
+                                onClick={() => handleLeadSort('engagementStage')}
                             >
                                 <div className="flex items-center">
-                                    Aida Status
-                                    {leadSortField === 'aidaStatus' && (
+                                    Engagement Stage
+                                    {leadSortField === 'engagementStage' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
@@ -8992,6 +8992,25 @@ const Clients = React.memo(() => {
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                         <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                             <select
+                                                value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.aidaStatus ?? (lead.stage || 'awareness')).toLowerCase())) || 'Awareness'}
+                                                onChange={e => handleUpdateLeadAidaStatus(lead.id, e.target.value)}
+                                                className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                    (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                                }`}
+                                            >
+                                                <option value="No Engagement">No Engagement</option>
+                                                <option value="Awareness">Awareness</option>
+                                                <option value="Interest">Interest</option>
+                                                <option value="Desire">Desire</option>
+                                                <option value="Action">Action</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                            <select
                                                 value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
                                                 onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
                                                 className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
@@ -9011,25 +9030,6 @@ const Clients = React.memo(() => {
                                                 <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
-                                            </select>
-                                        </td>
-                                        <td className="px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                                            <select
-                                                value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.aidaStatus ?? (lead.stage || 'awareness')).toLowerCase())) || 'Awareness'}
-                                                onChange={e => handleUpdateLeadAidaStatus(lead.id, e.target.value)}
-                                                className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
-                                                    (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                                }`}
-                                            >
-                                                <option value="No Engagement">No Engagement</option>
-                                                <option value="Awareness">Awareness</option>
-                                                <option value="Interest">Interest</option>
-                                                <option value="Desire">Desire</option>
-                                                <option value="Action">Action</option>
                                             </select>
                                         </td>
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`} onClick={e => e.stopPropagation()}>
@@ -9086,6 +9086,25 @@ const Clients = React.memo(() => {
                                             </td>
                                             <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                                 <select
+                                                    value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((site.aidaStatus || 'awareness').toLowerCase())) || 'Awareness'}
+                                                    onChange={e => handleUpdateSiteAidaStatus(lead, site, siteIdx, e.target.value)}
+                                                    className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
+                                                        (site.aidaStatus || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                        (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                                    }`}
+                                                >
+                                                    <option value="No Engagement">No Engagement</option>
+                                                    <option value="Awareness">Awareness</option>
+                                                    <option value="Interest">Interest</option>
+                                                    <option value="Desire">Desire</option>
+                                                    <option value="Action">Action</option>
+                                                </select>
+                                            </td>
+                                            <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                                <select
                                                     value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
                                                     onChange={e => handleUpdateSiteEngagementStage(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
@@ -9105,25 +9124,6 @@ const Clients = React.memo(() => {
                                                     <option value="Disinterested">Disinterested</option>
                                                     <option value="Proposal">Proposal</option>
                                                     <option value="Tender">Tender</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                                                <select
-                                                    value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((site.aidaStatus || 'awareness').toLowerCase())) || 'Awareness'}
-                                                    onChange={e => handleUpdateSiteAidaStatus(lead, site, siteIdx, e.target.value)}
-                                                    className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                        (site.aidaStatus || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                                        (site.aidaStatus || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                                        (site.aidaStatus || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                        (site.aidaStatus || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
-                                                        (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                                    }`}
-                                                >
-                                                    <option value="No Engagement">No Engagement</option>
-                                                    <option value="Awareness">Awareness</option>
-                                                    <option value="Interest">Interest</option>
-                                                    <option value="Desire">Desire</option>
-                                                    <option value="Action">Action</option>
                                                 </select>
                                             </td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>

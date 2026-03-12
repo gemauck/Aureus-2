@@ -376,19 +376,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const clientPropRef = useRef(client);
     clientPropRef.current = client;
     
-    // Stable key so we only run when synced fields actually change – prevents flashing (e.g. External Agent select)
+    // Stable key so we only run when synced fields actually change – prevents flashing (e.g. External Agent select).
+    // Exclude KYC from the key: list/refresh often send unstable KYC refs, causing repeated setFormData and field flashing.
     const clientSyncKey = (() => {
         if (!client || client.id == null) return null;
         const fu = typeof client.followUps === 'string' ? (client.followUps.trim() ? JSON.parse(client.followUps) : []) : (Array.isArray(client.followUps) ? client.followUps : []);
         const notes = client.notes !== undefined && client.notes !== null ? String(client.notes) : '';
         const co = typeof client.comments === 'string' ? (client.comments.trim() ? JSON.parse(client.comments) : []) : (Array.isArray(client.comments) ? client.comments : []);
-        const kyc = (() => {
-            if (client.kyc != null && typeof client.kyc === 'object') return client.kyc;
-            if (typeof client.kyc === 'string' && client.kyc.trim()) { try { return JSON.parse(client.kyc); } catch (_) {} }
-            if (client.kycJsonb != null && typeof client.kycJsonb === 'object') return client.kycJsonb;
-            return {};
-        })();
-        return `${client.id}\n${JSON.stringify(fu)}\n${notes}\n${JSON.stringify(co)}\n${JSON.stringify(kyc)}`;
+        return `${client.id}\n${JSON.stringify(fu)}\n${notes}\n${JSON.stringify(co)}`;
     })();
     
     // CRITICAL: Update formData when client prop changes (for followUps, notes, comments persistence)
