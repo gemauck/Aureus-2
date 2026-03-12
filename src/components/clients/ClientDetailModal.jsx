@@ -173,6 +173,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Groups state for Services section
     const [availableGroups, setAvailableGroups] = useState([]);
     const [clientGroupMemberships, setClientGroupMemberships] = useState([]);
+    const lastClientGroupMembershipsKeyRef = useRef(null); // avoid setState when data unchanged (stops tag flashing)
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
     const [showGroupSelector, setShowGroupSelector] = useState(false);
     const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -371,9 +372,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const justSavedRef = useRef(false);
     const saveTimestampRef = useRef(0);
     
+    // Hold latest client so sync effect can use it when sync key changes (avoids running on every client ref change)
+    const clientPropRef = useRef(client);
+    clientPropRef.current = client;
+    
+    // Stable key so we only run when synced fields actually change – prevents flashing (e.g. External Agent select)
+    const clientSyncKey = (() => {
+        if (!client || client.id == null) return null;
+        const fu = typeof client.followUps === 'string' ? (client.followUps.trim() ? JSON.parse(client.followUps) : []) : (Array.isArray(client.followUps) ? client.followUps : []);
+        const notes = client.notes !== undefined && client.notes !== null ? String(client.notes) : '';
+        const co = typeof client.comments === 'string' ? (client.comments.trim() ? JSON.parse(client.comments) : []) : (Array.isArray(client.comments) ? client.comments : []);
+        const kyc = (() => {
+            if (client.kyc != null && typeof client.kyc === 'object') return client.kyc;
+            if (typeof client.kyc === 'string' && client.kyc.trim()) { try { return JSON.parse(client.kyc); } catch (_) {} }
+            if (client.kycJsonb != null && typeof client.kycJsonb === 'object') return client.kycJsonb;
+            return {};
+        })();
+        return `${client.id}\n${JSON.stringify(fu)}\n${notes}\n${JSON.stringify(co)}\n${JSON.stringify(kyc)}`;
+    })();
+    
     // CRITICAL: Update formData when client prop changes (for followUps, notes, comments persistence)
-    // This ensures data persists when navigating away and back, or on page refresh
+    // Depends on clientSyncKey so we only run when synced data changes, not on every parent re-render (stops field flashing).
     useEffect(() => {
+        const client = clientPropRef.current;
         if (!client || !client.id) return;
         
         // Skip if user is currently editing or auto-saving - don't overwrite their changes
@@ -511,7 +532,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 id: client.id
             };
         }
-    }, [client]);
+    }, [clientSyncKey]);
     
     // Cleanup editing timeout on unmount
     useEffect(() => {
@@ -2308,7 +2329,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         if (window.RateLimitManager?.isRateLimited?.()) {
             setAvailableGroups([]);
-            if (client?.id) setClientGroupMemberships([]);
+            if (client?.id && lastClientGroupMembershipsKeyRef.current !== '') {
+                lastClientGroupMembershipsKeyRef.current = '';
+                setClientGroupMemberships([]);
+            }
             return;
         }
         
@@ -2369,22 +2393,38 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             if (membershipsResponse.ok) {
                                 const membershipsData = await membershipsResponse.json();
                                 const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
-                                setClientGroupMemberships(memberships);
+                                const key = memberships.length ? memberships.map(m => m.group?.id ?? m.id).filter(Boolean).sort().join(',') : '';
+                                if (lastClientGroupMembershipsKeyRef.current !== key) {
+                                    lastClientGroupMembershipsKeyRef.current = key;
+                                    setClientGroupMemberships(memberships);
+                                }
                             } else if (membershipsResponse.status === 500) {
                                 // Server error - likely database issue with this client
                                 console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             } else if (membershipsResponse.status === 404) {
                                 // 404 is expected when client has no groups or doesn't exist - silently handle
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             } else if (membershipsResponse.status === 429) {
                                 const retryAfter = parseInt(membershipsResponse.headers.get('Retry-After') || '60', 10);
                                 window.RateLimitManager?.setRateLimit?.(retryAfter);
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             } else {
                                 // Other errors (403, etc.)
                                 console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             }
                         } catch (groupError) {
                             const is429 = groupError?.status === 429 || groupError?.code === 'RATE_LIMIT_EXCEEDED';
@@ -2392,7 +2432,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             if (!is429 && !is404) {
                                 console.error('❌ Error loading client groups:', groupError);
                             }
-                            setClientGroupMemberships([]);
+                            if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                lastClientGroupMembershipsKeyRef.current = '';
+                                setClientGroupMemberships([]);
+                            }
                         }
                     }, 3000); // 3 second deduplication window for memberships
                 }
@@ -2434,25 +2477,44 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             if (membershipsResponse.ok) {
                                 const membershipsData = await membershipsResponse.json();
                                 const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
-                                setClientGroupMemberships(memberships);
+                                const key = memberships.length ? memberships.map(m => m.group?.id ?? m.id).filter(Boolean).sort().join(',') : '';
+                                if (lastClientGroupMembershipsKeyRef.current !== key) {
+                                    lastClientGroupMembershipsKeyRef.current = key;
+                                    setClientGroupMemberships(memberships);
+                                }
                             } else if (membershipsResponse.status === 500) {
                                 console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             } else if (membershipsResponse.status === 404) {
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             } else if (membershipsResponse.status === 429) {
                                 const retryAfter = parseInt(membershipsResponse.headers.get('Retry-After') || '60', 10);
                                 window.RateLimitManager?.setRateLimit?.(retryAfter);
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             } else {
                                 console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
-                                setClientGroupMemberships([]);
+                                if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                    lastClientGroupMembershipsKeyRef.current = '';
+                                    setClientGroupMemberships([]);
+                                }
                             }
                         } catch (groupError) {
                             if (groupError?.status !== 429 && groupError?.code !== 'RATE_LIMIT_EXCEEDED') {
                                 console.error('❌ Error loading client groups:', groupError);
                             }
-                            setClientGroupMemberships([]);
+                            if (lastClientGroupMembershipsKeyRef.current !== '') {
+                                lastClientGroupMembershipsKeyRef.current = '';
+                                setClientGroupMemberships([]);
+                            }
                         }
                     }
                 } catch (error) {
@@ -2476,9 +2538,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Load groups when client changes
     useEffect(() => {
         if (client?.id) {
+            lastClientGroupMembershipsKeyRef.current = null; // force next load to apply (different client)
             loadGroups();
         } else {
-            setClientGroupMemberships([]);
+            if (lastClientGroupMembershipsKeyRef.current !== '') {
+                lastClientGroupMembershipsKeyRef.current = '';
+                setClientGroupMemberships([]);
+            }
         }
     }, [client?.id, loadGroups]);
     
@@ -4577,7 +4643,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 )}
                                             </div>
                                             <select
-                                                value={formData.externalAgentId || formData.externalAgent?.id || ''}
+                                                value={String(formData.externalAgentId ?? formData.externalAgent?.id ?? '')}
                                                 onFocus={() => {
                                                     isEditingRef.current = true;
                                                     userHasStartedTypingRef.current = true;
@@ -4630,7 +4696,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             >
                                                 <option value="">Select External Agent</option>
                                                 {externalAgents.map((agent) => (
-                                                    <option key={agent.id} value={agent.id}>
+                                                    <option key={agent.id} value={String(agent.id)}>
                                                         {agent.name}
                                                     </option>
                                                 ))}

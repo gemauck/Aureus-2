@@ -942,7 +942,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, []);
 
     // Allow Space and Enter in Monthly Data Review notes: block other keydown handlers from running
-    // so they cannot preventDefault. Listener runs in capture phase so it runs before bubble listeners.
+    // so they cannot preventDefault. Attach to both window and document (capture) to run before others.
     useEffect(() => {
         if (!isMonthlyDataReview || typeof document === 'undefined') return;
         const handler = (e) => {
@@ -951,8 +951,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 e.stopImmediatePropagation();
             }
         };
+        window.addEventListener('keydown', handler, true);
         document.addEventListener('keydown', handler, true);
-        return () => document.removeEventListener('keydown', handler, true);
+        return () => {
+            window.removeEventListener('keydown', handler, true);
+            document.removeEventListener('keydown', handler, true);
+        };
     }, [isMonthlyDataReview]);
 
     // Sync selectedYear from URL (docYear) so deep links open with correct year and popup shows comments
@@ -4028,7 +4032,26 @@ const getAssigneeColor = (identifier, users) => {
                     value={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
                     onKeyDownCapture={(e) => e.stopImmediatePropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                        if (e.key !== ' ' && e.key !== 'Enter') {
+                            e.stopPropagation();
+                            return;
+                        }
+                        // Fallback: manually insert Space/Enter so typing works even if another handler preventDefaults
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const ta = e.target;
+                        const start = ta.selectionStart;
+                        const end = ta.selectionEnd;
+                        const ch = e.key === ' ' ? ' ' : '\n';
+                        const newValue = notes.slice(0, start) + ch + notes.slice(end);
+                        handleUpdateNotes(section.id, doc.id, month, newValue);
+                        const nextPos = start + 1;
+                        setTimeout(() => {
+                            ta.selectionStart = nextPos;
+                            ta.selectionEnd = nextPos;
+                        }, 0);
+                    }}
                     onBlur={() => {
                         lastSavedDataRef.current = null;
                         if (saveTimeoutRef.current) {
