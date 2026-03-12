@@ -1701,11 +1701,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // ============================================================
     
     const statusOptions = [
-        { value: 'requested', label: 'Requested', color: 'bg-orange-200 text-slate-700 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' },
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
-        { value: 'ongoing', label: 'Ongoing', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-300 shadow-sm' }
+        { value: 'not-done', label: 'Not Done', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
+        { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
+        { value: 'done', label: 'Done', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
+        { value: 'issue', label: 'Issue', color: 'bg-orange-200 text-slate-700 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' }
     ];
     
     const getStatusConfig = (status) => {
@@ -4013,6 +4012,7 @@ const getAssigneeColor = (identifier, users) => {
                 <textarea
                     value={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
+                    onKeyDownCapture={(e) => e.stopImmediatePropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
                     onBlur={() => {
                         lastSavedDataRef.current = null;
@@ -4150,7 +4150,7 @@ Abcotronics`;
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [sendPlainTextOnly, setSendPlainTextOnly] = useState(false);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
-        const [scheduleStopStatus, setScheduleStopStatus] = useState('collected');
+        const [scheduleStopStatus, setScheduleStopStatus] = useState('done');
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
         const [result, setResult] = useState(null);
@@ -4574,7 +4574,7 @@ Abcotronics`;
                     frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
                         ? tpl.schedule.frequency
                         : 'none',
-                    stopWhenStatus: (tpl?.schedule?.stopWhenStatus || 'collected')
+                    stopWhenStatus: (tpl?.schedule?.stopWhenStatus || 'done')
                 }
             };
         }
@@ -4610,7 +4610,7 @@ Abcotronics`;
                 sendPlainTextOnly: nextPlainTextOnly,
                 schedule: {
                     frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
-                    stopWhenStatus: scheduleStopStatus || 'collected'
+                    stopWhenStatus: scheduleStopStatus || 'done'
                 }
             });
         }
@@ -4891,7 +4891,7 @@ Abcotronics`;
                             ...section,
                             documents: (section.documents || []).map(doc => {
                                 if (String(doc.id) !== String(ctx.doc.id)) return doc;
-                                const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, 'requested', selectedYear);
+                                const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, 'not-done', selectedYear);
                                 return { ...doc, collectionStatus: updatedStatus };
                             })
                         };
