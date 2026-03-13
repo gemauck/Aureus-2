@@ -77,9 +77,8 @@ export async function searchNewsForClient(clientName, website) {
       }
     }
     
-    // Google News RSS: request only last 7 days so we don't fill DB with old articles
-    const queryWithWhen = `${searchQuery} when:7d`
-    const encodedQuery = encodeURIComponent(queryWithWhen)
+    // Don't use when:7d — it often returns zero results. Fetch default (recent) results, filter by date when saving.
+    const encodedQuery = encodeURIComponent(searchQuery)
     const rssUrl = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en&gl=US&ceid=US:en`
 
     // Fetch RSS feed (browser-like headers to reduce blocking)
@@ -98,8 +97,10 @@ export async function searchNewsForClient(clientName, website) {
     
     const xmlText = await response.text()
     const articles = parseRSS(xmlText)
-    
-    return articles.slice(0, 10) // Limit to top 10 results
+    if (articles.length === 0) {
+      console.warn(`   ⚠️ RSS returned 0 articles for "${clientName}" (might be blocked or empty feed)`)
+    }
+    return articles.slice(0, 15) // Limit to 15 so we have more recent ones to pick from after 30d filter
     
   } catch (error) {
     console.error(`   ❌ Error searching news for ${clientName}:`, error.message)
@@ -131,16 +132,21 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
     
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    
+    const cutoff30d = new Date(today)
+    cutoff30d.setDate(cutoff30d.getDate() - 30)
+
     let articlesSaved = 0
-    
-    // Process and save articles
+
+    // Only save articles from the last 30 days so we don't repopulate old items (e.g. Dec 2023)
     for (const article of articles) {
       if (!article.url || !article.title) {
         continue
       }
-      
+
       const publishedDate = new Date(article.publishedAt || Date.now())
+      if (publishedDate < cutoff30d) {
+        continue // skip articles older than 30 days
+      }
       const isNew = publishedDate >= today
       
       // Check if article already exists
