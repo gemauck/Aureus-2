@@ -421,7 +421,6 @@ const ClientsMobileOptimized = () => {
                     >
                         <option value="All Engagement Stages">All Engagement Stages</option>
                         <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
                         <option value="New">New</option>
                         <option value="Contacted">Contacted</option>
                         <option value="Proposal">Proposal</option>
@@ -453,8 +452,7 @@ const ClientsMobileOptimized = () => {
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                         type === 'client' 
                             ? (item.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800')
-                            : (item.status === 'New' ? 'bg-yellow-100 text-yellow-800' : 
-                               item.status === 'Qualified' ? 'bg-blue-100 text-blue-800' :
+: (item.status === 'New' ? 'bg-yellow-100 text-yellow-800' :
                                item.status === 'Closed Won' ? 'bg-green-100 text-green-800' :
                                'bg-gray-100 text-gray-800')
                     }`}>

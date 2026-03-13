@@ -189,9 +189,9 @@ async function main() {
       name: 'Transport Services',
       type: 'lead',
       industry: 'Transport',
-      status: 'qualified',
+      engagementStage: 'Potential',
       address: '333 Highway Road, Durban',
-      notes: 'Qualified lead. Proposal sent.'
+      notes: 'Proposal sent.'
     }
   ]
 

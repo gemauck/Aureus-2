@@ -110,7 +110,6 @@ const BulkOperations = ({
                             {type === 'clients' ? (
                                 <>
                                     <option value="Active">Active</option>
-                                    <option value="Inactive">Inactive</option>
                                     <option value="Prospect">Prospect</option>
                                 </>
                             ) : (

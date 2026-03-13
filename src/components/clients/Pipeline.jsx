@@ -71,8 +71,6 @@ const normalizeLifecycleStageValue = (value) => {
     switch ((value || '').toLowerCase()) {
         case 'active':
             return 'Active';
-        case 'inactive':
-            return 'Inactive';
         case 'proposal':
             return 'Proposal';
         case 'tender':
@@ -1360,7 +1358,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     const STAGE_OPTIONS = ['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'];
-    const STATUS_OPTIONS = ['Potential', 'Active', 'Inactive', 'Disinterested', 'Proposal', 'Tender'];
+    const STATUS_OPTIONS = ['Potential', 'Active', 'Disinterested', 'Proposal', 'Tender'];
 
     const handlePipelineStageChange = useCallback(async (item, newStage) => {
         const token = storage?.getToken?.();

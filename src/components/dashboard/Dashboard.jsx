@@ -196,8 +196,8 @@ const Dashboard = () => {
         });
 
     // Pipeline stats - Include both Leads and Client Opportunities
-    // Since status is always 'active', use stage or just count all leads as qualified
-    const qualifiedLeads = leads.filter(l => l.stage === 'Qualified' || l.stage === 'Consideration' || l.stage === 'Proposal' || l.stage === 'Negotiation').length || leads.length;
+    // Count leads in pipeline (Proposal, etc.); Qualified/On Hold removed from engagement options
+    const qualifiedLeads = leads.filter(l => ['Consideration', 'Proposal', 'Negotiation'].includes(l.stage) || (l.engagementStage && ['Proposal', 'Tender'].includes(l.engagementStage))).length || leads.length;
     const leadsPipelineValue = leads.reduce((sum, l) => sum + l.value, 0);
     const leadsWeightedValue = leads.reduce((sum, l) => sum + (l.value * l.probability / 100), 0);
     

@@ -517,8 +517,7 @@ function processClientData(rawClients, cacheKey) {
             engagementStage = c.engagementStage ?? c.status ?? 'Potential';
         } else {
             if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
-            else if ((c.engagementStage ?? c.status) === 'inactive') engagementStage = 'Inactive';
-            else engagementStage = c.engagementStage ?? c.status ?? 'Inactive';
+            else engagementStage = c.engagementStage ?? c.status ?? 'Potential';
         }
         
         const contacts = Array.isArray(c.contacts) ? c.contacts : (typeof c.contacts === 'string' ? safeParseJson(c.contacts, []) : []);
@@ -575,7 +574,7 @@ function processClientData(rawClients, cacheKey) {
                 id: c?.id,
                 name: c?.name ?? 'Unknown',
                 type: c?.type ?? null,
-                engagementStage: 'Inactive',
+                engagementStage: 'Potential',
                 aidaStatus: 'Awareness',
                 industry: c?.industry || 'Other',
                 revenue: 0,
@@ -3134,8 +3133,7 @@ const Clients = React.memo(() => {
                 engagementStage = c.engagementStage ?? c.status ?? 'Potential';
             } else {
                 if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
-                else if ((c.engagementStage ?? c.status) === 'inactive') engagementStage = 'Inactive';
-                else engagementStage = c.engagementStage ?? c.status ?? 'Inactive';
+                else engagementStage = c.engagementStage ?? c.status ?? 'Potential';
             }
 
             return {
@@ -6913,7 +6911,7 @@ const Clients = React.memo(() => {
                 return { ...lead, aidaStatus: mappedAida };
             }).filter(lead => {
                 const eng = lead.engagementStage ?? lead.status;
-                return eng !== 'Inactive' && eng !== 'Disinterested';
+                return eng !== 'Disinterested';
             });
         }, [leads]);
         
@@ -6921,7 +6919,7 @@ const Clients = React.memo(() => {
         const activeOpportunities = useMemo(() => {
             return clientOpportunities.filter(opp => {
                 const eng = opp.engagementStage ?? opp.status ?? 'Active';
-                return eng !== 'Inactive' && eng !== 'Closed Lost' && eng !== 'Closed Won';
+                return eng !== 'Closed Lost' && eng !== 'Closed Won';
             });
         }, [clientOpportunities]);
 
@@ -9023,7 +9021,7 @@ const Clients = React.memo(() => {
                                                 <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                             ) : (
                                             <select
-                                                value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
+                                                value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
                                                 onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
                                                 className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
@@ -9036,7 +9034,6 @@ const Clients = React.memo(() => {
                                             >
                                                 <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
-                                                <option value="Inactive">Inactive</option>
                                                 <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
@@ -9116,7 +9113,7 @@ const Clients = React.memo(() => {
                                             </td>
                                             <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                                 <select
-                                                    value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
+                                                    value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
                                                     onChange={e => handleUpdateSiteEngagementStage(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
@@ -9129,7 +9126,6 @@ const Clients = React.memo(() => {
                                                 >
                                                     <option value="Potential">Potential</option>
                                                     <option value="Active">Active</option>
-                                                    <option value="Inactive">Inactive</option>
                                                     <option value="Disinterested">Disinterested</option>
                                                     <option value="Proposal">Proposal</option>
                                                     <option value="Tender">Tender</option>

@@ -4446,7 +4446,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             >
                                                 <option>Active</option>
-                                                <option>Inactive</option>
                                             </select>
                                         </div>
                                     )}
@@ -4610,7 +4609,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             >
                                                 <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
-                                                <option value="Inactive">Inactive</option>
                                                 <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
@@ -4728,41 +4726,68 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     )}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Website</label>
-                                        <input 
-                                            type="url" 
-                                            value={formData.website || ''}
-                                            onFocus={() => {
-                                                isEditingRef.current = true;
-                                                userHasStartedTypingRef.current = true;
-                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                            }}
-                                            onChange={(e) => {
-                                                // CRITICAL: Mark that user has started typing and edited this field
-                                                userHasStartedTypingRef.current = true;
-                                                isEditingRef.current = true;
-                                                hasUserEditedForm.current = true; // Mark that user has edited
-                                                userEditedFieldsRef.current.add('website'); // Track that user has edited this field
-                                                if (onEditingChange) onEditingChange(true);
-                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                editingTimeoutRef.current = setTimeout(() => {
-                                                    isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
-                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                setFormData(prev => {
-                                                    const updated = {...prev, website: e.target.value};
-                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
-                                                    formDataRef.current = updated;
-                                                    return updated;
-                                                });
-                                            }}
-                                            onBlur={() => {
-                                                setTimeout(() => {
-                                                    isEditingRef.current = false;
-                                                }, 500);
-                                            }}
-                                            placeholder="https://example.com"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
-                                        />
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <input 
+                                                    type="url" 
+                                                    value={formData.website || ''}
+                                                    onFocus={() => {
+                                                        isEditingRef.current = true;
+                                                        userHasStartedTypingRef.current = true;
+                                                        if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                    }}
+                                                    onChange={(e) => {
+                                                        userHasStartedTypingRef.current = true;
+                                                        isEditingRef.current = true;
+                                                        hasUserEditedForm.current = true;
+                                                        userEditedFieldsRef.current.add('website');
+                                                        if (onEditingChange) onEditingChange(true);
+                                                        if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                        editingTimeoutRef.current = setTimeout(() => {
+                                                            isEditingRef.current = false;
+                                                            if (onEditingChange) onEditingChange(false);
+                                                        }, 5000);
+                                                        setFormData(prev => {
+                                                            const updated = {...prev, website: e.target.value};
+                                                            formDataRef.current = updated;
+                                                            return updated;
+                                                        });
+                                                    }}
+                                                    onBlur={async (e) => {
+                                                        setTimeout(() => { isEditingRef.current = false; }, 500);
+                                                        const url = ((e && e.target && e.target.value) || formDataRef.current?.website || formData.website || '').trim();
+                                                        if (!url || !/^https?:\/\/[^\s/]+/i.test(url)) return;
+                                                        try {
+                                                            const logoRes = await fetch(`/api/website-logo?url=${encodeURIComponent(url)}`);
+                                                            if (!logoRes.ok) return;
+                                                            const { logoUrl } = await logoRes.json();
+                                                            if (!logoUrl) return;
+                                                            const updated = { ...formDataRef.current, thumbnail: logoUrl };
+                                                            formDataRef.current = updated;
+                                                            setFormData(prev => ({ ...prev, thumbnail: logoUrl }));
+                                                            if (client?.id && typeof onSave === 'function') {
+                                                                onSave(updated, true).catch(() => {});
+                                                            }
+                                                            if (onUpdate && client) onUpdate({ ...client, thumbnail: logoUrl });
+                                                        } catch (_) {}
+                                                    }}
+                                                    placeholder="https://example.com"
+                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                                />
+                                            </div>
+                                            {(formData.website || '').trim() && /^https?:\/\/[^\s/]+/i.test((formData.website || '').trim()) && (
+                                                <div className="flex-shrink-0 flex items-center gap-1">
+                                                    <div className="w-16 h-12 rounded border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center" title="Site preview">
+                                                        <img src={`/api/website-preview?url=${encodeURIComponent((formData.website || '').trim())}&width=320&height=240`} alt="" className="max-w-full max-h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                    </div>
+                                                    {(formData.thumbnail || (client && client.thumbnail)) && (
+                                                        <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 bg-white flex items-center justify-center" title="Logo">
+                                                            <img src={formData.thumbnail || client.thumbnail} alt="" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -5579,14 +5604,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
-                                                            value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
                                                             onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                             title="Lifecycle status – matches list Engagement Stage column"
                                                         >
                                                             <option value="Potential">Potential</option>
                                                             <option value="Active">Active</option>
-                                                            <option value="Inactive">Inactive</option>
                                                             <option value="Disinterested">Disinterested</option>
                                                             <option value="Proposal">Proposal</option>
                                                             <option value="Tender">Tender</option>
@@ -5752,13 +5776,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
-                                                            value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
                                                             onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                         >
                                                             <option value="Potential">Potential</option>
                                                             <option value="Active">Active</option>
-                                                            <option value="Inactive">Inactive</option>
                                                             <option value="Disinterested">Disinterested</option>
                                                             <option value="Proposal">Proposal</option>
                                                             <option value="Tender">Tender</option>

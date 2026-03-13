@@ -565,7 +565,6 @@ const ClientsDatabaseFirst = () => {
                             >
                                 <option>All Status</option>
                                 <option>Active</option>
-                                <option>Inactive</option>
                                 <option>New</option>
                                 <option>Contacted</option>
                                 <option>Proposal</option>
@@ -690,8 +689,7 @@ const ClientsDatabaseFirst = () => {
                                             </p>
                                         </div>
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                            lead.status === 'New' ? 'bg-yellow-100 text-yellow-800' : 
-                                            lead.status === 'Qualified' ? 'bg-blue-100 text-blue-800' :
+lead.status === 'New' ? 'bg-yellow-100 text-yellow-800' :
                                             lead.status === 'Closed Won' ? 'bg-green-100 text-green-800' :
                                             'bg-gray-100 text-gray-800'
                                         }`}>

@@ -24,8 +24,7 @@ function processClientData(clientsArray) {
             engagementStage = c.engagementStage ?? (c.status || 'Potential');
         } else {
             if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
-            else if ((c.engagementStage ?? c.status) === 'inactive') engagementStage = 'Inactive';
-            else engagementStage = c.engagementStage ?? (c.status || 'Inactive');
+            else engagementStage = c.engagementStage ?? (c.status || 'Potential');
         }
         
         return {

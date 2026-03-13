@@ -123,7 +123,6 @@ const ClientModal = ({ client, onSave, onClose }) => {
                                 }`}
                             >
                                 <option>Active</option>
-                                <option>Inactive</option>
                             </select>
                         </div>
                     </div>
